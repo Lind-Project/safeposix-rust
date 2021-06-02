@@ -5,7 +5,9 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
 use std::fs;
+use std::io::SeekFrom;
 use std::path::PathBuf;
+use std::slice;
 
 let SAFEPOSIX_DIR = ".";
 let MAX_FILENAME_LENGTH = 120;
@@ -78,7 +80,7 @@ pub fn emulated_open(filename: &str, create: bool) {
 pub struct emulated_file {
   filename: &str,
   abs_filename: &str,
-  fobj: Arc<Mutex<File>>
+  fobj: Option<Arc<Mutex<File>>>
   filesize: i32
 }
 
@@ -120,12 +122,90 @@ impl emulated_file {
     let openfiles = OPEN_FILES.lock().unwrap();
 
     let fobj = self.fobj.lock().unwrap();
-
     drop(fobj);
+    let fobj = None;
+
     openfiles.remove(self.filename);
 
     drop(openfiles);
 
+  }
+
+  unsafe fn readat(&self, ptr: *const u8, length: usize, offset: usize) -> isize {
+    
+    let mut bytes_read = 0;
+
+    if offset < 0 {
+      panic!("Negative offset specified.");
+    }
+
+    if length < 0 {
+      panic!("Negative length specified.");
+    }
+    
+    let buf = unsafe {
+      assert!(!ptr.is_null());
+      slice::from_raw_parts_mut(ptr, length)
+    };
+
+    match self.fobj {
+      None => panic!("{} is already closed.", self.filename),
+      Some(f) => { 
+        let fobj = self.f.lock().unwrap();
+        if offset > self.filesize {
+          panic!("Seek offset extends past the EOF!");
+        }
+        fobj.seek(SeekFrom::Start(offset))?;
+        bytes_read = fobj.read(buf);
+        fobj.sync_data()?;
+  
+        drop(fobj)
+
+      }
+    }
+
+    bytes_read;
+  }
+
+
+  unsafe fn writeat(&self, ptr: *const u8, length: usize, offset: usize) -> isize) {
+
+    let mut bytes_written = 0;
+
+    if offset < 0 {
+      panic!("Negative offset specified.");
+    }
+
+    if length < 0 {
+      panic!("Negative length specified.");
+    }
+
+    let buf = unsafe {
+      assert!(!ptr.is_null());
+      slice::from_raw_parts(ptr, length)
+    };
+
+    match self.fobj {
+      None => panic!("{} is already closed.", self.filename),
+      Some(f) => { 
+        let fobj = self.f.lock().unwrap();
+        if offset > self.filesize {
+          panic!("Seek offset extends past the EOF!");
+        }
+        fobj.seek(SeekFrom::Start(offset))?;
+        bytes_written = fobj.write_all(buf);
+        fobj.sync_data()?;
+  
+        drop(fobj)
+
+      }
+    }
+
+    if offset + length > self.filesize {
+      self.filesize = offset + length;
+    }
+
+    bytes_written;
   }
 
 }
