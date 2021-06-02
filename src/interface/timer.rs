@@ -18,9 +18,13 @@ pub fn sleep_ms(dur: time::Duration) {
     thread::sleep(dur);
 }
 
-pub fn main() {
-    let onesec = time::Duration::new(1, 0);
-    sleep_ms(onesec);
-    println!("{:?}", getruntime());
-
+#[cfg(test)]
+mod tests {
+  use super::*;
+  #[test]
+  pub fn naptime() {
+      let onesec = time::Duration::new(1, 0);
+      sleep_ms(onesec);
+      println!("{:?}", getruntime());
+  }
 }
