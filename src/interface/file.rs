@@ -1,6 +1,8 @@
 // Author: Nicholas Renner
 //
 // File related interface
+#![feature(once_cell)]
+use std::lazy::SyncLazy;
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
@@ -9,13 +11,9 @@ use std::io::SeekFrom;
 use std::path::PathBuf;
 use std::slice;
 
-let SAFEPOSIX_DIR = ".";
-let MAX_FILENAME_LENGTH = 120;
-
-let ILLEGAL_FILENAMES : HashSet<&'static str> = [ ".", "..", "" ].iter().cloned().collect();
 
 
-let OPEN_FILES = Arc::new(Mutex::new(HashSet::new()));
+static OPEN_FILES: SyncLazy<Arc<Mutex<HashSet>>> = SyncLazy::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> <Vec<String>> {
     let paths = fs::read_dir(&Path::new(
@@ -54,6 +52,10 @@ pub fn removefile(filename: &str) {
 }
 
 fn assert_is_allowed_filename(filename: &str) {
+
+  let SAFEPOSIX_DIR = ".";
+  let MAX_FILENAME_LENGTH = 120;
+  let ILLEGAL_FILENAMES : HashSet<&'static str> = [ ".", "..", "" ].iter().cloned().collect();
 
   if filename.len() > MAX_FILENAME_LENGTH {
     panic!("ArgumentError: Filename exceeds maximum length.")
@@ -168,7 +170,7 @@ impl emulated_file {
   }
 
 
-  unsafe fn writeat(&self, ptr: *const u8, length: usize, offset: usize) -> isize) {
+  unsafe fn writeat(&self, ptr: *const u8, length: usize, offset: usize) -> isize {
 
     let mut bytes_written = 0;
 

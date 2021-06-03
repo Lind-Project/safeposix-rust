@@ -2,6 +2,8 @@
 //
 // Misc functions for interface
 // Random, locks, etc.
+#![feature(once_cell)]
+pub use std::lazy::SyncLazy;
 
 use std::fs::File;
 use std::io::Read;
@@ -9,6 +11,7 @@ use std::collections::HashMap as dict;
 
 pub use std::sync::Mutex as lock;
 pub use std::sync::Arc as rct;
+
 
 
 // Print text to stdout
