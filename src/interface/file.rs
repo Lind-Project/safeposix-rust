@@ -1,6 +1,7 @@
 // Author: Nicholas Renner
 //
 // File related interface
+
 #![feature(once_cell)]
 use std::lazy::SyncLazy;
 
@@ -11,10 +12,10 @@ use std::io::SeekFrom;
 use std::path::PathBuf;
 use std::slice;
 
-
-
+// Set of open files (global)
 static OPEN_FILES: SyncLazy<Arc<Mutex<HashSet>>> = SyncLazy::new(|| Arc::new(Mutex::new(HashSet::new())));
 
+// List all files in current directory, return list of filename strings
 pub fn listfiles() -> <Vec<String>> {
     let paths = fs::read_dir(&Path::new(
         &env::current_dir().unwrap())).unwrap();
@@ -30,6 +31,7 @@ pub fn listfiles() -> <Vec<String>> {
       return names;
 }
 
+// Remove target file
 pub fn removefile(filename: &str) {
     let openfiles = OPEN_FILES.lock().unwrap();
 
@@ -51,6 +53,7 @@ pub fn removefile(filename: &str) {
     
 }
 
+// Checker for illegal filenames
 fn assert_is_allowed_filename(filename: &str) {
 
   let SAFEPOSIX_DIR = ".";
@@ -75,10 +78,12 @@ fn assert_is_allowed_filename(filename: &str) {
   }
 }
 
-pub fn emulated_open(filename: &str, create: bool) {
+// Exposed function to create new file
+pub fn emulated_open(filename: &str, create: bool) -> emulated_file {
   emulated_file::new(filename, create);
 }
 
+// File object
 pub struct emulated_file {
   filename: &str,
   abs_filename: &str,
@@ -88,6 +93,7 @@ pub struct emulated_file {
 
 impl emulated_file {
 
+  // Create/Open new file
   fn new(filename: &str, create: bool) {
     assert_is_allowed_filename(filename);
 
@@ -120,6 +126,7 @@ impl emulated_file {
 
   }
 
+  // Close file
   fn close(&self) {
     let openfiles = OPEN_FILES.lock().unwrap();
 
@@ -133,6 +140,7 @@ impl emulated_file {
 
   }
 
+  // Read from file into provided C-buffer
   unsafe fn readat(&self, ptr: *const u8, length: usize, offset: usize) -> isize {
     
     let mut bytes_read = 0;
@@ -169,7 +177,7 @@ impl emulated_file {
     bytes_read;
   }
 
-
+  // Write to file from provided C-buffer
   unsafe fn writeat(&self, ptr: *const u8, length: usize, offset: usize) -> isize {
 
     let mut bytes_written = 0;
