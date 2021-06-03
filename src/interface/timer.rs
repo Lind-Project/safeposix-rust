@@ -4,12 +4,14 @@
 
 use std::{thread, time};
 
-// Get program start time as reference
-static now: time::Instant  = time::Instant::now();
 
+// Create a new timer
+pub fn starttimer() -> time::Instant {
+    time::Instant::now()
+}
 
-// Return time since program has started
-pub fn getruntime() -> time::Duration {
+// Return time since timer was started
+pub fn readtimer(now: time::Instant) -> time::Duration {
     now.elapsed()
 }
 
@@ -23,8 +25,9 @@ mod tests {
   use super::*;
   #[test]
   pub fn naptime() {
+      let starttime = starttimer();
       let onesec = time::Duration::new(1, 0);
       sleep_ms(onesec);
-      println!("{:?}", getruntime());
+      println!("{:?}", readtimer(starttime));
   }
 }
