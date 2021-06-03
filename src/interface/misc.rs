@@ -23,29 +23,46 @@ pub fn randombytes() -> Vec<u8> {
 }
 
 // Wrapper to return a dictionary (hashmap)
-pub fn new_dict() -> HashMap<K, V, RandomState> {
+pub fn new_dict<K, V>() -> HashMap<K, V> {
     return HashMap::new();
 }
 
 // Wrapped Lock
-pub struct emulated_lock<T> {
+pub struct EmulatedLock<T> {
     lock: Arc<Mutex<T>>
 }
 
 // Lock constructor
-pub fn createlock<T>(data: T) -> emulated_lock {
-    let new_lock = emulated_lock{lock: Arc::new(Mutex::new(T))}
+pub fn createlock<T>(data: T) -> EmulatedLock<T> {
+    let new_lock = EmulatedLock{lock: Arc::new(Mutex::new(data))};
     
     return new_lock;
 }
 
 // Lock methods
-impl<T> emulated_lock<T> {
-    pub fn acquire(&self) -> &T {
-        return &self.lock.lock().unwrap();
+impl<T> EmulatedLock<T> {
+    pub fn acquire(&mut self) -> &mut T {
+        &mut self.lock.lock().unwrap()
     }
 
     pub fn release(data: T) {
         drop(data);
     }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  #[test]
+  pub fn misctester() {
+      log_to_stdout(std::str::from_utf8(&randombytes()).unwrap());
+      let mut locky: EmulatedLock<HashMap<u8, String>> = createlock(new_dict());
+      let j = locky.acquire();
+      j.insert(1, "foo".to_string());
+      j.insert(2, "bar".to_string());
+      j.insert(3, "fizz".to_string());
+      j.insert(2, "buzz".to_string());
+      log_to_stdout(&j.get(&2).unwrap().to_string());
+      EmulatedLock::release(j);
+  }
 }
