@@ -4,18 +4,17 @@
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
-use std::fs;
-use std::path::PathBuf;
+use std::fs::{self, File};
+use std::env;
+use std::path::{PathBuf, Path};
+use std::lazy::SyncLazy;
 
-let SAFEPOSIX_DIR = ".";
-let MAX_FILENAME_LENGTH = 120;
+const SAFEPOSIX_DIR: &str = ".";
+const MAX_FILENAME_LENGTH: usize = 120;
 
-let ILLEGAL_FILENAMES : HashSet<&'static str> = [ ".", "..", "" ].iter().cloned().collect();
+static OPEN_FILES: SyncLazy<Arc<Mutex<HashSet<String>>>> = SyncLazy::new(|| Arc::new(Mutex::new(HashSet::new())));
 
-
-let OPEN_FILES = Arc::new(Mutex::new(HashSet::new()));
-
-pub fn listfiles() -> <Vec<String>> {
+pub fn listfiles() -> Vec<String> {
     let paths = fs::read_dir(&Path::new(
         &env::current_dir().unwrap())).unwrap();
       
@@ -30,16 +29,16 @@ pub fn listfiles() -> <Vec<String>> {
       return names;
 }
 
-pub fn removefile(filename: &str) {
+pub fn removefile(filename: String) -> std::io::Result<()> {
     let openfiles = OPEN_FILES.lock().unwrap();
 
-    if openfiles.contains(filename) {
+    if openfiles.contains(&filename) {
       panic!("FileInUse");
     }
 
-    let path: PathBuf = [SAFEPOSIX_DIR, filename].iter().collect();
+    let path: PathBuf = [SAFEPOSIX_DIR.to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path);
+    let absolute_filename = fs::canonicalize(&path).unwrap();
 
     if !absolute_filename.exists() {
       panic!("FileNotFoundError");
@@ -48,10 +47,10 @@ pub fn removefile(filename: &str) {
     fs::remove_file(absolute_filename)?;
 
     drop(openfiles);
-    
+    Ok(())
 }
 
-fn assert_is_allowed_filename(filename: &str) {
+fn assert_is_allowed_filename(filename: &String) {
 
   if filename.len() > MAX_FILENAME_LENGTH {
     panic!("ArgumentError: Filename exceeds maximum length.")
@@ -61,8 +60,9 @@ fn assert_is_allowed_filename(filename: &str) {
     panic!("ArgumentError: Filename has disallowed charachters.")
   }
 
-  if ILLEGAL_FILENAMES.contains(filename) {
-    panic!("ArgumentError: Illegal filename.")
+  match filename.as_str() {
+    "" | "." | ".." => panic!("ArgumentError: Illegal filename."),
+    _ => {}
   }
 
   if filename.starts_with(".") {
@@ -71,58 +71,59 @@ fn assert_is_allowed_filename(filename: &str) {
   }
 }
 
-pub fn emulated_open(filename: &str, create: bool) {
-  emulated_file::new(filename, create);
+pub fn emulated_open(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+  EmulatedFile::new(filename, create)
 }
 
-pub struct emulated_file {
-  filename: &str,
-  abs_filename: &str,
-  fobj: Arc<Mutex<File>>
-  filesize: i32
+pub struct EmulatedFile {
+  filename: String,
+  abs_filename: PathBuf,
+  fobj: Arc<Mutex<File>>,
+  filesize: usize,
 }
 
-impl emulated_file {
+impl EmulatedFile {
 
-  fn new(filename: &str, create: bool) {
-    assert_is_allowed_filename(filename);
+  fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+    assert_is_allowed_filename(&filename);
 
-    let openfiles = OPEN_FILES.lock().unwrap();
+    let mut openfiles = OPEN_FILES.lock().unwrap();
 
-    if openfiles.contains(filename) {
+    if openfiles.contains(&filename) {
       panic!("FileInUse");
     }
 
-    let path: PathBuf = [SAFEPOSIX_DIR, filename].iter().collect();
-    let absolute_filename = fs::canonicalize(&path);
+    let path: PathBuf = [SAFEPOSIX_DIR.to_string(), filename.clone()].iter().collect();
+    let absolute_filename = fs::canonicalize(&path)?;
 
     if !absolute_filename.exists() {
       if !create {
         panic!("Cannot open non-existent file {}", filename);
       }
 
-      let mut f = File::create(filename)?;
+      let f = File::create(filename.clone())?;
       drop(f);    
     }
 
-    let mut f = File::open(filename)?;
+    let f = File::open(filename.clone())?;
 
-    openfiles.insert(filename);
-    let filesize = f.stream_len()?;
+    openfiles.insert(filename.clone());
+    f.sync_all()?;
+    let filesize = f.metadata()?.len();
 
     drop(openfiles);
 
-    emulated_file {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), filesize: filesize}
+    Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), filesize: filesize as usize})
 
   }
 
-  fn close(&self) {
-    let openfiles = OPEN_FILES.lock().unwrap();
+  fn close(&mut self) {
+    let mut openfiles = OPEN_FILES.lock().unwrap();
 
     let fobj = self.fobj.lock().unwrap();
 
     drop(fobj);
-    openfiles.remove(self.filename);
+    openfiles.remove(&self.filename);
 
     drop(openfiles);
 
