@@ -21,4 +21,6 @@ pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4
     let current_cage = cage_table[cageid];
 
     //implement syscall method calling using matching
+
+    return code;
 }

@@ -7,7 +7,7 @@
 pub use std::lazy::SyncLazy as rust_global;
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read, Write};
 use std::collections::HashMap as rust_hashmap;
 
 pub use std::sync::RwLock as rust_lock;
@@ -18,6 +18,11 @@ pub use std::thread::current::id as rust_gettid;
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
     print!("{}", s);
+}
+
+// Print text to stderr
+pub fn log_to_stderr(s: &str) {
+    io::stderr().write_all(s)?;
 }
 
 // Return a string of random bytes with length 1024

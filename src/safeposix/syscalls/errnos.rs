@@ -1,145 +1,149 @@
 
-// add error function
-// first param - key to errnos dict below for return code
-// second param - message to log to stderr
-pub fn syscall_error(syscall: &str, error: &str, message: &str) -> i32 {
-    // log
-    return errcode;
+// Error handling for SafePOSIX
+use interface::*;
+
+static verbose : bool = true;
+
+enum Errno = {
+  EPERM,	// Operation not permitted 
+  ENOENT, // No such file or directory
+  ESRCH,	// No such process 
+  EINTR,	// Interrupted system call 
+  EIO,	// I/O error 
+  ENXIO,	// No such device or address 
+  EBIG,	// Argument list too long 
+  ENOEXEC,	// Exec format error 
+  EBADF,	// Bad file number 
+  ECHILD,	// No child processes 
+  EAGAIN,	// Try again 
+  ENOMEM,	// Out of memory 
+  EACCES,	// Permission denied 
+  EFAULT,	// Bad address 
+  ENOTBLK,	// Block device required 
+  EBUSY,	// Device or resource busy 
+  EEXIST,	// File exists 
+  EXDEV,	// Cross-device link 
+  ENODEV,	// No such device 
+  ENOTDIR,	// Not a directory 
+  EISDIR,	// Is a directory 
+  EINVAL,	// Invalid argument 
+  ENFILE,	// File table overflow 
+  EMFILE,	// Too many open files 
+  ENOTTY,	// Not a typewriter 
+  ETXTBSY,	// Text file busy 
+  EFBIG,	// File too large 
+  ENOSPC,	// No space left on device 
+  ESPIPE,	// Illegal seek 
+  EROFS,	// Read-only file system 
+  EMLINK,	// Too many links 
+  EPIPE,	// Broken pipe 
+  EDOM,	// Math argument out of domain of func 
+  ERANGE,	// Math result not representable 
+  EDEADLK,	// Resource deadlock would occur 
+  ENAMETOOLONG,	// File name too long 
+  ENOLCK,  // No record locks available 
+  ENOSYS,	// Function not implemented 
+  ENOTEMPTY,	// Directory not empty 
+  ELOOP,	// Too many symbolic links encountered 
+  EWOULDBLOCK, // Operation would block, returns EAGAIN 
+  ENOMSG,	// No message of desired type 
+  EIDRM,	// Identifier removed 
+  ECHRNG,	// Channel number out of range 
+  ELNSYNC,	// Level  not synchronized 
+  ELHLT,	// Level  halted 
+  ELRST,	// Level  reset 
+  ELNRNG,	// Link number out of range 
+  EUNATCH,	// Protocol driver not attached 
+  ENOCSI,	// No CSI structure available 
+  ELHLT,	// Level  halted 
+  EBADE,	// Invalid exchange 
+  EBADR,	// Invalid request descriptor 
+  EXFULL,	// Exchange full 
+  ENOANO,	// No anode 
+  EBADRQC,	// Invalid request code 
+  EBADSLT,	// Invalid slot 
+  EBFONT,	// Bad font file format 
+  ENOSTR,	// Device not a stream 
+  ENODATA,	// No data available 
+  ETIME,	// Timer expired 
+  ENOSR,	// Out of streams resources 
+  ENONET,	// Machine is not on the network 
+  ENOPKG,	// Package not installed 
+  EREMOTE,	// Object is remote 
+  ENOLINK,	// Link has been severed 
+  EADV,	// Advertise error 
+  ESRMNT,	// Srmount error 
+  ECOMM,	// Communication error on send 
+  EPROTO,	// Protocol error 
+  EMULTIHOP,	// Multihop attempted 
+  EDOTDOT,	// RFS specific error 
+  EBADMSG,	// Not a data message 
+  EOVERFLOW,	// Value too large for defined data type 
+  ENOTUNIQ,	// Name not unique on network 
+  EBADFD,	// File descriptor in bad state 
+  EREMCHG,	// Remote address changed 
+  ELIBACC,	// Can not access a needed shared library 
+  ELIBBAD,	// Accessing a corrupted shared library 
+  ELIBSCN,	// .lib section in a.out corrupted 
+  ELIBMAX,	// Attempting to link in too many shared libraries 
+  ELIBEXEC,	// Cannot exec a shared library directly 
+  EILSEQ,	// Illegal byte sequence 
+  ERESTART,	// Interrupted system call should be restarted 
+  ESTRPIPE,	// Streams pipe error 
+  EUSERS,	// Too many users 
+  ENOTSOCK,	// Socket operation on non-socket 
+  EDESTADDRREQ,	// Destination address required 
+  EMSGSIZE,	// Message too long 
+  EPROTOTYPE,	// Protocol wrong type for socket 
+  ENOPROTOOPT,	// Protocol not available 
+  EPROTONOSUPPORT,	// Protocol not supported 
+  ESOCKTNOSUPPORT,	// Socket type not supported 
+  EOPNOTSUPP,	// Operation not supported on transport endpoint 
+  EPFNOSUPPORT,	// Protocol family not supported 
+  EAFNOSUPPORT,	// Address family not supported by protocol 
+  EADDRINUSE,	// Address already in use 
+  EADDRNOTAVAIL,	// Cannot assign requested address 
+  ENETDOWN,	// Network is down 
+  ENETUNREACH,	// Network is unreachable 
+  ENETRESET,	// Network dropped connection because of reset 
+  ECONNABORTED,	// Software caused connection abort 
+  ECONNRESET,	// Connection reset by peer 
+  ENOBUFS,	// No buffer space available 
+  EISCONN,	// Transport endpoint is already connected 
+  ENOTCONN,	// Transport endpoint is not connected 
+  ESHUTDOWN,	// Cannot send after transport endpoint shutdown 
+  ETOOMANYREFS,	// Too many references cannot splice 
+  ETIMEDOUT,	// Connection timed out 
+  ECONNREFUSED,	// Connection refused 
+  EHOSTDOWN,	// Host is down 
+  EHOSTUNREACH,	// No route to host 
+  EALREADY,	// Operation already in progress 
+  EINPROGRESS,	// Operation now in progress 
+  ESTALE,	// Stale NFS file handle 
+  EUCLEAN,	// Structure needs cleaning 
+  ENOTNAM,	// Not a XENIX named type file 
+  ENAVAIL,	// No XENIX semaphores available 
+  EISNAM,	// Is a named type file 
+  EREMOTEIO,	// Remote I/O error 
+  EDQUOT,	// Quota exceeded 
+  ENOMEDIUM,	// No medium found 
+  EMEDIUMTYPE,	// Wrong medium type 
+  ECANCELED,	// Operation Canceled 
+  ENOKEY,	// Required key not available 
+  EKEYEXPIRED,	// Key has expired 
+  EKEYREVOKED,	// Key has been revoked 
+  EKEYREJECTED,	// Key was rejected by service  for robust mutexes 
+  EOWNERDEAD,	// Owner died 
+  ENOTRECOVERABLE	// State not recoverable
 }
 
-// TODO: Translate to rust
-
-errnos = {
-  'EPERM':1,	# Operation not permitted 
-  'ENOENT':2, # No such file or directory
-  'ESRCH': 3,	# No such process 
-  'EINTR': 4,	# Interrupted system call 
-  'EIO': 5,	# I/O error 
-  'ENXIO': 6,	# No such device or address 
-  'E2BIG': 7,	# Argument list too long 
-  'ENOEXEC': 8,	# Exec format error 
-  'EBADF': 9,	# Bad file number 
-  'ECHILD':10,	# No child processes 
-  'EAGAIN':11,	# Try again 
-  'ENOMEM':12,	# Out of memory 
-  'EACCES':13,	# Permission denied 
-  'EFAULT':14,	# Bad address 
-  'ENOTBLK':15,	# Block device required 
-  'EBUSY':16,	# Device or resource busy 
-  'EEXIST':17,	# File exists 
-  'EXDEV':18,	# Cross-device link 
-  'ENODEV':19,	# No such device 
-  'ENOTDIR':20,	# Not a directory 
-  'EISDIR':21,	# Is a directory 
-  'EINVAL':22,	# Invalid argument 
-  'ENFILE':23,	# File table overflow 
-  'EMFILE':24,	# Too many open files 
-  'ENOTTY':25,	# Not a typewriter 
-  'ETXTBSY':26,	# Text file busy 
-  'EFBIG':27,	# File too large 
-  'ENOSPC':28,	# No space left on device 
-  'ESPIPE':29,	# Illegal seek 
-  'EROFS':30,	# Read-only file system 
-  'EMLINK':31,	# Too many links 
-  'EPIPE':32,	# Broken pipe 
-  'EDOM':33,	# Math argument out of domain of func 
-  'ERANGE':34,	# Math result not representable 
-
-  'EDEADLK':35,	# Resource deadlock would occur 
-  'ENAMETOOLONG':36,	# File name too long 
-  'ENOLCK':37,  # No record locks available 
-  'ENOSYS':38,	# Function not implemented 
-  'ENOTEMPTY':39,	# Directory not empty 
-  'ELOOP':40,	# Too many symbolic links encountered 
-  'EWOULDBLOCK':11, # Operation would block, returns EAGAIN 
-  'ENOMSG':42,	# No message of desired type 
-  'EIDRM':43,	# Identifier removed 
-  'ECHRNG':44,	# Channel number out of range 
-  'EL2NSYNC':45,	# Level 2 not synchronized 
-  'EL3HLT':46,	# Level 3 halted 
-  'EL3RST':47,	# Level 3 reset 
-  'ELNRNG':48,	# Link number out of range 
-  'EUNATCH':49,	# Protocol driver not attached 
-  'ENOCSI':50,	# No CSI structure available 
-  'EL2HLT':51,	# Level 2 halted 
-  'EBADE':52,	# Invalid exchange 
-  'EBADR':53,	# Invalid request descriptor 
-  'EXFULL':54,	# Exchange full 
-  'ENOANO':55,	# No anode 
-  'EBADRQC':56,	# Invalid request code 
-  'EBADSLT':57,	# Invalid slot 
-  'EBFONT':59,	# Bad font file format 
-  'ENOSTR':60,	# Device not a stream 
-  'ENODATA':61,	# No data available 
-  'ETIME':62,	# Timer expired 
-  'ENOSR':63,	# Out of streams resources 
-  'ENONET':64,	# Machine is not on the network 
-  'ENOPKG':65,	# Package not installed 
-  'EREMOTE':66,	# Object is remote 
-  'ENOLINK':67,	# Link has been severed 
-  'EADV':68,	# Advertise error 
-  'ESRMNT':69,	# Srmount error 
-  'ECOMM':70,	# Communication error on send 
-  'EPROTO':71,	# Protocol error 
-  'EMULTIHOP':72,	# Multihop attempted 
-  'EDOTDOT':73,	# RFS specific error 
-  'EBADMSG':74,	# Not a data message 
-  'EOVERFLOW':75,	# Value too large for defined data type 
-  'ENOTUNIQ':76,	# Name not unique on network 
-  'EBADFD':77,	# File descriptor in bad state 
-  'EREMCHG':78,	# Remote address changed 
-  'ELIBACC':79,	# Can not access a needed shared library 
-  'ELIBBAD':80,	# Accessing a corrupted shared library 
-  'ELIBSCN':81,	# .lib section in a.out corrupted 
-  'ELIBMAX':82,	# Attempting to link in too many shared libraries 
-  'ELIBEXEC':83,	# Cannot exec a shared library directly 
-  'EILSEQ':84,	# Illegal byte sequence 
-  'ERESTART':85,	# Interrupted system call should be restarted 
-  'ESTRPIPE':86,	# Streams pipe error 
-  'EUSERS':87,	# Too many users 
-  'ENOTSOCK':88,	# Socket operation on non-socket 
-  'EDESTADDRREQ':89,	# Destination address required 
-  'EMSGSIZE':90,	# Message too long 
-  'EPROTOTYPE':91,	# Protocol wrong type for socket 
-  'ENOPROTOOPT':92,	# Protocol not available 
-  'EPROTONOSUPPORT':93,	# Protocol not supported 
-  'ESOCKTNOSUPPORT':94,	# Socket type not supported 
-  'EOPNOTSUPP':95,	# Operation not supported on transport endpoint 
-  'EPFNOSUPPORT':96,	# Protocol family not supported 
-  'EAFNOSUPPORT':97,	# Address family not supported by protocol 
-  'EADDRINUSE':98,	# Address already in use 
-  'EADDRNOTAVAIL':99,	# Cannot assign requested address 
-  'ENETDOWN':100,	# Network is down 
-  'ENETUNREACH':101,	# Network is unreachable 
-  'ENETRESET':102,	# Network dropped connection because of reset 
-  'ECONNABORTED':103,	# Software caused connection abort 
-  'ECONNRESET':104,	# Connection reset by peer 
-  'ENOBUFS':105,	# No buffer space available 
-  'EISCONN':106,	# Transport endpoint is already connected 
-  'ENOTCONN':107,	# Transport endpoint is not connected 
-  'ESHUTDOWN':108,	# Cannot send after transport endpoint shutdown 
-  'ETOOMANYREFS':109,	# Too many references: cannot splice 
-  'ETIMEDOUT':110,	# Connection timed out 
-  'ECONNREFUSED':111,	# Connection refused 
-  'EHOSTDOWN':112,	# Host is down 
-  'EHOSTUNREACH':113,	# No route to host 
-  'EALREADY':114,	# Operation already in progress 
-  'EINPROGRESS':115,	# Operation now in progress 
-  'ESTALE':116,	# Stale NFS file handle 
-  'EUCLEAN':117,	# Structure needs cleaning 
-  'ENOTNAM':118,	# Not a XENIX named type file 
-  'ENAVAIL':119,	# No XENIX semaphores available 
-  'EISNAM':120,	# Is a named type file 
-  'EREMOTEIO':121,	# Remote I/O error 
-  'EDQUOT':122,	# Quota exceeded 
-  'ENOMEDIUM':123,	# No medium found 
-  'EMEDIUMTYPE':124,	# Wrong medium type 
-  'ECANCELED':125,	# Operation Canceled 
-  'ENOKEY':126,	# Required key not available 
-  'EKEYEXPIRED':127,	# Key has expired 
-  'EKEYREVOKED':128,	# Key has been revoked 
-  'EKEYREJECTED':129,	# Key was rejected by service 
-  # for robust mutexes 
-  'EOWNERDEAD':130,	# Owner died 
-  'ENOTRECOVERABLE':131	# State not recoverable
+impl Errno {
+    fn syscall_error(&self, syscall: &str, message: &str) -> i32 {
+        if (verbose) {
+            let msg = format!("Error in syscall: {} - {}: {}", syscall, self, message);
+            log_to_stderr(msg);
+        }
+        return self as i32;
+    }
+    
 }
