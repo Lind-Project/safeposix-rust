@@ -4,14 +4,15 @@
 // Random, locks, etc.
 
 #![feature(once_cell)]
-pub use std::lazy::SyncLazy;
+pub use std::lazy::SyncLazy as rust_global;
 
 use std::fs::File;
 use std::io::Read;
-use std::collections::HashMap as dict;
+use std::collections::HashMap as rust_hashmap;
 
-pub use std::sync::Mutex as lock;
-pub use std::sync::Arc as rct;
+pub use std::sync::RwLock as rust_lock;
+pub use std::sync::Arc as rust_rfc;
+pub use std::thread::current::id as rust_gettid;
 
 
 // Print text to stdout
@@ -29,8 +30,8 @@ pub fn randombytes() -> Vec<u8> {
 }
 
 // Wrapper to return a dictionary (hashmap)
-pub fn new_dict<K, V>() -> dict<K, V> {
-    return dict::new()
+pub fn new_hashmap<K, V>() -> rust_hashmap<K, V> {
+    return rust_hashmap::new()
 }
 
 #[cfg(test)]
@@ -39,7 +40,7 @@ mod tests {
   #[test]
   pub fn misctester() {
       log_to_stdout(std::str::from_utf8(&randombytes()).unwrap());
-      let fd_table = new_dict();
+      let fd_table = rust_hashmap();
 
   }
 }
