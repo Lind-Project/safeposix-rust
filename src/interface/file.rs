@@ -187,10 +187,10 @@ mod tests {
       println!("{:?}", listfiles());
       let mut f = emulated_open("foobar".to_string(), true).expect("?!");
       println!("{:?}", listfiles());
-      let mut q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
+      let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
       println!("{:?}", unsafe{f.writeat(q, 9, 0)});
-      let mut b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
+      let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
       println!("{:?}", unsafe{f.readat(b, 9, 0)});
       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
