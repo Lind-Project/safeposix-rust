@@ -6,4 +6,4 @@
 pub mod comm;
 pub mod file;
 pub mod misc;
-pub mod timers;
+pub mod timer;
