@@ -10,9 +10,9 @@ use std::env;
 use std::slice;
 use std::path::{PathBuf, Path};
 use std::io::{SeekFrom, Seek, Read, Write};
-use std::lazy::SyncLazy;
+pub use std::lazy::SyncLazy as RustLazyGlobal;
 
-static OPEN_FILES: SyncLazy<Arc<Mutex<HashSet<String>>>> = SyncLazy::new(|| Arc::new(Mutex::new(HashSet::new())));
+static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> Vec<String> {
     let paths = fs::read_dir(&Path::new(
@@ -124,9 +124,9 @@ impl EmulatedFile {
     }
 
     // Read from file into provided C-buffer
-    pub unsafe fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
+    pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
 
-        let mut buf = unsafe {
+        let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts_mut(ptr, length)
         };
@@ -147,9 +147,9 @@ impl EmulatedFile {
     }
 
     // Write to file from provided C-buffer
-    pub unsafe fn writeat(&mut self, ptr: *const u8, length: usize, offset: usize) -> std::io::Result<usize> {
+    pub fn writeat(&mut self, ptr: *const u8, length: usize, offset: usize) -> std::io::Result<usize> {
 
-        let mut bytes_written;
+        let bytes_written;
 
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -189,10 +189,10 @@ mod tests {
       println!("{:?}", listfiles());
       let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
-      println!("{:?}", unsafe{f.writeat(q, 9, 0)});
+      println!("{:?}", f.writeat(q, 9, 0));
       let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
-      println!("{:?}", unsafe{f.readat(b, 9, 0)});
+      println!("{:?}", f.readat(b, 9, 0));
       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
       println!("{:?}", f.close());
       unsafe {
