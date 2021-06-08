@@ -2,18 +2,15 @@
 //
 // Misc functions for interface
 // Random, locks, etc.
-
-#![feature(once_cell)]
-pub use std::lazy::SyncLazy as rust_global;
+#![allow(dead_code)]
 
 use std::fs::File;
-use std::io::{self, Read, Write};
-use std::collections::HashMap as rust_hashmap;
+use std::io::Read;
+use std::collections::HashMap as RustHashMap;
 
-pub use std::sync::RwLock as rust_lock;
-pub use std::sync::Arc as rust_rfc;
-pub use std::thread::current::id as rust_gettid;
-
+pub use std::sync::RwLock as RustLock;
+pub use std::sync::Arc as RustRfc;
+pub use std::thread::current as rust_gettid;
 
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
@@ -22,7 +19,7 @@ pub fn log_to_stdout(s: &str) {
 
 // Print text to stderr
 pub fn log_to_stderr(s: &str) {
-    io::stderr().write_all(s)?;
+    eprintln!("{}", s);
 }
 
 // Return a string of random bytes with length 1024
@@ -35,17 +32,18 @@ pub fn randombytes() -> Vec<u8> {
 }
 
 // Wrapper to return a dictionary (hashmap)
-pub fn new_hashmap<K, V>() -> rust_hashmap<K, V> {
-    return rust_hashmap::new()
+pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
+    return RustHashMap::new()
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-  #[test]
-  pub fn misctester() {
-      log_to_stdout(std::str::from_utf8(&randombytes()).unwrap());
-      let fd_table = rust_hashmap();
+    use super::*;
+    #[test]
+    pub fn misctester() {
+        //we clamp the ascii values so that from_utf8 does not fail
+        log_to_stdout(std::str::from_utf8(&randombytes().into_iter().map(|x| if x < 128 {x} else {72}).collect::<Vec<u8>>().as_slice()).unwrap());
+        let fd_table = RustHashMap::<&str, u32>::new();
 
-  }
+    }
 }

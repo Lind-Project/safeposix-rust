@@ -1,221 +1,204 @@
 // Author: Nicholas Renner
 //
 // File related interface
-
-#![feature(once_cell)]
-use std::lazy::SyncLazy;
+#![allow(dead_code)]
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
-use std::fs;
-use std::io::SeekFrom;
-use std::path::PathBuf;
+use std::fs::{self, File, OpenOptions};
+use std::env;
 use std::slice;
+use std::path::{PathBuf, Path};
+use std::io::{SeekFrom, Seek, Read, Write};
+pub use std::lazy::SyncLazy as RustLazyGlobal;
 
-// Set of open files (global)
-static OPEN_FILES: SyncLazy<Arc<Mutex<HashSet>>> = SyncLazy::new(|| Arc::new(Mutex::new(HashSet::new())));
+static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
-// List all files in current directory, return list of filename strings
-pub fn listfiles() -> <Vec<String>> {
+pub fn listfiles() -> Vec<String> {
     let paths = fs::read_dir(&Path::new(
         &env::current_dir().unwrap())).unwrap();
       
-      let names =
-      paths.filter_map(|entry| {
-        entry.ok().and_then(|e|
-          e.path().file_name()
-          .and_then(|n| n.to_str().map(|s| String::from(s)))
-        )
-      }).collect::<Vec<String>>();
+    let names =
+    paths.filter_map(|entry| {
+      entry.ok().and_then(|e|
+        e.path().file_name()
+        .and_then(|n| n.to_str().map(|s| String::from(s)))
+      )
+    }).collect::<Vec<String>>();
 
-      return names;
+    return names;
 }
 
-// Remove target file
-pub fn removefile(filename: &str) {
+pub fn removefile(filename: String) -> std::io::Result<()> {
     let openfiles = OPEN_FILES.lock().unwrap();
 
-    if openfiles.contains(filename) {
-      panic!("FileInUse");
+    if openfiles.contains(&filename) {
+        panic!("FileInUse");
     }
 
-    let path: PathBuf = [SAFEPOSIX_DIR, filename].iter().collect();
+    let path: PathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path);
+    let absolute_filename = fs::canonicalize(&path).unwrap();
 
     if !absolute_filename.exists() {
-      panic!("FileNotFoundError");
+        panic!("FileNotFoundError");
     }
 
     fs::remove_file(absolute_filename)?;
 
-    drop(openfiles);
-    
+    Ok(())
 }
 
 // Checker for illegal filenames
-fn assert_is_allowed_filename(filename: &str) {
+fn assert_is_allowed_filename(filename: &String) {
 
-  let SAFEPOSIX_DIR = ".";
-  let MAX_FILENAME_LENGTH = 120;
-  let ILLEGAL_FILENAMES : HashSet<&'static str> = [ ".", "..", "" ].iter().cloned().collect();
+    const MAX_FILENAME_LENGTH: usize = 120;
 
-  if filename.len() > MAX_FILENAME_LENGTH {
-    panic!("ArgumentError: Filename exceeds maximum length.")
-  }
+    if filename.len() > MAX_FILENAME_LENGTH {
+        panic!("ArgumentError: Filename exceeds maximum length.")
+    }
 
-  if !filename.chars().all(char::is_alphanumeric) {
-    panic!("ArgumentError: Filename has disallowed charachters.")
-  }
+    if !filename.chars().all(char::is_alphanumeric) {
+        panic!("ArgumentError: Filename has disallowed charachters.")
+    }
 
-  if ILLEGAL_FILENAMES.contains(filename) {
-    panic!("ArgumentError: Illegal filename.")
-  }
+    match filename.as_str() {
+        "" | "." | ".." => panic!("ArgumentError: Illegal filename."),
+        _ => {}
+    }
 
-  if filename.starts_with(".") {
-    panic!("ArgumentError: Filename cannot start with a period.")
-
-  }
+    if filename.starts_with(".") {
+        panic!("ArgumentError: Filename cannot start with a period.")
+    }
 }
 
-// Exposed function to create new file
-pub fn emulated_open(filename: &str, create: bool) -> emulated_file {
-  emulated_file::new(filename, create);
+pub fn emulated_open(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new(filename, create)
 }
 
-// File object
-pub struct emulated_file {
-  filename: &str,
-  abs_filename: &str,
-  fobj: Option<Arc<Mutex<File>>>
-  filesize: i32
+pub struct EmulatedFile {
+    filename: String,
+    abs_filename: PathBuf,
+    fobj: Option<Arc<Mutex<File>>>,
+    filesize: usize,
 }
 
-impl emulated_file {
+impl EmulatedFile {
 
-  // Create/Open new file
-  fn new(filename: &str, create: bool) {
-    assert_is_allowed_filename(filename);
+    fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+        assert_is_allowed_filename(&filename);
 
-    let openfiles = OPEN_FILES.lock().unwrap();
+        let mut openfiles = OPEN_FILES.lock().unwrap();
 
-    if openfiles.contains(filename) {
-      panic!("FileInUse");
-    }
-
-    let path: PathBuf = [SAFEPOSIX_DIR, filename].iter().collect();
-    let absolute_filename = fs::canonicalize(&path);
-
-    if !absolute_filename.exists() {
-      if !create {
-        panic!("Cannot open non-existent file {}", filename);
-      }
-
-      let mut f = File::create(filename)?;
-      drop(f);    
-    }
-
-    let mut f = File::open(filename)?;
-
-    openfiles.insert(filename);
-    let filesize = f.stream_len()?;
-
-    drop(openfiles);
-
-    emulated_file {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), filesize: filesize}
-
-  }
-
-  // Close file
-  fn close(&self) {
-    let openfiles = OPEN_FILES.lock().unwrap();
-
-    let fobj = self.fobj.lock().unwrap();
-    drop(fobj);
-    let fobj = None;
-
-    openfiles.remove(self.filename);
-
-    drop(openfiles);
-
-  }
-
-  // Read from file into provided C-buffer
-  unsafe fn readat(&self, ptr: *const u8, length: usize, offset: usize) -> isize {
-    
-    let mut bytes_read = 0;
-
-    if offset < 0 {
-      panic!("Negative offset specified.");
-    }
-
-    if length < 0 {
-      panic!("Negative length specified.");
-    }
-    
-    let buf = unsafe {
-      assert!(!ptr.is_null());
-      slice::from_raw_parts_mut(ptr, length)
-    };
-
-    match self.fobj {
-      None => panic!("{} is already closed.", self.filename),
-      Some(f) => { 
-        let fobj = self.f.lock().unwrap();
-        if offset > self.filesize {
-          panic!("Seek offset extends past the EOF!");
+        if openfiles.contains(&filename) {
+            panic!("FileInUse");
         }
-        fobj.seek(SeekFrom::Start(offset))?;
-        bytes_read = fobj.read(buf);
-        fobj.sync_data()?;
-  
-        drop(fobj)
 
-      }
+        let path: PathBuf = [".".to_string(), filename.clone()].iter().collect();
+
+        let f = if !path.exists() {
+            if !create {
+              panic!("Cannot open non-existent file {}", filename);
+            }
+
+            OpenOptions::new().read(true).write(true).create(true).open(filename.clone())
+        } else {
+            OpenOptions::new().read(true).write(true).open(filename.clone())
+        }?;
+
+        let absolute_filename = fs::canonicalize(&path)?;
+
+        openfiles.insert(filename.clone());
+        f.sync_all()?;
+        let filesize = f.metadata()?.len();
+
+        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
+
     }
 
-    bytes_read;
-  }
+    pub fn close(&self) -> std::io::Result<()> {
+        let mut openfiles = OPEN_FILES.lock().unwrap();
 
-  // Write to file from provided C-buffer
-  unsafe fn writeat(&self, ptr: *const u8, length: usize, offset: usize) -> isize {
-
-    let mut bytes_written = 0;
-
-    if offset < 0 {
-      panic!("Negative offset specified.");
+        openfiles.remove(&self.filename);
+        Ok(())
     }
 
-    if length < 0 {
-      panic!("Negative length specified.");
-    }
+    // Read from file into provided C-buffer
+    pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
 
-    let buf = unsafe {
-      assert!(!ptr.is_null());
-      slice::from_raw_parts(ptr, length)
-    };
+        let buf = unsafe {
+            assert!(!ptr.is_null());
+            slice::from_raw_parts_mut(ptr, length)
+        };
 
-    match self.fobj {
-      None => panic!("{} is already closed.", self.filename),
-      Some(f) => { 
-        let fobj = self.f.lock().unwrap();
-        if offset > self.filesize {
-          panic!("Seek offset extends past the EOF!");
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                  panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                let bytes_read = fobj.read(buf)?;
+                fobj.sync_data()?;
+                Ok(bytes_read)
+            }
         }
-        fobj.seek(SeekFrom::Start(offset))?;
-        bytes_written = fobj.write_all(buf);
-        fobj.sync_data()?;
-  
-        drop(fobj)
+    }
 
+    // Write to file from provided C-buffer
+    pub fn writeat(&mut self, ptr: *const u8, length: usize, offset: usize) -> std::io::Result<usize> {
+
+        let bytes_written;
+
+        let buf = unsafe {
+            assert!(!ptr.is_null());
+            slice::from_raw_parts(ptr, length)
+        };
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                bytes_written = fobj.write(buf)?;
+                fobj.sync_data()?;
+            }
+        }
+
+        if offset + length > self.filesize {
+            self.filesize = offset + length;
+        }
+
+        Ok(bytes_written)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate libc;
+    use std::mem;
+    use super::*;
+    #[test]
+    pub fn filewritetest() {
+      println!("{:?}", listfiles());
+      let mut f = emulated_open("foobar".to_string(), true).expect("?!");
+      println!("{:?}", listfiles());
+      let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
+      unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
+      println!("{:?}", f.writeat(q, 9, 0));
+      let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
+      println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
+      println!("{:?}", f.readat(b, 9, 0));
+      println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
+      println!("{:?}", f.close());
+      unsafe {
+        libc::free(q as *mut libc::c_void);
+        libc::free(b as *mut libc::c_void);
       }
+      println!("{:?}", removefile("foobar".to_string()));
     }
-
-    if offset + length > self.filesize {
-      self.filesize = offset + length;
-    }
-
-    bytes_written;
-  }
-
 }
