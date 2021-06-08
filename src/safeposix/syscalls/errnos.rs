@@ -4,6 +4,8 @@ use crate::interface;
 
 static verbose : bool = true;
 
+#[derive(Debug)]
+
 enum Errno {
   EPERM = 1,	// Operation not permitted
   ENOENT = 2, // No such file or directory
@@ -140,7 +142,7 @@ enum Errno {
 impl Errno {
     fn syscall_error(&self, syscall: &str, message: &str) -> i32 {
         if verbose {
-            let msg = format!("Error in syscall: {} - {}: {}", syscall, *self as i32, message);
+            let msg = format!("Error in syscall: {} - {:?}: {}", syscall, self, message);
             interface::log_to_stderr(msg);
         }
         *self as i32
