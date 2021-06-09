@@ -17,10 +17,10 @@ struct GenericInode {
     gid: usize,
     mode: usize,
     linkcount: usize,
+    refcount: usize,
     atime: u64,
     ctime: u64,
     mtime: u64,
-    refcount: usize
 }
 
 struct DirInode {
@@ -29,11 +29,11 @@ struct DirInode {
     gid: usize,
     mode: usize,
     linkcount: usize,
+    refcount: usize,
     atime: u64,
     ctime: u64,
     mtime: u64
-    filename_to_inode_dict: RustHashMap<String, usize>,
-    refcount: usize
+    filename_to_inode_dict: RustHashMap<String, usize>
 }
 
 
@@ -46,4 +46,11 @@ pub struct FilesystemMetadata {
 
 impl FilesystemMetadata {
 
+}
+
+pub fn persist_metadata {
+}
+
+pub fn restore_metadata {
+    
 }
