@@ -54,15 +54,11 @@ pub struct Cage {
 impl Cage {
 
     //Creates new cage - parent and old fdtable supplied on fork()
-    fn new(cageid: usize, workingdir: String, parent: Option<usize>, fdtable: Option<RustHashMap<usize, RustLock<RustRfc<FileDescriptor>>>>) -> Cage {
-        match parent {
-            Some(parent) => parent,
-            None => 0
-        }
+    fn new(cageid: usize, workingdir: String, parent: usize, fdtable: Option<RustHashMap<usize, RustLock<RustRfc<FileDescriptor>>>>) -> Cage {
 
         match fdtable {
             Some(fdtable) => fdtable,
-            None => new_hashmap()<usize, RustLock<RustRfc<FileDescriptor>>>
+            None => new_hashmap()<usize, RustLock<RustRfc<FileDescriptor>>>,
         }
         
         Cage {cageid: cageid, cwd: workingdir, parent: parent, filedescriptortable: fdtable})
@@ -73,7 +69,7 @@ impl Cage {
 
         match startfd {
             Some(startfd) => startfd,
-            None => STARTINGFD
+            None => STARTINGFD,
         }
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
