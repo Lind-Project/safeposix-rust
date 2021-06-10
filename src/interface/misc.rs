@@ -6,7 +6,7 @@
 
 use std::fs::File;
 use std::io::Read;
-use std::collections::HashMap as RustHashMap;
+pub use std::collections::HashMap as RustHashMap;
 
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;

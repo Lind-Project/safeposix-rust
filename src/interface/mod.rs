@@ -3,7 +3,11 @@
 // Module definitions for the SafePOSIX Rust interface
 // this interface limits kernel access from Rust to the popular paths as defined in Lock-in-Pop
 
-pub mod comm;
-pub mod file;
-pub mod misc;
-pub mod timer;
+mod comm;
+mod file;
+mod misc;
+mod timer;
+pub use comm::*;
+pub use file::*;
+pub use misc::*;
+pub use timer::*;

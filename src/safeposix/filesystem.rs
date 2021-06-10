@@ -1,4 +1,5 @@
 // Filesystem metadata struct
+#![allow(dead_code)]
 
 use crate::interface;
 
@@ -20,10 +21,10 @@ struct GenericInode {
     refcount: usize,
     atime: u64,
     ctime: u64,
-    mtime: u64,
+    mtime: u64
 }
 
-struct DirInode {
+struct DirectoryInode {
     size: usize,
     uid: usize,
     gid: usize,
@@ -32,25 +33,25 @@ struct DirInode {
     refcount: usize,
     atime: u64,
     ctime: u64,
-    mtime: u64
-    filename_to_inode_dict: RustHashMap<String, usize>
+    mtime: u64,
+    filename_to_inode_dict: interface::RustHashMap<String, usize>
 }
 
 
 pub struct FilesystemMetadata {
     nextinode: usize,
     dev_id: usize,
-    inodetable: RustHashMap<usize, Inode>
-    fileobjecttable: RustHashMap<usize, EmulatedFile>
+    inodetable: interface::RustHashMap<usize, Inode>,
+    fileobjecttable: interface::RustHashMap<usize, interface::EmulatedFile>
 } 
 
 impl FilesystemMetadata {
 
 }
 
-pub fn persist_metadata {
+pub fn persist_metadata() {
 }
 
-pub fn restore_metadata {
+pub fn restore_metadata() {
     
 }
