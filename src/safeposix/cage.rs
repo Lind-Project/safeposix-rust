@@ -4,7 +4,7 @@ use crate::interface;
 use syscalls::fs_constants::*;
 
 
-pub static cage_table: RustLazyGlobal<RustLock<RustRfc<RustHashMap<usize, Cage>>>> = RustLazyGlobal::new(|| rust_rfc::new(rust_lock::new(new_hashmap())));
+pub static cage_table: RustLazyGlobal<RustLock<RustRfc<RustHashMap<usize, Cage>>>> = RustLazyGlobal::new(|| rust_rfc::new(rust_lock::new(new_hashmap()<usize, Cage>)));
 
 
 enum FileDescriptor {
