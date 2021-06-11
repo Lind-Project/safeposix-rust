@@ -65,23 +65,26 @@ const PWRITE_SYSCALL: i32 = 127;
 
 
 use crate::interface;
-use super::cage::CAGE_TABLE;
+use super::cage::{CAGE_TABLE, Cage};
 
 
 #[repr(C)]
 pub union Arg {
   int: i32,
+  ulong: u64,
   cstr: *const u8,
   cstrarr: *const *const u8,
 }
 
+pub static THREAD2CAGEID: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<interface::RustThreadId, u64>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
 pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
     
-    let cageid = u64::from(interface::rust_gettid().id().as_u64()); //figure this out
+    let threadnum = interface::rust_gettid().id();
+    let cageid = { THREAD2CAGEID.read().unwrap().get(&threadnum).unwrap().clone() };
 
     // need to match based on if cage exists
-    let current_cage = {CAGE_TABLE.read().unwrap().get(&cageid)};
+    let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
 
     //implement syscall method calling using matching
     // match based on syscall, take cagetable lock as read for all except fork/exec, which need write
@@ -91,9 +94,17 @@ pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4
         0
       },
       EXEC_SYSCALL => {
+        {
+          let mut t2cid = THREAD2CAGEID.write().unwrap();
+          t2cid.insert(threadnum, unsafe{arg1.ulong});
+        }
+        cage.exec_syscall(unsafe{arg1.ulong});
         0
       }
       FORK_SYSCALL => {
+        //do something with threadid 2 cageid, but we don't know the threadid in advance?? 
+        //dispatch to a register cageid kind of thing further on in fork?
+        cage.fork_syscall(unsafe{arg1.ulong});
         0
       },
       _ => {//unknown syscall
@@ -102,3 +113,21 @@ pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    pub fn cagetest() {
+      let threadnum = interface::rust_gettid().id();
+      {THREAD2CAGEID.write().unwrap().insert(threadnum, 1_u64);};
+
+      {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd:"/".to_string(), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
+      {println!("{:?}", CAGE_TABLE.read().unwrap());};
+      {println!("{}", interface::RustRfc::strong_count(CAGE_TABLE.read().unwrap().get(&1_u64).unwrap()));}
+      dispatcher(FORK_SYSCALL, Arg {ulong: 2_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
+      {println!("{:?}", CAGE_TABLE.read().unwrap());};
+      dispatcher(EXEC_SYSCALL, Arg {ulong: 7_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
+      {println!("{:?}", CAGE_TABLE.read().unwrap());};
+      
+    }
+}

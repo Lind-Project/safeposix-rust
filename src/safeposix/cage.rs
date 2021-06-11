@@ -3,66 +3,60 @@ use crate::interface;
 
 use crate::safeposix::syscalls::fs_constants::*;
 
-pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustRfc<interface::RustHashMap<u64, Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustRfc::new(interface::new_hashmap())));
+pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
 
-enum FileDescriptor {
+#[derive(Debug)]
+pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
     Pipe(PipeDesc)
 }
 
-struct FileDesc {
-    position: usize,
-    inode: usize,
-    flags: usize
+#[derive(Debug)]
+pub struct FileDesc {
+    pub position: usize,
+    pub inode: usize,
+    pub flags: usize
 }
 
-struct StreamDesc {
-    position: usize,
-    inode: usize,
-    flags: usize
+#[derive(Debug)]
+pub struct StreamDesc {
+    pub position: usize,
+    pub inode: usize,
+    pub flags: usize
 }
 
-struct SocketDesc {
-    mode: usize,
-    domain: usize,
-    socktype: usize,
-    protocol: usize,
-    options: usize,
-    sndbuf: usize,
-    rcvbuf: usize,
-    state: usize,
-    flags: usize,
-    errno: usize
+#[derive(Debug)]
+pub struct SocketDesc {
+    pub mode: usize,
+    pub domain: usize,
+    pub socktype: usize,
+    pub protocol: usize,
+    pub options: usize,
+    pub sndbuf: usize,
+    pub rcvbuf: usize,
+    pub state: usize,
+    pub flags: usize,
+    pub errno: usize
 }
 
-struct PipeDesc {
-    pipe: usize,
-    flags: usize
+#[derive(Debug)]
+pub struct PipeDesc {
+    pub pipe: usize,
+    pub flags: usize
 }
 
+#[derive(Debug)]
 pub struct Cage {
-    cageid: usize,
-    cwd: String,
-    parent: usize,
-    filedescriptortable: interface::RustHashMap<usize, interface::RustLock<interface::RustRfc<FileDescriptor>>>
+    pub cageid: u64,
+    pub cwd: String,
+    pub parent: u64,
+    pub filedescriptortable: interface::RustLock<interface::RustHashMap<usize, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>>
 }
 
 impl Cage {
-
-    //Creates new cage - parent and old fdtable supplied on fork()
-    fn new(cageid: usize, workingdir: String, parent: usize, fdtable: Option<interface::RustHashMap<usize, interface::RustLock<interface::RustRfc<FileDescriptor>>>>) -> Cage {
-
-        let fdt2put = match fdtable {
-            Some(fdtable) => fdtable,
-            None => interface::new_hashmap()
-        };
-        
-        Cage {cageid: cageid, cwd: workingdir, parent: parent, filedescriptortable: fdt2put}
-
-    }
 
     fn get_next_fd(&self, startfd: Option<usize>) -> Option<usize> {
 
@@ -72,8 +66,9 @@ impl Cage {
         };
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
+        let rdguard = self.filedescriptortable.read().unwrap();
         for fd in start..MAXFD{
-            if !self.filedescriptortable.contains_key(&fd) {
+            if !rdguard.contains_key(&fd) {
                 return Some(fd);
             }
         };
@@ -81,11 +76,11 @@ impl Cage {
     }
 
     fn add_to_fd_table(&mut self, fd: usize, descriptor: FileDescriptor) {
-        self.filedescriptortable.insert(fd, interface::RustLock::new(interface::RustRfc::new(descriptor)));
+        self.filedescriptortable.write().unwrap().insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
     }
 
     fn rm_from_fd_table(&mut self, fd: &usize) {
-        self.filedescriptortable.remove(fd);
+        self.filedescriptortable.write().unwrap().remove(fd);
     }
 
     fn changedir(&mut self, newdir: String) {

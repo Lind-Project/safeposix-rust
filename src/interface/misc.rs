@@ -10,7 +10,7 @@ pub use std::collections::HashMap as RustHashMap;
 
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;
-pub use std::thread::current as rust_gettid;
+pub use std::thread::{current as rust_gettid, ThreadId as RustThreadId};
 
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
