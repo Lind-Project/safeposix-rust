@@ -74,6 +74,7 @@ pub union Arg {
   ulong: u64,
   cstr: *const u8,
   cstrarr: *const *const u8,
+  void: *const c_void, //used in get/setrlimit
 }
 
 pub static THREAD2CAGEID: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<interface::RustThreadId, u64>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
