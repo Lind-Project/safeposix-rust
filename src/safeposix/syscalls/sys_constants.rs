@@ -19,3 +19,11 @@ NOFILE_MAX : u64 = 4*1024
 
 STACK_CUR : u64 = 8192*1024
 STACK_MAX : u64 = 2**32
+
+
+//R Limit for getrlimit system call
+#[repr(C)]
+pub struct Rlimit {
+  rlim_cur: u64,
+  rlim_max: u64,
+}
