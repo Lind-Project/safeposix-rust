@@ -6,5 +6,5 @@ use crate::interface;
 // Define constants using static or const
 // Imported into fs_calls file
 
-const STARTINGFD: usize = 0;
-const MAXFD: usize = 1024
+pub const STARTINGFD: usize = 0;
+pub const MAXFD: usize = 1024;

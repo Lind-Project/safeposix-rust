@@ -1,99 +1,90 @@
-
+#![allow(dead_code)]
 use crate::interface;
 
-use syscalls::fs_constants::*;
+use crate::safeposix::syscalls::fs_constants::*;
+
+pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
 
-pub static cage_table: RustLazyGlobal<RustLock<RustRfc<RustHashMap<usize, Cage>>>> = RustLazyGlobal::new(|| rust_rfc::new(rust_lock::new(new_hashmap()<usize, Cage>)));
-
-
-enum FileDescriptor {
+#[derive(Debug)]
+pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
     Pipe(PipeDesc)
 }
 
-struct FileDesc {
-    position: usize,
-    inode: usize,
-    flags, usize
+#[derive(Debug)]
+pub struct FileDesc {
+    pub position: usize,
+    pub inode: usize,
+    pub flags: usize
 }
 
-struct StreamDesc {
-    position: usize,
-    inode: usize,
-    flags, usize
+#[derive(Debug)]
+pub struct StreamDesc {
+    pub position: usize,
+    pub inode: usize,
+    pub flags: usize
 }
 
-struct SocketDesc {
-    mode: usize,
-    domain: usize,
-    type: usize,
-    protocol: usize,
-    options: usize,
-    sndbuf: usize,
-    rcvbuf: usize,
-    state: usize,
-    flags: usize,
-    errno: usize
+#[derive(Debug)]
+pub struct SocketDesc {
+    pub mode: usize,
+    pub domain: usize,
+    pub socktype: usize,
+    pub protocol: usize,
+    pub options: usize,
+    pub sndbuf: usize,
+    pub rcvbuf: usize,
+    pub state: usize,
+    pub flags: usize,
+    pub errno: usize
 }
 
-struct PipeDesc {
-    pipe: usize,
-    flags: usize
+#[derive(Debug)]
+pub struct PipeDesc {
+    pub pipe: usize,
+    pub flags: usize
 }
 
+#[derive(Debug)]
 pub struct Cage {
-    cageid: usize,
-    cwd: String,
-    parent: usize,
-    filedescriptortable: RustHashMap<usize, RustLock<RustRfc<FileDescriptor>>>
+    pub cageid: u64,
+    pub cwd: String,
+    pub parent: u64,
+    pub filedescriptortable: interface::RustLock<interface::RustHashMap<usize, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>>
 }
 
 impl Cage {
 
-    //Creates new cage - parent and old fdtable supplied on fork()
-    fn new(cageid: usize, workingdir: String, parent: usize, fdtable: Option<RustHashMap<usize, RustLock<RustRfc<FileDescriptor>>>>) -> Cage {
+    fn get_next_fd(&self, startfd: Option<usize>) -> Option<usize> {
 
-        match fdtable {
-            Some(fdtable) => fdtable,
-            None => new_hashmap()<usize, RustLock<RustRfc<FileDescriptor>>>,
-        }
-        
-        Cage {cageid: cageid, cwd: workingdir, parent: parent, filedescriptortable: fdtable})
-
-    }
-
-    fn get_next_fd(&self, startfd: Option<usize>) -> usize {
-
-        match startfd {
+        let start = match startfd {
             Some(startfd) => startfd,
             None => STARTINGFD,
-        }
+        };
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
-        for fd in startfd..MAX_FD){
-            if !self.filedescriptortable.contains_key(fd) {
-                return fd;
+        let rdguard = self.filedescriptortable.read().unwrap();
+        for fd in start..MAXFD{
+            if !rdguard.contains_key(&fd) {
+                return Some(fd);
             }
-        }
-
+        };
+        None
     }
 
-    fn add_to_fd_table(&self, fd: usize, descriptor: FileDescriptor) {
-        self.filedescriptortable.insert(fd, descriptor);
+    fn add_to_fd_table(&mut self, fd: usize, descriptor: FileDescriptor) {
+        self.filedescriptortable.write().unwrap().insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
     }
 
-    fn rm_from_fd_table(&self, fd: usize) {
-        self.filedescriptortable.remove(fd);        
+    fn rm_from_fd_table(&mut self, fd: &usize) {
+        self.filedescriptortable.write().unwrap().remove(fd);
     }
 
-
-    fn changedir(&self, newdir: String) {
+    fn changedir(&mut self, newdir: String) {
         self.cwd = newdir;
     }
 
-
 }
- 
