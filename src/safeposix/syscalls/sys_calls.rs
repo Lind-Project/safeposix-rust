@@ -32,4 +32,27 @@ impl Cage {
   pub fn getpid_syscall(&self) -> i32 {
     self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
   }
+  
+  pub fn getppid_syscall(&self) -> i32 {
+    self.parent as i32 // mimicing the call above -- easy to change later if necessary
+  }
+  
+  pub fn getgid_syscall(&self) -> i32 {
+    DEFAULT_GID as i32 //currently, Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn getegid_syscall(&self) -> i32 {
+    DEFAULT_GID as i32 //currently, Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn getuid_syscall(&self) -> i32 {
+    DEFAULT_UID as i32 //currently, Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn geteuid_syscall(&self) -> i32 {
+    DEFAULT_UID as i32 //currently, Lind is only run in one group so a default value is returned
+  }
+  
+  //setrlimit and getrlimit
+    
 }
