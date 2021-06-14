@@ -52,7 +52,5 @@ impl Cage {
   pub fn geteuid_syscall(&self) -> i32 {
     DEFAULT_UID as i32 //currently, Lind is only run in one group so a default value is returned
   }
-  
-  //setrlimit and getrlimit
-    
+
 }
