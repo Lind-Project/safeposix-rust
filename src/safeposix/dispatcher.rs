@@ -90,22 +90,23 @@ pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4
     // match based on syscall, take cagetable lock as read for all except fork/exec, which need write
 
     match callnum {
+      GETPID_SYSCALL => {
+        cage.getpid_syscall()
+      }
       EXIT_SYSCALL => {
-        0
+        cage.exit_syscall()
       },
       EXEC_SYSCALL => {
         {
           let mut t2cid = THREAD2CAGEID.write().unwrap();
           t2cid.insert(threadnum, unsafe{arg1.ulong});
         }
-        cage.exec_syscall(unsafe{arg1.ulong});
-        0
+        cage.exec_syscall(unsafe{arg1.ulong})
       }
       FORK_SYSCALL => {
         //do something with threadid 2 cageid, but we don't know the threadid in advance?? 
         //dispatch to a register cageid kind of thing further on in fork?
-        cage.fork_syscall(unsafe{arg1.ulong});
-        0
+        cage.fork_syscall(unsafe{arg1.ulong})
       },
       _ => {//unknown syscall
         -1
@@ -128,6 +129,7 @@ mod tests {
       {println!("{:?}", CAGE_TABLE.read().unwrap());};
       dispatcher(EXEC_SYSCALL, Arg {ulong: 7_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
       {println!("{:?}", CAGE_TABLE.read().unwrap());};
+      dispatcher(EXIT_SYSCALL, Arg {ulong: 61_u64}, Arg {int: 33987}, Arg {int: 123452}, Arg {int: -98493}, Arg {int: -1}, Arg {int: 0});
       
     }
 }
