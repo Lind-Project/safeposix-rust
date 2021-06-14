@@ -4,3 +4,18 @@ use crate::interface;
 
 // Define constants using static or const
 // Imported into fs_calls file
+
+
+//GID AND UID DEFAULT VALUES
+
+DEFAULT_UID : u64 = 1000
+DEFAULT_GID : u64 = 1000
+
+
+// RESOURCE LIMITS
+
+NOFILE_CUR : u64 = 1024
+NOFILE_MAX : u64 = 4*1024
+
+STACK_CUR : u64 = 8192*1024
+STACK_MAX : u64 = 2**32
