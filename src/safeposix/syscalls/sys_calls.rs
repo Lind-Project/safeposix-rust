@@ -32,4 +32,55 @@ impl Cage {
   pub fn getpid_syscall(&self) -> i32 {
     self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
   }
+
+  pub fn getppid_syscall(&self) -> i32 {
+    self.parent as i32 // mimicing the call above -- easy to change later if necessary
+  }
+  
+  pub fn getgid_syscall(&self) -> i32 {
+    DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn getegid_syscall(&self) -> i32 {
+    DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn getuid_syscall(&self) -> i32 {
+    DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn geteuid_syscall(&self) -> i32 {
+    DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
+  }
+  
+  pub fn getrlimit(&self, res_type: void, rlimit: Rlimit) -> i32 {
+    match res_type{
+      RLIMIT_NOFILE => {
+          rlimit.rlim_cur = NOFILE_CUR,
+          rlimit.rlim_max = NOFILE_MAX,
+        }
+        0
+      },
+      RLIMIT_STACK => {
+        rlimit.rlim_cur = STACK_CUR,
+        rlimit.rlim_max = STACK_MAX,
+        0
+      },
+      _ => -1,
+      }
+    }
+  }
+  
+  pub fn setrlimit(&self, res_type: void, limitValue: u64) -> i32 {
+    match res_type{
+      RLIMIT_NOFILE => {
+          if (&NOFILE_CUR > NOFILE_MAX) -1
+          else  0 
+          //FIXME: not implemented yet to update value in program
+        },
+      _ => -1,
+      }
+    }
+  }
+
 }
