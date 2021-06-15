@@ -32,7 +32,6 @@ impl Cage {
   pub fn getpid_syscall(&self) -> i32 {
     self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
   }
-
   pub fn getppid_syscall(&self) -> i32 {
     self.parent as i32 // mimicing the call above -- easy to change later if necessary
   }
