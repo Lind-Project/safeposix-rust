@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::env;
 use std::slice;
-use std::path::{PathBuf, Path};
+pub use std::path::{PathBuf, Path, Component};
 use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::SyncLazy as RustLazyGlobal;
 

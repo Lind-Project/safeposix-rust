@@ -3,39 +3,53 @@
 
 use crate::interface;
 use super::syscalls::fs_constants::*;
+use super::cage::Cage;
 
 
 enum Inode {
     File(GenericInode),
+    CharDev(DeviceInode),
     Dir(DirectoryInode),
     Stream(GenericInode),
     Pipe(GenericInode),
     Socket(GenericInode)
 }
 
-struct GenericInode {
-    size: usize,
-    uid: usize,
-    gid: usize,
-    mode: usize,
-    linkcount: usize,
-    refcount: usize,
-    atime: u64,
-    ctime: u64,
-    mtime: u64
+pub struct GenericInode {
+    pub size: usize,
+    pub uid: usize,
+    pub gid: usize,
+    pub mode: usize,
+    pub linkcount: usize,
+    pub refcount: usize,
+    pub atime: u64,
+    pub ctime: u64,
+    pub mtime: u64
+}
+pub struct DeviceInode {
+    pub size: usize,
+    pub uid: usize,
+    pub gid: usize,
+    pub mode: usize,
+    pub linkcount: usize,
+    pub refcount: usize,
+    pub atime: u64,
+    pub ctime: u64,
+    pub mtime: u64,
+    pub dev: DevNo,
 }
 
-struct DirectoryInode {
-    size: usize,
-    uid: usize,
-    gid: usize,
-    mode: usize,
-    linkcount: usize,
-    refcount: usize,
-    atime: u64,
-    ctime: u64,
-    mtime: u64,
-    filename_to_inode_dict: interface::RustHashMap<String, usize>
+pub struct DirectoryInode {
+    pub size: usize,
+    pub uid: usize,
+    pub gid: usize,
+    pub mode: usize,
+    pub linkcount: usize,
+    pub refcount: usize,
+    pub atime: u64,
+    pub ctime: u64,
+    pub mtime: u64,
+    pub filename_to_inode_dict: interface::RustHashMap<String, usize>
 }
 
 
@@ -65,4 +79,21 @@ pub fn persist_metadata() {
 
 pub fn restore_metadata() {
     
+}
+
+pub fn normpath(origp: interface::PathBuf, cage: Cage) -> interface::PathBuf {
+    let mut newp = interface::PathBuf::new();
+    if origp.is_relative() {
+        newp.push(cage.cwd);
+    }
+
+    for comp in origp.components() {
+        match comp {
+            interface::Component::RootDir => {newp.push(comp);},
+            interface::Component::Normal(_) => {newp.push(comp);},
+            interface::Component::ParentDir => {if newp.parent().is_some() {newp.pop();};}
+            _ => {},
+        };
+    }
+    newp
 }

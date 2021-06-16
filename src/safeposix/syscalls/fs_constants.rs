@@ -22,6 +22,7 @@ pub const DEFAULTTIME: u64 = 1323630836;
 pub const DEFAULT_UID:usize = 1000;
 pub const DEFAULT_GID:usize = 1000;
 
+//Standard flag combinations
 pub const S_IRWXA: usize = 0o777;
 pub const S_IRWXU: usize = 0o700;
 pub const S_IRUSR: usize = 0o400;
@@ -36,6 +37,7 @@ pub const S_IROTH: usize = 0o004;
 pub const S_IWOTH: usize = 0o002;
 pub const S_IXOTH: usize = 0o001;
 
+//File types for open/stat etc.
 pub const S_IFBLK: usize = 24576;
 pub const S_IFCHR: usize = 8192;
 pub const S_IFDIR: usize = 16384;
@@ -43,3 +45,14 @@ pub const S_IFIFO: usize = 4096;
 pub const S_IFLNK: usize = 40960;
 pub const S_IFREG: usize = 32768;
 pub const S_IFSOCK: usize = 49152;
+
+//device info for char files
+#[derive(PartialEq)]
+pub struct DevNo {
+  pub major: u64,
+  pub minor: u64
+}
+pub const NULLDEVNO: DevNo = DevNo {major: 1, minor: 3};
+pub const ZERODEVNO: DevNo = DevNo {major: 1, minor: 5};
+pub const RANDOMDEVNO: DevNo = DevNo {major: 1, minor: 8};
+pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
