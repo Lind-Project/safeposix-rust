@@ -58,7 +58,7 @@ pub struct Cage {
 
 impl Cage {
 
-    fn get_next_fd(&self, startfd: Option<usize>) -> Option<usize> {
+    pub fn get_next_fd(&self, startfd: Option<usize>) -> Option<usize> {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -75,16 +75,25 @@ impl Cage {
         None
     }
 
-    fn add_to_fd_table(&mut self, fd: usize, descriptor: FileDescriptor) {
+    pub fn add_to_fd_table(&mut self, fd: usize, descriptor: FileDescriptor) {
         self.filedescriptortable.write().unwrap().insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
     }
 
-    fn rm_from_fd_table(&mut self, fd: &usize) {
+    pub fn rm_from_fd_table(&mut self, fd: &usize) {
         self.filedescriptortable.write().unwrap().remove(fd);
     }
 
-    fn changedir(&mut self, newdir: String) {
+    pub fn changedir(&mut self, newdir: String) {
         self.cwd = newdir;
     }
 
+    pub fn load_lower_handle_stubs(&mut self) {
+        let stdin = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, inode: STREAMINODE, flags: O_RDONLY}))));
+        let stdout = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, inode: STREAMINODE, flags: O_WRONLY}))));
+        let stderr = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, inode: STREAMINODE, flags: O_WRONLY}))));
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        fdtable.insert(0, stdin);
+        fdtable.insert(1, stdout);
+        fdtable.insert(2, stderr);
+    }
 }

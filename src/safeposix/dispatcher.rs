@@ -76,13 +76,8 @@ pub union Arg {
   cstrarr: *const *const u8,
 }
 
-pub static THREAD2CAGEID: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<interface::RustThreadId, u64>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
-
-pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
+pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
     
-    let threadnum = interface::rust_gettid().id();
-    let cageid = { THREAD2CAGEID.read().unwrap().get(&threadnum).unwrap().clone() };
-
     // need to match based on if cage exists
     let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
 
@@ -97,10 +92,6 @@ pub extern "C" fn dispatcher(callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4
         cage.exit_syscall()
       },
       EXEC_SYSCALL => {
-        {
-          let mut t2cid = THREAD2CAGEID.write().unwrap();
-          t2cid.insert(threadnum, unsafe{arg1.ulong});
-        }
         cage.exec_syscall(unsafe{arg1.ulong})
       }
       FORK_SYSCALL => {
@@ -119,17 +110,17 @@ mod tests {
     use super::*;
     #[test]
     pub fn cagetest() {
-      let threadnum = interface::rust_gettid().id();
-      {THREAD2CAGEID.write().unwrap().insert(threadnum, 1_u64);};
 
       {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd:"/".to_string(), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
+      {let mut cagey = interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
       {println!("{:?}", CAGE_TABLE.read().unwrap());};
       {println!("{}", interface::RustRfc::strong_count(CAGE_TABLE.read().unwrap().get(&1_u64).unwrap()));}
-      dispatcher(FORK_SYSCALL, Arg {ulong: 2_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
+      dispatcher(1, FORK_SYSCALL, Arg {ulong: 2_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
       {println!("{:?}", CAGE_TABLE.read().unwrap());};
-      dispatcher(EXEC_SYSCALL, Arg {ulong: 7_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
+      dispatcher(2, EXEC_SYSCALL, Arg {ulong: 7_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
       {println!("{:?}", CAGE_TABLE.read().unwrap());};
-      dispatcher(EXIT_SYSCALL, Arg {ulong: 61_u64}, Arg {int: 33987}, Arg {int: 123452}, Arg {int: -98493}, Arg {int: -1}, Arg {int: 0});
+      dispatcher(7, EXIT_SYSCALL, Arg {ulong: 61_u64}, Arg {int: 33987}, Arg {int: 123452}, Arg {int: -98493}, Arg {int: -1}, Arg {int: 0});
+      {println!("{:?}", CAGE_TABLE.read().unwrap());};
       
     }
 }
