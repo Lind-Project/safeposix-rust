@@ -8,8 +8,8 @@ use crate::interface;
 
 //GID AND UID DEFAULT VALUES
 
-DEFAULT_UID : u64 = 1000;
-DEFAULT_GID : u64 = 1000;
+static DEFAULT_UID : u64 = 1000;
+static DEFAULT_GID : u64 = 1000;
 
 
 // RESOURCE LIMITS
