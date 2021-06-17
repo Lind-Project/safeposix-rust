@@ -66,6 +66,7 @@ const PWRITE_SYSCALL: i32 = 127;
 
 use crate::interface;
 use super::cage::{CAGE_TABLE, Cage};
+use super::syscalls::{sys_constants::*};
 
 
 #[repr(C)]
@@ -74,6 +75,7 @@ pub union Arg {
   ulong: u64,
   cstr: *const u8,
   cstrarr: *const *const u8,
+  rlimitstruct: *const Rlimit,
 }
 
 pub static THREAD2CAGEID: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<interface::RustThreadId, u64>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
