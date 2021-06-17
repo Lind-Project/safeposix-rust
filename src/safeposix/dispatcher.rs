@@ -74,6 +74,8 @@ pub union Arg {
   ulong: u64,
   cstr: *const u8,
   cstrarr: *const *const u8,
+  void: *const c_void, 
+  rlimitstruct: *const Rlimit,
 }
 
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
