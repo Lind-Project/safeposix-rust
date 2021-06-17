@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 use crate::interface;
 
-use crate::safeposix::syscalls::fs_constants::*;
+use super::syscalls::fs_constants::*;
+use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
@@ -18,19 +19,19 @@ pub enum FileDescriptor {
 pub struct FileDesc {
     pub position: usize,
     pub inode: usize,
-    pub flags: usize
+    pub flags: i32
 }
 
 #[derive(Debug)]
 pub struct StreamDesc {
     pub position: usize,
     pub inode: usize,
-    pub flags: usize
+    pub flags: i32
 }
 
 #[derive(Debug)]
 pub struct SocketDesc {
-    pub mode: usize,
+    pub mode: u32,
     pub domain: usize,
     pub socktype: usize,
     pub protocol: usize,
@@ -38,27 +39,27 @@ pub struct SocketDesc {
     pub sndbuf: usize,
     pub rcvbuf: usize,
     pub state: usize,
-    pub flags: usize,
+    pub flags: i32,
     pub errno: usize
 }
 
 #[derive(Debug)]
 pub struct PipeDesc {
     pub pipe: usize,
-    pub flags: usize
+    pub flags: i32
 }
 
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
-    pub cwd: String,
+    pub cwd: interface::PathBuf,
     pub parent: u64,
-    pub filedescriptortable: interface::RustLock<interface::RustHashMap<usize, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>>
+    pub filedescriptortable: interface::RustLock<interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>>
 }
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<usize>) -> Option<usize> {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> Option<i32> {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -75,16 +76,16 @@ impl Cage {
         None
     }
 
-    pub fn add_to_fd_table(&mut self, fd: usize, descriptor: FileDescriptor) {
+    pub fn add_to_fd_table(&mut self, fd: i32, descriptor: FileDescriptor) {
         self.filedescriptortable.write().unwrap().insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
     }
 
-    pub fn rm_from_fd_table(&mut self, fd: &usize) {
+    pub fn rm_from_fd_table(&mut self, fd: &i32) {
         self.filedescriptortable.write().unwrap().remove(fd);
     }
 
-    pub fn changedir(&mut self, newdir: String) {
-        self.cwd = newdir;
+    pub fn changedir(&mut self, newdir: interface::PathBuf) {
+        self.cwd = normpath(self.cwd.join(newdir), self);
     }
 
     pub fn load_lower_handle_stubs(&mut self) {

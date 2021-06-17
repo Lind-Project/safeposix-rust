@@ -113,8 +113,8 @@ mod tests {
     #[test]
     pub fn cagetest() {
 
-      {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd:"/".to_string(), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
-      {let mut cagey = interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
+      {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd: interface::PathBuf::from("/"), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
+      {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
       {println!("{:?}", CAGE_TABLE.read().unwrap());};
       {println!("{}", interface::RustRfc::strong_count(CAGE_TABLE.read().unwrap().get(&1_u64).unwrap()));}
       dispatcher(1, FORK_SYSCALL, Arg {ulong: 2_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
