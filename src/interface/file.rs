@@ -59,7 +59,7 @@ fn assert_is_allowed_filename(filename: &String) {
     }
 
     if !filename.chars().all(char::is_alphanumeric) {
-        panic!("ArgumentError: Filename has disallowed charachters.")
+        panic!("ArgumentError: Filename has disallowed characters.")
     }
 
     match filename.as_str() {
