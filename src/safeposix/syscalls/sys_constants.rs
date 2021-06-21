@@ -8,25 +8,25 @@ use crate::interface;
 
 //GID AND UID DEFAULT VALUES
 
-DEFAULT_UID : u64 = 1000;
-DEFAULT_GID : u64 = 1000;
+pub const DEFAULT_UID : u64 = 1000;
+pub const DEFAULT_GID : u64 = 1000;
 
 
 // RESOURCE LIMITS
 
-NOFILE_CUR : u64 = 1024;
-NOFILE_MAX : u64 = 4*1024;
+pub const NOFILE_CUR : u64 = 1024;
+pub const NOFILE_MAX : u64 = 4*1024;
 
-STACK_CUR : u64 = 8192*1024;
-STACK_MAX : u64 = 2**32;
+pub const STACK_CUR : u64 = 8192*1024;
+pub const STACK_MAX : u64 = 1 << 32;
 
-RLIMIT_STACK = 0;
-RLIMIT_NOFILE = 1;
+pub const RLIMIT_STACK: u64 = 0;
+pub const RLIMIT_NOFILE: u64 = 1;
 
 
 //R Limit for getrlimit system call
 #[repr(C)]
 pub struct Rlimit {
-  rlim_cur: u64,
-  rlim_max: u64,
+  pub rlim_cur: u64,
+  pub rlim_max: u64,
 }

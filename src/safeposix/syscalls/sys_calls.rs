@@ -52,33 +52,28 @@ impl Cage {
     DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
   }
   
-  pub fn getrlimit(&self, res_type: void, rlimit: Rlimit) -> i32 {
-    match res_type{
+  pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
+    match res_type {
       RLIMIT_NOFILE => {
-          rlimit.rlim_cur = NOFILE_CUR,
-          rlimit.rlim_max = NOFILE_MAX,
-        }
-        0
+          rlimit.rlim_cur = NOFILE_CUR;
+          rlimit.rlim_max = NOFILE_MAX;
       },
       RLIMIT_STACK => {
-        rlimit.rlim_cur = STACK_CUR,
-        rlimit.rlim_max = STACK_MAX,
-        0
+        rlimit.rlim_cur = STACK_CUR;
+        rlimit.rlim_max = STACK_MAX;
       },
-      _ => -1,
-      }
+      _ => return -1,
     }
+    0
   }
   
-  pub fn setrlimit(&self, res_type: void, limitValue: u64) -> i32 {
+  pub fn setrlimit(&self, res_type: u64, limit_value: u64) -> i32 {
     match res_type{
       RLIMIT_NOFILE => {
-          if (&NOFILE_CUR > NOFILE_MAX) -1
-          else  0 
+          if NOFILE_CUR > NOFILE_MAX {-1} else {0}
           //FIXME: not implemented yet to update value in program
         },
       _ => -1,
-      }
     }
   }
 
