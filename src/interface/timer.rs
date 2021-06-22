@@ -4,8 +4,13 @@
 #![allow(dead_code)]
 
 use std::thread;
+use std::time::SystemTime;
 pub use std::time::Instant as RustInstant;
 pub use std::time::Duration as RustDuration;
+
+pub fn timestamp() -> u64 {
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+}
 
 // Create a new timer
 pub fn starttimer() -> RustInstant {

@@ -2,22 +2,62 @@
 
 use crate::interface;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*};
+use crate::safeposix::filesystem::{FS_METADATA, Inode};
 
 use super::sys_constants::*;
 
 impl Cage {
   pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-    CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(Cage {cageid: child_cageid, cwd: self.cwd.clone(), parent: self.cageid, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())}));
+    let mut cagetab = CAGE_TABLE.write().unwrap();
+
+    //construct new cage struct with a cloned fdtable
+    let mut newfdtable = interface::RustHashMap::new();
+    {
+      let mut fsm = FS_METADATA.write().unwrap();
+      for (key, value) in self.filedescriptortable.read().unwrap().iter() {
+          let fd = value.read().unwrap();
+
+          //only file inodes have real inode objects currently
+          let inodopt = match &**fd {
+              File(f) => {Some(f.inode)}
+              Stream(f) => {None}
+              Socket(f) => {None}
+              Pipe(f) => {None}
+          };
+
+          if let Some(ino) = inodopt {
+            //increment the reference count on the inode
+            let mut inode = fsm.inodetable.get_mut(&ino).unwrap();
+            match inode {
+                Inode::File(f) => {f.refcount += 1;}
+                Inode::CharDev(f) => {f.refcount += 1;}
+                //Inode::Stream(f) => {f.refcount += 1;}
+                Inode::Pipe(f) => {f.refcount += 1;}
+                Inode::Socket(f) => {f.refcount += 1;}
+                Inode::Dir(_) => {}
+            }
+          }
+
+          newfdtable.insert(*key, value.clone()); //clone (increment) the reference counter, and add to hashmap
+      }
+    }
+    let cageobj = Cage {
+        cageid: child_cageid, cwd: self.cwd.clone(), parent: self.cageid, 
+        filedescriptortable: interface::RustLock::new(newfdtable)
+    };
+    cagetab.insert(child_cageid, interface::RustRfc::new(cageobj));
     0
   }
   pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
     { CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap(); }
+
     self.filedescriptortable.write().unwrap().retain(|&_, v| !match &**v.read().unwrap() {
       File(_f) => true,//f.flags & CLOEXEC,
       Stream(_s) => true,//s.flags & CLOEXEC,
       Socket(_s) => true,//s.flags & CLOEXEC,
       Pipe(_p) => true,//p.flags & CLOEXEC
     });
+
     let newcage = Cage {cageid: child_cageid, cwd: self.cwd.clone(), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
     //wasteful clone of fdtable, but mutability constraints exist
 
