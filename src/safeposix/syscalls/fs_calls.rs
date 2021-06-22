@@ -224,4 +224,19 @@ impl Cage {
           -1
         }
     }
+
+    fn chdir_syscall(&mut self, path: &str) -> i32 {
+        let truepath = normpath(convpath(path), self);
+        let mdobj = FS_METADATA.read().unwrap();
+        if let Some(inodeno) = metawalk(&truepath, Some(&mdobj)) {
+            if let Inode::Dir(_dir) = mdobj.inodetable.get(&inodeno).unwrap() {
+                self.cwd = truepath;
+                0
+            } else {
+                -1
+            }
+        } else {
+            -1
+        }
+    }
 }
