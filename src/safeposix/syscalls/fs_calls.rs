@@ -95,9 +95,8 @@ impl Cage {
 
     //------------------STAT SYSCALL------------------
 
-    pub fn stat_syscall(&self, path: std::ffi::CString) -> &mut statdata {        
+    pub fn stat_syscall(&self, path: std::ffi::CString, ret : &mut StatData) -> &mut StatData {        
         //need to get datalock somehow
-
         let truepath = normpath(convpath(path.into_string().unwrap()), self);
 
         if let Some(inodeno) = metawalk(truepath) {
@@ -105,6 +104,8 @@ impl Cage {
             let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
             let mode;
             let size;
+            let linkcount;
+
             match inodeobj {
                 Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1},
                 Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1},
@@ -112,26 +113,21 @@ impl Cage {
                 Inode::Stream(f) => {size = f.size; mode = f.mode; f.refcount += 1},
                 Inode::Pipe(f) => {panic!("How did you even manage to open a pipe like that?");},
                 Inode::Socket(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                _ => {return -1;},
             }
 
-            let ret : &mut statdata;
-
-            if (is_chr(mode)) {
-                return _istat_helper_chr_file(inodeobj, ret);
+            if is_chr(mode) {
+                Self::_istat_helper_chr_file(inodeobj, ret, inodeno);
             }
 
-            return _istat_helper(inodeobj, ret);
+            Self::_istat_helper(inodeobj, ret, inodeno);
         }
+        return ret;
 
     }
 
-    //not sure how you want "FS_CALL_DICTIONARY["stat_syscall"] = stat_syscall" implemented
-    //"FS_CALL_DICTIONARY["fstat_syscall"] = fstat_syscall," too
-
-    pub fn _istat_helper(inodeobj: GenericInode, ret: &mut statdata) { 
-        // ret.dev_id = inodeobj.dev_id;
-        // ret.inode = inodeobj;
+    pub fn _istat_helper(inodeobj: GenericstatInode, ret: &mut StatData, inodeno: usize) { 
+        ret.dev_id = inodeobj.dev_id;
+        ret.inode = inodeno;
         ret.mode = inodeobj.mode;
         ret.linkcount = inodeobj.linkcount;
         ret.refcount = inodeobj.refcount;
@@ -149,9 +145,9 @@ impl Cage {
         // ret.ctimens = 0;
     }
 
-    pub fn _istat_helper_chr_file(inodeobj: GenericInode, ret: &mut statdata) {   //please check this and the other file's Inode type implementations
-        // ret.dev_id = 5;     //it's always 5
-        // ret.inode = inodeobj;
+    pub fn _istat_helper_chr_file(inodeobj: GenericInode, ret: &mut StatData, inodeno: usize) {   //please check this and the other file's Inode type implementations
+        ret.dev_id = 5;     //it's always 5
+        ret.inode = inodeno;
         ret.mode = inodeobj.mode;
         ret.linkcount = inodeobj.linkcount;
         ret.refcount = inodeobj.refcount;
@@ -179,14 +175,23 @@ impl Cage {
             let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
             let mode;
 
+            match inodeobj {
+                Inode::File(f) => {mode = f.mode; f.refcount += 1},
+                Inode::CharDev(f) => {mode = f.mode; f.refcount += 1},
+                Inode::Dir(f) => {mode = f.mode; f.refcount += 1},
+                Inode::Stream(f) => {mode = f.mode; f.refcount += 1},
+                Inode::Pipe(f) => {panic!("How did you even manage to open a pipe like that?");},
+                Inode::Socket(f) => {mode = f.mode; f.refcount += 1},
+            }
+
             let newmode: u32 = 0;
-            if amode & X_OK {newmode |= S_IXUSR; }
-            if amode & W_OK {newmode |= S_IWUSR; }
-            if amode & R_OK {newmode |= S_IRUSR; }
+            if amode & X_OK == X_OK {newmode |= S_IXUSR; }
+            if amode & W_OK == W_OK {newmode |= S_IWUSR; }
+            if amode & R_OK == R_OK {newmode |= S_IRUSR; }
 
-            if inodeobj.mode & newmode == newmode {return 0;}
+            if mode & newmode == newmode {return 0;}
 
-            return -1; //returns -1 if requested access is denied
         }
+        return -1; //returns -1 if requested access is denied
     }
 }
