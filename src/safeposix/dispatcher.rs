@@ -67,7 +67,7 @@ const PWRITE_SYSCALL: i32 = 127;
 use crate::interface;
 use super::cage::{CAGE_TABLE, Cage};
 use super::syscalls::{sys_constants::*};
-use crate::safeposix::syscalls::
+use super::filesystem::{FS_METADATA};
 
 
 #[repr(C)]
@@ -81,31 +81,31 @@ pub union Arg {
 }
 
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
-    
+
     // need to match based on if cage exists
     let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
 
     //implement syscall method calling using matching
-    // match based on syscall, take cagetable lock as read for all except fork/exec, which need write
 
     match callnum {
-      GETPID_SYSCALL => {
-        cage.getpid_syscall()
-      }
-      EXIT_SYSCALL => {
-        cage.exit_syscall()
-      },
-      EXEC_SYSCALL => {
-        cage.exec_syscall(unsafe{arg1.ulong})
-      }
-      FORK_SYSCALL => {
-        //do something with threadid 2 cageid, but we don't know the threadid in advance?? 
-        //dispatch to a register cageid kind of thing further on in fork?
-        cage.fork_syscall(unsafe{arg1.ulong})
-      },
-      _ => {//unknown syscall
-        -1
-      }
+        OPEN_SYSCALL => {
+            cage.open_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{arg2.int}, unsafe{arg3.uint})
+        }
+        GETPID_SYSCALL => {
+            cage.getpid_syscall()
+        }
+        EXIT_SYSCALL => {
+            cage.exit_syscall()
+        }
+        EXEC_SYSCALL => {
+            cage.exec_syscall(unsafe{arg1.ulong})
+        }
+        FORK_SYSCALL => {
+            cage.fork_syscall(unsafe{arg1.ulong})
+        }
+        _ => {//unknown syscall
+            -1
+        }
     }
 }
 
@@ -115,16 +115,16 @@ mod tests {
     #[test]
     pub fn cagetest() {
 
-      {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd: interface::PathBuf::from("/"), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
-      {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
-      {println!("{:?}", CAGE_TABLE.read().unwrap());};
-      {println!("{}", interface::RustRfc::strong_count(CAGE_TABLE.read().unwrap().get(&1_u64).unwrap()));}
-      dispatcher(1, FORK_SYSCALL, Arg {ulong: 2_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
-      {println!("{:?}", CAGE_TABLE.read().unwrap());};
-      dispatcher(2, EXEC_SYSCALL, Arg {ulong: 7_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
-      {println!("{:?}", CAGE_TABLE.read().unwrap());};
-      dispatcher(7, EXIT_SYSCALL, Arg {ulong: 61_u64}, Arg {int: 33987}, Arg {int: 123452}, Arg {int: -98493}, Arg {int: -1}, Arg {int: 0});
-      {println!("{:?}", CAGE_TABLE.read().unwrap());};
-      
+        {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd: interface::PathBuf::from("/"), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
+        {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
+        {println!("{:?}", CAGE_TABLE.read().unwrap());};
+        {println!("{:?}", FS_METADATA.read().unwrap().inodetable);};
+        dispatcher(1, FORK_SYSCALL, Arg {ulong: 2_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
+        {println!("{:?}", CAGE_TABLE.read().unwrap());};
+        dispatcher(2, EXEC_SYSCALL, Arg {ulong: 7_u64}, Arg {int: 34132}, Arg {int: 109384}, Arg {int: -12341}, Arg {int: -12341}, Arg {int: 0});
+        {println!("{:?}", CAGE_TABLE.read().unwrap());};
+        dispatcher(7, EXIT_SYSCALL, Arg {ulong: 61_u64}, Arg {int: 33987}, Arg {int: 123452}, Arg {int: -98493}, Arg {int: -1}, Arg {int: 0});
+        {println!("{:?}", CAGE_TABLE.read().unwrap());};
+
     }
 }

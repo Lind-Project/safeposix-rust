@@ -66,7 +66,7 @@ pub const S_IFSOCK: i32 = 0o140000;
 pub const S_FILETYPEFLAGS: i32 = 0o170000;
 
 //device info for char files
-#[derive(PartialEq)]
+#[derive(PartialEq,Debug)]
 pub struct DevNo {
   pub major: u64,
   pub minor: u64
