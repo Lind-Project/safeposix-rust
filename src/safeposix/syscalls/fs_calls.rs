@@ -103,9 +103,16 @@ impl Cage {
             let mut mdobj = FS_METADATA.write().unwrap();
             let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
             let mode;
+            // let linkcount;
+            // let refcount;
             let size;
-            let linkcount;
-
+            // let uid;
+            // let gid;
+            // let size;
+            // let atime;
+            // let mtime;
+            // let ctime;
+            
             match inodeobj {
                 Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1},
                 Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1},
@@ -125,9 +132,9 @@ impl Cage {
 
     }
 
-    pub fn _istat_helper(inodeobj: GenericstatInode, ret: &mut StatData, inodeno: usize) { 
-        ret.dev_id = inodeobj.dev_id;
-        ret.inode = inodeno;
+    pub fn _istat_helper(inodeobj: GenericInode, ret: &mut StatData, inodeno: usize) { 
+        // ret.dev_id = inodeobj.dev_id;
+        // ret.inode = inodeno;
         ret.mode = inodeobj.mode;
         ret.linkcount = inodeobj.linkcount;
         ret.refcount = inodeobj.refcount;
@@ -146,8 +153,8 @@ impl Cage {
     }
 
     pub fn _istat_helper_chr_file(inodeobj: GenericInode, ret: &mut StatData, inodeno: usize) {   //please check this and the other file's Inode type implementations
-        ret.dev_id = 5;     //it's always 5
-        ret.inode = inodeno;
+        // ret.dev_id = 5;     //it's always 5
+        // ret.inode = inodeno;
         ret.mode = inodeobj.mode;
         ret.linkcount = inodeobj.linkcount;
         ret.refcount = inodeobj.refcount;

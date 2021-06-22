@@ -79,8 +79,8 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 pub const FILEDATAPREFIX: &str = "linddata.";
 
 pub struct StatData {
-  pub dev_id: usize,
-  pub inode: u32,  //Not sure if this is necessary, and if it is, then it needs to have a use line at the top of this file
+  // pub dev_id: usize,
+  // pub inode: usize,  //Not sure if this is necessary, and if it is, then it needs to have a use line at the top of this file
   pub mode: u32,
   pub linkcount: usize,
   pub refcount: usize,
