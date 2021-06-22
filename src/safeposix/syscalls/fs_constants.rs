@@ -73,6 +73,30 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
+pub struct statdata {
+  // pub dev_id: usize,
+  // pub inode: Inode,  //Not sure if this is necessary, and if it is, then it needs to have a use line at the top of this file
+  pub mode: u32,
+  pub linkcount: usize,
+  pub refcount: usize,
+  pub uid: usize,
+  pub gid: usize,
+  // pub dev: usize, //should this be diff type?
+  pub size: usize,
+  // pub blksize: usize,
+  // pub blocks: usize,
+  pub atime: u64,
+  // pub atimens: usize,
+  pub mtime: u64,
+  // pub mtimens: usize,
+  pub ctime: u64,
+  // pub ctimens: usize,
+}
+
 pub fn is_reg(mode: u32) -> bool {
-    (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
+  (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
+}
+
+pub fn is_chr(mode: u32) -> bool {
+  (mode as i32 & S_FILETYPEFLAGS) == S_IFCHR
 }

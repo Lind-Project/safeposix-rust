@@ -90,4 +90,77 @@ impl Cage {
         } else {panic!("Inode not created for some reason");}
         0
     }
+
+    pub fn stat_syscall(&self, path: std::ffi::CString) -> &mut statdata {        
+        //need to get datalock somehow
+
+        let truepath = normpath(convpath(path.into_string().unwrap()), self);
+
+        if let Some(inodeno) = metawalk(truepath) {
+            let mut mdobj = FS_METADATA.write().unwrap();
+            let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
+            let mode;
+            let size;
+            match inodeobj {
+                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+                Inode::Stream(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+                Inode::Pipe(f) => {panic!("How did you even manage to open a pipe like that?");},
+                Inode::Socket(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+            }
+
+            let ret : &mut statdata;
+
+            if (is_chr(mode)) {
+                return _istat_helper_chr_file(inodeobj, ret);
+            }
+
+            return _istat_helper(inodeobj, ret);
+        }
+
+    }
+
+    //not sure how you want "FS_CALL_DICTIONARY["stat_syscall"] = stat_syscall" implemented
+    //"FS_CALL_DICTIONARY["fstat_syscall"] = fstat_syscall," too
+
+    pub fn _istat_helper(inodeobj: GenericInode, ret: &mut statdata) { 
+        // ret.dev_id = inodeobj.dev_id;
+        // ret.inode = inodeobj;
+        ret.mode = inodeobj.mode;
+        ret.linkcount = inodeobj.linkcount;
+        ret.refcount = inodeobj.refcount;
+        ret.uid = inodeobj.uid;
+        ret.gid = inodeobj.gid;
+        // ret.dev = 0;
+        ret.size = inodeobj.size;
+        // ret.blksize = 0;
+        // ret.blocks = 0;
+        ret.atime = inodeobj.atime;
+        // ret.atimens = 0;
+        ret.mtime = inodeobj.mtime;
+        // ret.mtimens = 0;
+        ret.ctime = inodeobj.ctime;
+        // ret.ctimens = 0;
+    }
+
+    pub fn _istat_helper_chr_file(inodeobj: GenericInode, ret: &mut statdata) {   //please check this and the other file's Inode type implementations
+        // ret.dev_id = 5;     //it's always 5
+        // ret.inode = inodeobj;
+        ret.mode = inodeobj.mode;
+        ret.linkcount = inodeobj.linkcount;
+        ret.refcount = inodeobj.refcount;
+        ret.uid = inodeobj.uid;
+        ret.gid = inodeobj.gid;
+        // ret.dev = inodeobj.dev;
+        ret.size = inodeobj.size;
+        // ret.blksize = 0;
+        // ret.blocks = 0;
+        ret.atime = inodeobj.atime;
+        // ret.atimens = 0;
+        ret.mtime = inodeobj.mtime;
+        // ret.mtimens = 0;
+        ret.ctime = inodeobj.ctime;
+        // ret.ctimens = 0;
+    }
 }
