@@ -120,6 +120,10 @@ impl Cage {
         0
     }
 
+    pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
+        self.open_syscall(path, O_CREAT | O_TRUNC | O_WRONLY, mode)
+    }
+
     // ADD FSTAT AS WELL
 
     //------------------STAT SYSCALL------------------
@@ -157,7 +161,7 @@ impl Cage {
 
     }
 
-    pub fn _istat_helper(inodeobj: &GenericInode, ret: &mut StatData) {
+    fn _istat_helper(inodeobj: &GenericInode, ret: &mut StatData) {
         ret.st_mode = inodeobj.mode;
         ret.st_nlink = inodeobj.linkcount;
         ret.st_uid = inodeobj.uid;
@@ -168,7 +172,7 @@ impl Cage {
         ret.st_blocks = 0;
     }
 
-    pub fn _istat_helper_dir(inodeobj: &DirectoryInode, ret: &mut StatData) {
+    fn _istat_helper_dir(inodeobj: &DirectoryInode, ret: &mut StatData) {
         ret.st_mode = inodeobj.mode;
         ret.st_nlink = inodeobj.linkcount;
         ret.st_uid = inodeobj.uid;
@@ -179,7 +183,7 @@ impl Cage {
         ret.st_blocks = 0;
     }
 
-    pub fn _istat_helper_chr_file(inodeobj: &DeviceInode, ret: &mut StatData) {
+    fn _istat_helper_chr_file(inodeobj: &DeviceInode, ret: &mut StatData) {
         //compose inode object like in glibc makedev
         ret.st_dev = 5;
         ret.st_mode = inodeobj.mode;
@@ -195,7 +199,7 @@ impl Cage {
 
     //------------------ACCESS SYSCALL------------------
 
-    fn access_syscall(&self, path: &str, amode: u32) -> i32 {
+    pub fn access_syscall(&self, path: &str, amode: u32) -> i32 {
         let truepath = normpath(convpath(path), self);
         let mdobj = FS_METADATA.read().unwrap();
 
@@ -225,12 +229,12 @@ impl Cage {
         }
     }
 
-    fn chdir_syscall(&mut self, path: &str) -> i32 {
+    pub fn chdir_syscall(&/*mut*/ self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
         let mdobj = FS_METADATA.read().unwrap();
         if let Some(inodeno) = metawalk(&truepath, Some(&mdobj)) {
             if let Inode::Dir(_dir) = mdobj.inodetable.get(&inodeno).unwrap() {
-                self.cwd = truepath;
+                //self.cwd = truepath; as getting self as mut currently is fraught this may not be so easy
                 0
             } else {
                 -1

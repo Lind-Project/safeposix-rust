@@ -89,6 +89,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     //implement syscall method calling using matching
 
     match callnum {
+        ACCESS_SYSCALL => {
+            cage.access_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{arg2.uint})
+        }
+        CHDIR_SYSCALL => {
+            cage.chdir_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap())
+        }
         OPEN_SYSCALL => {
             cage.open_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{arg2.int}, unsafe{arg3.uint})
         }
