@@ -91,6 +91,10 @@ impl Cage {
         0
     }
 
+    // ADD FSTAT AS WELL
+
+    //------------------STAT SYSCALL------------------
+
     pub fn stat_syscall(&self, path: std::ffi::CString) -> &mut statdata {        
         //need to get datalock somehow
 
@@ -108,6 +112,7 @@ impl Cage {
                 Inode::Stream(f) => {size = f.size; mode = f.mode; f.refcount += 1},
                 Inode::Pipe(f) => {panic!("How did you even manage to open a pipe like that?");},
                 Inode::Socket(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+                _ => {return -1;},
             }
 
             let ret : &mut statdata;
@@ -162,5 +167,26 @@ impl Cage {
         // ret.mtimens = 0;
         ret.ctime = inodeobj.ctime;
         // ret.ctimens = 0;
+    }
+
+    //------------------ACCESS SYSCALL------------------
+
+    fn access_syscall(&self, path: std::ffi::CString, amode: u32) -> i32 {
+        //somehow get data lock
+        let truepath = normpath(convpath(path.into_string().unwrap()), self);
+        if let Some(inodeno) = metawalk(truepath) {
+            let mut mdobj = FS_METADATA.write().unwrap();
+            let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
+            let mode;
+
+            let newmode: u32 = 0;
+            if amode & X_OK {newmode |= S_IXUSR; }
+            if amode & W_OK {newmode |= S_IWUSR; }
+            if amode & R_OK {newmode |= S_IRUSR; }
+
+            if inodeobj.mode & newmode == newmode {return 0;}
+
+            return -1; //returns -1 if requested access is denied
+        }
     }
 }

@@ -13,6 +13,11 @@ pub const MAXFD: i32 = 1024;
 pub const ROOTDIRECTORYINODE: usize = 1;
 pub const STREAMINODE: usize = 2;
 
+pub const F_OK: u32 = 0;
+pub const X_OK: u32 = 1;
+pub const W_OK: u32 = 2;
+pub const R_OK: u32 = 4;
+
 pub const O_RDONLY: i32 = 0o0;
 pub const O_WRONLY: i32 = 0o1;
 pub const O_RDWR: i32 = 0o2;
@@ -32,8 +37,8 @@ pub const O_CLOEXEC: i32 = 0o2000000;
 
 pub const DEFAULTTIME: u64 = 1323630836;
 
-pub const DEFAULT_UID:usize = 1000;
-pub const DEFAULT_GID:usize = 1000;
+pub const DEFAULT_UID: usize = 1000;
+pub const DEFAULT_GID: usize = 1000;
 
 //Standard flag combinations
 pub const S_IRWXA: u32 = 0o777;
