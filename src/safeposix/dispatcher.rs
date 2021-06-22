@@ -66,16 +66,17 @@ const PWRITE_SYSCALL: i32 = 127;
 
 use crate::interface;
 use super::cage::{CAGE_TABLE, Cage};
-use super::syscalls::{sys_constants::*};
+use super::syscalls::{sys_constants::*, fs_constants::*};
 use super::filesystem::{FS_METADATA};
 
 
 #[repr(C)]
 pub union Arg {
   int: i32,
+  uint: u32,
   ulong: u64,
-  cstr: *const u8,
-  cstrarr: *const *const u8,
+  cstr: *const i8,
+  cstrarr: *const *const i8,
   rlimitstruct: *const Rlimit,
   statdatastruct: *const StatData //not sure if this should be in the union or not -- figured I would try the same thing that I tried with sys_calls
 }

@@ -23,11 +23,11 @@ pub enum Inode {
 #[derive(Debug)]
 pub struct GenericInode {
     pub size: usize,
-    pub uid: usize,
-    pub gid: usize,
+    pub uid: u32,
+    pub gid: u32,
     pub mode: u32,
-    pub linkcount: usize,
-    pub refcount: usize,
+    pub linkcount: u32,
+    pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64
@@ -35,11 +35,11 @@ pub struct GenericInode {
 #[derive(Debug)]
 pub struct DeviceInode {
     pub size: usize,
-    pub uid: usize,
-    pub gid: usize,
+    pub uid: u32,
+    pub gid: u32,
     pub mode: u32,
-    pub linkcount: usize,
-    pub refcount: usize,
+    pub linkcount: u32,
+    pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
@@ -49,11 +49,11 @@ pub struct DeviceInode {
 #[derive(Debug)]
 pub struct DirectoryInode {
     pub size: usize,
-    pub uid: usize,
-    pub gid: usize,
+    pub uid: u32,
+    pub gid: u32,
     pub mode: u32,
-    pub linkcount: usize,
-    pub refcount: usize,
+    pub linkcount: u32,
+    pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
@@ -63,7 +63,7 @@ pub struct DirectoryInode {
 
 pub struct FilesystemMetadata {
     pub nextinode: usize,
-    pub dev_id: usize,
+    pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>,
     pub fileobjecttable: interface::RustHashMap<usize, interface::EmulatedFile>
 } 

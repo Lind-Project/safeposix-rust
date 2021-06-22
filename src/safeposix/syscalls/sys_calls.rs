@@ -20,14 +20,14 @@ impl Cage {
           //only file inodes have real inode objects currently
           let inodopt = match &**fd {
               File(f) => {Some(f.inode)}
-              Stream(f) => {None}
-              Socket(f) => {None}
-              Pipe(f) => {None}
+              Stream(_) => {None}
+              Socket(_) => {None}
+              Pipe(_) => {None}
           };
 
           if let Some(ino) = inodopt {
             //increment the reference count on the inode
-            let mut inode = fsm.inodetable.get_mut(&ino).unwrap();
+            let inode = fsm.inodetable.get_mut(&ino).unwrap();
             match inode {
                 Inode::File(f) => {f.refcount += 1;}
                 Inode::CharDev(f) => {f.refcount += 1;}

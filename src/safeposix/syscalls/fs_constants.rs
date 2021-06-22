@@ -37,8 +37,8 @@ pub const O_CLOEXEC: i32 = 0o2000000;
 
 pub const DEFAULTTIME: u64 = 1323630836;
 
-pub const DEFAULT_UID: usize = 1000;
-pub const DEFAULT_GID: usize = 1000;
+pub const DEFAULT_UID: u32 = 1000;
+pub const DEFAULT_GID: u32 = 1000;
 
 //Standard flag combinations
 pub const S_IRWXA: u32 = 0o777;
@@ -68,8 +68,8 @@ pub const S_FILETYPEFLAGS: i32 = 0o170000;
 //device info for char files
 #[derive(PartialEq,Debug)]
 pub struct DevNo {
-  pub major: u64,
-  pub minor: u64
+  pub major: u32,
+  pub minor: u32
 }
 pub const NULLDEVNO: DevNo = DevNo {major: 1, minor: 3};
 pub const ZERODEVNO: DevNo = DevNo {major: 1, minor: 5};
@@ -78,24 +78,22 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
+#[repr(C)]
 pub struct StatData {
-  // pub dev_id: usize,
-  // pub inode: usize,  //Not sure if this is necessary, and if it is, then it needs to have a use line at the top of this file
-  pub mode: u32,
-  pub linkcount: usize,
-  pub refcount: usize,
-  pub uid: usize,
-  pub gid: usize,
-  // pub dev: usize, //should this be diff type?
-  pub size: usize,
-  // pub blksize: usize,
-  // pub blocks: usize,
-  pub atime: u64,
-  // pub atimens: usize,
-  pub mtime: u64,
-  // pub mtimens: usize,
-  pub ctime: u64,
-  // pub ctimens: usize
+  pub st_dev: u64,
+  pub st_ino: usize,
+  pub st_mode: u32,
+  pub st_nlink: u32,
+  pub st_uid: u32,
+  pub st_gid: u32,
+  pub st_rdev: u64,
+  pub st_size: usize,
+  pub st_blksize: isize,
+  pub st_blocks: usize,
+  //currently we don't populate or care about the time bits here
+  pub st_atim: (u64, u64),
+  pub st_mtim: (u64, u64),
+  pub st_ctim: (u64, u64)
 }
 
 pub fn is_reg(mode: u32) -> bool {

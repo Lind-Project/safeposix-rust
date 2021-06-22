@@ -50,11 +50,12 @@ impl Cage {
                     atime: time, ctime: time, mtime: time,
                 });
 
-                let newinode = fmd.nextinode;
+                let newinodeno = fmd.nextinode;
                 fmd.nextinode += 1;
                 if let Inode::Dir(ind) = fmd.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinode);
+                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodeno);
                 } //insert a reference to the file in the parent directory
+                fmd.inodetable.insert(newinodeno, newinode).unwrap();
                 //persist metadata?
             }
 
@@ -86,7 +87,7 @@ impl Cage {
 
         //We redo our metawalk in case of O_CREAT, but this is somewhat inefficient
         if let Some(inodeno) = metawalk(truepath.as_path(), Some(&fmd)) {
-            let mut inodeobj = fmd.inodetable.get_mut(&inodeno).unwrap();
+            let inodeobj = fmd.inodetable.get_mut(&inodeno).unwrap();
             let mode;
             let size;
 
@@ -123,110 +124,104 @@ impl Cage {
 
     //------------------STAT SYSCALL------------------
 
-    pub fn stat_syscall(&self, path: std::ffi::CString, ret : &mut StatData) -> &mut StatData {        
-        //need to get datalock somehow
-        let truepath = normpath(convpath(path.into_string().unwrap()), self);
+    pub fn stat_syscall(&self, path: &str, ret : &mut StatData) -> i32 {
+        let truepath = normpath(convpath(path), self);
+        let mdobj = FS_METADATA.read().unwrap();
 
-        if let Some(inodeno) = metawalk(truepath) {
-            let mut mdobj = FS_METADATA.write().unwrap();
-            let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
-            let mode;
-            // let linkcount;
-            // let refcount;
-            let size;
-            // let uid;
-            // let gid;
-            // let size;
-            // let atime;
-            // let mtime;
-            // let ctime;
+        if let Some(inodeno) = metawalk(truepath.as_path(), Some(&mdobj)) {
+            let inodeobj = mdobj.inodetable.get(&inodeno).unwrap();
             
             match inodeobj {
-                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::Stream(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::Pipe(f) => {panic!("How did you even manage to open a pipe like that?");},
-                Inode::Socket(f) => {size = f.size; mode = f.mode; f.refcount += 1},
+                Inode::File(f) => {
+                    Self::_istat_helper(f, ret);
+                },
+                Inode::CharDev(f) => {
+                    Self::_istat_helper_chr_file(f, ret);
+                },
+                Inode::Dir(f) => {
+                    Self::_istat_helper_dir(f, ret);
+                },
+                Inode::Pipe(_) => {
+                    panic!("How did you even manage to refer to a pipe like that?");
+                },
+                Inode::Socket(_) => {
+                    panic!("How did you even manage to refer to a socket like that?");
+                },
             }
-
-            if is_chr(mode) {
-                Self::_istat_helper_chr_file(inodeobj, ret, inodeno);
-            }
-
-            Self::_istat_helper(inodeobj, ret, inodeno);
+            ret.st_dev = mdobj.dev_id;
+            ret.st_ino = inodeno;
+            0
+        } else {
+            -1
         }
-        return ret;
 
     }
 
-    pub fn _istat_helper(inodeobj: GenericInode, ret: &mut StatData, inodeno: usize) { 
-        // ret.dev_id = inodeobj.dev_id;
-        // ret.inode = inodeno;
-        ret.mode = inodeobj.mode;
-        ret.linkcount = inodeobj.linkcount;
-        ret.refcount = inodeobj.refcount;
-        ret.uid = inodeobj.uid;
-        ret.gid = inodeobj.gid;
-        // ret.dev = 0;
-        ret.size = inodeobj.size;
-        // ret.blksize = 0;
-        // ret.blocks = 0;
-        ret.atime = inodeobj.atime;
-        // ret.atimens = 0;
-        ret.mtime = inodeobj.mtime;
-        // ret.mtimens = 0;
-        ret.ctime = inodeobj.ctime;
-        // ret.ctimens = 0;
+    pub fn _istat_helper(inodeobj: &GenericInode, ret: &mut StatData) {
+        ret.st_mode = inodeobj.mode;
+        ret.st_nlink = inodeobj.linkcount;
+        ret.st_uid = inodeobj.uid;
+        ret.st_gid = inodeobj.gid;
+        ret.st_rdev = 0;
+        ret.st_size = inodeobj.size;
+        ret.st_blksize = 0;
+        ret.st_blocks = 0;
     }
 
-    pub fn _istat_helper_chr_file(inodeobj: GenericInode, ret: &mut StatData, inodeno: usize) {   //please check this and the other file's Inode type implementations
-        // ret.dev_id = 5;     //it's always 5
-        // ret.inode = inodeno;
-        ret.mode = inodeobj.mode;
-        ret.linkcount = inodeobj.linkcount;
-        ret.refcount = inodeobj.refcount;
-        ret.uid = inodeobj.uid;
-        ret.gid = inodeobj.gid;
-        // ret.dev = inodeobj.dev;
-        ret.size = inodeobj.size;
-        // ret.blksize = 0;
-        // ret.blocks = 0;
-        ret.atime = inodeobj.atime;
-        // ret.atimens = 0;
-        ret.mtime = inodeobj.mtime;
-        // ret.mtimens = 0;
-        ret.ctime = inodeobj.ctime;
-        // ret.ctimens = 0;
+    pub fn _istat_helper_dir(inodeobj: &DirectoryInode, ret: &mut StatData) {
+        ret.st_mode = inodeobj.mode;
+        ret.st_nlink = inodeobj.linkcount;
+        ret.st_uid = inodeobj.uid;
+        ret.st_gid = inodeobj.gid;
+        ret.st_rdev = 0;
+        ret.st_size = inodeobj.size;
+        ret.st_blksize = 0;
+        ret.st_blocks = 0;
+    }
+
+    pub fn _istat_helper_chr_file(inodeobj: &DeviceInode, ret: &mut StatData) {
+        //compose inode object like in glibc makedev
+        ret.st_dev = 5;
+        ret.st_mode = inodeobj.mode;
+        ret.st_nlink = inodeobj.linkcount;
+        ret.st_uid = inodeobj.uid;
+        ret.st_gid = inodeobj.gid;
+        ret.st_rdev = ((inodeobj.dev.major as u64 & 0x00000fff) <<  8) | 
+                     ((inodeobj.dev.major as u64 & 0xfffff000) << 32) |
+                     ((inodeobj.dev.minor as u64 & 0x000000ff) <<  0) |
+                     ((inodeobj.dev.minor as u64 & 0xffffff00) << 12);
+        ret.st_size = inodeobj.size;
     }
 
     //------------------ACCESS SYSCALL------------------
 
-    fn access_syscall(&self, path: std::ffi::CString, amode: u32) -> i32 {
-        //somehow get data lock
-        let truepath = normpath(convpath(path.into_string().unwrap()), self);
-        if let Some(inodeno) = metawalk(truepath) {
-            let mut mdobj = FS_METADATA.write().unwrap();
-            let mut inodeobj = mdobj.inodetable.get_mut(&inodeno).unwrap();
-            let mode;
+    fn access_syscall(&self, path: &str, amode: u32) -> i32 {
+        let truepath = normpath(convpath(path), self);
+        let mdobj = FS_METADATA.read().unwrap();
 
-            match inodeobj {
-                Inode::File(f) => {mode = f.mode; f.refcount += 1},
-                Inode::CharDev(f) => {mode = f.mode; f.refcount += 1},
-                Inode::Dir(f) => {mode = f.mode; f.refcount += 1},
-                Inode::Stream(f) => {mode = f.mode; f.refcount += 1},
-                Inode::Pipe(f) => {panic!("How did you even manage to open a pipe like that?");},
-                Inode::Socket(f) => {mode = f.mode; f.refcount += 1},
-            }
+        if let Some(inodeno) = metawalk(truepath.as_path(), Some(&mdobj)) {
+            let inodeobj = mdobj.inodetable.get(&inodeno).unwrap();
 
-            let newmode: u32 = 0;
-            if amode & X_OK == X_OK {newmode |= S_IXUSR; }
-            if amode & W_OK == W_OK {newmode |= S_IWUSR; }
-            if amode & R_OK == R_OK {newmode |= S_IRUSR; }
+            let mode = match inodeobj {
+                Inode::File(f) => {f.mode},
+                Inode::CharDev(f) => {f.mode},
+                Inode::Dir(f) => {f.mode},
+                Inode::Pipe(_) => {
+                    panic!("How did you even manage to refer to a pipe like that?");
+                },
+                Inode::Socket(_) => {
+                    panic!("How did you even manage to refer to a socket like that?");
+                },
+            };
 
-            if mode & newmode == newmode {return 0;}
+            let mut newmode: u32 = 0;
+            if amode & X_OK == X_OK {newmode |= S_IXUSR;}
+            if amode & W_OK == W_OK {newmode |= S_IWUSR;}
+            if amode & R_OK == R_OK {newmode |= S_IRUSR;}
 
+            if mode & newmode == newmode {0} else {-1}
+        } else {
+          -1
         }
-        return -1; //returns -1 if requested access is denied
     }
 }
