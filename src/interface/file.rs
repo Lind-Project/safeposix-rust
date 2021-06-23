@@ -72,7 +72,7 @@ fn assert_is_allowed_filename(filename: &String) {
     }
 }
 
-pub fn emulated_open(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
     EmulatedFile::new(filename, create)
 }
 

@@ -78,7 +78,7 @@ pub union Arg {
   cstr: *const i8,
   cstrarr: *const *const i8,
   rlimitstruct: *mut Rlimit,
-  statdatastruct: *mut StatData //not sure if this should be in the union or not -- figured I would try the same thing that I tried with sys_calls
+  statdatastruct: *mut StatData
 }
 
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
