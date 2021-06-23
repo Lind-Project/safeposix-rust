@@ -199,9 +199,9 @@ impl Cage {
         
         if !fdt.contains_key(&fd.unwrap()) { return -1; }
 
-        if Self::IS_PIPE_DESC(fd) { Self::_stat_alt_helper(self, ret); }
+        if Self::IS_PIPE_DESC(self, &fd) { Self::_stat_alt_helper(self, ret); }
 
-        let inode = self.filedescriptortable.fd.inode;
+        let inode = self.filedescriptortable.;
         
         if inode == STREAMINODE { Self::_stat_alt_helper(self, ret) }
         if is_chr(mdobj.inodetable.inode.mode) { Self::_istat_helper_chr_file(inode, ret) }
@@ -216,8 +216,12 @@ impl Cage {
         ret.st_gid = DEFAULT_GID;
     }
 
-    pub fn IS_PIPE_DESC(fd: Option<i32>) -> bool{
-        FS_METADATA.read().unwrap().fd.contains_key(String::from("pipe"))
+    pub fn IS_PIPE_DESC(&self, fd: &Option<i32>) -> bool{
+        if let Some(Pipe(fd)) = self.filedescriptortable.read().unwrap().get(&fd.unwrap()) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     //------------------ACCESS SYSCALL------------------
