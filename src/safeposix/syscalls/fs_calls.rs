@@ -122,22 +122,24 @@ impl Cage {
 
     //------------------STAT SYSCALL------------------
 
-    pub fn stat_syscall(&self, path: &str, ret : &mut StatData) -> i32 {
+    pub fn stat_syscall(&self, path: &str, statbuf : &mut StatData) -> i32 {
         let truepath = normpath(convpath(path), self);
         let mdobj = FS_METADATA.read().unwrap();
 
         if let Some(inodeno) = metawalk(truepath.as_path(), Some(&mdobj)) {
             let inodeobj = mdobj.inodetable.get(&inodeno).unwrap();
             
+            statbuf.st_dev = mdobj.dev_id;
+            statbuf.st_ino = inodeno;
             match inodeobj {
                 Inode::File(f) => {
-                    Self::_istat_helper(f, ret);
+                    Self::_istat_helper(f, statbuf);
                 },
                 Inode::CharDev(f) => {
-                    Self::_istat_helper_chr_file(f, ret);
+                    Self::_istat_helper_chr_file(f, statbuf);
                 },
                 Inode::Dir(f) => {
-                    Self::_istat_helper_dir(f, ret);
+                    Self::_istat_helper_dir(f, statbuf);
                 },
                 Inode::Pipe(_) => {
                     panic!("How did you even manage to refer to a pipe like that?");
@@ -146,8 +148,6 @@ impl Cage {
                     panic!("How did you even manage to refer to a socket like that?");
                 },
             }
-            ret.st_dev = mdobj.dev_id;
-            ret.st_ino = inodeno;
             0
         } else {
             -1
@@ -155,72 +155,89 @@ impl Cage {
 
     }
 
-    pub fn _istat_helper(inodeobj: &GenericInode, ret: &mut StatData) {
-        ret.st_mode = inodeobj.mode;
-        ret.st_nlink = inodeobj.linkcount;
-        ret.st_uid = inodeobj.uid;
-        ret.st_gid = inodeobj.gid;
-        ret.st_rdev = 0;
-        ret.st_size = inodeobj.size;
-        ret.st_blksize = 0;
-        ret.st_blocks = 0;
+    fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
+        statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
+        statbuf.st_uid = inodeobj.uid;
+        statbuf.st_gid = inodeobj.gid;
+        statbuf.st_rdev = 0;
+        statbuf.st_size = inodeobj.size;
+        statbuf.st_blksize = 0;
+        statbuf.st_blocks = 0;
     }
 
-    pub fn _istat_helper_dir(inodeobj: &DirectoryInode, ret: &mut StatData) {
-        ret.st_mode = inodeobj.mode;
-        ret.st_nlink = inodeobj.linkcount;
-        ret.st_uid = inodeobj.uid;
-        ret.st_gid = inodeobj.gid;
-        ret.st_rdev = 0;
-        ret.st_size = inodeobj.size;
-        ret.st_blksize = 0;
-        ret.st_blocks = 0;
+    fn _istat_helper_dir(inodeobj: &DirectoryInode, statbuf: &mut StatData) {
+        statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
+        statbuf.st_uid = inodeobj.uid;
+        statbuf.st_gid = inodeobj.gid;
+        statbuf.st_rdev = 0;
+        statbuf.st_size = inodeobj.size;
+        statbuf.st_blksize = 0;
+        statbuf.st_blocks = 0;
     }
 
-    pub fn _istat_helper_chr_file(inodeobj: &DeviceInode, ret: &mut StatData) {
+    fn _istat_helper_chr_file(inodeobj: &DeviceInode, statbuf: &mut StatData) {
         //compose inode object like in glibc makedev
-        ret.st_dev = 5;
-        ret.st_mode = inodeobj.mode;
-        ret.st_nlink = inodeobj.linkcount;
-        ret.st_uid = inodeobj.uid;
-        ret.st_gid = inodeobj.gid;
-        ret.st_rdev = ((inodeobj.dev.major as u64 & 0x00000fff) <<  8) | 
+        statbuf.st_dev = 5;
+        statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
+        statbuf.st_uid = inodeobj.uid;
+        statbuf.st_gid = inodeobj.gid;
+        statbuf.st_rdev = ((inodeobj.dev.major as u64 & 0x00000fff) <<  8) | 
                      ((inodeobj.dev.major as u64 & 0xfffff000) << 32) |
                      ((inodeobj.dev.minor as u64 & 0x000000ff) <<  0) |
                      ((inodeobj.dev.minor as u64 & 0xffffff00) << 12);
-        ret.st_size = inodeobj.size;
+        statbuf.st_size = inodeobj.size;
     }
+
+    fn _stat_alt_helper(&self, statbuf: &mut StatData, inodenum: usize, mdobj: &FilesystemMetadata) {
+        statbuf.st_dev = mdobj.dev_id;
+        statbuf.st_ino = inodenum;
+        statbuf.st_mode = 49590; //r and w priveliged 
+        statbuf.st_nlink = 1;
+        statbuf.st_uid = DEFAULT_UID;
+        statbuf.st_gid = DEFAULT_GID;
+        statbuf.st_rdev = 0;
+        statbuf.st_size = 0;
+        statbuf.st_blksize = 0;
+        statbuf.st_blocks = 0;
+    }
+
 
     //------------------FSTAT SYSCALL------------------
 
-    pub fn fstat_syscall(&self, fd: Option<i32>, ret: &mut StatData) -> i32 {
-        let mdobj = FS_METADATA.read().unwrap();
-        let mut fdt = self.filedescriptortable.read().unwrap();
-        
-        if !fdt.contains_key(&fd.unwrap()) { return -1; }
-
-        if Self::IS_PIPE_DESC(self, &fd) { Self::_stat_alt_helper(self, ret); }
-
-        let inode = self.filedescriptortable.;
-        
-        if inode == STREAMINODE { Self::_stat_alt_helper(self, ret) }
-        if is_chr(mdobj.inodetable.inode.mode) { Self::_istat_helper_chr_file(inode, ret) }
-        Self::_istat_helper(inode, ret);
-        0
-    }
-
-    pub fn _stat_alt_helper(&self, ret: &mut StatData) {
-        ret.st_mode = 49590; //r and w priveliged 
-        ret.st_nlink = 1;
-        ret.st_uid = DEFAULT_UID;
-        ret.st_gid = DEFAULT_GID;
-    }
-
-    pub fn IS_PIPE_DESC(&self, fd: &Option<i32>) -> bool{
-        if let Some(Pipe(fd)) = self.filedescriptortable.read().unwrap().get(&fd.unwrap()) {
-            return true;
+    pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
+        let fdt = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(fdno) = fdt.get(&fd) {
+            let fdobj = fdno.read().unwrap();
+            let mdobj = FS_METADATA.read().unwrap();
+            match &**fdobj {
+                File(fobj) => {
+                    let inode = mdobj.inodetable.get(&fobj.inode).unwrap();
+                    match inode {
+                        Inode::File(f) => {
+                            Self::_istat_helper(&f, statbuf);
+                        }
+                        Inode::CharDev(f) => {
+                            Self::_istat_helper_chr_file(&f, statbuf);
+                        }
+                        Inode::Dir(f) => {
+                            Self::_istat_helper_dir(&f, statbuf);
+                        }
+                        _ => {panic!("Wonky file descriptor shenanigains");}
+                    }
+                    statbuf.st_ino = fobj.inode;
+                    statbuf.st_dev = mdobj.dev_id;
+                }
+                Socket(_) => {return -1;/*Socket fstat not implemented (yet)*/}
+                Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &mdobj);}
+                Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &mdobj);}
+            }
+            0
         } else {
-            return false;
+            -1
         }
     }
 
