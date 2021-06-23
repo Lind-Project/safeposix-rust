@@ -90,16 +90,16 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 
     match callnum {
         ACCESS_SYSCALL => {
-            cage.access_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{arg2.uint})
+            cage.access_syscall(unsafe{interface::charstar_to_ruststr(arg1.cstr)}, unsafe{arg2.uint})
         }
         CHDIR_SYSCALL => {
-            cage.chdir_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap())
+            cage.chdir_syscall(unsafe{interface::charstar_to_ruststr(arg1.cstr)})
         }
         XSTAT_SYSCALL => {
-            cage.stat_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{&mut *arg2.statdatastruct})
+            cage.stat_syscall(unsafe{interface::charstar_to_ruststr(arg1.cstr)}, unsafe{&mut *arg2.statdatastruct})
         }
         OPEN_SYSCALL => {
-            cage.open_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{arg2.int}, unsafe{arg3.uint})
+            cage.open_syscall(unsafe{interface::charstar_to_ruststr(arg1.cstr)}, unsafe{arg2.int}, unsafe{arg3.uint})
         }
         FXSTAT_SYSCALL => {
             cage.fstat_syscall(unsafe{arg1.int}, unsafe{&mut *arg2.statdatastruct})

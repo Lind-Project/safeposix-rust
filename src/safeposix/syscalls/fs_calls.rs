@@ -58,45 +58,45 @@ impl Cage {
                     atime: time, ctime: time, mtime: time,
                 });
 
-                let newinodeno = mutmetadata.nextinode;
+                let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodeno);
+                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
                 } //insert a reference to the file in the parent directory
-                mutmetadata.inodetable.insert(newinodeno, newinode).unwrap();
+                mutmetadata.inodetable.insert(newinodenum, newinode).unwrap();
                 //persist metadata?
             }
 
             //If the file exists (we don't need to look at parent here)
-            (Some(inodeno), ..) => {
+            (Some(inodenum), ..) => {
                 if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
                     return -1; //EEXIST later
                 }
 
                 if 0 != (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    if mutmetadata.fileobjecttable.contains_key(&inodeno) {
-                        mutmetadata.fileobjecttable.get(&inodeno).unwrap().close().unwrap();
+                    if mutmetadata.fileobjecttable.contains_key(&inodenum) {
+                        mutmetadata.fileobjecttable.get(&inodenum).unwrap().close().unwrap();
                     }
 
                     //set size of file to 0
-                    match mutmetadata.inodetable.get_mut(&inodeno).unwrap() {
+                    match mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
                         Inode::File(g) => {g.size = 0;}
                         Inode::Dir(_) => {return -1;/*EISDIR*/}
                         _ => {return -1;/*EINVAL*/}
                     }
 
                     //remove the previous file and add a new one of 0 length
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodeno);
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     interface::removefile(sysfilename.clone()).unwrap();
-                    mutmetadata.fileobjecttable.insert(inodeno, interface::emulated_open(sysfilename, true).unwrap());
+                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
                 }
             }
         }
 
         //We redo our metawalk in case of O_CREAT, but this is somewhat inefficient
-        if let Some(inodeno) = metawalk(truepath.as_path(), Some(&mutmetadata)) {
-            let inodeobj = mutmetadata.inodetable.get_mut(&inodeno).unwrap();
+        if let Some(inodenum) = metawalk(truepath.as_path(), Some(&mutmetadata)) {
+            let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
             let mode;
             let size;
 
@@ -110,15 +110,15 @@ impl Cage {
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
-                if mutmetadata.fileobjecttable.contains_key(&inodeno) {
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodeno);
-                    mutmetadata.fileobjecttable.insert(inodeno, interface::emulated_open(sysfilename, false).unwrap());
+                if mutmetadata.fileobjecttable.contains_key(&inodenum) {
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, false).unwrap());
                 }
             }
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodeno, flags: flags & O_RDWRFLAGS});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(newfd)));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -224,19 +224,19 @@ impl Cage {
         let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
-            let fdobj = wrappedfd.read().unwrap();
+            let filedesc_enum = wrappedfd.read().unwrap();
             let metadata = FS_METADATA.read().unwrap();
 
             //Delegate populating statbuf to the relevant helper depending on the file type.
             //First we check in the file descriptor to handle sockets, streams, and pipes,
             //and if it is a normal file descriptor we handle regular files, dirs, and char 
             //files based on the information in the inode.
-            match &**fdobj {
-                File(fobj) => {
-                    let inode = metadata.inodetable.get(&fobj.inode).unwrap();
+            match &**filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inode = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //populate those fields in statbuf which depend on things other than the inode object
-                    statbuf.st_ino = fobj.inode;
+                    statbuf.st_ino = normalfile_filedesc_obj.inode;
                     statbuf.st_dev = metadata.dev_id;
 
                     match inode {
@@ -270,8 +270,8 @@ impl Cage {
 
 
         //Walk the file tree to get inode from path
-        if let Some(inodeno) = metawalk(truepath.as_path(), Some(&metadata)) {
-            let inodeobj = metadata.inodetable.get(&inodeno).unwrap();
+        if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
+            let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
 
             //Get the mode bits if the type of the inode is sane
             let mode = match inodeobj {
@@ -309,8 +309,8 @@ impl Cage {
         let metadata = FS_METADATA.read().unwrap();
 
         //Walk the file tree to get inode from path
-        if let Some(inodeno) = metawalk(&truepath, Some(&metadata)) {
-            if let Inode::Dir(_dir) = metadata.inodetable.get(&inodeno).unwrap() {
+        if let Some(inodenum) = metawalk(&truepath, Some(&metadata)) {
+            if let Inode::Dir(_dir) = metadata.inodetable.get(&inodenum).unwrap() {
                 //self.cwd = truepath; as getting self as mut currently is fraught this may not be so easy
                 //increment refcount to prevent current directory from being removed while you're in it
                 0

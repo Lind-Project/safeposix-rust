@@ -8,7 +8,7 @@ use super::sys_constants::*;
 
 impl Cage {
   pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-    let mut cagetab = CAGE_TABLE.write().unwrap();
+    let mut mutcagetable = CAGE_TABLE.write().unwrap();
 
     //construct new cage struct with a cloned fdtable
     let mut newfdtable = interface::RustHashMap::new();
@@ -18,20 +18,17 @@ impl Cage {
           let fd = value.read().unwrap();
 
           //only file inodes have real inode objects currently
-          let inodopt = match &**fd {
+          let inodenum_option = match &**fd {
               File(f) => {Some(f.inode)}
-              Stream(_) => {None}
-              Socket(_) => {None}
-              Pipe(_) => {None}
+              _ => {None}
           };
 
-          if let Some(ino) = inodopt {
+          if let Some(inodenum) = inodenum_option {
             //increment the reference count on the inode
-            let inode = fsm.inodetable.get_mut(&ino).unwrap();
+            let inode = fsm.inodetable.get_mut(&inodenum).unwrap();
             match inode {
                 Inode::File(f) => {f.refcount += 1;}
                 Inode::CharDev(f) => {f.refcount += 1;}
-                //Inode::Stream(f) => {f.refcount += 1;}
                 Inode::Pipe(f) => {f.refcount += 1;}
                 Inode::Socket(f) => {f.refcount += 1;}
                 Inode::Dir(_) => {}
@@ -45,9 +42,10 @@ impl Cage {
         cageid: child_cageid, cwd: self.cwd.clone(), parent: self.cageid, 
         filedescriptortable: interface::RustLock::new(newfdtable)
     };
-    cagetab.insert(child_cageid, interface::RustRfc::new(cageobj));
+    mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
     0
   }
+
   pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
     { CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap(); }
 
@@ -64,11 +62,13 @@ impl Cage {
     {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
     0
   }
+
   pub fn exit_syscall(&self) -> i32 {
     CAGE_TABLE.write().unwrap().remove(&self.cageid);
     //fdtable will be dropped at end of dispatcher scope because of Arc
     0
   }
+
   pub fn getpid_syscall(&self) -> i32 {
     self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
   }
@@ -79,17 +79,15 @@ impl Cage {
   pub fn getgid_syscall(&self) -> i32 {
     DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
   }
-  
   pub fn getegid_syscall(&self) -> i32 {
     DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
   }
   
   pub fn getuid_syscall(&self) -> i32 {
-    DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
+    DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
   }
-  
   pub fn geteuid_syscall(&self) -> i32 {
-    DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
+    DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
   }
   
   pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {

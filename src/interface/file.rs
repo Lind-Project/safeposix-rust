@@ -185,7 +185,7 @@ mod tests {
     #[test]
     pub fn filewritetest() {
       println!("{:?}", listfiles());
-      let mut f = emulated_open("foobar".to_string(), true).expect("?!");
+      let mut f = openfile("foobar".to_string(), true).expect("?!");
       println!("{:?}", listfiles());
       let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
