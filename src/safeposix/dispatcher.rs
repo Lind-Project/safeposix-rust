@@ -77,8 +77,8 @@ pub union Arg {
   ulong: u64,
   cstr: *const i8,
   cstrarr: *const *const i8,
-  rlimitstruct: *const Rlimit,
-  statdatastruct: *const StatData //not sure if this should be in the union or not -- figured I would try the same thing that I tried with sys_calls
+  rlimitstruct: *mut Rlimit,
+  statdatastruct: *mut StatData //not sure if this should be in the union or not -- figured I would try the same thing that I tried with sys_calls
 }
 
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
@@ -95,8 +95,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         CHDIR_SYSCALL => {
             cage.chdir_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap())
         }
+        XSTAT_SYSCALL => {
+            cage.stat_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{&mut *arg2.statdatastruct})
+        }
         OPEN_SYSCALL => {
             cage.open_syscall(unsafe{std::ffi::CStr::from_ptr(arg1.cstr)}.to_str().unwrap(), unsafe{arg2.int}, unsafe{arg3.uint})
+        }
+        FXSTAT_SYSCALL => {
+            cage.fstat_syscall(unsafe{arg1.int}, unsafe{&mut *arg2.statdatastruct})
+        }
+        GETPPID_SYSCALL => {
+            cage.getppid_syscall()
         }
         GETPID_SYSCALL => {
             cage.getpid_syscall()
@@ -109,6 +118,18 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         FORK_SYSCALL => {
             cage.fork_syscall(unsafe{arg1.ulong})
+        }
+        GETUID_SYSCALL => {
+            cage.getuid_syscall()
+        }
+        GETEUID_SYSCALL => {
+            cage.geteuid_syscall()
+        }
+        GETGID_SYSCALL => {
+            cage.getgid_syscall()
+        }
+        GETEGID_SYSCALL => {
+            cage.getegid_syscall()
         }
         _ => {//unknown syscall
             -1
