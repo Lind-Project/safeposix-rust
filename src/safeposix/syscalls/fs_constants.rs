@@ -102,3 +102,15 @@ pub fn is_reg(mode: u32) -> bool {
 pub fn is_chr(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFCHR
 }
+
+pub fn is_dir(mode: u32) -> bool {
+  (mode as i32 & S_FILETYPEFLAGS) == S_IFDIR
+}
+
+//the same as the glibc makedev
+pub fn makedev(dev: &DevNo) -> u64 {
+    ((dev.major as u64 & 0x00000fff) <<  8) |
+    ((dev.major as u64 & 0xfffff000) << 32) |
+    ((dev.minor as u64 & 0x000000ff) <<  0) |
+    ((dev.minor as u64 & 0xffffff00) << 12)
+}
