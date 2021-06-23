@@ -120,8 +120,6 @@ impl Cage {
         0
     }
 
-    // ADD FSTAT AS WELL
-
     //------------------STAT SYSCALL------------------
 
     pub fn stat_syscall(&self, path: &str, ret : &mut StatData) -> i32 {
@@ -191,6 +189,35 @@ impl Cage {
                      ((inodeobj.dev.minor as u64 & 0x000000ff) <<  0) |
                      ((inodeobj.dev.minor as u64 & 0xffffff00) << 12);
         ret.st_size = inodeobj.size;
+    }
+
+    //------------------FSTAT SYSCALL------------------
+
+    pub fn fstat_syscall(&self, fd: Option<i32>, ret: &mut StatData) -> i32 {
+        let mdobj = FS_METADATA.read().unwrap();
+        let mut fdt = self.filedescriptortable.read().unwrap();
+        
+        if !fdt.contains_key(&fd.unwrap()) { return -1; }
+
+        if Self::IS_PIPE_DESC(fd) { Self::_stat_alt_helper(self, ret); }
+
+        let inode = self.filedescriptortable.fd.inode;
+        
+        if inode == STREAMINODE { Self::_stat_alt_helper(self, ret) }
+        if is_chr(mdobj.inodetable.inode.mode) { Self::_istat_helper_chr_file(inode, ret) }
+        Self::_istat_helper(inode, ret);
+        0
+    }
+
+    pub fn _stat_alt_helper(&self, ret: &mut StatData) {
+        ret.st_mode = 49590; //r and w priveliged 
+        ret.st_nlink = 1;
+        ret.st_uid = DEFAULT_UID;
+        ret.st_gid = DEFAULT_GID;
+    }
+
+    pub fn IS_PIPE_DESC(fd: Option<i32>) -> bool{
+        FS_METADATA.read().unwrap().fd.contains_key(String::from("pipe"))
     }
 
     //------------------ACCESS SYSCALL------------------
