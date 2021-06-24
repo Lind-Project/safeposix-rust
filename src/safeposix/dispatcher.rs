@@ -75,6 +75,9 @@ pub union Arg {
   int: i32,
   uint: u32,
   ulong: u64,
+  usz: usize,
+  cbuf: *const u8,
+  mutcbuf: *mut u8,
   cstr: *const i8,
   cstrarr: *const *const i8,
   rlimitstruct: *mut Rlimit,
@@ -100,6 +103,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         OPEN_SYSCALL => {
             cage.open_syscall(unsafe{interface::charstar_to_ruststr(arg1.cstr)}, unsafe{arg2.int}, unsafe{arg3.uint})
+        }
+        READ_SYSCALL => {
+            cage.read_syscall(unsafe{arg1.int}, unsafe{arg2.mutcbuf}, unsafe{arg3.usz})
+        }
+        WRITE_SYSCALL => {
+            cage.write_syscall(unsafe{arg1.int}, unsafe{arg2.cbuf}, unsafe{arg3.usz})
         }
         FXSTAT_SYSCALL => {
             cage.fstat_syscall(unsafe{arg1.int}, unsafe{&mut *arg2.statdatastruct})

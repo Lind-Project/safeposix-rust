@@ -121,7 +121,7 @@ impl Cage {
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
             let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS});
-            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(newfd)));
+            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
         thisfd //open returns the opened file descriptr
@@ -233,7 +233,7 @@ impl Cage {
             //First we check in the file descriptor to handle sockets, streams, and pipes,
             //and if it is a normal file descriptor we handle regular files, dirs, and char 
             //files based on the information in the inode.
-            match &**filedesc_enum {
+            match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inode = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -268,16 +268,16 @@ impl Cage {
 
     //------------------READ SYSCALL------------------
 
-    pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32{
+    pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
-            match &**filedesc_enum {
-                File(mut normalfile_filedesc_obj) => {
+            match &mut *filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
                     if is_wronly(normalfile_filedesc_obj.flags) {
-                        return syscall_error(Errno::EBADF, "read", "specified pipe not open for writing");
+                        return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
 
                     let metadata = FS_METADATA.read().unwrap();
@@ -293,9 +293,8 @@ impl Cage {
                                0 //0 bytes read, but not an error value that can/should be passed to the user
                             }
                         }
-                        Inode::CharDev(_) => {
-                            //self._read_chr_file(inode, buf, count);
-                            0
+                        Inode::CharDev(char_inode_obj) => {
+                            self._read_chr_file(char_inode_obj, buf, count)
                         }
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "read", "attempted to read from a directory")
@@ -307,14 +306,88 @@ impl Cage {
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
-                        return syscall_error(Errno::EBADF, "read", "specified pipe not open for writing");
+                        return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-                    //self._read_from_pipe(fd, 
+                    //self._read_from_pipe...
                     syscall_error(Errno::EOPNOTSUPP, "read", "reading from a pipe not implemented yet")
                 }
             }
         } else {
             syscall_error(Errno::EBADF, "read", "invalid file descriptor")
+        }
+    }
+
+    fn _read_chr_file(&self, inodeobj: &DeviceInode, buf: *mut u8, count: usize) -> i32 {
+        match inodeobj.dev {
+            NULLDEVNO => {0} //reading from /dev/null always reads 0 bytes
+            ZERODEVNO => {interface::fillzero(buf, count)}
+            RANDOMDEVNO => {interface::fillrandom(buf, count)}
+            URANDOMDEVNO => {interface::fillrandom(buf, count)}
+            _ => {syscall_error(Errno::EOPNOTSUPP, "read or readat", "read from specified device not implemented")}
+        }
+    }
+
+    //------------------WRITE SYSCALL------------------
+
+    pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            match &mut *filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "write", "specified file not open for writing");
+                    }
+
+                    let mut metadata = FS_METADATA.write().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match inodeobj {
+                        Inode::File(_) => {
+                            let position = normalfile_filedesc_obj.position;
+                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                               normalfile_filedesc_obj.position += byteswritten;
+                               byteswritten as i32
+                            } else {
+                               0 //0 bytes written, but not an error value that can/should be passed to the user
+                            }
+                        }
+                        Inode::CharDev(char_inode_obj) => {
+                            self._write_chr_file(char_inode_obj, buf, count)
+                        }
+                        Inode::Dir(_) => {
+                            syscall_error(Errno::EISDIR, "write", "attempted to write to a directory")
+                        }
+                        _ => {panic!("Wonky file descriptor shenanigains");}
+                    }
+                }
+                Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
+                Stream(_) => {
+                    count as i32
+                }
+                Pipe(pipe_filedesc_obj) => {
+                    if is_rdonly(pipe_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
+                    }
+                    //self._write_to_pipe...
+                    syscall_error(Errno::EOPNOTSUPP, "write", "writing from a pipe not implemented yet")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "write", "invalid file descriptor")
+        }
+    }
+
+    fn _write_chr_file(&self, inodeobj: &DeviceInode, _buf: *const u8, count: usize) -> i32 {
+        //writes to any of these device files transparently succeed while doing nothing
+        match inodeobj.dev {
+            NULLDEVNO => {count as i32}
+            ZERODEVNO => {count as i32}
+            RANDOMDEVNO => {count as i32}
+            URANDOMDEVNO => {count as i32}
+            _ => {syscall_error(Errno::EOPNOTSUPP, "write or writeat", "write to specified device not implemented")}
         }
     }
 
