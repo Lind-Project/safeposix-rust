@@ -340,4 +340,44 @@ impl Cage {
             syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
         }
     }
+
+    //------------------DUP & DUP2 SYSCALLS------------------
+
+    pub fn dup_syscall(&self, fd: i32, startDesc: Option<i32>) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        let mut startFD = match startDesc {
+            Some(startDesc) => startDesc,
+            None => STARTINGFD,
+        };
+
+        //checking whether the fd exists in the file table and is higher than the starting file descriptor
+        if let Some(fileD) = fdtable.get(&fd) {
+            if fd >= STARTINGFD {
+                return syscall_error(Errno::EBADF, "dup_syscall", "provided file descriptor is out of range");
+            }
+
+            //error below may need to be changed -- called if error getting file descriptor
+            let nextfd = if let Some(fd) = self.get_next_fd(startFD, Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
+            return Self::dup2_helper(&self, fd, nextfd)
+        } else {
+            return syscall_error(Errno::EBADF, "dup_syscall", "file descriptor not found")
+        }
+    }
+
+    pub fn dup2_helper(&self, oldfd: i32, newfd: i32, fdtable:) -> i32 {
+        //checking if the new fd is out of range
+        if newfd >= MAXFD || newfd <= STARTINGFD {
+            return syscall_error(Errno::EBADF, "dup2_helper", "provided file descriptor is out of range");
+        }
+
+        //if the file descriptors are equal, return the new one
+        if newfd == oldfd {
+            return newfd;
+        }
+
+        //need to add close helper and reference
+        return 1;
+    }
+
 }
