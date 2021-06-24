@@ -22,7 +22,11 @@ impl Cage {
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
-        let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "open", "no available file descriptor number could be found");};
+        let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
+            fd
+        } else {
+            return syscall_error(Errno::ENFILE, "open", "no available file descriptor number could be found");
+        };
 
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
@@ -336,6 +340,7 @@ impl Cage {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
             match &mut *filedesc_enum {
+                //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     if is_rdonly(normalfile_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified file not open for writing");
@@ -343,10 +348,12 @@ impl Cage {
 
                     let mut metadata = FS_METADATA.write().unwrap();
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
                     match inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
                             let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+
                             if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                normalfile_filedesc_obj.position += byteswritten;
                                byteswritten as i32
@@ -354,9 +361,11 @@ impl Cage {
                                0 //0 bytes written, but not an error value that can/should be passed to the user
                             }
                         }
+
                         Inode::CharDev(char_inode_obj) => {
                             self._write_chr_file(char_inode_obj, buf, count)
                         }
+
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "write", "attempted to write to a directory")
                         }
@@ -364,8 +373,14 @@ impl Cage {
                     }
                 }
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
-                Stream(_) => {
-                    count as i32
+                Stream(stream_filedesc_obj) => {
+                    //if it's stdout or stderr, print out and we're done
+                    if let 1..=2 = stream_filedesc_obj.stream {
+                        interface::log_from_ptr(buf);
+                        count as i32
+                    } else {
+                        0
+                    }
                 }
                 Pipe(pipe_filedesc_obj) => {
                     if is_rdonly(pipe_filedesc_obj.flags) {
@@ -425,7 +440,9 @@ impl Cage {
 
             //if the desired access bits are compatible with the actual access bits 
             //of the file, return a success result, else return a failure result
-            if mode & newmode == newmode {0} else {
+            if mode & newmode == newmode {
+                0
+            } else {
                 syscall_error(Errno::EACCES, "access", "the requested access would be denied to the file")
             }
         } else {
