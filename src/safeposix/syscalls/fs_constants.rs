@@ -108,6 +108,10 @@ pub fn is_dir(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFDIR
 }
 
+pub fn is_wronly(flags: i32) -> bool {
+  (flags & O_RDWRFLAGS) == O_WRONLY
+}
+
 //the same as the glibc makedev
 pub fn makedev(dev: &DevNo) -> u64 {
     ((dev.major as u64 & 0x00000fff) <<  8) |

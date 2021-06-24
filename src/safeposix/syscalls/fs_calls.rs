@@ -266,6 +266,58 @@ impl Cage {
         }
     }
 
+    //------------------READ SYSCALL------------------
+
+    pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32{
+        let fdtable = self.filedescriptortable.write().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            match &**filedesc_enum {
+                File(mut normalfile_filedesc_obj) => {
+                    if is_wronly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "read", "specified pipe not open for writing");
+                    }
+
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match inodeobj {
+                        Inode::File(_) => {
+                            let position = normalfile_filedesc_obj.position;
+                            let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            if let Ok(bytesread) = fileobject.readat(buf, count, position) {
+                               normalfile_filedesc_obj.position += bytesread;
+                               bytesread as i32
+                            } else {
+                               0 //0 bytes read, but not an error value that can/should be passed to the user
+                            }
+                        }
+                        Inode::CharDev(_) => {
+                            //self._read_chr_file(inode, buf, count);
+                            0
+                        }
+                        Inode::Dir(_) => {
+                            syscall_error(Errno::EISDIR, "read", "attempted to read from a directory")
+                        }
+                        _ => {panic!("Wonky file descriptor shenanigains");}
+                    }
+                }
+                Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "recv not implemented yet")}
+                Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
+                Pipe(pipe_filedesc_obj) => {
+                    if is_wronly(pipe_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "read", "specified pipe not open for writing");
+                    }
+                    //self._read_from_pipe(fd, 
+                    syscall_error(Errno::EOPNOTSUPP, "read", "reading from a pipe not implemented yet")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "read", "invalid file descriptor")
+        }
+    }
+
     //------------------ACCESS SYSCALL------------------
 
     pub fn access_syscall(&self, path: &str, amode: u32) -> i32 {
