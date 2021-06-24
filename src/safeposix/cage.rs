@@ -49,17 +49,18 @@ pub struct PipeDesc {
     pub flags: i32
 }
 
+type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>;
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
-    pub cwd: interface::PathBuf,
+    pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
-    pub filedescriptortable: interface::RustLock<interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>>
+    pub filedescriptortable: interface::RustLock<FdTable>
 }
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>) -> Option<i32> {
+    pub fn get_next_fd(&self, startfd: Option<i32>, fdtable_option: Option<&FdTable>) -> Option<i32> {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -67,7 +68,10 @@ impl Cage {
         };
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
-        let rdguard = self.filedescriptortable.read().unwrap();
+        let ourreader;
+        let rdguard = if let Some(fdtable) = fdtable_option {fdtable} else {
+            ourreader = self.filedescriptortable.read().unwrap(); &ourreader
+        };
         for fd in start..MAXFD{
             if !rdguard.contains_key(&fd) {
                 return Some(fd);
@@ -76,16 +80,23 @@ impl Cage {
         None
     }
 
-    pub fn add_to_fd_table(&mut self, fd: i32, descriptor: FileDescriptor) {
-        self.filedescriptortable.write().unwrap().insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
+    pub fn add_to_fd_table(&mut self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
+        let mut ourwriter;
+        let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
+            ourwriter = self.filedescriptortable.write().unwrap();
+            &mut ourwriter
+        };
+        writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
     }
 
     pub fn rm_from_fd_table(&mut self, fd: &i32) {
         self.filedescriptortable.write().unwrap().remove(fd);
     }
 
-    pub fn changedir(&mut self, newdir: interface::PathBuf) {
-        self.cwd = normpath(self.cwd.join(newdir), self);
+    pub fn changedir(&self, newdir: interface::RustPathBuf) {
+        let newwd = interface::RustRfc::new(normpath(newdir, self));
+        let mut cwdbox = self.cwd.write().unwrap();
+        *cwdbox = newwd;
     }
 
     pub fn load_lower_handle_stubs(&mut self) {

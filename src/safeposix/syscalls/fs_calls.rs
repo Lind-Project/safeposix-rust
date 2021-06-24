@@ -5,6 +5,7 @@ use crate::interface;
 use super::fs_constants::*;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc};
 use crate::safeposix::filesystem::*;
+use super::errnos::*;
 
 impl Cage {
 
@@ -12,7 +13,7 @@ impl Cage {
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         //Check that path is not empty
-        if path.len() != 0 {return -1;}//ENOENT later
+        if path.len() != 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
 
         let truepath = normpath(convpath(path), self);
 
@@ -21,34 +22,34 @@ impl Cage {
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
-        let thisfd = if let Some(fd) = self.get_next_fd(None) {fd} else {return -1/*ENFILE*/};
+        let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "open", "no available file descriptor number could be found");};
 
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
             (None, None) => {
                 if 0 != (flags & O_CREAT) {
-                    return -1; //ENOENT later
+                    return syscall_error(Errno::ENOENT, "open", "tried to open a file that did not exist, and O_CREAT was not specified");
                 }
-                return -1; //ENOTDIR later
+                return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
             }
 
             //If the file doesn't exist but the parent does
             (None, Some(pardirinode)) => {
                 if 0 != (flags & O_CREAT) {
-                    return -1; //ENOENT later
+                    return syscall_error(Errno::ENOENT, "open", "tried to open a file that did not exist, and O_CREAT was not specified");
                 }
 
                 let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
 
                 if 0 != (S_IFCHR & flags) {
-                    return -1; //you shouldn't be able to create a character file except by mknod
+                    return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
                 } 
 
                 let effective_mode = S_IFREG as u32 | mode;
 
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
-                    return -1; //serious error, but not sure what to put here... ENOPERM?
+                    return syscall_error(Errno::EPERM, "open", "Mode bits were not sane");
                 } //assert sane mode bits
 
                 let time = interface::timestamp(); //We do a real timestamp now
@@ -70,7 +71,7 @@ impl Cage {
             //If the file exists (we don't need to look at parent here)
             (Some(inodenum), ..) => {
                 if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
-                    return -1; //EEXIST later
+                    return syscall_error(Errno::EEXIST, "open", "file already exists and O_CREAT and O_EXCL were used");
                 }
 
                 if 0 != (flags & O_TRUNC) {
@@ -82,8 +83,9 @@ impl Cage {
                     //set size of file to 0
                     match mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
                         Inode::File(g) => {g.size = 0;}
-                        Inode::Dir(_) => {return -1;/*EISDIR*/}
-                        _ => {return -1;/*EINVAL*/}
+                        _ => {
+                            return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
+                        }
                     }
 
                     //remove the previous file and add a new one of 0 length
@@ -122,7 +124,7 @@ impl Cage {
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(newfd)));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
-        0
+        thisfd //open returns the opened file descriptr
     }
 
     //------------------CREAT SYSCALL------------------
@@ -163,9 +165,9 @@ impl Cage {
                     panic!("How did you even manage to refer to a socket using a path?");
                 },
             }
-            0
+            0 //stat has succeeded!
         } else {
-            -1 //
+            syscall_error(Errno::ENOENT, "stat", "path refers to an invalid file")
         }
 
     }
@@ -252,13 +254,15 @@ impl Cage {
                         _ => {panic!("A file fd points to a socket or pipe");}
                     }
                 }
-                Socket(_) => {return -1;/*Socket fstat not implemented (yet), ENOTSUPP*/}
+                Socket(_) => {
+                    return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
+                    }
                 Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);}
                 Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
             }
-            0
+            0 //fstat has succeeded!
         } else {
-            -1 //EBADF
+            syscall_error(Errno::ENOENT, "fstat", "invalid file descriptor")
         }
     }
 
@@ -296,29 +300,44 @@ impl Cage {
 
             //if the desired access bits are compatible with the actual access bits 
             //of the file, return a success result, else return a failure result
-            if mode & newmode == newmode {0} else {-1/**/}
+            if mode & newmode == newmode {0} else {
+                syscall_error(Errno::EACCES, "access", "the requested access would be denied to the file")
+            }
         } else {
-          -1 //ENOENT
+            syscall_error(Errno::ENOENT, "access", "path does not refer to an existing file")
         }
     }
 
     //------------------CHDIR SYSCALL------------------
     
-    pub fn chdir_syscall(&/*mut*/ self, path: &str) -> i32 {
+    pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
-        let metadata = FS_METADATA.read().unwrap();
+        let mutmetadata = FS_METADATA.write().unwrap();
 
         //Walk the file tree to get inode from path
-        if let Some(inodenum) = metawalk(&truepath, Some(&metadata)) {
-            if let Inode::Dir(_dir) = metadata.inodetable.get(&inodenum).unwrap() {
-                //self.cwd = truepath; as getting self as mut currently is fraught this may not be so easy
-                //increment refcount to prevent current directory from being removed while you're in it
-                0
+        if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
+            if let Inode::Dir(dir) = mutmetadata.inodetable.get(&inodenum).unwrap() {
+
+                //decrement refcount of previous cwd inode, however this is complex because of cage
+                //initialization and deinitialization concerns so we leave it unimplemented for now
+                //if let Some(oldinodenum) = metawalk(&self.cwd, Some(&mutmetadata)) {
+                //    if let Inode::Dir(olddir) = mutmetadata.inodetable.get(&oldinodenum).unwrap() {
+                //        olddir.linkcount -= 1;
+                //    } else {panic!("We changed from a directory that was not a directory in chdir!");}
+                //} else {panic!("We changed from a directory that was not a directory in chdir!");}
+
+                self.changedir(truepath);
+
+                //increment refcount of new cwd inode to ensure that you can't remove a directory,
+                //currently unimplmented
+                //dir.linkcount += 1;
+
+                0 //chdir has succeeded!;
             } else {
-                -1 //ENOTDIR
+                syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory")
             }
         } else {
-            -1 //ENOENT
+            syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
         }
     }
 }

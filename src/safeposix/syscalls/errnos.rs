@@ -1,12 +1,12 @@
-
+#![allow(dead_code)]
 // Error handling for SafePOSIX
 use crate::interface;
 
-static verbose : bool = true;
+static VERBOSE : bool = true;
 
 #[derive(Debug)]
 
-enum Errno {
+pub enum Errno {
   EPERM = 1,	// Operation not permitted
   ENOENT = 2, // No such file or directory
   ESRCH = 3,	// No such process
@@ -139,13 +139,10 @@ enum Errno {
   ENOTRECOVERABLE = 131// State not recoverable
 }
 
-impl Errno {
-    fn syscall_error(&self, syscall: &str, message: &str) -> i32 {
-        if verbose {
-            let msg = format!("Error in syscall: {} - {:?}: {}", syscall, self, message);
-            interface::log_to_stderr(msg);
-        }
-        *self as i32
+pub fn syscall_error(e: Errno, syscall: &str, message: &str) -> i32 {
+    if VERBOSE {
+        let msg = format!("Error in syscall: {} - {:?}: {}", syscall, e, message);
+        interface::log_to_stderr(&msg);
     }
- 
+    e as i32
 }

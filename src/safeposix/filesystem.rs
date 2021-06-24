@@ -75,7 +75,7 @@ impl FilesystemMetadata {
         let time = interface::timestamp(); //We do a real timestamp now
         let mut dirin = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID, 
             mode: S_IFDIR as u32 | S_IRWXA, atime: time, ctime: time, mtime: time,
-            linkcount: 2, refcount: 0, filename_to_inode_dict: interface::RustHashMap::new()};
+            linkcount: 3, refcount: 0, filename_to_inode_dict: interface::RustHashMap::new()};//this is where cwd starts
         dirin.filename_to_inode_dict.insert(std::ffi::OsString::from("."), ROOTDIRECTORYINODE);
         dirin.filename_to_inode_dict.insert(std::ffi::OsString::from(".."), ROOTDIRECTORYINODE);
         retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirin));
@@ -90,11 +90,11 @@ pub fn restore_metadata() {
 
 }
 
-pub fn convpath(cpath: &str) -> interface::PathBuf {
-    interface::PathBuf::from(cpath)
+pub fn convpath(cpath: &str) -> interface::RustPathBuf {
+    interface::RustPathBuf::from(cpath)
 }
 //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
-pub fn metawalkandparent(path: &interface::Path, guard: Option<&FilesystemMetadata>) -> (Option<usize>, Option<usize>) {
+pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMetadata>) -> (Option<usize>, Option<usize>) {
     let ourreader;
     //Acquire a readlock if we were not passed in a reference
     let md = if let Some(rl) = guard {rl} else {
@@ -110,9 +110,9 @@ pub fn metawalkandparent(path: &interface::Path, guard: Option<&FilesystemMetada
     for comp in path.components() {
         match comp {
             //We've already done what initialization needs to be done
-            interface::Component::RootDir => {},
+            interface::RustPathComponent::RootDir => {},
 
-            interface::Component::Normal(f) => {
+            interface::RustPathComponent::Normal(f) => {
                 //If we're trying to get the child of a nonexistent directory, exit out
                 if inodeno.is_none() {return (None, None);}
                 match curnode {
@@ -146,20 +146,20 @@ pub fn metawalkandparent(path: &interface::Path, guard: Option<&FilesystemMetada
     //return inode number and it's parent's number
     (inodeno, previnodeno)
 }
-pub fn metawalk(path: &interface::Path, guard: Option<&FilesystemMetadata>) -> Option<usize> {
+pub fn metawalk(path: &interface::RustPath, guard: Option<&FilesystemMetadata>) -> Option<usize> {
     metawalkandparent(path, guard).0
 }
-pub fn normpath(origp: interface::PathBuf, cage: &Cage) -> interface::PathBuf {
+pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPathBuf {
     //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
-    let mut newp = if origp.is_relative() {cage.cwd.clone()} else {interface::PathBuf::from("/")};
+    let mut newp = if origp.is_relative() {(**cage.cwd.read().unwrap()).clone()} else {interface::RustPathBuf::from("/")};
 
     for comp in origp.components() {
         match comp {
             //if we have a normal path component, push it on to our normed path
-            interface::Component::Normal(_) => {newp.push(comp);},
+            interface::RustPathComponent::Normal(_) => {newp.push(comp);},
 
             //if we have a .. path component, pop the last component off our normed path
-            interface::Component::ParentDir => {newp.pop();},
+            interface::RustPathComponent::ParentDir => {newp.pop();},
 
             //if we have a . path component (Or a root dir or a prefix(?)) do nothing
             _ => {},

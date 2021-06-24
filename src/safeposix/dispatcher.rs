@@ -143,7 +143,7 @@ mod tests {
     #[test]
     pub fn cagetest() {
 
-        {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd: interface::PathBuf::from("/"), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
+        {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
         {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
         {println!("{:?}", CAGE_TABLE.read().unwrap());};
         {println!("{:?}", FS_METADATA.read().unwrap().inodetable);};
