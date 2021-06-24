@@ -2,33 +2,73 @@
 
 use crate::interface;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*};
+use crate::safeposix::filesystem::{FS_METADATA, Inode};
 
 use super::sys_constants::*;
 
 impl Cage {
   pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-    CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(Cage {cageid: child_cageid, cwd: self.cwd.clone(), parent: self.cageid, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())}));
+    let mut mutcagetable = CAGE_TABLE.write().unwrap();
+
+    //construct new cage struct with a cloned fdtable
+    let mut newfdtable = interface::RustHashMap::new();
+    {
+      let mut fsm = FS_METADATA.write().unwrap();
+      for (key, value) in self.filedescriptortable.read().unwrap().iter() {
+          let fd = value.read().unwrap();
+
+          //only file inodes have real inode objects currently
+          let inodenum_option = match &**fd {
+              File(f) => {Some(f.inode)}
+              _ => {None}
+          };
+
+          if let Some(inodenum) = inodenum_option {
+            //increment the reference count on the inode
+            let inode = fsm.inodetable.get_mut(&inodenum).unwrap();
+            match inode {
+                Inode::File(f) => {f.refcount += 1;}
+                Inode::CharDev(f) => {f.refcount += 1;}
+                Inode::Pipe(f) => {f.refcount += 1;}
+                Inode::Socket(f) => {f.refcount += 1;}
+                Inode::Dir(_) => {}
+            }
+          }
+
+          newfdtable.insert(*key, value.clone()); //clone (increment) the reference counter, and add to hashmap
+      }
+    }
+    let cageobj = Cage {
+        cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
+        filedescriptortable: interface::RustLock::new(newfdtable)
+    };
+    mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
     0
   }
+
   pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
     { CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap(); }
+
     self.filedescriptortable.write().unwrap().retain(|&_, v| !match &**v.read().unwrap() {
       File(_f) => true,//f.flags & CLOEXEC,
       Stream(_s) => true,//s.flags & CLOEXEC,
       Socket(_s) => true,//s.flags & CLOEXEC,
       Pipe(_p) => true,//p.flags & CLOEXEC
     });
-    let newcage = Cage {cageid: child_cageid, cwd: self.cwd.clone(), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
+
+    let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
     //wasteful clone of fdtable, but mutability constraints exist
 
     {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
     0
   }
+
   pub fn exit_syscall(&self) -> i32 {
     CAGE_TABLE.write().unwrap().remove(&self.cageid);
     //fdtable will be dropped at end of dispatcher scope because of Arc
     0
   }
+
   pub fn getpid_syscall(&self) -> i32 {
     self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
   }
@@ -39,17 +79,15 @@ impl Cage {
   pub fn getgid_syscall(&self) -> i32 {
     DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
   }
-  
   pub fn getegid_syscall(&self) -> i32 {
     DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
   }
   
   pub fn getuid_syscall(&self) -> i32 {
-    DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
+    DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
   }
-  
   pub fn geteuid_syscall(&self) -> i32 {
-    DEFAULT_UID as i32 //Lind is only run in one group so a default value is returned
+    DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
   }
   
   pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {

@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 use crate::interface;
 
-use crate::safeposix::syscalls::fs_constants::*;
+use super::syscalls::fs_constants::*;
+use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
@@ -18,19 +19,19 @@ pub enum FileDescriptor {
 pub struct FileDesc {
     pub position: usize,
     pub inode: usize,
-    pub flags: usize
+    pub flags: i32
 }
 
 #[derive(Debug)]
 pub struct StreamDesc {
     pub position: usize,
-    pub inode: usize,
-    pub flags: usize
+    //pub inode: usize, inode for stream is implicitly STREAMINODE
+    pub flags: i32
 }
 
 #[derive(Debug)]
 pub struct SocketDesc {
-    pub mode: usize,
+    pub mode: u32,
     pub domain: usize,
     pub socktype: usize,
     pub protocol: usize,
@@ -38,27 +39,28 @@ pub struct SocketDesc {
     pub sndbuf: usize,
     pub rcvbuf: usize,
     pub state: usize,
-    pub flags: usize,
+    pub flags: i32,
     pub errno: usize
 }
 
 #[derive(Debug)]
 pub struct PipeDesc {
     pub pipe: usize,
-    pub flags: usize
+    pub flags: i32
 }
 
+type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>;
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
-    pub cwd: String,
+    pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
-    pub filedescriptortable: interface::RustLock<interface::RustHashMap<usize, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>>
+    pub filedescriptortable: interface::RustLock<FdTable>
 }
 
 impl Cage {
 
-    fn get_next_fd(&self, startfd: Option<usize>) -> Option<usize> {
+    pub fn get_next_fd(&self, startfd: Option<i32>, fdtable_option: Option<&FdTable>) -> Option<i32> {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -66,7 +68,10 @@ impl Cage {
         };
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
-        let rdguard = self.filedescriptortable.read().unwrap();
+        let ourreader;
+        let rdguard = if let Some(fdtable) = fdtable_option {fdtable} else {
+            ourreader = self.filedescriptortable.read().unwrap(); &ourreader
+        };
         for fd in start..MAXFD{
             if !rdguard.contains_key(&fd) {
                 return Some(fd);
@@ -75,16 +80,32 @@ impl Cage {
         None
     }
 
-    fn add_to_fd_table(&mut self, fd: usize, descriptor: FileDescriptor) {
-        self.filedescriptortable.write().unwrap().insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
+    pub fn add_to_fd_table(&mut self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
+        let mut ourwriter;
+        let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
+            ourwriter = self.filedescriptortable.write().unwrap();
+            &mut ourwriter
+        };
+        writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
     }
 
-    fn rm_from_fd_table(&mut self, fd: &usize) {
+    pub fn rm_from_fd_table(&mut self, fd: &i32) {
         self.filedescriptortable.write().unwrap().remove(fd);
     }
 
-    fn changedir(&mut self, newdir: String) {
-        self.cwd = newdir;
+    pub fn changedir(&self, newdir: interface::RustPathBuf) {
+        let newwd = interface::RustRfc::new(normpath(newdir, self));
+        let mut cwdbox = self.cwd.write().unwrap();
+        *cwdbox = newwd;
     }
 
+    pub fn load_lower_handle_stubs(&mut self) {
+        let stdin = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, flags: O_RDONLY}))));
+        let stdout = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, flags: O_WRONLY}))));
+        let stderr = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, flags: O_WRONLY}))));
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        fdtable.insert(0, stdin);
+        fdtable.insert(1, stdout);
+        fdtable.insert(2, stderr);
+    }
 }

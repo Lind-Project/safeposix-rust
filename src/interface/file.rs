@@ -8,14 +8,14 @@ use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::env;
 use std::slice;
-use std::path::{PathBuf, Path};
+pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::SyncLazy as RustLazyGlobal;
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> Vec<String> {
-    let paths = fs::read_dir(&Path::new(
+    let paths = fs::read_dir(&RustPath::new(
         &env::current_dir().unwrap())).unwrap();
       
     let names =
@@ -36,7 +36,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
         panic!("FileInUse");
     }
 
-    let path: PathBuf = [".".to_string(), filename].iter().collect();
+    let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
     let absolute_filename = fs::canonicalize(&path).unwrap();
 
@@ -59,7 +59,7 @@ fn assert_is_allowed_filename(filename: &String) {
     }
 
     if !filename.chars().all(char::is_alphanumeric) {
-        panic!("ArgumentError: Filename has disallowed charachters.")
+        panic!("ArgumentError: Filename has disallowed characters.")
     }
 
     match filename.as_str() {
@@ -78,7 +78,7 @@ pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile>
 
 pub struct EmulatedFile {
     filename: String,
-    abs_filename: PathBuf,
+    abs_filename: RustPathBuf,
     fobj: Option<Arc<Mutex<File>>>,
     filesize: usize,
 }
@@ -94,7 +94,7 @@ impl EmulatedFile {
             panic!("FileInUse");
         }
 
-        let path: PathBuf = [".".to_string(), filename.clone()].iter().collect();
+        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
 
         let f = if !path.exists() {
             if !create {
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     pub fn filewritetest() {
       println!("{:?}", listfiles());
-      let mut f = emulated_open("foobar".to_string(), true).expect("?!");
+      let mut f = openfile("foobar".to_string(), true).expect("?!");
       println!("{:?}", listfiles());
       let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};

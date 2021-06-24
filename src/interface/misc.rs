@@ -30,12 +30,16 @@ pub fn randombytes() -> Vec<u8> {
     let mut buf = vec![0u8; 1024];
     f.read_exact(buf.as_mut_slice()).unwrap();
 
-    return buf;
+    buf
 }
 
 // Wrapper to return a dictionary (hashmap)
 pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
-    return RustHashMap::new()
+    RustHashMap::new()
+}
+
+pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> &'a str {
+    std::ffi::CStr::from_ptr(cstr).to_str().unwrap()
 }
 
 #[cfg(test)]
@@ -45,7 +49,7 @@ mod tests {
     pub fn misctester() {
         //we clamp the ascii values so that from_utf8 does not fail
         log_to_stdout(std::str::from_utf8(&randombytes().into_iter().map(|x| if x < 128 {x} else {72}).collect::<Vec<u8>>().as_slice()).unwrap());
-        let fd_table = RustHashMap::<&str, u32>::new();
+        let _fd_table = RustHashMap::<&str, u32>::new();
 
     }
 }

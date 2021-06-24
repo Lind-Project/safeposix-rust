@@ -6,3 +6,4 @@ pub use fs_constants::*;
 pub use fs_calls::*;
 pub use sys_calls::*;
 pub use sys_constants::*;
+mod errnos;
