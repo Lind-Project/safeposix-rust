@@ -278,7 +278,9 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
+            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
             match &mut *filedesc_enum {
+                //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     if is_wronly(normalfile_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
@@ -286,20 +288,26 @@ impl Cage {
 
                     let metadata = FS_METADATA.read().unwrap();
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //delegate to character if it's a character file, checking bassed on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
                             let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
-                               normalfile_filedesc_obj.position += bytesread;
-                               bytesread as i32
+                                //move position forward by the number of bytes we've read
+                                normalfile_filedesc_obj.position += bytesread;
+                                bytesread as i32
                             } else {
                                0 //0 bytes read, but not an error value that can/should be passed to the user
                             }
                         }
+
                         Inode::CharDev(char_inode_obj) => {
                             self._read_chr_file(char_inode_obj, buf, count)
                         }
+
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "read", "attempted to read from a directory")
                         }
@@ -339,6 +347,7 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
+            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
             match &mut *filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
@@ -346,17 +355,35 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "write", "specified file not open for writing");
                     }
 
-                    let mut metadata = FS_METADATA.write().unwrap();
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    //we need to wrap the metadata within a refcell because we need to mutably
+                    //borrow it twice at the same time
+                    let metadata = interface::RustRefCell::new(FS_METADATA.write().unwrap());
 
+                    //borrow_mut from the refcell needs to be assigned to a variable so that its lifetime is known
+                    let mut metadataref_inodetable = metadata.borrow_mut();
+                    let inodeobj = metadataref_inodetable.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //delegate to character helper or print out if it's a character file or stream,
+                    //checking bassed on the type of the inode object
                     match inodeobj {
-                        Inode::File(_) => {
+                        //we must borrow the file inode object as a mutable reference to update the size
+                        Inode::File(ref mut normalfile_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
-                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+
+                            //borrow_mut from the refcell needs to be assigned to a variable so that its lifetime is known
+                            let mut metadataref_fileobjecttable = metadata.borrow_mut();
+                            let fileobject = metadataref_fileobjecttable.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
-                               normalfile_filedesc_obj.position += byteswritten;
-                               byteswritten as i32
+                                //move position forward by the number of bytes we've written
+                                normalfile_filedesc_obj.position = position + byteswritten;
+                                let newposition = normalfile_filedesc_obj.position;
+
+                                if newposition > normalfile_inode_obj.size {
+                                    normalfile_inode_obj.size = newposition;
+                                } //update file size if necessary
+
+                                byteswritten as i32
                             } else {
                                0 //0 bytes written, but not an error value that can/should be passed to the user
                             }

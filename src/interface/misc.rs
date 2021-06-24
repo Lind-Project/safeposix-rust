@@ -10,7 +10,7 @@ pub use std::collections::HashMap as RustHashMap;
 
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;
-pub use std::thread::{current as rust_gettid, ThreadId as RustThreadId};
+pub use std::cell::{RefCell as RustRefCell};
 
 pub use serde::{Serialize as RustSerialize, Deserialize as RustDeserialize};
 
@@ -30,22 +30,13 @@ pub fn log_to_stderr(s: &str) {
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
-    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
-    let mut f = File::open("/dev/urandom").unwrap();
-    f.read(slice).unwrap() as i32
+    let f = super::openfile("/dev/urandom".to_string(), false).unwrap();
+    f.readat(bufptr, count, 0).unwrap() as i32
 }
 pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     for i in 0..count {slice[i] = 0u8;}
     count as i32
-}
-// Return a string of random bytes with length 1024
-pub fn randombytes() -> Vec<u8> {
-    let mut f = File::open("/dev/urandom").unwrap();
-    let mut buf = vec![0u8; 1024];
-    f.read_exact(buf.as_mut_slice()).unwrap();
-
-    buf
 }
 
 // Wrapper to return a dictionary (hashmap)
