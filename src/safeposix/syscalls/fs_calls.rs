@@ -176,7 +176,7 @@ impl Cage {
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
                 //persist metadata?
-                0
+                0 //mknod has succeeded
             }
             (Some(_), ..) => {
                 syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
@@ -187,8 +187,8 @@ impl Cage {
     //------------------LINK SYSCALL------------------
 
     pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
-        if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given oldpath was null");}
-        if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given newpath was null");}
+        if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given oldpath was null");}
+        if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given newpath was null");}
         let trueoldpath = normpath(convpath(oldpath), self);
         let truenewpath = normpath(convpath(newpath), self);
         let filename = truenewpath.file_name();
@@ -207,35 +207,83 @@ impl Cage {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1;
                         match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "mknod", "newpath cannot be created")}
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
                             (None, Some(pardirinode)) => {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                0
+                                0 //link has succeeded
                             }
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "mknod", "newpath already exists")}
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
                         }
                     }
                     Inode::CharDev(ref mut chardev_inode_obj) => {
                         chardev_inode_obj.linkcount += 1;
                         match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "mknod", "newpath cannot be created")}
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
                             (None, Some(pardirinode)) => {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                0
+                                0 //link has succeeded
                             }
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "mknod", "newpath already exists")}
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
                         }
                     }
-                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "mknod", "oldpath is a directory")}
+                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
                     _ => {panic!("How did you even manage to refer to a pipe/socket using a path?");}
                 }
             }
+        }
+    }
+
+    //------------------UNLINK SYSCALL------------------
+
+    pub fn unlink_syscall(&self, path: &str) -> i32 {
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If the file does not exist
+            (None, ..) => {
+                syscall_error(Errno::ENOENT, "unlink", "path does not exist")
+            }
+
+            //If the file exists but has no parent, it's the root directory
+            (Some(_), None) => {
+                syscall_error(Errno::EISDIR, "unlink", "cannot unlink root directory")
+            }
+
+            //If both the file and the root directory exists
+            (Some(inodenum), Some(parentinodenum)) => {
+                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                let (currefcount, curlinkcount) = match inodeobj {
+                    Inode::File(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::CharDev(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
+                    _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
+                };
+
+                let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
+                let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
+                    panic!("File was a child of something other than a directory????");
+                };
+                directory_parent_inode_obj.filename_to_inode_dict.remove(truepath.file_name().unwrap());
+                directory_parent_inode_obj.linkcount -= 1;
+
+                if curlinkcount == 0 {
+                    if currefcount == 0  {
+                        mutmetadata.inodetable.remove(&inodenum);
+                    } //we don't need a separate unlinked flag, we can just check that refcount is 0
+                }
+                0 //unlink has succeeded
+            }
+
         }
     }
 
