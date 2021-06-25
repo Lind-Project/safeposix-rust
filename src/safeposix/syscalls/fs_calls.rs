@@ -80,8 +80,9 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    if mutmetadata.fileobjecttable.contains_key(&inodenum) {
-                        mutmetadata.fileobjecttable.get(&inodenum).unwrap().close().unwrap();
+                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                    if fobjtable.contains_key(&inodenum) {
+                        fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
 
                     //set size of file to 0
@@ -115,9 +116,10 @@ impl Cage {
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
-                if !mutmetadata.fileobjecttable.contains_key(&inodenum) {
+                let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                if !fobjtable.contains_key(&inodenum) {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
+                    fobjtable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
                 }
             }
 
@@ -292,7 +294,8 @@ impl Cage {
                     match inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
-                            let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
@@ -348,7 +351,8 @@ impl Cage {
                     //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
-                            let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
                                 bytesread as i32
@@ -409,21 +413,20 @@ impl Cage {
                     }
 
                     let mut metadata = FS_METADATA.write().unwrap();
-                    //As the lifetime of this would overlap the lifetime of the borrow to the other
-                    //field of metadata we want, fileobjecttable, we must reborrow this later, as mut
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
                     match inodeobj {
-                        //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
-                        Inode::File(normalfile_inode_obj) => {
+                        Inode::File(ref mut normalfile_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
 
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = position as isize - filesize as isize;
 
-                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
                             if blankbytecount > 0 {
@@ -437,28 +440,19 @@ impl Cage {
                             }
 
                             let newposition;
-                            let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                            if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                 //move position forward by the number of bytes we've written
                                 normalfile_filedesc_obj.position = position + byteswritten;
                                 newposition = normalfile_filedesc_obj.position;
+                                if newposition > normalfile_inode_obj.size {
+                                    normalfile_inode_obj.size = newposition;
+                                } //update file size if necessary
+                                //persist metadata
 
                                 byteswritten as i32
                             } else {
-                                return 0 //0 bytes written, but not an error value that can/should be passed to the user
-                            };
-
-                            //for the sake of the borrow checker not mutably borrowing both an
-                            //inodetable element and a fileobject element at the same time, we need
-                            //to re-retrieve the value here
-                            let inode_handle2 = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
-                            if let Inode::File(handle2_to_normalfile_inode_obj) = inode_handle2 {
-                                if newposition > handle2_to_normalfile_inode_obj.size {
-                                    handle2_to_normalfile_inode_obj.size = newposition;
-                                } //update file size if necessary
-                                //persist metadata
+                                0 //0 bytes written, but not an error value that can/should be passed to the user
                             }
-
-                            retval
                         }
 
                         Inode::CharDev(char_inode_obj) => {
@@ -510,20 +504,19 @@ impl Cage {
                     }
 
                     let mut metadata = FS_METADATA.write().unwrap();
-                    //As the lifetime of this would overlap the lifetime of the borrow to the other
-                    //field of metadata we want, fileobjecttable, we must reborrow this later, as mut
+
                     let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
                     match inodeobj {
-                        //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
 
-                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
                             if blankbytecount > 0 {
@@ -548,16 +541,10 @@ impl Cage {
                                   //we still may need to update file size from blank bytes write, so we don't bail out
                             };
 
-                            //for the sake of the borrow checker not mutably borrowing both an
-                            //inodetable element and a fileobject element at the same time, we need
-                            //to re-retrieve the value here
-                            let inode_handle2 = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
-                            if let Inode::File(handle2_to_normalfile_inode_obj) = inode_handle2 {
-                                if newposition > filesize {
-                                    handle2_to_normalfile_inode_obj.size = newposition;
-                                } //update file size if necessary
-                                //persist metadata
-                            }
+                            if newposition > filesize {
+                               normalfile_inode_obj.size = newposition;
+                            } //update file size if necessary
+                            //persist metadata
 
                             retval
                         }
