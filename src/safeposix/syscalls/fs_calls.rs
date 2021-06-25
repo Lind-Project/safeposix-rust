@@ -13,7 +13,7 @@ impl Cage {
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         //Check that path is not empty
-        if path.len() != 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
 
         let truepath = normpath(convpath(path), self);
 
@@ -32,7 +32,7 @@ impl Cage {
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
             (None, None) => {
-                if 0 != (flags & O_CREAT) {
+                if 0 == (flags & O_CREAT) {
                     return syscall_error(Errno::ENOENT, "open", "tried to open a file that did not exist, and O_CREAT was not specified");
                 }
                 return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
@@ -40,13 +40,13 @@ impl Cage {
 
             //If the file doesn't exist but the parent does
             (None, Some(pardirinode)) => {
-                if 0 != (flags & O_CREAT) {
+                if 0 == (flags & O_CREAT) {
                     return syscall_error(Errno::ENOENT, "open", "tried to open a file that did not exist, and O_CREAT was not specified");
                 }
 
                 let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
 
-                if 0 != (S_IFCHR & flags) {
+                if S_IFCHR == (S_IFCHR & flags) {
                     return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
                 } 
 
@@ -68,7 +68,7 @@ impl Cage {
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
                 } //insert a reference to the file in the parent directory
-                mutmetadata.inodetable.insert(newinodenum, newinode).unwrap();
+                mutmetadata.inodetable.insert(newinodenum, newinode);
                 //persist metadata?
             }
 
@@ -78,7 +78,7 @@ impl Cage {
                     return syscall_error(Errno::EEXIST, "open", "file already exists and O_CREAT and O_EXCL were used");
                 }
 
-                if 0 != (flags & O_TRUNC) {
+                if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
                     if mutmetadata.fileobjecttable.contains_key(&inodenum) {
                         mutmetadata.fileobjecttable.get(&inodenum).unwrap().close().unwrap();
@@ -95,7 +95,6 @@ impl Cage {
                     //remove the previous file and add a new one of 0 length
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     interface::removefile(sysfilename.clone()).unwrap();
-                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
                 }
             }
         }
@@ -116,9 +115,9 @@ impl Cage {
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
-                if mutmetadata.fileobjecttable.contains_key(&inodenum) {
+                if !mutmetadata.fileobjecttable.contains_key(&inodenum) {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, false).unwrap());
+                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
                 }
             }
 
@@ -355,38 +354,42 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "write", "specified file not open for writing");
                     }
 
-                    //we need to wrap the metadata within a refcell because we need to mutably
-                    //borrow it twice at the same time
-                    let metadata = interface::RustRefCell::new(FS_METADATA.write().unwrap());
-
-                    //borrow_mut from the refcell needs to be assigned to a variable so that its lifetime is known
-                    let mut metadataref_inodetable = metadata.borrow_mut();
-                    let inodeobj = metadataref_inodetable.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                    let mut metadata = FS_METADATA.write().unwrap();
+                    //As the lifetime of this would overlap the lifetime of the borrow to the other
+                    //field of metadata we want, fileobjecttable, we must reborrow this later, as mut
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking bassed on the type of the inode object
                     match inodeobj {
-                        //we must borrow the file inode object as a mutable reference to update the size
-                        Inode::File(ref mut normalfile_inode_obj) => {
+                        //we must reborrow the file at the end of this match arm for the sake of the borrow checker
+                        Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
 
-                            //borrow_mut from the refcell needs to be assigned to a variable so that its lifetime is known
-                            let mut metadataref_fileobjecttable = metadata.borrow_mut();
-                            let fileobject = metadataref_fileobjecttable.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
-                            if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                            let newposition;
+                            let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                 //move position forward by the number of bytes we've written
                                 normalfile_filedesc_obj.position = position + byteswritten;
-                                let newposition = normalfile_filedesc_obj.position;
-
-                                if newposition > normalfile_inode_obj.size {
-                                    normalfile_inode_obj.size = newposition;
-                                } //update file size if necessary
+                                newposition = normalfile_filedesc_obj.position;
 
                                 byteswritten as i32
                             } else {
-                               0 //0 bytes written, but not an error value that can/should be passed to the user
+                               return 0 //0 bytes written, but not an error value that can/should be passed to the user
+                            };
+
+                            //for the sake of the borrow checker not mutably borrowing both an
+                            //inodetable element and a fileobject element at the same time, we need
+                            //to re-retrieve the value here
+                            let inode_handle2_option = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode);
+                            if let Some(Inode::File(handle2_to_normalfile_inode_obj)) = inode_handle2_option {
+                              if newposition > handle2_to_normalfile_inode_obj.size {
+                                  handle2_to_normalfile_inode_obj.size = newposition;
+                              } //update file size if necessary
                             }
+
+                            retval
                         }
 
                         Inode::CharDev(char_inode_obj) => {
@@ -508,5 +511,33 @@ impl Cage {
         } else {
             syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    pub fn rdwrtest() {
+        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+        cage.load_lower_handle_stubs();
+        let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+
+        //we don't support lseek so we just reopen each time
+ 
+        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
+        assert_eq!(len1, 12);
+        assert_eq!(cage.write_syscall(fd, ptr1, len1), len1 as i32);
+
+        let fd2 = cage.open_syscall("/foobar", O_RDWR, S_IRWXA);
+        let mut v = vec![0u8; 5];
+        let readbuf1 = v.as_mut_slice();
+        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
+        assert_eq!(cage.read_syscall(fd2, readptr1, 5), 5);
+        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
+        println!("{:?}", bufbuf);
+        assert_eq!(bufbuf, "hello");
+
+
     }
 }

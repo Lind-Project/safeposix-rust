@@ -103,7 +103,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
     };
 
     let mut curnode = Some(md.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
-    let mut inodeno = None;
+    let mut inodeno = Some(ROOTDIRECTORYINODE);
     let mut previnodeno = None;
 
     //Iterate over the components of the pathbuf in order to walk the file tree

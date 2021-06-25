@@ -10,7 +10,6 @@ pub use std::collections::HashMap as RustHashMap;
 
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;
-pub use std::cell::{RefCell as RustRefCell};
 
 pub use serde::{Serialize as RustSerialize, Deserialize as RustDeserialize};
 

@@ -49,6 +49,10 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
     Ok(())
 }
 
+fn is_allowed_char(c: char) -> bool{
+    char::is_alphanumeric(c) || c == '.'
+}
+
 // Checker for illegal filenames
 fn assert_is_allowed_filename(filename: &String) {
 
@@ -58,7 +62,8 @@ fn assert_is_allowed_filename(filename: &String) {
         panic!("ArgumentError: Filename exceeds maximum length.")
     }
 
-    if !filename.chars().all(char::is_alphanumeric) {
+    if !filename.chars().all(is_allowed_char) {
+        println!("'{}'", filename);
         panic!("ArgumentError: Filename has disallowed characters.")
     }
 
