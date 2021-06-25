@@ -67,6 +67,7 @@ impl Cage {
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                    ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
                 //persist metadata?
@@ -179,6 +180,61 @@ impl Cage {
             }
             (Some(_), ..) => {
                 syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
+            }
+        }
+    }
+
+    //------------------LINK SYSCALL------------------
+
+    pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
+        if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given oldpath was null");}
+        if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given newpath was null");}
+        let trueoldpath = normpath(convpath(oldpath), self);
+        let truenewpath = normpath(convpath(newpath), self);
+        let filename = truenewpath.file_name();
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalk(trueoldpath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            None => {
+                syscall_error(Errno::ENOENT, "link", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+            Some(inodenum) => {
+                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                match inodeobj {
+                    Inode::File(ref mut normalfile_inode_obj) => {
+                        normalfile_inode_obj.linkcount += 1;
+                        match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "mknod", "newpath cannot be created")}
+                            (None, Some(pardirinode)) => {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.linkcount += 1;
+                                } //insert a reference to the inode in the parent directory
+                                0
+                            }
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "mknod", "newpath already exists")}
+                        }
+                    }
+                    Inode::CharDev(ref mut chardev_inode_obj) => {
+                        chardev_inode_obj.linkcount += 1;
+                        match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "mknod", "newpath cannot be created")}
+                            (None, Some(pardirinode)) => {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.linkcount += 1;
+                                } //insert a reference to the inode in the parent directory
+                                0
+                            }
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "mknod", "newpath already exists")}
+                        }
+                    }
+                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "mknod", "oldpath is a directory")}
+                    _ => {panic!("How did you even manage to refer to a pipe/socket using a path?");}
+                }
             }
         }
     }
