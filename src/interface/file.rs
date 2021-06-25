@@ -181,6 +181,51 @@ impl EmulatedFile {
         Ok(bytes_written)
     }
 
+    // Read from file into provided C-buffer
+    pub fn read_to_new_string(&self, offset: usize) -> String {
+
+        let mut buf = String::new();
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                obj.read_to_string(&mut buf)?;
+                fobj.sync_data()?;
+                buf // return new buf string
+            }
+        }
+    }
+
+    // Write to file from provided C-buffer
+    pub fn write_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<> {
+
+        let length = buf.len();
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                bytes_written = fobj.write(buf)?;
+                fobj.sync_data()?;
+            }
+        }
+
+        if offset + length > self.filesize {
+            self.filesize = offset + length;
+        }
+
+        Ok()
+    }
+
     pub fn zerofill_at(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {
         let bytes_written;
         let buf = vec![0; count];

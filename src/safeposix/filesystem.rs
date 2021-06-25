@@ -5,6 +5,8 @@ use crate::interface;
 use super::syscalls::fs_constants::*;
 use super::cage::Cage;
 
+const METADATAFILENAME: &str = "lind.metadata";
+/
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
@@ -60,7 +62,7 @@ pub struct DirectoryInode {
     pub filename_to_inode_dict: interface::RustHashMap<std::ffi::OsString, usize>
 }
 
-
+#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
 pub struct FilesystemMetadata {
     pub nextinode: usize,
     pub dev_id: u64,
@@ -83,16 +85,39 @@ impl FilesystemMetadata {
     }
 }
 
+// Serialize Metadata Struct to JSON, write to file
 pub fn persist_metadata() {
+
+    // Serialize metadata to string
+    let metadata = FS_METADATA.read().unwrap();
+    let metadatastring = interface::rust_serialize_to_string(&metadata).unwrap();
+    
+    // remove file if it exists
+    interface::removefile(METADATAFILENAME)?; 
+
+    // write to file
+    let metadatafo = interface::openfile(METADATAFILENAME, true).unwrap();
+    metadatafo.write_from_string(metadatastring, 0);
+    metadatafo.close();
 }
 
+// Read file, and deserialize json to FS METADATA
 pub fn restore_metadata() {
 
+    // Read JSON from file
+    let metadatafo = interface::openfile(METADATAFILENAME, true).unwrap();
+    let metadatastring = metadatafo.read_to_string(0);
+    metadatafo.close();
+
+    // Restore metadata
+    let metadata = FS_METADATA.read().unwrap();
+    *metadata =  interface::rust_deserialize_from_string(&metadatastring).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
 }
+
 //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
 pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMetadata>) -> (Option<usize>, Option<usize>) {
     let ourreader;
