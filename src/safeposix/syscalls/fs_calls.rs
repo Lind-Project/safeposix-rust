@@ -272,7 +272,7 @@ impl Cage {
     //------------------READ SYSCALL------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
@@ -288,7 +288,7 @@ impl Cage {
                     let metadata = FS_METADATA.read().unwrap();
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                    //delegate to character if it's a character file, checking bassed on the type of the inode object
+                    //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
@@ -330,12 +330,11 @@ impl Cage {
 
     //------------------PREAD SYSCALL------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
-            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
             match &mut *filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
@@ -346,7 +345,7 @@ impl Cage {
                     let metadata = FS_METADATA.read().unwrap();
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                    //delegate to character if it's a character file, checking bassed on the type of the inode object
+                    //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
                             let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
@@ -396,7 +395,7 @@ impl Cage {
     //------------------WRITE SYSCALL------------------
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
@@ -415,13 +414,27 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
-                    //checking bassed on the type of the inode object
+                    //checking based on the type of the inode object
                     match inodeobj {
                         //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
-                        Inode::File(_) => {
+                        Inode::File(normalfile_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
 
+                            let filesize = normalfile_inode_obj.size;
+                            let blankbytecount = position as isize - filesize as isize;
+
                             let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+
+                            //we need to pad the file with blank bytes if we are at a position past the end of the file!
+                            if blankbytecount > 0 {
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("Write of blank bytes for pwrite failed!");
+                                    }
+                                } else {
+                                    panic!("Write of blank bytes for pwrite failed!");
+                                }
+                            }
 
                             let newposition;
                             let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
@@ -484,12 +497,11 @@ impl Cage {
     //------------------PWRITE SYSCALL------------------
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
-            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
             match &mut *filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
@@ -503,7 +515,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
-                    //checking bassed on the type of the inode object
+                    //checking based on the type of the inode object
                     match inodeobj {
                         //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
                         Inode::File(ref mut normalfile_inode_obj) => {
@@ -515,7 +527,7 @@ impl Cage {
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
                             if blankbytecount > 0 {
-                                if let Ok(byteswritten) = fileobject.zero(filesize, blankbytecount as usize) {
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
                                     if byteswritten != blankbytecount as usize {
                                         panic!("Write of blank bytes for pwrite failed!");
                                     }
@@ -585,6 +597,85 @@ impl Cage {
             _ => {syscall_error(Errno::EOPNOTSUPP, "write or pwrite", "write to specified device not implemented")}
         }
     }
+
+    //------------------LSEEK SYSCALL------------------
+    pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            //confirm fd type is seekable
+            match &mut *filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //handle files/directories differently
+                    match inodeobj {
+                        Inode::File(normalfile_inode_obj) => {
+                            let eventualpos = match whence {
+                                SEEK_SET => {offset}
+                                SEEK_CUR => {normalfile_filedesc_obj.position as isize + offset}
+                                SEEK_END => {normalfile_inode_obj.size as isize + offset}
+                                _ => {return syscall_error(Errno::EINVAL, "lseek", "unknown whence");}
+                            };
+
+                            if eventualpos < 0 {
+                                return syscall_error(Errno::EINVAL, "lseek", "seek to before position 0 in file");
+                            }
+                            //subsequent writes to the end of the file must zero pad up until this point if we
+                            //overran the end of our file when seeking
+
+                            normalfile_filedesc_obj.position = eventualpos as usize;
+                            //return the location that we sought to
+                            eventualpos as i32
+                        }
+
+                        Inode::CharDev(_) => {
+                            0 //for character files, rather than seeking, we transparently do nothing
+                        }
+
+                        Inode::Dir(dir_inode_obj) => {
+                            //for directories we seek between entries, and thus our end position is the total number of entries
+                            let eventualpos = match whence {
+                                SEEK_SET => {offset}
+                                SEEK_CUR => {normalfile_filedesc_obj.position as isize + offset}
+                                SEEK_END => {dir_inode_obj.filename_to_inode_dict.len() as isize + offset}
+                                _ => {return syscall_error(Errno::EINVAL, "lseek", "unknown whence");}
+                            };
+
+                            //confirm that the location we want to seek to is valid
+                            if eventualpos < 0 {
+                                return syscall_error(Errno::EINVAL, "lseek", "seek to before position 0 in directory");
+                            }
+                            if eventualpos > dir_inode_obj.filename_to_inode_dict.len() as isize {
+                                return syscall_error(Errno::EINVAL, "lseek", "seek to after last position in directory");
+                            }
+
+                            normalfile_filedesc_obj.position = eventualpos as usize;
+                            //return the location that we sought to
+                            eventualpos as i32
+                        }
+                        _ => {panic!("Wonky file descriptor shenanigains");}
+                    }
+                }
+                Socket(_) => {
+                    syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with a socket, cannot seek")
+                }
+                Stream(_) => {
+                    syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with a stream, cannot seek")
+                }
+                Pipe(_) => {
+                    syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with a pipe, cannot seek")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "lseek", "invalid file descriptor")
+        }
+
+    }
+
 
     //------------------ACCESS SYSCALL------------------
 
@@ -679,24 +770,24 @@ mod tests {
         assert_eq!(len1, 12);
         assert_eq!(cage.write_syscall(fd, ptr1, len1), len1 as i32);
 
-        let fd2 = cage.open_syscall("/foobar", O_RDWR, S_IRWXA);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         let mut v = vec![0u8; 5];
         let readbuf1 = v.as_mut_slice();
         let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd2, readptr1, 5), 5);
+        assert_eq!(cage.read_syscall(fd, readptr1, 5), 5);
         let bufbuf = std::str::from_utf8(readbuf1).unwrap();
         println!("{:?}", bufbuf);
         assert_eq!(bufbuf, "hello");
 
         let (ptr2, len2, _) = " world".to_string().into_raw_parts();
         assert_eq!(len2, 6);
-        assert_eq!(cage.write_syscall(fd2, ptr2, len2), len2 as i32);
+        assert_eq!(cage.write_syscall(fd, ptr2, len2), len2 as i32);
 
-        let fd3 = cage.open_syscall("/foobar", O_RDWR, S_IRWXA);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         let mut v = vec![0u8; 12];
         let readbuf2 = v.as_mut_slice();
         let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd3, readptr2, 1000), 12);
+        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
         let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
         println!("{:?}", bufbuf2);
         assert_eq!(bufbuf2, "hello world!");
