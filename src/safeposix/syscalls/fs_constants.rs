@@ -65,8 +65,13 @@ pub const S_IFREG: i32 = 0o100000;
 pub const S_IFSOCK: i32 = 0o140000;
 pub const S_FILETYPEFLAGS: i32 = 0o170000;
 
+
+pub const SEEK_SET: i32 = 0;
+pub const SEEK_CUR: i32 = 1;
+pub const SEEK_END: i32 = 2;
+
 //device info for char files
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq,Eq,Debug)]
 pub struct DevNo {
   pub major: u32,
   pub minor: u32
@@ -106,6 +111,13 @@ pub fn is_chr(mode: u32) -> bool {
 
 pub fn is_dir(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFDIR
+}
+
+pub fn is_wronly(flags: i32) -> bool {
+  (flags & O_RDWRFLAGS) == O_WRONLY
+}
+pub fn is_rdonly(flags: i32) -> bool {
+  (flags & O_RDWRFLAGS) == O_RDONLY
 }
 
 //the same as the glibc makedev

@@ -144,5 +144,5 @@ pub fn syscall_error(e: Errno, syscall: &str, message: &str) -> i32 {
         let msg = format!("Error in syscall: {} - {:?}: {}", syscall, e, message);
         interface::log_to_stderr(&msg);
     }
-    e as i32
+    -(e as i32)
 }
