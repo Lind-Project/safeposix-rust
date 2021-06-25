@@ -130,6 +130,59 @@ impl Cage {
         thisfd //open returns the opened file descriptr
     }
 
+    //------------------MKNOD SYSCALL------------------
+
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
+        //Check that path is not empty
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
+
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            (None, None) => {
+                syscall_error(Errno::ENOENT, "mknod", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+
+            //If the file doesn't exist but the parent does
+            (None, Some(pardirinode)) => {
+                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+
+                let effective_mode = S_IFREG as u32 | mode;
+
+                //assert sane mode bits
+                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                    return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
+                }
+                if mode as i32 & S_IFCHR == 0 {
+                    return syscall_error(Errno::EINVAL, "mknod", "only character files are supported");
+                }
+
+                let time = interface::timestamp(); //We do a real timestamp now
+                let newinode = Inode::CharDev(DeviceInode {
+                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                    mode: effective_mode, linkcount: 1, refcount: 0,
+                    atime: time, ctime: time, mtime: time, dev: devtuple(dev)
+                });
+
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
+                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                } //insert a reference to the file in the parent directory
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+
+                //persist metadata?
+                0
+            }
+            (Some(_), ..) => {
+                syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
+            }
+        }
+    }
+
     //------------------CREAT SYSCALL------------------
     
     pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
@@ -474,7 +527,7 @@ impl Cage {
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
                 Stream(stream_filedesc_obj) => {
                     //if it's stdout or stderr, print out and we're done
-                    if let 1..=2 = stream_filedesc_obj.stream {
+                    if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
                         interface::log_from_ptr(buf);
                         count as i32
                     } else {
@@ -763,8 +816,6 @@ mod tests {
         let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
         cage.load_lower_handle_stubs();
         let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        //we don't support lseek so we just reopen each time
  
         let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
         assert_eq!(len1, 12);
@@ -799,8 +850,6 @@ mod tests {
         cage.load_lower_handle_stubs();
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
 
-        //we don't support lseek so we just reopen each time
- 
         let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
         assert_eq!(len1, 12);
         assert_eq!(cage.pwrite_syscall(fd, ptr1, len1, 0), len1 as i32);
@@ -824,5 +873,6 @@ mod tests {
         let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
         println!("{:?}", bufbuf2);
         assert_eq!(bufbuf2, "hello world!");
+        //assert_eq!(cage.mknod_syscall("/null", S_IFCHR as u32 | S_IWUSR, makedev(&DevNo{major: 1, minor: 5})), 0);
     }
 }
