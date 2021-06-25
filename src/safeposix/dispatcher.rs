@@ -76,6 +76,7 @@ pub union Arg {
   uint: u32,
   ulong: u64,
   usz: usize,
+  isz: isize,
   cbuf: *const u8,
   mutcbuf: *mut u8,
   cstr: *const i8,
@@ -139,6 +140,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         GETEGID_SYSCALL => {
             cage.getegid_syscall()
+        }
+        PREAD_SYSCALL => {
+            cage.pread_syscall(unsafe{arg1.int}, unsafe{arg2.mutcbuf}, unsafe{arg3.usz}, unsafe{arg4.isz})
+        }
+        PWRITE_SYSCALL => {
+            cage.pwrite_syscall(unsafe{arg1.int}, unsafe{arg2.cbuf}, unsafe{arg3.usz}, unsafe{arg4.isz})
         }
         _ => {//unknown syscall
             -1

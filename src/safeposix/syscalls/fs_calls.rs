@@ -328,13 +328,68 @@ impl Cage {
         }
     }
 
+    //------------------PREAD SYSCALL------------------
+    pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
+            match &mut *filedesc_enum {
+                //we must borrow the filedesc object as a mutable reference to update the position
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_wronly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "pread", "specified file not open for reading");
+                    }
+
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //delegate to character if it's a character file, checking bassed on the type of the inode object
+                    match inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
+                                bytesread as i32
+                            } else {
+                               0 //0 bytes read, but not an error value that can/should be passed to the user
+                            }
+                        }
+
+                        Inode::CharDev(char_inode_obj) => {
+                            self._read_chr_file(char_inode_obj, buf, count)
+                        }
+
+                        Inode::Dir(_) => {
+                            syscall_error(Errno::EISDIR, "pread", "attempted to read from a directory")
+                        }
+                        _ => {panic!("Wonky file descriptor shenanigains");}
+                    }
+                }
+                Socket(_) => {
+                    syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with a socket, cannot seek")
+                }
+                Stream(_) => {
+                    syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with a stream, cannot seek")
+                }
+                Pipe(_) => {
+                    syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with a pipe, cannot seek")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "pread", "invalid file descriptor")
+        }
+    }
+
     fn _read_chr_file(&self, inodeobj: &DeviceInode, buf: *mut u8, count: usize) -> i32 {
         match inodeobj.dev {
             NULLDEVNO => {0} //reading from /dev/null always reads 0 bytes
             ZERODEVNO => {interface::fillzero(buf, count)}
             RANDOMDEVNO => {interface::fillrandom(buf, count)}
             URANDOMDEVNO => {interface::fillrandom(buf, count)}
-            _ => {syscall_error(Errno::EOPNOTSUPP, "read or readat", "read from specified device not implemented")}
+            _ => {syscall_error(Errno::EOPNOTSUPP, "read or pread", "read from specified device not implemented")}
         }
     }
 
@@ -362,7 +417,7 @@ impl Cage {
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking bassed on the type of the inode object
                     match inodeobj {
-                        //we must reborrow the file at the end of this match arm for the sake of the borrow checker
+                        //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
 
@@ -376,17 +431,18 @@ impl Cage {
 
                                 byteswritten as i32
                             } else {
-                               return 0 //0 bytes written, but not an error value that can/should be passed to the user
+                                return 0 //0 bytes written, but not an error value that can/should be passed to the user
                             };
 
                             //for the sake of the borrow checker not mutably borrowing both an
                             //inodetable element and a fileobject element at the same time, we need
                             //to re-retrieve the value here
-                            let inode_handle2_option = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode);
-                            if let Some(Inode::File(handle2_to_normalfile_inode_obj)) = inode_handle2_option {
-                              if newposition > handle2_to_normalfile_inode_obj.size {
-                                  handle2_to_normalfile_inode_obj.size = newposition;
-                              } //update file size if necessary
+                            let inode_handle2 = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            if let Inode::File(handle2_to_normalfile_inode_obj) = inode_handle2 {
+                                if newposition > handle2_to_normalfile_inode_obj.size {
+                                    handle2_to_normalfile_inode_obj.size = newposition;
+                                } //update file size if necessary
+                                //persist metadata
                             }
 
                             retval
@@ -409,7 +465,7 @@ impl Cage {
                         interface::log_from_ptr(buf);
                         count as i32
                     } else {
-                        0
+                        return syscall_error(Errno::EBADF, "write", "specified stream not open for writing");
                     }
                 }
                 Pipe(pipe_filedesc_obj) => {
@@ -417,11 +473,105 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
                     //self._write_to_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "write", "writing from a pipe not implemented yet")
+                    syscall_error(Errno::EOPNOTSUPP, "write", "writing to a pipe not implemented yet")
                 }
             }
         } else {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
+        }
+    }
+
+    //------------------PWRITE SYSCALL------------------
+
+    pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
+            match &mut *filedesc_enum {
+                //we must borrow the filedesc object as a mutable reference to update the position
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "pwrite", "specified file not open for writing");
+                    }
+
+                    let mut metadata = FS_METADATA.write().unwrap();
+                    //As the lifetime of this would overlap the lifetime of the borrow to the other
+                    //field of metadata we want, fileobjecttable, we must reborrow this later, as mut
+                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //delegate to character helper or print out if it's a character file or stream,
+                    //checking bassed on the type of the inode object
+                    match inodeobj {
+                        //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            let position = offset as usize;
+                            let filesize = normalfile_inode_obj.size;
+                            let blankbytecount = offset - filesize as isize;
+
+                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+
+                            //we need to pad the file with blank bytes if we are seeking past the end of the file!
+                            if blankbytecount > 0 {
+                                if let Ok(byteswritten) = fileobject.zero(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("Write of blank bytes for pwrite failed!");
+                                    }
+                                } else {
+                                    panic!("Write of blank bytes for pwrite failed!");
+                                }
+                            }
+
+                            let newposition;
+                            let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                                //move position forward by the number of bytes we've written
+                                newposition = position + byteswritten;
+
+                                byteswritten as i32
+                            } else {
+                                newposition = position;
+                                0 //0 bytes written, but not an error value that can/should be passed to the user
+                                  //we still may need to update file size from blank bytes write, so we don't bail out
+                            };
+
+                            //for the sake of the borrow checker not mutably borrowing both an
+                            //inodetable element and a fileobject element at the same time, we need
+                            //to re-retrieve the value here
+                            let inode_handle2 = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            if let Inode::File(handle2_to_normalfile_inode_obj) = inode_handle2 {
+                                if newposition > filesize {
+                                    handle2_to_normalfile_inode_obj.size = newposition;
+                                } //update file size if necessary
+                                //persist metadata
+                            }
+
+                            retval
+                        }
+
+                        Inode::CharDev(char_inode_obj) => {
+                            self._write_chr_file(char_inode_obj, buf, count)
+                        }
+
+                        Inode::Dir(_) => {
+                            syscall_error(Errno::EISDIR, "pwrite", "attempted to write to a directory")
+                        }
+                        _ => {panic!("Wonky file descriptor shenanigains");}
+                    }
+                }
+                Socket(_) => {
+                    syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with a socket, cannot seek")
+                }
+                Stream(_) => {
+                    syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with a stream, cannot seek")
+                }
+                Pipe(_) => {
+                    syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with a pipe, cannot seek")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "pwrite", "invalid file descriptor")
         }
     }
 
@@ -432,7 +582,7 @@ impl Cage {
             ZERODEVNO => {count as i32}
             RANDOMDEVNO => {count as i32}
             URANDOMDEVNO => {count as i32}
-            _ => {syscall_error(Errno::EOPNOTSUPP, "write or writeat", "write to specified device not implemented")}
+            _ => {syscall_error(Errno::EOPNOTSUPP, "write or pwrite", "write to specified device not implemented")}
         }
     }
 
@@ -547,6 +697,39 @@ mod tests {
         let readbuf2 = v.as_mut_slice();
         let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
         assert_eq!(cage.read_syscall(fd3, readptr2, 1000), 12);
+        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
+        println!("{:?}", bufbuf2);
+        assert_eq!(bufbuf2, "hello world!");
+    }
+
+    #[test]
+    pub fn prdwrtest() {
+        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+        cage.load_lower_handle_stubs();
+        let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+
+        //we don't support lseek so we just reopen each time
+ 
+        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
+        assert_eq!(len1, 12);
+        assert_eq!(cage.pwrite_syscall(fd, ptr1, len1, 0), len1 as i32);
+
+        let mut v = vec![0u8; 5];
+        let readbuf1 = v.as_mut_slice();
+        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
+        assert_eq!(cage.pread_syscall(fd, readptr1, 5, 0), 5);
+        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
+        println!("{:?}", bufbuf);
+        assert_eq!(bufbuf, "hello");
+
+        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
+        assert_eq!(len2, 6);
+        assert_eq!(cage.pwrite_syscall(fd, ptr2, len2, 5), len2 as i32);
+
+        let mut v = vec![0u8; 12];
+        let readbuf2 = v.as_mut_slice();
+        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
+        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
         let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
         println!("{:?}", bufbuf2);
         assert_eq!(bufbuf2, "hello world!");

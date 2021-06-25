@@ -180,6 +180,30 @@ impl EmulatedFile {
 
         Ok(bytes_written)
     }
+
+    pub fn zero(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {
+        let bytes_written;
+        let buf = vec![0; count];
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                bytes_written = fobj.write(buf.as_slice())?;
+                fobj.sync_data()?;
+            }
+        }
+
+        if offset + count > self.filesize {
+            self.filesize = offset + count;
+        }
+
+        Ok(bytes_written)
+    }
 }
 
 #[cfg(test)]
