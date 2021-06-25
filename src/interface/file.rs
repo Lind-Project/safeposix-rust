@@ -182,7 +182,7 @@ impl EmulatedFile {
     }
 
     // Read from file into provided C-buffer
-    pub fn read_to_new_string(&self, offset: usize) -> String {
+    pub fn read_to_new_string(&self, offset: usize) -> std::io::Result<String> {
 
         let mut buf = String::new();
 
@@ -194,15 +194,15 @@ impl EmulatedFile {
                     panic!("Seek offset extends past the EOF!");
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
-                obj.read_to_string(&mut buf)?;
+                fobj.read_to_string(&mut buf)?;
                 fobj.sync_data()?;
-                buf // return new buf string
+                Ok(buf) // return new buf string
             }
         }
     }
 
     // Write to file from provided C-buffer
-    pub fn write_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<> {
+    pub fn write_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
 
         let length = buf.len();
 
@@ -214,7 +214,7 @@ impl EmulatedFile {
                     panic!("Seek offset extends past the EOF!");
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
-                bytes_written = fobj.write(buf)?;
+                fobj.write(buf.as_bytes())?;
                 fobj.sync_data()?;
             }
         }
@@ -223,7 +223,7 @@ impl EmulatedFile {
             self.filesize = offset + length;
         }
 
-        Ok()
+        Ok(())
     }
 
     pub fn zerofill_at(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {

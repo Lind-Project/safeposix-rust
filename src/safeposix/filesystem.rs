@@ -6,13 +6,13 @@ use super::syscalls::fs_constants::*;
 use super::cage::Cage;
 
 const METADATAFILENAME: &str = "lind.metadata";
-/
+
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
     ); //we want to check if fs exists before doing a blank init, but not for now
 
-#[derive(Debug)]
+#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
 pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
@@ -22,7 +22,7 @@ pub enum Inode {
     Socket(GenericInode)
 }
 
-#[derive(Debug)]
+#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
 pub struct GenericInode {
     pub size: usize,
     pub uid: u32,
@@ -34,7 +34,7 @@ pub struct GenericInode {
     pub ctime: u64,
     pub mtime: u64
 }
-#[derive(Debug)]
+#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
 pub struct DeviceInode {
     pub size: usize,
     pub uid: u32,
@@ -48,7 +48,7 @@ pub struct DeviceInode {
     pub dev: DevNo,
 }
 
-#[derive(Debug)]
+#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
 pub struct DirectoryInode {
     pub size: usize,
     pub uid: u32,
@@ -93,10 +93,10 @@ pub fn persist_metadata() {
     let metadatastring = interface::rust_serialize_to_string(&metadata).unwrap();
     
     // remove file if it exists
-    interface::removefile(METADATAFILENAME)?; 
+    interface::removefile(METADATAFILENAME.to_string()).unwrap(); 
 
     // write to file
-    let metadatafo = interface::openfile(METADATAFILENAME, true).unwrap();
+    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
     metadatafo.write_from_string(metadatastring, 0);
     metadatafo.close();
 }
@@ -105,8 +105,8 @@ pub fn persist_metadata() {
 pub fn restore_metadata() {
 
     // Read JSON from file
-    let metadatafo = interface::openfile(METADATAFILENAME, true).unwrap();
-    let metadatastring = metadatafo.read_to_string(0);
+    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    let metadatastring = metadatafo.read_to_new_string(0).unwrap();
     metadatafo.close();
 
     // Restore metadata
