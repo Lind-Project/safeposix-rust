@@ -538,6 +538,17 @@ mod tests {
         println!("{:?}", bufbuf);
         assert_eq!(bufbuf, "hello");
 
+        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
+        assert_eq!(len2, 6);
+        assert_eq!(cage.write_syscall(fd2, ptr2, len2), len2 as i32);
 
+        let fd3 = cage.open_syscall("/foobar", O_RDWR, S_IRWXA);
+        let mut v = vec![0u8; 12];
+        let readbuf2 = v.as_mut_slice();
+        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
+        assert_eq!(cage.read_syscall(fd3, readptr2, 1000), 12);
+        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
+        println!("{:?}", bufbuf2);
+        assert_eq!(bufbuf2, "hello world!");
     }
 }
