@@ -344,7 +344,7 @@ impl Cage {
     //------------------DUP & DUP2 SYSCALLS------------------
 
     pub fn dup_syscall(&self, fd: i32, startDesc: Option<i32>) -> i32 {
-        let fdtable = self.filedescriptortable.read().unwrap();
+        let mut fdtable = self.filedescriptortable.write().unwrap();
 
         let mut startFD = match startDesc {
             Some(startDesc) => startDesc,
@@ -359,13 +359,13 @@ impl Cage {
 
             //error below may need to be changed -- called if error getting file descriptor
             let nextfd = if let Some(fd) = self.get_next_fd(startFD, Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
-            return Self::dup2_helper(&self, fd, nextfd)
+            return Self::dup2_helper(&self, fd, nextfd, fdtable)
         } else {
             return syscall_error(Errno::EBADF, "dup_syscall", "file descriptor not found")
         }
     }
 
-    pub fn dup2_helper(&self, oldfd: i32, newfd: i32, fdtable:) -> i32 {
+    pub fn dup2_helper(&self, oldfd: i32, newfd: i32, fdtable: interface::RustLock<FdTable>) -> i32 {
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd <= STARTINGFD {
             return syscall_error(Errno::EBADF, "dup2_helper", "provided file descriptor is out of range");
