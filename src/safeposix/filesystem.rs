@@ -9,6 +9,9 @@ pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
     ); //we want to check if fs exists before doing a blank init, but not for now
+type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
+pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
+    interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
 
 #[derive(Debug)]
 pub enum Inode {
@@ -65,13 +68,12 @@ pub struct FilesystemMetadata {
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>,
-    pub fileobjecttable: interface::RustHashMap<usize, interface::EmulatedFile>
-} 
+}
 
 impl FilesystemMetadata {
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
-        let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new(), fileobjecttable: interface::RustHashMap::new()};
+        let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let mut dirin = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID, 
             mode: S_IFDIR as u32 | S_IRWXA, atime: time, ctime: time, mtime: time,
