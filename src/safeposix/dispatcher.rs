@@ -96,6 +96,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         ACCESS_SYSCALL => {
             cage.access_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_uint})
         }
+        UNLINK_SYSCALL => {
+            cage.unlink_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
+        }
+        LINK_SYSCALL => {
+            cage.link_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
+        }
         CHDIR_SYSCALL => {
             cage.chdir_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
         }
