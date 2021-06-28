@@ -11,6 +11,8 @@ pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
     ); //we want to check if fs exists before doing a blank init, but not for now
+
+
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
 pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
     interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
@@ -87,24 +89,28 @@ impl FilesystemMetadata {
     }
 }
 
+pub fn load_fs() {
+    
+}
+
 // Serialize Metadata Struct to JSON, write to file
 pub fn persist_metadata() {
 
     // Serialize metadata to string
     let metadata = FS_METADATA.read().unwrap();
-    let metadatastring = interface::rust_serialize_to_string(&metadata).unwrap();
+    let metadatastring = interface::rust_serialize_to_string(&*metadata).unwrap();
     
     // remove file if it exists
     interface::removefile(METADATAFILENAME.to_string()).unwrap(); 
 
     // write to file
-    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    let mut metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
     metadatafo.write_from_string(metadatastring, 0);
     metadatafo.close();
 }
 
 // Read file, and deserialize json to FS METADATA
-pub fn restore_metadata() {
+pub fn restore_metadata() -> FilesystemMetadata {
 
     // Read JSON from file
     let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
@@ -112,8 +118,8 @@ pub fn restore_metadata() {
     metadatafo.close();
 
     // Restore metadata
-    let metadata = FS_METADATA.read().unwrap();
-    *metadata =  interface::rust_deserialize_from_string(&metadatastring).unwrap();
+    let metadata: FilesystemMetadata = interface::rust_deserialize_from_string(&metadatastring).unwrap();
+    metadata
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
