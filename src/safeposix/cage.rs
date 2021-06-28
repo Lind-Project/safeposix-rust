@@ -90,7 +90,7 @@ impl Cage {
         writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
 
-    pub fn rm_from_fd_table(&mut self, fd: &i32) {
+    pub fn rm_from_fd_table(&self, fd: &i32) {
         self.filedescriptortable.write().unwrap().remove(fd);
     }
 

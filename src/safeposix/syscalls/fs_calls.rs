@@ -9,7 +9,7 @@ use super::errnos::*;
 
 impl Cage {
 
-    //------------------OPEN SYSCALL------------------
+    //------------------------------------OPEN SYSCALL------------------------------------
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         //Check that path is not empty
@@ -133,7 +133,7 @@ impl Cage {
         thisfd //open returns the opened file descriptr
     }
 
-    //------------------MKNOD SYSCALL------------------
+    //------------------------------------MKNOD SYSCALL------------------------------------
 
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
         //Check that path is not empty
@@ -186,7 +186,7 @@ impl Cage {
         }
     }
 
-    //------------------LINK SYSCALL------------------
+    //------------------------------------LINK SYSCALL------------------------------------
 
     pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
         if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given oldpath was null");}
@@ -247,7 +247,7 @@ impl Cage {
         }
     }
 
-    //------------------UNLINK SYSCALL------------------
+    //------------------------------------UNLINK SYSCALL------------------------------------
 
     pub fn unlink_syscall(&self, path: &str) -> i32 {
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
@@ -302,13 +302,13 @@ impl Cage {
         }
     }
 
-    //------------------CREAT SYSCALL------------------
+    //------------------------------------CREAT SYSCALL------------------------------------
     
     pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
         self.open_syscall(path, O_CREAT | O_TRUNC | O_WRONLY, mode)
     }
 
-    //------------------STAT SYSCALL------------------
+    //------------------------------------STAT SYSCALL------------------------------------
 
     pub fn stat_syscall(&self, path: &str, statbuf: &mut StatData) -> i32 {
         let truepath = normpath(convpath(path), self);
@@ -395,7 +395,7 @@ impl Cage {
     }
 
 
-    //------------------FSTAT SYSCALL------------------
+    //------------------------------------FSTAT SYSCALL------------------------------------
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -441,7 +441,7 @@ impl Cage {
         }
     }
 
-    //------------------READ SYSCALL------------------
+    //------------------------------------READ SYSCALL------------------------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -501,7 +501,7 @@ impl Cage {
         }
     }
 
-    //------------------PREAD SYSCALL------------------
+    //------------------------------------PREAD SYSCALL------------------------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
  
@@ -566,7 +566,7 @@ impl Cage {
         }
     }
 
-    //------------------WRITE SYSCALL------------------
+    //------------------------------------WRITE SYSCALL------------------------------------
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -658,7 +658,7 @@ impl Cage {
         }
     }
 
-    //------------------PWRITE SYSCALL------------------
+    //------------------------------------PWRITE SYSCALL------------------------------------
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -755,7 +755,7 @@ impl Cage {
         }
     }
 
-    //------------------LSEEK SYSCALL------------------
+    //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
  
@@ -834,7 +834,7 @@ impl Cage {
     }
 
 
-    //------------------ACCESS SYSCALL------------------
+    //------------------------------------ACCESS SYSCALL------------------------------------
 
     pub fn access_syscall(&self, path: &str, amode: u32) -> i32 {
         let truepath = normpath(convpath(path), self);
@@ -878,7 +878,7 @@ impl Cage {
         }
     }
 
-    //------------------CHDIR SYSCALL------------------
+    //------------------------------------CHDIR SYSCALL------------------------------------
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
@@ -911,7 +911,7 @@ impl Cage {
         }
     }
 
-    //------------------DUP & DUP2 SYSCALLS------------------
+    //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
 
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
@@ -964,13 +964,23 @@ impl Cage {
 
         //need to add close helper and reference
         match fdtable.get(&newfd) {
-            Some(_) => {return Self::_close_helper(&self, newfd, Some(&fdtable));},
+            Some(_) => {return Self::_close_helper(&self, newfd, Some(&fdtable), false);},
             None => {} //link the new fd entry to the old one [Cage add_to_table or something]
         }
         return 0;
     }
 
-    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
+    //------------------------------------CLOSE SYSCALL------------------------------------
+
+    pub fn close_syscall(&self, fd: i32) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+        match fdtable.get(&fd) {
+            Some(_) => {return Self::_close_helper(self, fd, Some(&fdtable), true);},
+            None => {return syscall_error(Errno::EBADF, "close_syscall", "invalid file descriptor");},
+        }
+    }
+
+    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>, is_close_syscall: bool) -> i32 {
         let writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
@@ -1067,7 +1077,10 @@ impl Cage {
                         Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
                     }
                 },
-                _ => {panic!("Non-FD objet in the file descriptor table");},
+            }
+            // if this is a part of the close syscall, then the fd table instance of the fd is removed
+            if is_close_syscall {
+                self.filedescriptortable.write().unwrap().remove(&fd);
             }
             return 0; //_close_helper has succeeded!
         } else {
