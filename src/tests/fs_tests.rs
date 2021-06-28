@@ -55,8 +55,13 @@ mod fs_tests {
 
         assert_eq!(cage.pwrite_syscall(fd, str2cbuf("Lorem ipsum dolor sit amet, consectetur adipiscing elit"), 55, 0), 55);
 
-        let mut readbuf = sizecbuf(1000);
-        assert_eq!(cage.pread_syscall(fd, readbuf.as_mut_ptr(), 1000, 0), 1000);
-        assert_eq!(cbuf2str(&readbuf), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
+        let mut readbufzero = sizecbuf(1000);
+        assert_eq!(cage.pread_syscall(fd, readbufzero.as_mut_ptr(), 1000, 0), 1000);
+        assert_eq!(cbuf2str(&readbufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
+
+        let fd2 = cage.open_syscall("/dev/urandom", O_RDWR, S_IRWXA);
+        assert!(fd2 >= 0);
+        let mut readbufrand = sizecbuf(1000);
+        assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
     }
 }
