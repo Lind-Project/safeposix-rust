@@ -60,7 +60,7 @@ pub struct DirectoryInode {
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
-    pub filename_to_inode_dict: interface::RustHashMap<std::ffi::OsString, usize>
+    pub filename_to_inode_dict: interface::RustHashMap<interface::OsStringKey, usize>
 }
 
 
@@ -70,10 +70,10 @@ pub struct FilesystemMetadata {
     pub inodetable: interface::RustHashMap<usize, Inode>,
 }
 
-pub fn init_filename_to_inode_dict(parentinode: usize) -> interface::RustHashMap<std::ffi::OsString, usize> {
+pub fn init_filename_to_inode_dict(parentinode: usize) -> interface::RustHashMap<interface::OsStringKey, usize> {
     let mut retval = interface::RustHashMap::new();
-    retval.insert(std::ffi::OsString::from("."), ROOTDIRECTORYINODE);
-    retval.insert(std::ffi::OsString::from(".."), parentinode);
+    retval.insert(interface::OsStringKey::from("."), ROOTDIRECTORYINODE);
+    retval.insert(interface::OsStringKey::from(".."), parentinode);
     retval
 }
 
