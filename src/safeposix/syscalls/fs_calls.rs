@@ -3,7 +3,7 @@
 use crate::interface;
 
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
 use crate::safeposix::filesystem::*;
 use super::errnos::*;
 
@@ -346,7 +346,7 @@ impl Cage {
     pub fn dup_syscall(&self, fd: i32, startDesc: Option<i32>) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
-        let mut startFD = match startDesc {
+        let startFD = match startDesc {
             Some(startDesc) => startDesc,
             None => STARTINGFD,
         };
@@ -358,14 +358,30 @@ impl Cage {
             }
 
             //error below may need to be changed -- called if error getting file descriptor
-            let nextfd = if let Some(fd) = self.get_next_fd(startFD, Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
-            return Self::dup2_helper(&self, fd, nextfd, fdtable)
+            let nextfd = if let Some(fd) = self.get_next_fd(Some(startFD), Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
+            return Self::_dup2_helper(&self, fd, nextfd, Some(&fdtable))
         } else {
             return syscall_error(Errno::EBADF, "dup_syscall", "file descriptor not found")
         }
     }
 
-    pub fn dup2_helper(&self, oldfd: i32, newfd: i32, fdtable: interface::RustLock<FdTable>) -> i32 {
+    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        if let Some(_) = fdtable.get(&oldfd) {
+            return Self::_dup2_helper(&self, oldfd, newfd, Some(&fdtable));
+        } else {
+            return syscall_error(Errno::EBADF, "dup2_syscall","Invalid old file descriptor.");
+        }
+    }
+
+    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdTableLock: Option<&FdTable>) -> i32 {
+        let writer;
+        let fdtable = if let Some(rl) = fdTableLock {rl} else {
+            writer = self.filedescriptortable.write().unwrap(); 
+            &writer
+        };
+        
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd <= STARTINGFD {
             return syscall_error(Errno::EBADF, "dup2_helper", "provided file descriptor is out of range");
@@ -377,7 +393,91 @@ impl Cage {
         }
 
         //need to add close helper and reference
-        return 1;
+        match fdtable.get(&newfd) {
+            Some(_) => {return Self::_close_helper(&self, newfd, Some(&fdtable));},
+            None => {} //link the new fd entry to the old one [Cage add_to_table or something]
+        }
+        return 0;
     }
 
+    pub fn _close_helper(&self, fd: i32, fdTableLock: Option<&FdTable>) -> i32 {
+        //NOTE: Ask about next 5 lines of code
+        let writer;
+        let fdtable = if let Some(rl) = fdTableLock {rl} else {
+            writer = self.filedescriptortable.write().unwrap(); 
+            &writer
+        };
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc_enum = wrappedfd.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            //Decide how to proceed depending on the fd type.
+            //First we check in the file descriptor to handle sockets, streams, and pipes,
+            //and if it is a normal file descriptor we decrement the refcount to reflect
+            //one less reference to the file.
+            match &**filedesc_enum {
+                //if we are a socket, we dont change disk metadata
+                Stream(_) => {return 0;},
+                Socket(_) => {
+                    //TO DO: cleanup socket
+                 },
+                Pipe(_) => {
+                    //TO DO: cleanup pipe
+                },
+                //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator (if necessary?)
+                //TO DO: check whether the file is a regular file or not
+                File(filedescObject) => {
+                    let inodeNum = filedescObject.inode;
+                    match mutmetadata.inodetable.get(&inodeNum).unwrap() {
+                        Inode::File(f) => {
+                            f.refcount -= 1;
+                            if !is_reg(f.mode) {
+                                if mutmetadata.fileobjecttable.contains_key(&inodeNum) {
+                                    return -1; //this raises an exception in repy
+                                } else {
+                                    return 0;
+                                }
+                            }
+                            if f.refcount != 0 {
+                                return 0;
+                            }
+                            
+                        },
+                        Inode::Dir(f) => {
+                            f.refcount -= 1;
+                            if !is_reg(f.mode) {
+                                if mutmetadata.fileobjecttable.contains_key(&inodeNum) {
+                                    return -1; //this raises an exception in repy
+                                } else {
+                                    return 0;
+                                }
+                            }
+                            if f.refcount != 0 {
+                                return 0;
+                            }
+                        },
+                        Inode::CharDev(f) => {
+                            f.refcount -= 1;
+                            if !is_reg(f.mode) {
+                                if mutmetadata.fileobjecttable.contains_key(&inodeNum) {
+                                    return -1; //this raises an exception in repy
+                                } else {
+                                    return 0;
+                                }
+                            }
+                            if f.refcount != 0 {
+                                return 0;
+                            }
+                        },
+                        Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
+                        _ => {return syscall_error(Errno::EBADFD, "_close_helper", "unidentified inode in inodetable");}, //should this panic as well?
+                    }
+                },
+            }
+            return 0; //_close_helper has succeeded!
+        } else {
+            return syscall_error(Errno::ENOENT, "_close_helper", "invalid file descriptor");
+        }
+    }
 }
