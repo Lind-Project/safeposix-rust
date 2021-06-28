@@ -18,10 +18,7 @@ impl Cage {
           let fd = value.read().unwrap();
 
           //only file inodes have real inode objects currently
-          let inodenum_option = match &**fd {
-              File(f) => {Some(f.inode)}
-              _ => {None}
-          };
+          let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
 
           if let Some(inodenum) = inodenum_option {
             //increment the reference count on the inode
@@ -49,7 +46,7 @@ impl Cage {
   pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
     { CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap(); }
 
-    self.filedescriptortable.write().unwrap().retain(|&_, v| !match &**v.read().unwrap() {
+    self.filedescriptortable.write().unwrap().retain(|&_, v| !match &*v.read().unwrap() {
       File(_f) => true,//f.flags & CLOEXEC,
       Stream(_s) => true,//s.flags & CLOEXEC,
       Socket(_s) => true,//s.flags & CLOEXEC,

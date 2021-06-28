@@ -1,6 +1,6 @@
 #![feature(once_cell)] //for synclazy
 #![feature(rustc_private)] //for private crate imports for tests
-#![feature(thread_id_value)]
+#![feature(vec_into_raw_parts)]
 #![allow(unused_imports)]
 
 mod interface;
