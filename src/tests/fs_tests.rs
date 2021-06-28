@@ -45,23 +45,23 @@ mod fs_tests {
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
     }
 
-    // #[test]
-//     pub fn devzerotest() {
-//         let cage = init_cage();
-//         filesystem::load_fs_special_files(&cage);
+    #[test]
+    pub fn devzerotest() {
+        let cage = init_cage();
+        filesystem::load_fs_special_files(&cage);
 
-//         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
-//         assert!(fd >= 0);
+        let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
 
-//         assert_eq!(cage.pwrite_syscall(fd, str2cbuf("Lorem ipsum dolor sit amet, consectetur adipiscing elit"), 55, 0), 55);
+        assert_eq!(cage.pwrite_syscall(fd, str2cbuf("Lorem ipsum dolor sit amet, consectetur adipiscing elit"), 55, 0), 55);
 
-//         let mut readbufzero = sizecbuf(1000);
-//         assert_eq!(cage.pread_syscall(fd, readbufzero.as_mut_ptr(), 1000, 0), 1000);
-//         assert_eq!(cbuf2str(&readbufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
+        let mut readbufzero = sizecbuf(1000);
+        assert_eq!(cage.pread_syscall(fd, readbufzero.as_mut_ptr(), 1000, 0), 1000);
+        assert_eq!(cbuf2str(&readbufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
 
-//         let fd2 = cage.open_syscall("/dev/urandom", O_RDWR, S_IRWXA);
-//         assert!(fd2 >= 0);
-//         let mut readbufrand = sizecbuf(1000);
-//         assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
-//     }
+        let fd2 = cage.open_syscall("/dev/urandom", O_RDWR, S_IRWXA);
+        assert!(fd2 >= 0);
+        let mut readbufrand = sizecbuf(1000);
+        assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
+    }
 }

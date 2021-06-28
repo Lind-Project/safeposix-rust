@@ -71,7 +71,7 @@ pub const SEEK_CUR: i32 = 1;
 pub const SEEK_END: i32 = 2;
 
 //device info for char files
-#[derive(interface::RustSerialize, interface::RustDeserialize, PartialEq, Eq, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
 pub struct DevNo {
   pub major: u32,
   pub minor: u32
