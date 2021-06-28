@@ -913,22 +913,22 @@ impl Cage {
 
     //------------------DUP & DUP2 SYSCALLS------------------
 
-    pub fn dup_syscall(&self, fd: i32, startDesc: Option<i32>) -> i32 {
-        let mut fdtable = self.filedescriptortable.write().unwrap();
+    pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
 
-        let startFD = match startDesc {
-            Some(startDesc) => startDesc,
+        let start_fd = match start_desc {
+            Some(start_desc) => start_desc,
             None => STARTINGFD,
         };
 
         //checking whether the fd exists in the file table and is higher than the starting file descriptor
-        if let Some(fileD) = fdtable.get(&fd) {
+        if let Some(_) = fdtable.get(&fd) {
             if fd >= STARTINGFD {
                 return syscall_error(Errno::EBADF, "dup_syscall", "provided file descriptor is out of range");
             }
 
             //error below may need to be changed -- called if error getting file descriptor
-            let nextfd = if let Some(fd) = self.get_next_fd(Some(startFD), Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
+            let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
             return Self::_dup2_helper(&self, fd, nextfd, Some(&fdtable))
         } else {
             return syscall_error(Errno::EBADF, "dup_syscall", "file descriptor not found")
@@ -936,7 +936,7 @@ impl Cage {
     }
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
-        let mut fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(_) = fdtable.get(&oldfd) {
             return Self::_dup2_helper(&self, oldfd, newfd, Some(&fdtable));
@@ -945,9 +945,9 @@ impl Cage {
         }
     }
 
-    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdTableLock: Option<&FdTable>) -> i32 {
+    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
         let writer;
-        let fdtable = if let Some(rl) = fdTableLock {rl} else {
+        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
             &writer
         };
@@ -970,10 +970,10 @@ impl Cage {
         return 0;
     }
 
-    pub fn _close_helper(&self, fd: i32, fdTableLock: Option<&FdTable>) -> i32 {
+    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
         //NOTE: Ask about next 5 lines of code
         let writer;
-        let fdtable = if let Some(rl) = fdTableLock {rl} else {
+        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
             &writer
         };
@@ -986,7 +986,7 @@ impl Cage {
             //First we check in the file descriptor to handle sockets, streams, and pipes,
             //and if it is a normal file descriptor we decrement the refcount to reflect
             //one less reference to the file.
-            match &**filedesc_enum {
+            match &*filedesc_enum {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {return 0;},
                 Socket(_) => {
@@ -997,51 +997,34 @@ impl Cage {
                 },
                 //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator (if necessary?)
                 //TO DO: check whether the file is a regular file or not
-                File(filedescObject) => {
-                    let inodeNum = filedescObject.inode;
-                    match mutmetadata.inodetable.get(&inodeNum).unwrap() {
-                        Inode::File(f) => {
-                            f.refcount -= 1;
-                            if !is_reg(f.mode) {
-                                if mutmetadata.fileobjecttable.contains_key(&inodeNum) {
-                                    return -1; //this raises an exception in repy
-                                } else {
-                                    return 0;
-                                }
-                            }
-                            if f.refcount != 0 {
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                    match inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount -= 1;
+
+                            if normalfile_inode_obj.refcount != 0 {
                                 return 0;
                             }
                             
                         },
-                        Inode::Dir(f) => {
-                            f.refcount -= 1;
-                            if !is_reg(f.mode) {
-                                if mutmetadata.fileobjecttable.contains_key(&inodeNum) {
-                                    return -1; //this raises an exception in repy
-                                } else {
-                                    return 0;
-                                }
-                            }
-                            if f.refcount != 0 {
+                        Inode::Dir(ref mut dir_inode_obj) => {
+                            dir_inode_obj.refcount -= 1;
+
+                            if dir_inode_obj.refcount != 0 {
                                 return 0;
                             }
                         },
-                        Inode::CharDev(f) => {
-                            f.refcount -= 1;
-                            if !is_reg(f.mode) {
-                                if mutmetadata.fileobjecttable.contains_key(&inodeNum) {
-                                    return -1; //this raises an exception in repy
-                                } else {
-                                    return 0;
-                                }
-                            }
-                            if f.refcount != 0 {
+                        Inode::CharDev(ref mut char_inode_obj) => {
+                            char_inode_obj.refcount -= 1;
+
+                            if char_inode_obj.refcount != 0 {
                                 return 0;
                             }
                         },
                         Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
-                        _ => {return syscall_error(Errno::EBADFD, "_close_helper", "unidentified inode in inodetable");}, //should this panic as well?
                     }
                 },
             }
