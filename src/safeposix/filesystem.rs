@@ -98,20 +98,27 @@ impl FilesystemMetadata {
 }
 
 pub fn load_fs() {
-    // Create initial cage
+
+    // Create initial cage, probably will move this
     let utilcage = Cage{cageid: 0,
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
 
-    let mut metadatafo = interface::openfile(METADATAFILENAME.to_string(), true)?;
+    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true);
+        
+    match metadatafo {
+        Ok(file) => {file.close().unwrap();}
+        Err(_e) => {FilesystemMetadata::blank_fs_init();}
+    };
 
-
-
+    // need to globalize this
+    let metadata = restore_metadata();
+    load_fs_special_files(&utilcage);
 
 }
 
-pub fn load_fs_special_files(utilcage: Cage) {
+pub fn load_fs_special_files(utilcage: &Cage) {
 
     if utilcage.mkdir_syscall("/dev", S_IRWXA) != 0 {
         interface::log_to_stderr("making /dev failed. Skipping");
@@ -146,8 +153,8 @@ pub fn persist_metadata() {
 
     // write to file
     let mut metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadatafo.write_from_string(metadatastring, 0);
-    metadatafo.close();
+    metadatafo.write_from_string(metadatastring, 0).unwrap();
+    metadatafo.close().unwrap();
 }
 
 // Read file, and deserialize json to FS METADATA
@@ -156,7 +163,7 @@ pub fn restore_metadata() -> FilesystemMetadata {
     // Read JSON from file
     let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
     let metadatastring = metadatafo.read_to_new_string(0).unwrap();
-    metadatafo.close();
+    metadatafo.close().unwrap();
 
     // Restore metadata
     let metadata: FilesystemMetadata = interface::rust_deserialize_from_string(&metadatastring).unwrap();
