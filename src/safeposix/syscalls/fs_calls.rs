@@ -971,7 +971,6 @@ impl Cage {
     }
 
     pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
-        //NOTE: Ask about next 5 lines of code
         let writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
@@ -996,10 +995,10 @@ impl Cage {
                     //TO DO: cleanup pipe
                 },
                 //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator (if necessary?)
-                //TO DO: check whether the file is a regular file or not
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
 
                     match inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
@@ -1008,13 +1007,40 @@ impl Cage {
                             if normalfile_inode_obj.refcount != 0 {
                                 return 0;
                             }
-                            
+                            if fobjtable.contains_key(&inodenum) {
+                                fobjtable.get(&inodenum).unwrap().close().unwrap();
+                                // Not sure how to "del fdobjtable.inode"
+                            }
+                            if normalfile_inode_obj.refcount == 0 {
+                                if normalfile_inode_obj.linkcount == 0  {
+            
+                                    //actually remove file and the handle to it
+                                    mutmetadata.inodetable.remove(&inodenum);
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename).unwrap();
+            
+                                } 
+                            }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
 
                             if dir_inode_obj.refcount != 0 {
                                 return 0;
+                            }
+                            if fobjtable.contains_key(&inodenum) {
+                                fobjtable.get(&inodenum).unwrap().close().unwrap();
+                                // Not sure how to "del fdobjtable.inode"
+                            }
+                            if dir_inode_obj.refcount == 0 {
+                                if dir_inode_obj.linkcount == 0  {
+            
+                                    //actually remove file and the handle to it
+                                    mutmetadata.inodetable.remove(&inodenum);
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename).unwrap();
+            
+                                } 
                             }
                         },
                         Inode::CharDev(ref mut char_inode_obj) => {
@@ -1023,10 +1049,25 @@ impl Cage {
                             if char_inode_obj.refcount != 0 {
                                 return 0;
                             }
+                            if fobjtable.contains_key(&inodenum) {
+                                fobjtable.get(&inodenum).unwrap().close().unwrap();
+                                // Not sure how to "del fdobjtable.inode"
+                            }
+                            if char_inode_obj.refcount == 0 {
+                                if char_inode_obj.linkcount == 0  {
+            
+                                    //actually remove file and the handle to it
+                                    mutmetadata.inodetable.remove(&inodenum);
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename).unwrap();
+            
+                                } 
+                            }
                         },
                         Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
                     }
                 },
+                _ => {panic!("Non-FD objet in the file descriptor table");},
             }
             return 0; //_close_helper has succeeded!
         } else {
