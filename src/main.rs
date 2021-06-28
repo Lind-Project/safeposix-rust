@@ -5,6 +5,7 @@
 
 mod interface;
 mod safeposix;
+mod tests;
 
 fn main() {
     println!("Hello, world!");

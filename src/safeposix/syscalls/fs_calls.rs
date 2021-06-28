@@ -133,6 +133,58 @@ impl Cage {
         thisfd //open returns the opened file descriptr
     }
 
+    //------------------MKDIR SYSCALL------------------
+
+    pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
+        //Check that path is not empty
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "mkdir", "given path was null");}
+
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            (None, None) => {
+                syscall_error(Errno::ENOENT, "mkdir", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+
+            //If the file doesn't exist but the parent does
+            (None, Some(pardirinode)) => {
+                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+
+                let effective_mode = S_IFREG as u32 | mode;
+
+                //assert sane mode bits
+                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                    return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
+                }
+
+                let time = interface::timestamp(); //We do a real timestamp now
+                let newinode = Inode::Dir(DirectoryInode {
+                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                    mode: effective_mode, linkcount: 2, refcount: 0,
+                    atime: time, ctime: time, mtime: time, 
+                    filename_to_inode_dict: init_filename_to_inode_dict(pardirinode)
+                });
+
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    parentdir.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                } //insert a reference to the file in the parent directory
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+
+                //persist metadata?
+                0 //mknod has succeeded
+            }
+
+            (Some(_), ..) => {
+                syscall_error(Errno::EEXIST, "mkdir", "pathname already exists, cannot create directory")
+            }
+        }
+    }
+
     //------------------MKNOD SYSCALL------------------
 
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
@@ -172,14 +224,15 @@ impl Cage {
 
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
-                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    parentdir.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
                 //persist metadata?
                 0 //mknod has succeeded
             }
+
             (Some(_), ..) => {
                 syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
             }
@@ -909,74 +962,5 @@ impl Cage {
         } else {
             syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    pub fn rdwrtest() {
-        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-        cage.load_lower_handle_stubs();
-        let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
- 
-        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
-        assert_eq!(len1, 12);
-        assert_eq!(cage.write_syscall(fd, ptr1, len1), len1 as i32);
-
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut v = vec![0u8; 5];
-        let readbuf1 = v.as_mut_slice();
-        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr1, 5), 5);
-        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
-        println!("{:?}", bufbuf);
-        assert_eq!(bufbuf, "hello");
-
-        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
-        assert_eq!(len2, 6);
-        assert_eq!(cage.write_syscall(fd, ptr2, len2), len2 as i32);
-
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut v = vec![0u8; 12];
-        let readbuf2 = v.as_mut_slice();
-        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
-        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
-        println!("{:?}", bufbuf2);
-        assert_eq!(bufbuf2, "hello world!");
-    }
-
-    #[test]
-    pub fn prdwrtest() {
-        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-        cage.load_lower_handle_stubs();
-        let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
-        assert_eq!(len1, 12);
-        assert_eq!(cage.pwrite_syscall(fd, ptr1, len1, 0), len1 as i32);
-
-        let mut v = vec![0u8; 5];
-        let readbuf1 = v.as_mut_slice();
-        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.pread_syscall(fd, readptr1, 5, 0), 5);
-        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
-        println!("{:?}", bufbuf);
-        assert_eq!(bufbuf, "hello");
-
-        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
-        assert_eq!(len2, 6);
-        assert_eq!(cage.pwrite_syscall(fd, ptr2, len2, 5), len2 as i32);
-
-        let mut v = vec![0u8; 12];
-        let readbuf2 = v.as_mut_slice();
-        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
-        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
-        println!("{:?}", bufbuf2);
-        assert_eq!(bufbuf2, "hello world!");
-        //assert_eq!(cage.mknod_syscall("/null", S_IFCHR as u32 | S_IWUSR, makedev(&DevNo{major: 1, minor: 5})), 0);
     }
 }
