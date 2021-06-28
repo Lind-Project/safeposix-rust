@@ -60,7 +60,7 @@ pub struct DirectoryInode {
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
-    pub filename_to_inode_dict: interface::RustHashMap<std::ffi::OsString, usize>
+    pub filename_to_inode_dict: interface::RustHashMap<interface::OsStringKey, usize>
 }
 
 
@@ -70,18 +70,50 @@ pub struct FilesystemMetadata {
     pub inodetable: interface::RustHashMap<usize, Inode>,
 }
 
+pub fn init_filename_to_inode_dict(parentinode: usize) -> interface::RustHashMap<interface::OsStringKey, usize> {
+    let mut retval = interface::RustHashMap::new();
+    retval.insert(interface::OsStringKey::from("."), ROOTDIRECTORYINODE);
+    retval.insert(interface::OsStringKey::from(".."), parentinode);
+    retval
+}
+
 impl FilesystemMetadata {
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
         let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
-        let mut dirin = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID, 
-            mode: S_IFDIR as u32 | S_IRWXA, atime: time, ctime: time, mtime: time,
-            linkcount: 3, refcount: 0, filename_to_inode_dict: interface::RustHashMap::new()};//this is where cwd starts
-        dirin.filename_to_inode_dict.insert(std::ffi::OsString::from("."), ROOTDIRECTORYINODE);
-        dirin.filename_to_inode_dict.insert(std::ffi::OsString::from(".."), ROOTDIRECTORYINODE);
-        retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirin));
+        let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+            mode: S_IFDIR as u32 | S_IRWXA, linkcount: 3, refcount: 0, 
+            atime: time, ctime: time, mtime: time,
+            filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE)};
+        retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirinode));
         retval
+    }
+}
+
+pub fn load_fs_special_files() {
+    let utilcage = Cage{cageid: 0,
+                        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+                        parent: 0, 
+                        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+    if utilcage.mkdir_syscall("/dev", S_IRWXA) != 0 {
+        interface::log_to_stderr("making /dev failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/null", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 3})) != 0 {
+        interface::log_to_stderr("making /dev/null failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/zero", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 5})) != 0 {
+        interface::log_to_stderr("making /dev/zero failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/urandom", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 9})) != 0 {
+        interface::log_to_stderr("making /dev/urandom failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/random", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 8})) != 0 {
+        interface::log_to_stderr("making /dev/random failed. Skipping");
     }
 }
 

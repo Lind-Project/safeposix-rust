@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::interface;
 
-use super::syscalls::fs_constants::*;
+pub use super::syscalls::fs_constants::*;
 use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
