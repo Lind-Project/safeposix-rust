@@ -31,8 +31,9 @@ pub fn log_to_stderr(s: &str) {
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
-    let f = super::openfile("/dev/urandom".to_string(), false).unwrap();
-    f.readat(bufptr, count, 0).unwrap() as i32
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
+    f.read(slice).unwrap() as i32
 }
 pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};

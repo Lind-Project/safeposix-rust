@@ -127,3 +127,17 @@ pub fn makedev(dev: &DevNo) -> u64 {
     ((dev.minor as u64 & 0x000000ff) <<  0) |
     ((dev.minor as u64 & 0xffffff00) << 12)
 }
+
+//the same as the glibc major and minor functions
+pub fn major(devnum: u64) -> u32 {
+    (((devnum & 0x00000000000fff00) >>  8) |
+     ((devnum & 0xfffff00000000000) >> 32)) as u32
+}
+pub fn minor(devnum: u64) -> u32 {
+    (((devnum & 0x00000000000000ff) >>  0) |
+     ((devnum & 0x00000ffffff00000) >> 12)) as u32
+}
+
+pub fn devtuple(devnum: u64) -> DevNo {
+    DevNo{major: major(devnum), minor: minor(devnum)}
+}

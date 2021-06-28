@@ -67,6 +67,7 @@ impl Cage {
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                    ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
                 //persist metadata?
@@ -108,10 +109,10 @@ impl Cage {
 
             //increment number of open handles to the file, retrieve other data from inode
             match inodeobj {
-                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                _ => {panic!("How did you even manage to open another kind of file like that?");},
+                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                _ => {panic!("How did you even manage to open another kind of file like that?");}
             }
 
             //If the file is a regular file, open the file object
@@ -130,6 +131,228 @@ impl Cage {
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
         thisfd //open returns the opened file descriptr
+    }
+
+    //------------------MKDIR SYSCALL------------------
+
+    pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
+        //Check that path is not empty
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "mkdir", "given path was null");}
+
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            (None, None) => {
+                syscall_error(Errno::ENOENT, "mkdir", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+
+            //If the file doesn't exist but the parent does
+            (None, Some(pardirinode)) => {
+                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+
+                let effective_mode = S_IFREG as u32 | mode;
+
+                //assert sane mode bits
+                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                    return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
+                }
+
+                let time = interface::timestamp(); //We do a real timestamp now
+                let newinode = Inode::Dir(DirectoryInode {
+                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                    mode: effective_mode, linkcount: 2, refcount: 0,
+                    atime: time, ctime: time, mtime: time, 
+                    filename_to_inode_dict: init_filename_to_inode_dict(pardirinode)
+                });
+
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    parentdir.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                } //insert a reference to the file in the parent directory
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+
+                //persist metadata?
+                0 //mknod has succeeded
+            }
+
+            (Some(_), ..) => {
+                syscall_error(Errno::EEXIST, "mkdir", "pathname already exists, cannot create directory")
+            }
+        }
+    }
+
+    //------------------MKNOD SYSCALL------------------
+
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
+        //Check that path is not empty
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
+
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            (None, None) => {
+                syscall_error(Errno::ENOENT, "mknod", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+
+            //If the file doesn't exist but the parent does
+            (None, Some(pardirinode)) => {
+                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+
+                let effective_mode = S_IFREG as u32 | mode;
+
+                //assert sane mode bits
+                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                    return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
+                }
+                if mode as i32 & S_IFCHR == 0 {
+                    return syscall_error(Errno::EINVAL, "mknod", "only character files are supported");
+                }
+
+                let time = interface::timestamp(); //We do a real timestamp now
+                let newinode = Inode::CharDev(DeviceInode {
+                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                    mode: effective_mode, linkcount: 1, refcount: 0,
+                    atime: time, ctime: time, mtime: time, dev: devtuple(dev)
+                });
+
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    parentdir.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                } //insert a reference to the file in the parent directory
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+
+                //persist metadata?
+                0 //mknod has succeeded
+            }
+
+            (Some(_), ..) => {
+                syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
+            }
+        }
+    }
+
+    //------------------LINK SYSCALL------------------
+
+    pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
+        if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given oldpath was null");}
+        if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given newpath was null");}
+        let trueoldpath = normpath(convpath(oldpath), self);
+        let truenewpath = normpath(convpath(newpath), self);
+        let filename = truenewpath.file_name();
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalk(trueoldpath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            None => {
+                syscall_error(Errno::ENOENT, "link", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+            Some(inodenum) => {
+                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                match inodeobj {
+                    Inode::File(ref mut normalfile_inode_obj) => {
+                        normalfile_inode_obj.linkcount += 1; //add link to inode
+                        match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                            (None, Some(pardirinode)) => {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.linkcount += 1;
+                                } //insert a reference to the inode in the parent directory
+                                0 //link has succeeded
+                            }
+
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                        }
+                    }
+
+                    Inode::CharDev(ref mut chardev_inode_obj) => {
+                        chardev_inode_obj.linkcount += 1; //add link to inode
+                        match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                            (None, Some(pardirinode)) => {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.linkcount += 1;
+                                } //insert a reference to the inode in the parent directory
+                                0 //link has succeeded
+                            }
+
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                        }
+                    }
+
+                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
+                    _ => {panic!("How did you even manage to refer to a pipe/socket using a path?");}
+                }
+            }
+        }
+    }
+
+    //------------------UNLINK SYSCALL------------------
+
+    pub fn unlink_syscall(&self, path: &str) -> i32 {
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If the file does not exist
+            (None, ..) => {
+                syscall_error(Errno::ENOENT, "unlink", "path does not exist")
+            }
+
+            //If the file exists but has no parent, it's the root directory
+            (Some(_), None) => {
+                syscall_error(Errno::EISDIR, "unlink", "cannot unlink root directory")
+            }
+
+            //If both the file and the root directory exists
+            (Some(inodenum), Some(parentinodenum)) => {
+                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                let (currefcount, curlinkcount) = match inodeobj {
+                    Inode::File(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::CharDev(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
+                    _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
+                }; //count current number of links and references
+
+                let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
+                let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
+                    panic!("File was a child of something other than a directory????");
+                };
+                directory_parent_inode_obj.filename_to_inode_dict.remove(truepath.file_name().unwrap());
+                directory_parent_inode_obj.linkcount -= 1;
+                //remove reference to file in parent directory
+
+                if curlinkcount == 0 {
+                    if currefcount == 0  {
+
+                        //actually remove file and the handle to it
+                        mutmetadata.inodetable.remove(&inodenum);
+                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                        interface::removefile(sysfilename).unwrap();
+
+                    } //we don't need a separate unlinked flag, we can just check that refcount is 0
+                }
+
+                0 //unlink has succeeded
+            }
+
+        }
     }
 
     //------------------CREAT SYSCALL------------------
@@ -468,7 +691,7 @@ impl Cage {
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
                 Stream(stream_filedesc_obj) => {
                     //if it's stdout or stderr, print out and we're done
-                    if let 1..=2 = stream_filedesc_obj.stream {
+                    if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
                         interface::log_from_ptr(buf);
                         count as i32
                     } else {
@@ -739,77 +962,5 @@ impl Cage {
         } else {
             syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    pub fn rdwrtest() {
-        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-        cage.load_lower_handle_stubs();
-        let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        //we don't support lseek so we just reopen each time
- 
-        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
-        assert_eq!(len1, 12);
-        assert_eq!(cage.write_syscall(fd, ptr1, len1), len1 as i32);
-
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut v = vec![0u8; 5];
-        let readbuf1 = v.as_mut_slice();
-        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr1, 5), 5);
-        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
-        println!("{:?}", bufbuf);
-        assert_eq!(bufbuf, "hello");
-
-        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
-        assert_eq!(len2, 6);
-        assert_eq!(cage.write_syscall(fd, ptr2, len2), len2 as i32);
-
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut v = vec![0u8; 12];
-        let readbuf2 = v.as_mut_slice();
-        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
-        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
-        println!("{:?}", bufbuf2);
-        assert_eq!(bufbuf2, "hello world!");
-    }
-
-    #[test]
-    pub fn prdwrtest() {
-        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-        cage.load_lower_handle_stubs();
-        let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        //we don't support lseek so we just reopen each time
- 
-        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
-        assert_eq!(len1, 12);
-        assert_eq!(cage.pwrite_syscall(fd, ptr1, len1, 0), len1 as i32);
-
-        let mut v = vec![0u8; 5];
-        let readbuf1 = v.as_mut_slice();
-        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.pread_syscall(fd, readptr1, 5, 0), 5);
-        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
-        println!("{:?}", bufbuf);
-        assert_eq!(bufbuf, "hello");
-
-        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
-        assert_eq!(len2, 6);
-        assert_eq!(cage.pwrite_syscall(fd, ptr2, len2, 5), len2 as i32);
-
-        let mut v = vec![0u8; 12];
-        let readbuf2 = v.as_mut_slice();
-        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
-        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
-        println!("{:?}", bufbuf2);
-        assert_eq!(bufbuf2, "hello world!");
     }
 }
