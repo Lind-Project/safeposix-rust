@@ -39,11 +39,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path).unwrap();
-
-    if !absolute_filename.exists() {
-        panic!("FileNotFoundError");
-    }
+    let absolute_filename = fs::canonicalize(&path)?; //will return an error if the file does not exist
 
     fs::remove_file(absolute_filename)?;
 
