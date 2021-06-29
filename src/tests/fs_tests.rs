@@ -3,6 +3,18 @@ mod fs_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, filesystem};
     use super::super::*;
+
+    #[test]
+    pub fn persistancetest() {
+        let cage = init_cage();
+
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        filesystem::persist_metadata();
+        filesystem::restore_metadata();
+    }
+
     #[test]
     pub fn rdwrtest() {
         let cage = init_cage();
