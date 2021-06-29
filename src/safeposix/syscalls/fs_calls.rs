@@ -67,6 +67,7 @@ impl Cage {
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                    ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
                 //persist metadata?
@@ -80,8 +81,9 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    if mutmetadata.fileobjecttable.contains_key(&inodenum) {
-                        mutmetadata.fileobjecttable.get(&inodenum).unwrap().close().unwrap();
+                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                    if fobjtable.contains_key(&inodenum) {
+                        fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
 
                     //set size of file to 0
@@ -107,17 +109,18 @@ impl Cage {
 
             //increment number of open handles to the file, retrieve other data from inode
             match inodeobj {
-                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1},
-                _ => {panic!("How did you even manage to open another kind of file like that?");},
+                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                _ => {panic!("How did you even manage to open another kind of file like that?");}
             }
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
-                if !mutmetadata.fileobjecttable.contains_key(&inodenum) {
+                let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                if !fobjtable.contains_key(&inodenum) {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    mutmetadata.fileobjecttable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
+                    fobjtable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
                 }
             }
 
@@ -128,6 +131,175 @@ impl Cage {
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
         thisfd //open returns the opened file descriptr
+    }
+
+    //------------------MKNOD SYSCALL------------------
+
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
+        //Check that path is not empty
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
+
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            (None, None) => {
+                syscall_error(Errno::ENOENT, "mknod", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+
+            //If the file doesn't exist but the parent does
+            (None, Some(pardirinode)) => {
+                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+
+                let effective_mode = S_IFREG as u32 | mode;
+
+                //assert sane mode bits
+                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                    return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
+                }
+                if mode as i32 & S_IFCHR == 0 {
+                    return syscall_error(Errno::EINVAL, "mknod", "only character files are supported");
+                }
+
+                let time = interface::timestamp(); //We do a real timestamp now
+                let newinode = Inode::CharDev(DeviceInode {
+                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                    mode: effective_mode, linkcount: 1, refcount: 0,
+                    atime: time, ctime: time, mtime: time, dev: devtuple(dev)
+                });
+
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
+                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                } //insert a reference to the file in the parent directory
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+
+                //persist metadata?
+                0 //mknod has succeeded
+            }
+            (Some(_), ..) => {
+                syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
+            }
+        }
+    }
+
+    //------------------LINK SYSCALL------------------
+
+    pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
+        if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given oldpath was null");}
+        if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given newpath was null");}
+        let trueoldpath = normpath(convpath(oldpath), self);
+        let truenewpath = normpath(convpath(newpath), self);
+        let filename = truenewpath.file_name();
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalk(trueoldpath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            None => {
+                syscall_error(Errno::ENOENT, "link", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+            Some(inodenum) => {
+                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                match inodeobj {
+                    Inode::File(ref mut normalfile_inode_obj) => {
+                        normalfile_inode_obj.linkcount += 1; //add link to inode
+                        match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                            (None, Some(pardirinode)) => {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.linkcount += 1;
+                                } //insert a reference to the inode in the parent directory
+                                0 //link has succeeded
+                            }
+
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                        }
+                    }
+
+                    Inode::CharDev(ref mut chardev_inode_obj) => {
+                        chardev_inode_obj.linkcount += 1; //add link to inode
+                        match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                            (None, Some(pardirinode)) => {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.linkcount += 1;
+                                } //insert a reference to the inode in the parent directory
+                                0 //link has succeeded
+                            }
+
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                        }
+                    }
+
+                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
+                    _ => {panic!("How did you even manage to refer to a pipe/socket using a path?");}
+                }
+            }
+        }
+    }
+
+    //------------------UNLINK SYSCALL------------------
+
+    pub fn unlink_syscall(&self, path: &str) -> i32 {
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If the file does not exist
+            (None, ..) => {
+                syscall_error(Errno::ENOENT, "unlink", "path does not exist")
+            }
+
+            //If the file exists but has no parent, it's the root directory
+            (Some(_), None) => {
+                syscall_error(Errno::EISDIR, "unlink", "cannot unlink root directory")
+            }
+
+            //If both the file and the root directory exists
+            (Some(inodenum), Some(parentinodenum)) => {
+                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                let (currefcount, curlinkcount) = match inodeobj {
+                    Inode::File(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::CharDev(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
+                    _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
+                }; //count current number of links and references
+
+                let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
+                let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
+                    panic!("File was a child of something other than a directory????");
+                };
+                directory_parent_inode_obj.filename_to_inode_dict.remove(truepath.file_name().unwrap());
+                directory_parent_inode_obj.linkcount -= 1;
+                //remove reference to file in parent directory
+
+                if curlinkcount == 0 {
+                    if currefcount == 0  {
+
+                        //actually remove file and the handle to it
+                        mutmetadata.inodetable.remove(&inodenum);
+                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                        interface::removefile(sysfilename).unwrap();
+
+                    } //we don't need a separate unlinked flag, we can just check that refcount is 0
+                }
+
+                0 //unlink has succeeded
+            }
+
+        }
     }
 
     //------------------CREAT SYSCALL------------------
@@ -292,7 +464,8 @@ impl Cage {
                     match inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
-                            let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
@@ -348,7 +521,8 @@ impl Cage {
                     //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
-                            let fileobject = metadata.fileobjecttable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
                                 bytesread as i32
@@ -409,21 +583,20 @@ impl Cage {
                     }
 
                     let mut metadata = FS_METADATA.write().unwrap();
-                    //As the lifetime of this would overlap the lifetime of the borrow to the other
-                    //field of metadata we want, fileobjecttable, we must reborrow this later, as mut
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
                     match inodeobj {
-                        //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
-                        Inode::File(normalfile_inode_obj) => {
+                        Inode::File(ref mut normalfile_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
 
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = position as isize - filesize as isize;
 
-                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
                             if blankbytecount > 0 {
@@ -437,28 +610,19 @@ impl Cage {
                             }
 
                             let newposition;
-                            let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                            if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                 //move position forward by the number of bytes we've written
                                 normalfile_filedesc_obj.position = position + byteswritten;
                                 newposition = normalfile_filedesc_obj.position;
+                                if newposition > normalfile_inode_obj.size {
+                                    normalfile_inode_obj.size = newposition;
+                                } //update file size if necessary
+                                //persist metadata
 
                                 byteswritten as i32
                             } else {
-                                return 0 //0 bytes written, but not an error value that can/should be passed to the user
-                            };
-
-                            //for the sake of the borrow checker not mutably borrowing both an
-                            //inodetable element and a fileobject element at the same time, we need
-                            //to re-retrieve the value here
-                            let inode_handle2 = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
-                            if let Inode::File(handle2_to_normalfile_inode_obj) = inode_handle2 {
-                                if newposition > handle2_to_normalfile_inode_obj.size {
-                                    handle2_to_normalfile_inode_obj.size = newposition;
-                                } //update file size if necessary
-                                //persist metadata
+                                0 //0 bytes written, but not an error value that can/should be passed to the user
                             }
-
-                            retval
                         }
 
                         Inode::CharDev(char_inode_obj) => {
@@ -474,7 +638,7 @@ impl Cage {
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
                 Stream(stream_filedesc_obj) => {
                     //if it's stdout or stderr, print out and we're done
-                    if let 1..=2 = stream_filedesc_obj.stream {
+                    if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
                         interface::log_from_ptr(buf);
                         count as i32
                     } else {
@@ -510,20 +674,19 @@ impl Cage {
                     }
 
                     let mut metadata = FS_METADATA.write().unwrap();
-                    //As the lifetime of this would overlap the lifetime of the borrow to the other
-                    //field of metadata we want, fileobjecttable, we must reborrow this later, as mut
+
                     let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
                     match inodeobj {
-                        //we must reborrow the file inode at the end of this match arm for the sake of the borrow checker
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
 
-                            let fileobject = metadata.fileobjecttable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
                             if blankbytecount > 0 {
@@ -548,16 +711,10 @@ impl Cage {
                                   //we still may need to update file size from blank bytes write, so we don't bail out
                             };
 
-                            //for the sake of the borrow checker not mutably borrowing both an
-                            //inodetable element and a fileobject element at the same time, we need
-                            //to re-retrieve the value here
-                            let inode_handle2 = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
-                            if let Inode::File(handle2_to_normalfile_inode_obj) = inode_handle2 {
-                                if newposition > filesize {
-                                    handle2_to_normalfile_inode_obj.size = newposition;
-                                } //update file size if necessary
-                                //persist metadata
-                            }
+                            if newposition > filesize {
+                               normalfile_inode_obj.size = newposition;
+                            } //update file size if necessary
+                            //persist metadata
 
                             retval
                         }
@@ -763,8 +920,6 @@ mod tests {
         let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
         cage.load_lower_handle_stubs();
         let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        //we don't support lseek so we just reopen each time
  
         let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
         assert_eq!(len1, 12);
@@ -799,8 +954,6 @@ mod tests {
         cage.load_lower_handle_stubs();
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
 
-        //we don't support lseek so we just reopen each time
- 
         let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
         assert_eq!(len1, 12);
         assert_eq!(cage.pwrite_syscall(fd, ptr1, len1, 0), len1 as i32);
@@ -824,5 +977,6 @@ mod tests {
         let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
         println!("{:?}", bufbuf2);
         assert_eq!(bufbuf2, "hello world!");
+        //assert_eq!(cage.mknod_syscall("/null", S_IFCHR as u32 | S_IWUSR, makedev(&DevNo{major: 1, minor: 5})), 0);
     }
 }
