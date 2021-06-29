@@ -81,7 +81,7 @@ impl Cage {
         None
     }
 
-    pub fn add_to_fd_table(&mut self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
+    pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
         let mut ourwriter;
         let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
             ourwriter = self.filedescriptortable.write().unwrap();

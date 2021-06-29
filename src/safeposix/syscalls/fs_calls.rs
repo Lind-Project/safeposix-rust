@@ -999,10 +999,20 @@ impl Cage {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {return 0;},
                 Socket(_) => {
-                    //TO DO: cleanup socket
+                    Self::_cleanup_socket(self, &fd, false);
                  },
-                Pipe(_) => {
-                    //TO DO: cleanup pipe
+                Pipe(pipe_filedesc_obj) => {
+                    let pipenumber = pipe_filedesc_obj.pipe;
+                    let read_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_RDONLY);
+                    let write_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_WRONLY);
+
+                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // let pipetable.pipenumber.eof = true;
+                    }
+
+                    if read_references + write_references == 1 {
+                        //del pipetable.pipenumber
+                    }
                 },
                 //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator (if necessary?)
                 File(normalfile_filedesc_obj) => {
@@ -1014,17 +1024,19 @@ impl Cage {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount -= 1;
 
+                            //if there are still references to the file, then do nothing to the file
                             if normalfile_inode_obj.refcount != 0 {
                                 return 0;
                             }
                             if fobjtable.contains_key(&inodenum) {
+                                //close and delete the file in the object table
                                 fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                // Not sure how to "del fdobjtable.inode"
+                                fdobjtbale.remove(&inodenum);
                             }
                             if normalfile_inode_obj.refcount == 0 {
                                 if normalfile_inode_obj.linkcount == 0  {
-            
-                                    //actually remove file and the handle to it
+                                    
+                                    //removing the file from the entire filesystem
                                     mutmetadata.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
@@ -1035,17 +1047,17 @@ impl Cage {
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
 
+                            //if there are still references to the file, then do nothing to the file
                             if dir_inode_obj.refcount != 0 {
                                 return 0;
                             }
                             if fobjtable.contains_key(&inodenum) {
+                                //close and delete the file in the object table
                                 fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                // Not sure how to "del fdobjtable.inode"
+                                fdobjtbale.remove(&inodenum);
                             }
                             if dir_inode_obj.refcount == 0 {
                                 if dir_inode_obj.linkcount == 0  {
-            
-                                    //actually remove file and the handle to it
                                     mutmetadata.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
@@ -1056,17 +1068,18 @@ impl Cage {
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
 
+                            //if there are still references to the file, then do nothing to the file
                             if char_inode_obj.refcount != 0 {
                                 return 0;
                             }
+
                             if fobjtable.contains_key(&inodenum) {
+                                //close and delete the file in the object table
                                 fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                // Not sure how to "del fdobjtable.inode"
+                                fdobjtbale.remove(&inodenum);
                             }
                             if char_inode_obj.refcount == 0 {
                                 if char_inode_obj.linkcount == 0  {
-            
-                                    //actually remove file and the handle to it
                                     mutmetadata.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
@@ -1088,6 +1101,18 @@ impl Cage {
         }
     }
 }
+
+pub fn _lookup_refs_by_pipe_end(&self, pipenumber: i32, flags: i32) -> i32 {
+    let pipe_references = 0;
+    //NOT COMPLETE
+    return 0;
+}
+
+pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
+    //NOT COMPELTE
+    return 0;
+}
+
 
 #[cfg(test)]
 mod tests {
