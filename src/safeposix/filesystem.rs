@@ -11,11 +11,13 @@ pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
     ); //we want to check if fs exists before doing a blank init, but not for now
+
+
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
 pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
     interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
 
-#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
@@ -25,7 +27,7 @@ pub enum Inode {
     Socket(GenericInode)
 }
 
-#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct GenericInode {
     pub size: usize,
     pub uid: u32,
@@ -37,7 +39,7 @@ pub struct GenericInode {
     pub ctime: u64,
     pub mtime: u64
 }
-#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct DeviceInode {
     pub size: usize,
     pub uid: u32,
@@ -51,7 +53,7 @@ pub struct DeviceInode {
     pub dev: DevNo,
 }
 
-#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct DirectoryInode {
     pub size: usize,
     pub uid: u32,
@@ -65,11 +67,18 @@ pub struct DirectoryInode {
     pub filename_to_inode_dict: interface::RustHashMap<String, usize>
 }
 
-#[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>,
+}
+
+pub fn init_filename_to_inode_dict(parentinode: usize) -> interface::RustHashMap<String, usize> {
+    let mut retval = interface::RustHashMap::new();
+    retval.insert(".".to_string(), ROOTDIRECTORYINODE);
+    retval.insert("..".to_string(), parentinode);
+    retval
 }
 
 impl FilesystemMetadata {
@@ -77,13 +86,59 @@ impl FilesystemMetadata {
         //remove open files?
         let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
-        let mut dirin = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID, 
-            mode: S_IFDIR as u32 | S_IRWXA, atime: time, ctime: time, mtime: time,
-            linkcount: 3, refcount: 0, filename_to_inode_dict: interface::RustHashMap::new()};//this is where cwd starts
-        dirin.filename_to_inode_dict.insert(".".to_string(), ROOTDIRECTORYINODE);
-        dirin.filename_to_inode_dict.insert("..".to_string(), ROOTDIRECTORYINODE);
-        retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirin));
+        let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+            mode: S_IFDIR as u32 | S_IRWXA, linkcount: 3, refcount: 0, 
+            atime: time, ctime: time, mtime: time,
+            filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE)};
+        retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirinode));
+
         retval
+    }
+}
+
+pub fn load_fs() {
+
+    // Create initial cage, probably will move this
+    let utilcage = Cage{cageid: 0,
+        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, 
+        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+
+    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true);
+    
+    // If the metadata file exists, just close the file for later restore
+    // If it doesn't, lets create a new one and persist it.
+    match metadatafo {
+        Ok(file) => {file.close().unwrap();}
+        Err(_e) => {FilesystemMetadata::blank_fs_init(); persist_metadata(None);}
+    };
+
+    // need to globalize this
+    let metadata = restore_metadata();
+    load_fs_special_files(&utilcage);
+
+}
+
+pub fn load_fs_special_files(utilcage: &Cage) {
+
+    if utilcage.mkdir_syscall("/dev", S_IRWXA) != 0 {
+        interface::log_to_stderr("making /dev failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/null", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 3})) != 0 {
+        interface::log_to_stderr("making /dev/null failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/zero", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 5})) != 0 {
+        interface::log_to_stderr("making /dev/zero failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/urandom", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 9})) != 0 {
+        interface::log_to_stderr("making /dev/urandom failed. Skipping");
+    }
+
+    if utilcage.mknod_syscall("/dev/random", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 8})) != 0 {
+        interface::log_to_stderr("making /dev/random failed. Skipping");
     }
 }
 
@@ -97,29 +152,28 @@ pub fn persist_metadata(guard: Option<&FilesystemMetadata>) {
     };
 
     // Serialize metadata to string
-    let metadatastring = interface::rust_serialize_to_string(&*metadata).unwrap();
+    let metadatastring = interface::serde_serialize_to_string(&*metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
     let mut metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadatafo.write_from_string(metadatastring, 0).unwrap();
+    metadatafo.writefile_from_string(metadatastring, 0).unwrap();
     metadatafo.close().unwrap();
 }
 
 // Read file, and deserialize json to FS METADATA
-pub fn restore_metadata() {
+pub fn restore_metadata() -> FilesystemMetadata {
 
     // Read JSON from file
     let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatastring = metadatafo.read_to_new_string(0).unwrap();
-    // Assigning it to nothing to avoid the compiler yelling about unused result
-    let _ = metadatafo.close();
+    let metadatastring = metadatafo.readfile_to_new_string(0).unwrap();
+    metadatafo.close().unwrap();
 
     // Restore metadata
-    let mut metadata = FS_METADATA.write().unwrap();
-    *metadata = interface::rust_deserialize_from_string(&metadatastring).unwrap();
+    let metadata: FilesystemMetadata = interface::serde_deserialize_from_string(&metadatastring).unwrap();
+    metadata
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
