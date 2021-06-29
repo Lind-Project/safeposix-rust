@@ -11,6 +11,9 @@ pub use std::collections::HashMap as RustHashMap;
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;
 
+pub use libc::mmap;
+pub use std::ffi::c_void;
+
 pub use serde::{Serialize as RustSerialize, Deserialize as RustDeserialize};
 
 pub fn log_from_ptr(buf: *const u8) {
@@ -46,4 +49,8 @@ pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
 
 pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> &'a str {
     std::ffi::CStr::from_ptr(cstr).to_str().unwrap()
+}
+
+pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
+    return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
 }

@@ -13,6 +13,8 @@ pub use std::ffi::OsString as OsStringKey;
 use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::SyncLazy as RustLazyGlobal;
 
+use std::os::unix::io::{AsRawFd, RawFd};
+
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> Vec<String> {
@@ -204,6 +206,14 @@ impl EmulatedFile {
         }
 
         Ok(bytes_written)
+    }
+    
+    pub fn as_fd_num(&self) -> i32 {
+        if let Some(wrapped_barefile) = &self.fobj {
+            wrapped_barefile.lock().unwrap().as_raw_fd() as i32
+        } else {
+            -1
+        }
     }
 }
 
