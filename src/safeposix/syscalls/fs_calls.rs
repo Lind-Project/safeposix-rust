@@ -966,7 +966,7 @@ impl Cage {
 
     //------------------MMAP SYSCALL------------------
     
-    fn mmap_syscall(&self, addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
+    pub fn mmap_syscall(&self, addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
         if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
 
         if 0 == flags & (MAP_PRIVATE | MAP_SHARED) {
@@ -1020,7 +1020,13 @@ impl Cage {
         } else {
             syscall_error(Errno::EBADF, "mmap", "invalid file descriptor")
         }
+    }
 
+    //------------------MUNMAP SYSCALL------------------
+    
+    pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
+        if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
+        interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
     }
 
 }
