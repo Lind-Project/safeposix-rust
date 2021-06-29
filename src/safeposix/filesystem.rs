@@ -62,7 +62,7 @@ pub struct DirectoryInode {
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
-    pub filename_to_inode_dict: interface::RustHashMap<std::ffi::OsString, usize>
+    pub filename_to_inode_dict: interface::RustHashMap<String, usize>
 }
 
 #[derive(interface::RustSerialize, interface::RustDeserialize, Debug)]
@@ -80,27 +80,32 @@ impl FilesystemMetadata {
         let mut dirin = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID, 
             mode: S_IFDIR as u32 | S_IRWXA, atime: time, ctime: time, mtime: time,
             linkcount: 3, refcount: 0, filename_to_inode_dict: interface::RustHashMap::new()};//this is where cwd starts
-        dirin.filename_to_inode_dict.insert(std::ffi::OsString::from("."), ROOTDIRECTORYINODE);
-        dirin.filename_to_inode_dict.insert(std::ffi::OsString::from(".."), ROOTDIRECTORYINODE);
+        dirin.filename_to_inode_dict.insert(".".to_string(), ROOTDIRECTORYINODE);
+        dirin.filename_to_inode_dict.insert("..".to_string(), ROOTDIRECTORYINODE);
         retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirin));
         retval
     }
 }
 
 // Serialize Metadata Struct to JSON, write to file
-pub fn persist_metadata() {
+pub fn persist_metadata(guard: Option<&FilesystemMetadata>) {
+    let ourreader;
+    //Acquire a readlock if we were not passed in a reference
+    let metadata = if let Some(rl) = guard {rl} else {
+        ourreader = FS_METADATA.read().unwrap(); 
+        &ourreader
+    };
 
     // Serialize metadata to string
-    let metadata = FS_METADATA.read().unwrap();
-    let metadatastring = interface::rust_serialize_to_string(&metadata).unwrap();
+    let metadatastring = interface::rust_serialize_to_string(&*metadata).unwrap();
     
-    // remove file if it exists
-    interface::removefile(METADATAFILENAME.to_string()).unwrap(); 
+    // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
+    let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
-    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadatafo.write_from_string(metadatastring, 0);
-    metadatafo.close();
+    let mut metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    metadatafo.write_from_string(metadatastring, 0).unwrap();
+    metadatafo.close().unwrap();
 }
 
 // Read file, and deserialize json to FS METADATA
@@ -109,11 +114,12 @@ pub fn restore_metadata() {
     // Read JSON from file
     let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
     let metadatastring = metadatafo.read_to_new_string(0).unwrap();
-    metadatafo.close();
+    // Assigning it to nothing to avoid the compiler yelling about unused result
+    let _ = metadatafo.close();
 
     // Restore metadata
-    let metadata = FS_METADATA.read().unwrap();
-    *metadata =  interface::rust_deserialize_from_string(&metadatastring).unwrap();
+    let mut metadata = FS_METADATA.write().unwrap();
+    *metadata = interface::rust_deserialize_from_string(&metadatastring).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
@@ -147,7 +153,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
                         previnodeno = inodeno;
 
                         //populate child inode number from parent directory's inode dict
-                        inodeno = match d.filename_to_inode_dict.get(f) {
+                        inodeno = match d.filename_to_inode_dict.get(&f.to_str().unwrap().to_string()) {
                             Some(num) => {
                                 curnode = md.inodetable.get(&num);
                                 Some(*num)

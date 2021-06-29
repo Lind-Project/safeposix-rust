@@ -44,7 +44,7 @@ impl Cage {
                     return syscall_error(Errno::ENOENT, "open", "tried to open a file that did not exist, and O_CREAT was not specified");
                 }
 
-                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 if S_IFCHR == (S_IFCHR & flags) {
                     return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
@@ -66,11 +66,11 @@ impl Cage {
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                    ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-                //persist metadata?
+                persist_metadata(Some(&mutmetadata));
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -151,7 +151,7 @@ impl Cage {
 
             //If the file doesn't exist but the parent does
             (None, Some(pardirinode)) => {
-                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 let effective_mode = S_IFREG as u32 | mode;
 
@@ -173,11 +173,11 @@ impl Cage {
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                    ind.filename_to_inode_dict.insert(filename, newinodenum);
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
-                //persist metadata?
+                persist_metadata(Some(&mutmetadata));
                 0 //mknod has succeeded
             }
             (Some(_), ..) => {
@@ -193,7 +193,7 @@ impl Cage {
         if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given newpath was null");}
         let trueoldpath = normpath(convpath(oldpath), self);
         let truenewpath = normpath(convpath(newpath), self);
-        let filename = truenewpath.file_name();
+        let filename = truenewpath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
@@ -213,7 +213,7 @@ impl Cage {
 
                             (None, Some(pardirinode)) => {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
                                 0 //link has succeeded
@@ -230,7 +230,7 @@ impl Cage {
 
                             (None, Some(pardirinode)) => {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
                                 0 //link has succeeded
@@ -281,7 +281,7 @@ impl Cage {
                 let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
-                directory_parent_inode_obj.filename_to_inode_dict.remove(truepath.file_name().unwrap());
+                directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
                 directory_parent_inode_obj.linkcount -= 1;
                 //remove reference to file in parent directory
 
@@ -617,7 +617,7 @@ impl Cage {
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
                                 } //update file size if necessary
-                                //persist metadata
+                                persist_metadata(Some(&metadata));
 
                                 byteswritten as i32
                             } else {
@@ -714,7 +714,7 @@ impl Cage {
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
                             } //update file size if necessary
-                            //persist metadata
+                            persist_metadata(Some(&metadata));
 
                             retval
                         }
