@@ -959,4 +959,73 @@ impl Cage {
         *cwd_container = interface::RustRfc::new(truepath);
         0 //chdir has succeeded!;
     }
+
+    //------------------MMAP SYSCALL------------------
+    
+    pub fn mmap_syscall(&self, addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
+        if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
+
+        if 0 == flags & (MAP_PRIVATE | MAP_SHARED) {
+            syscall_error(Errno::EINVAL, "mmap", "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)");
+        }
+
+        if 0 != flags & MAP_ANONYMOUS {
+            return interface::libc_mmap(addr, len, prot, flags, 0, -1);
+        }
+
+        let fdtable = self.filedescriptortable.read().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fildes) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            //confirm fd type is mappable
+            match &mut *filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //confirm inode type is mappable
+                    match inodeobj {
+                        Inode::File(normalfile_inode_obj) => {
+                            //if we want to write our changes back to the file the file needs to be open for reading and writing
+                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
+                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
+                            }
+                            let filesize = normalfile_inode_obj.size;
+                            if off < 0 || off > filesize as i64 {
+                                return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
+                            }
+                            //because of NaCl's internal workings we must allow mappings to extend past the end of a file
+                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
+                            //this is the system fd number--the number of the lind.<inodenum> file in our host system
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
+
+
+                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
+                        }
+
+                        Inode::CharDev(_chardev_inode_obj) => {
+                            syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
+                        }
+
+                        _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+                    }
+                }
+                _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "mmap", "invalid file descriptor")
+        }
+    }
+
+    //------------------MUNMAP SYSCALL------------------
+    
+    pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
+        if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
+        //NaCl's munmap implementation actually just writes over the previously mapped data with PROT_NONE
+        //This frees all of the resources except page table space, and is put inside safeposix for consistency
+        interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
+    }
+
 }
