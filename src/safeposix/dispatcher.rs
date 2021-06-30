@@ -162,6 +162,21 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
+fn lindrustinit() {
+    load_fs();
+    let mut mutcagetable = CAGE_TABLE.write().unwrap();
+    //init cage is its own parent
+    let initcage = Cage{
+        cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), 
+        parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+    initcage.load_lower_handle_stubs();
+    mutcagetable.insert(1, interface::RustRfc::new(initcage));
+}
+
+fn lindrustfinalize() {
+    //exit out of all cages
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
