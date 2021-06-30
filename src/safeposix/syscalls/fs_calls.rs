@@ -1018,7 +1018,7 @@ impl Cage {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
 
                     match inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
@@ -1031,7 +1031,7 @@ impl Cage {
                             if fobjtable.contains_key(&inodenum) {
                                 //close and delete the file in the object table
                                 fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                fdobjtbale.remove(&inodenum);
+                                fobjtable.remove(&inodenum);
                             }
                             if normalfile_inode_obj.refcount == 0 {
                                 if normalfile_inode_obj.linkcount == 0  {
@@ -1054,7 +1054,7 @@ impl Cage {
                             if fobjtable.contains_key(&inodenum) {
                                 //close and delete the file in the object table
                                 fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                fdobjtbale.remove(&inodenum);
+                                fobjtable.remove(&inodenum);
                             }
                             if dir_inode_obj.refcount == 0 {
                                 if dir_inode_obj.linkcount == 0  {
@@ -1076,7 +1076,7 @@ impl Cage {
                             if fobjtable.contains_key(&inodenum) {
                                 //close and delete the file in the object table
                                 fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                fdobjtbale.remove(&inodenum);
+                                fobjtable.remove(&inodenum);
                             }
                             if char_inode_obj.refcount == 0 {
                                 if char_inode_obj.linkcount == 0  {
@@ -1100,18 +1100,127 @@ impl Cage {
             return syscall_error(Errno::ENOENT, "_close_helper", "invalid file descriptor");
         }
     }
+
+    pub fn _lookup_refs_by_pipe_end(&self, pipenumber: usize, flags: i32) -> i32 {
+        let pipe_references = 0;
+        //NOT COMPLETE
+        return 0;
+    }
+    
+    pub fn _cleanup_socket(&self, fd: &i32, partial: bool) -> i32 {
+        //NOT COMPELTE
+        return 0;
+    }
+    
+    //------------------------------------FCNTL SYSCALL------------------------------------
+    
+    pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
+        
+        //DUMMY VARIABLE FOR ARGS: -1
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc_enum = wrappedfd.read().unwrap();
+            let cmd_arg_pair = (cmd, arg);
+            
+            match cmd_arg_pair {
+                (F_GETFD, -1) => {
+                    match &*filedesc_enum {
+                        Pipe(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                        Stream(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                        Socket(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                        File(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                    }
+                },
+                (F_SETFD, arg) if arg >= 0 => {
+                    match &*filedesc_enum {
+                        Pipe(obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                            return 0;
+                        },
+                        Stream(obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                            return 0;
+                        },
+                        Socket(obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                            return 0;
+                        },
+                        File(obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                            return 0;
+                        },
+                    }
+                },
+                (F_GETFL, -1) => {
+                    match &*filedesc_enum {
+                        Pipe(obj) => {return obj.flags;},
+                        Stream(obj) => {return obj.flags;},
+                        Socket(obj) => {return obj.flags;},
+                        File(obj) => {return obj.flags;},
+                    }
+                },
+                (F_SETFL, arg) if arg >= 0 => {
+                    //check that the type of x is an int or a long 
+                    Self::dup_syscall(self, fd, Some(arg));
+                    return 0;
+                },
+                (F_DUPFD, arg) if arg >= 0 => {
+                    //check that the type of x is an int or a long 
+                    match &*filedesc_enum {
+                        Pipe(_) => {
+                            obj.flags = arg;
+                            return 0;
+                        },
+                        Stream(_) => {
+                            obj.flags = arg;
+                            return 0;
+                        },
+                        Socket(_) => {
+                            obj.flags = arg;
+                            return 0;
+                        },
+                        File(_) => {
+                            obj.flags = arg;
+                            return 0;
+                        },
+                    }
+                },
+                //TO DO: implement. this one is saying get the signals
+                (F_GETOWN, -1) => {
+                    match &*filedesc_enum {
+                        Pipe(_) => {
+                            //TO DO: traditional SIGIO behavior
+                            return 0;
+                        },
+                        Stream(_) => {
+                            //TO DO: traditional SIGIO behavior
+                            return 0;
+                        },
+                        Socket(_) => {
+                            //TO DO: traditional SIGIO behavior
+                            return 0;
+                        },
+                        File(_) => {
+                            //TO DO: traditional SIGIO behavior
+                            return 0;
+                        },
+                    }
+                },
+                (F_SETOWN, arg) if arg >= 0 => {
+                    //check that the type is an int or a long
+                    //this would return the PID if positive and the process group if negative,
+                    //either way do nothing and return success
+                    return 0;
+                },
+                _ => {return syscall_error(Errno::EINVAL, "fcntl_syscall", "Arguments provided do not match implemented parameters");},
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "fcntl_syscall", "Invalid file descriptor");
+        }
+    }
 }
 
-pub fn _lookup_refs_by_pipe_end(&self, pipenumber: i32, flags: i32) -> i32 {
-    let pipe_references = 0;
-    //NOT COMPLETE
-    return 0;
-}
-
-pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
-    //NOT COMPELTE
-    return 0;
-}
 
 
 #[cfg(test)]

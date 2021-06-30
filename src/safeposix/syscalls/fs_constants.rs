@@ -55,6 +55,26 @@ pub const S_IROTH: u32 = 0o004;
 pub const S_IWOTH: u32 = 0o002;
 pub const S_IXOTH: u32 = 0o001;
 
+//Commands for FCNTL
+pub const F_DUPFD: i32= 0;
+pub const F_GETFD: i32= 1;
+pub const F_SETFD: i32= 2;
+pub const F_GETFL: i32= 3;
+pub const F_SETFL: i32= 4;
+pub const F_GETLK: i32= 5;
+pub const F_GETLK64: i32 = 5;
+pub const F_SETLK: i32 = 6;
+pub const F_SETLK64: i32 = 6;
+pub const F_SETLKW: i32 = 7;
+pub const F_SETLKW64: i32 = 7;
+pub const F_SETOWN: i32 = 8;
+pub const F_GETOWN: i32 = 9;
+pub const F_SETSIG: i32 = 10;
+pub const F_GETSIG: i32 = 11;
+pub const F_SETLEASE: i32 = 1024;
+pub const F_GETLEASE: i32 = 1025;
+pub const F_NOTIFY: i32 = 1026;
+
 //File types for open/stat etc.
 pub const S_IFBLK: i32 = 0o60000;
 pub const S_IFCHR: i32 = 0o20000;
