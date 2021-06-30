@@ -87,7 +87,7 @@ impl FilesystemMetadata {
         let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-            mode: S_IFDIR as u32 | S_IRWXA, linkcount: 3, refcount: 0, 
+            mode: S_IFDIR as u32 | S_IRWXA, linkcount: 2, refcount: 0,
             atime: time, ctime: time, mtime: time,
             filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE)};
         retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirinode));
@@ -256,4 +256,17 @@ pub fn incref_root() {
     if let Inode::Dir(rootdir_dirinode_obj) = rootinode {
         rootdir_dirinode_obj.refcount += 1;
     } else {panic!("Root directory inode was not a directory");}
+}
+
+pub fn decref_dir(mutmetadata: &mut FilesystemMetadata, cwd_container: &interface::RustPathBuf) {
+    if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
+        if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
+              cwddir.refcount -= 1;
+
+              //if the directory has been removed but we this cwd was the last open handle to it
+              if cwddir.refcount == 0 && cwddir.linkcount == 0 {
+                  mutmetadata.inodetable.remove(&cwdinodenum);
+              }
+        } else {panic!("Cage had a cwd that was not a directory!");}
+    } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
 }

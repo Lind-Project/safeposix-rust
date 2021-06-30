@@ -954,11 +954,7 @@ impl Cage {
         let mut cwd_container = self.cwd.write().unwrap();
 
         //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
-        if let Some(oldinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
-            if let Inode::Dir(ref mut olddir) = mutmetadata.inodetable.get_mut(&oldinodenum).unwrap() {
-                olddir.refcount -= 1;
-            } else {panic!("We changed from a directory that was not a directory in chdir!");}
-        } else {panic!("We changed from a directory that was not a directory in chdir!");}
+        decref_dir(&mut mutmetadata, &*cwd_container);
 
         *cwd_container = interface::RustRfc::new(truepath);
         0 //chdir has succeeded!;

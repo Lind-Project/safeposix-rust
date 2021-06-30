@@ -2,7 +2,7 @@
 
 use crate::interface;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*};
-use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk};
+use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 
 use super::sys_constants::*;
 
@@ -68,13 +68,12 @@ impl Cage {
   }
 
   pub fn exit_syscall(&self) -> i32 {
+      //get file descriptor table into a vector
+      //call close_syscall (or helper?) on each element of the vector
       let mut mutmetadata = FS_METADATA.write().unwrap();
       let cwd_container = self.cwd.read().unwrap();
-      if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
-          if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
-              cwddir.refcount -= 1;
-          } else {panic!("We changed from a directory that was not a directory in chdir!");}
-      } else {panic!("We changed from a directory that was not a directory in chdir!");}
+
+      decref_dir(&mut mutmetadata, &*cwd_container);
 
       CAGE_TABLE.write().unwrap().remove(&self.cageid);
       //fdtable will be dropped at end of dispatcher scope because of Arc
