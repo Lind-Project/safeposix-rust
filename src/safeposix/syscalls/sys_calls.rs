@@ -37,7 +37,7 @@ impl Cage {
           let cwd_container = self.cwd.read().unwrap();
           if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
               if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
-                  cwddir.linkcount += 1;
+                  cwddir.refcount += 1;
               } else {panic!("We changed from a directory that was not a directory in chdir!");}
           } else {panic!("We changed from a directory that was not a directory in chdir!");}
       }
@@ -72,7 +72,7 @@ impl Cage {
       let cwd_container = self.cwd.read().unwrap();
       if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
           if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
-              cwddir.linkcount -= 1;
+              cwddir.refcount -= 1;
           } else {panic!("We changed from a directory that was not a directory in chdir!");}
       } else {panic!("We changed from a directory that was not a directory in chdir!");}
 

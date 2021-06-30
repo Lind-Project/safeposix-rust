@@ -249,3 +249,11 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
     }
     newp
 }
+
+pub fn incref_root() {
+    let mut metadata = FS_METADATA.write().unwrap();
+    let rootinode = metadata.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap();
+    if let Inode::Dir(rootdir_dirinode_obj) = rootinode {
+        rootdir_dirinode_obj.refcount += 1;
+    } else {panic!("Root directory inode was not a directory");}
+}
