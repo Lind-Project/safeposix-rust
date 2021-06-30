@@ -3,6 +3,28 @@ mod fs_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, filesystem};
     use super::super::*;
+
+    #[test]
+    pub fn persistencetest() {
+        let cage = init_cage();
+
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        let mut metadata = filesystem::FS_METADATA.write().unwrap(); 
+        filesystem::persist_metadata(&metadata);
+
+        let metadatastring1 = interface::serde_serialize_to_string(&*metadata).unwrap(); // before restore
+
+        filesystem::restore_metadata(&mut metadata); // should be the same as after restore
+
+        let metadatastring2 = interface::serde_serialize_to_string(&*metadata).unwrap();
+
+        //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
+        assert_eq!(metadatastring1.len(), metadatastring2.len()); 
+
+    }
+
     #[test]
     pub fn rdwrtest() {
         let cage = init_cage();
@@ -48,7 +70,7 @@ mod fs_tests {
     #[test]
     pub fn devzerotest() {
         let cage = init_cage();
-        filesystem::load_fs_special_files();
+        filesystem::load_fs_special_files(&cage);
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
         assert!(fd >= 0);

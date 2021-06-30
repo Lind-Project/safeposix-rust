@@ -39,11 +39,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path).unwrap();
-
-    if !absolute_filename.exists() {
-        panic!("FileNotFoundError");
-    }
+    let absolute_filename = fs::canonicalize(&path)?; //will return an error if the file does not exist
 
     fs::remove_file(absolute_filename)?;
 
@@ -180,6 +176,51 @@ impl EmulatedFile {
         }
 
         Ok(bytes_written)
+    }
+
+    // Reads entire file into provided C-buffer
+    pub fn readfile_to_new_string(&self, offset: usize) -> std::io::Result<String> {
+
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut stringbuf = String::new();
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                fobj.read_to_string(&mut stringbuf)?;
+                fobj.sync_data()?;
+                Ok(stringbuf) // return new buf string
+            }
+        }
+    }
+
+    // Write to entire file from provided C-buffer
+    pub fn writefile_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
+
+        let length = buf.len();
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                fobj.write(buf.as_bytes())?;
+                fobj.sync_data()?;
+            }
+        }
+
+        if offset + length > self.filesize {
+            self.filesize = offset + length;
+        }
+
+        Ok(())
     }
 
     pub fn zerofill_at(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {

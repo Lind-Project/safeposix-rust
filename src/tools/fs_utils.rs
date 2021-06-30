@@ -5,17 +5,22 @@
 
 use std::env;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, prelude};
 
 mod interface;
 mod safeposix;
-use safeposix::{cage::*, filesystem};
+use safeposix::{cage::*, filesystem::*};
 //assume deserialization
 
 fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
     if !hostfilepath.exists() {
-        return; //perhaps error message later
+        if let Ok(_) = hostfilepath.read_link() {
+            return; //print error todo, ignore broken symlink on host fs
+        } //if read_link succeeds it's a symlink
+    } else {
+        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
     }
+
     if hostfilepath.is_file() {
         update_into_lind(cage, hostfilepath, lindfilepath);
     } else {
@@ -28,14 +33,14 @@ fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindf
 }
 
 fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
-    if hostfilepath.exists() || hostfilepath.is_file() {
+    if !hostfilepath.exists() || !hostfilepath.is_file() {
         return; //error message
     }
     let fmetadata = hostfilepath.metadata().unwrap();
     //let host_mtime = fmetadata.modified();
     let host_size = fmetadata.len();
     let mut lindstat_res: StatData;
-    let stat_us = cage.stat_syscall(format!("{:?}", hostfilepath).as_str(), &mut lindstat_res);
+    let stat_us = cage.stat_syscall(lindfilepath.as_str(), &mut lindstat_res);
     let lind_exists;
     let lind_isfile;
     let lind_size;
@@ -70,10 +75,75 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
         if lind_exists {
             cage.unlink_syscall(lindfilepath.as_str());
         }
-        cp_into_lind(hostfilepath, lindfilepath);
+        cp_into_lind(cage, hostfilepath, lindfilepath, true);
     } else {
         println!("Same files on host and lind--{} and {:?}, skipping", lindfilepath, hostfilepath);
     }
+}
+
+fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String, create_missing_dirs: bool) {
+    if !hostfilepath.exists() {
+        if let Ok(_) = hostfilepath.read_link() {
+            return; //print error todo, ignore broken symlink on host fs
+        } //if read_link succeeds it's a symlink
+    } else {
+        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+    }
+
+    if hostfilepath.is_file() {
+        cp_into_lind(cage, hostfilepath, lindfilepath, create_missing_dirs);
+    } else if hostfilepath.is_dir() {
+        let children = hostfilepath.read_dir().unwrap();
+        for wrappedchild in children {
+            let child = wrappedchild.unwrap();
+            cp_dir_into_lind(cage, child.path(), format!("{}/{:?}", lindfilepath, child.file_name()), create_missing_dirs);
+        }
+    }
+}
+
+fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String, create_missing_dirs: bool) {
+    if !hostfilepath.exists() {
+        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+    }
+    if !hostfilepath.is_file() {
+        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+    }
+
+    let lindtruepath = normpath(convpath(lindfilepath.as_str()), cage);
+    let mutmetadata = FS_METADATA.write().unwrap();
+    let mut ancestor = interface::RustPathBuf::from("/");
+    for component in lindtruepath.parent().unwrap().components() {
+        ancestor.push(component);
+        let mut lindstat_res: StatData;
+        let stat_us = cage.stat_syscall(format!("{:?}", ancestor).as_str(), &mut lindstat_res);
+        if stat_us == 0 {continue;}
+        if stat_us != -(Errno::ENOENT as i32) {
+            panic!("Fatal error in trying to get lind file path");
+        }
+        if create_missing_dirs && is_dir(lindstat_res.st_mode) {
+            cage.mkdir_syscall(format!("{:?}", ancestor).as_str(), S_IRWXA); //let's not mirror stat data
+        } else {
+            panic!("Lind fs path does not exist but should not be created {:?}", ancestor);
+        }
+    }
+
+    let host_fileobj = File::open(hostfilepath).unwrap();
+    let mut filecontents = Vec::new();
+    host_fileobj.read_to_end(&mut filecontents);
+
+    let lindfd = cage.open_syscall(format!("{:?}", lindtruepath).as_str(), O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+    let veclen = filecontents.len();
+    let fileslice = filecontents.as_slice();
+    let writtenlen = cage.write_syscall(lindfd, fileslice.as_ptr(), veclen);
+    assert_eq!(veclen as i32, writtenlen);
+
+    let mut lindstat_res: StatData;
+    let stat_us = cage.fstat_syscall(lindfd, &mut lindstat_res);
+    let inode = lindstat_res.st_ino;
+
+    cage.close_syscall(lindfd);
+
+    println!("Copied {:?} as {} ({})", hostfilepath, lindfilepath, inode);
 }
 
 fn main() {
