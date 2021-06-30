@@ -14,7 +14,9 @@ pub use std::sync::Arc as RustRfc;
 pub use libc::mmap;
 pub use std::ffi::c_void;
 
-pub use serde::{Serialize as RustSerialize, Deserialize as RustDeserialize};
+pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
+
+pub use serde_json::{to_string as serde_serialize_to_string, from_str as serde_deserialize_from_string};
 
 pub fn log_from_ptr(buf: *const u8) {
     if let Ok(s) = unsafe{std::ffi::CStr::from_ptr(buf as *const i8).to_str()} {
