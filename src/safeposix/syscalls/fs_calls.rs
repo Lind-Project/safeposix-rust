@@ -1134,19 +1134,19 @@ impl Cage {
                 },
                 (F_SETFD, arg) if arg >= 0 => {
                     match &*filedesc_enum {
-                        Pipe(obj) => {
+                        Pipe(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
                             return 0;
                         },
-                        Stream(obj) => {
+                        Stream(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
                             return 0;
                         },
-                        Socket(obj) => {
+                        Socket(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
                             return 0;
                         },
-                        File(obj) => {
+                        File(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
                             return 0;
                         },
@@ -1168,19 +1168,19 @@ impl Cage {
                 (F_DUPFD, arg) if arg >= 0 => {
                     //check that the type of x is an int or a long 
                     match &*filedesc_enum {
-                        Pipe(_) => {
+                        Pipe(ref mut obj) => {
                             obj.flags = arg;
                             return 0;
                         },
-                        Stream(_) => {
+                        Stream(ref mut obj) => {
                             obj.flags = arg;
                             return 0;
                         },
-                        Socket(_) => {
+                        Socket(ref mut obj) => {
                             obj.flags = arg;
                             return 0;
                         },
-                        File(_) => {
+                        File(ref mut obj) => {
                             obj.flags = arg;
                             return 0;
                         },
