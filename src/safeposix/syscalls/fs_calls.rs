@@ -324,8 +324,8 @@ impl Cage {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
                 let (currefcount, curlinkcount) = match inodeobj {
-                    Inode::File(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
-                    Inode::CharDev(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount)},
+                    Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                     _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
                 }; //count current number of links and references
