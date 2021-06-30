@@ -208,7 +208,8 @@ impl EmulatedFile {
         Ok(bytes_written)
     }
     
-    pub fn as_fd_num(&self) -> i32 {
+    //gets the raw fd handle (integer) from a rust fileobject
+    pub fn as_fd_handle_raw_int(&self) -> i32 {
         if let Some(wrapped_barefile) = &self.fobj {
             wrapped_barefile.lock().unwrap().as_raw_fd() as i32
         } else {

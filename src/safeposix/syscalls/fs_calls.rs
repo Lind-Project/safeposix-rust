@@ -1002,7 +1002,8 @@ impl Cage {
                             let fobjtable = FILEOBJECTTABLE.read().unwrap();
                             let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
-                            let fobjfdno = fobj.as_fd_num();
+                            //this is the system fd number--the number of the lind.<inodenum> file in our host system
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
 
 
                             interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
@@ -1026,6 +1027,8 @@ impl Cage {
     
     pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
         if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
+        //NaCl's munmap implementation actually just writes over the previously mapped data with PROT_NONE
+        //This frees all of the resources except page table space, and is put inside safeposix for consistency
         interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
     }
 
