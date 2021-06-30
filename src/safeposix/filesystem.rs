@@ -104,17 +104,19 @@ pub fn load_fs() {
         parent: 0, 
         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
 
-    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true);
+    let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true);
     
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one and persist it.
-    match metadatafo {
+    match metadata_fileobj {
         Ok(file) => {file.close().unwrap();}
-        Err(_e) => {FilesystemMetadata::blank_fs_init(); persist_metadata(None);}
+        Err(_e) => {persist_metadata(&FilesystemMetadata::blank_fs_init());}
     };
 
-    // need to globalize this
-    let metadata = restore_metadata();
+    // Restore metadata to global
+    let mut mutmetadata = FS_METADATA.write().unwrap();
+    restore_metadata(&mut mutmetadata);
+
     load_fs_special_files(&utilcage);
 
 }
@@ -143,37 +145,30 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 }
 
 // Serialize Metadata Struct to JSON, write to file
-pub fn persist_metadata(guard: Option<&FilesystemMetadata>) {
-    let ourreader;
-    //Acquire a readlock if we were not passed in a reference
-    let metadata = if let Some(rl) = guard {rl} else {
-        ourreader = FS_METADATA.read().unwrap(); 
-        &ourreader
-    };
-
+pub fn persist_metadata(metadata: &FilesystemMetadata) {
+  
     // Serialize metadata to string
-    let metadatastring = interface::serde_serialize_to_string(&*metadata).unwrap();
+    let metadatastring = interface::serde_serialize_to_string(&metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
-    let mut metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadatafo.writefile_from_string(metadatastring, 0).unwrap();
-    metadatafo.close().unwrap();
+    let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    metadata_fileobj.writefile_from_string(metadatastring, 0).unwrap();
+    metadata_fileobj.close().unwrap();
 }
 
 // Read file, and deserialize json to FS METADATA
-pub fn restore_metadata() -> FilesystemMetadata {
+pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
     // Read JSON from file
-    let metadatafo = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatastring = metadatafo.readfile_to_new_string(0).unwrap();
-    metadatafo.close().unwrap();
+    let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    let metadatastring = metadata_fileobj.readfile_to_new_string(0).unwrap();
+    metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    let metadata: FilesystemMetadata = interface::serde_deserialize_from_string(&metadatastring).unwrap();
-    metadata
+    *metadata = interface::serde_deserialize_from_string(&metadatastring).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {

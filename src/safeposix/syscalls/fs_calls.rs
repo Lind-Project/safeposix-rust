@@ -70,7 +70,7 @@ impl Cage {
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-                persist_metadata(Some(&mutmetadata));
+                persist_metadata(&mutmetadata);
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -175,7 +175,7 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
-                persist_metadata(Some(&mutmetadata));
+                persist_metadata(&mutmetadata);
                 0 //mknod has succeeded
             }
 
@@ -229,7 +229,7 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
-                persist_metadata(Some(&mutmetadata));
+                persist_metadata(&mutmetadata);
                 0 //mknod has succeeded
             }
 
@@ -670,7 +670,7 @@ impl Cage {
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
                                 } //update file size if necessary
-                                persist_metadata(Some(&metadata));
+                                persist_metadata(&metadata);
 
                                 byteswritten as i32
                             } else {
@@ -767,7 +767,7 @@ impl Cage {
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
                             } //update file size if necessary
-                            persist_metadata(Some(&metadata));
+                            persist_metadata(&metadata);
 
                             retval
                         }

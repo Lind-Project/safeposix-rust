@@ -5,14 +5,24 @@ mod fs_tests {
     use super::super::*;
 
     #[test]
-    pub fn persistancetest() {
+    pub fn persistencetest() {
         let cage = init_cage();
 
         let fd = cage.open_syscall("/testfile", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
 
-        filesystem::persist_metadata();
-        filesystem::restore_metadata();
+        let mut metadata = filesystem::FS_METADATA.write().unwrap(); 
+        filesystem::persist_metadata(&metadata);
+
+        let metadatastring1 = interface::serde_serialize_to_string(&*metadata).unwrap(); // before restore
+
+        filesystem::restore_metadata(&mut metadata); // should be the same as after restore
+
+        let metadatastring2 = interface::serde_serialize_to_string(&*metadata).unwrap();
+
+        //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
+        assert_eq!(metadatastring1.len(), metadatastring2.len()); 
+
     }
 
     #[test]
