@@ -935,32 +935,32 @@ impl Cage {
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
-        let mutmetadata = FS_METADATA.write().unwrap();
+        let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
-            if let Inode::Dir(dir) = mutmetadata.inodetable.get(&inodenum).unwrap() {
+            if let Inode::Dir(ref mut dir) = mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
 
-                //decrement refcount of previous cwd inode, however this is complex because of cage
-                //initialization and deinitialization concerns so we leave it unimplemented for now
-                //if let Some(oldinodenum) = metawalk(&self.cwd, Some(&mutmetadata)) {
-                //    if let Inode::Dir(olddir) = mutmetadata.inodetable.get(&oldinodenum).unwrap() {
-                //        olddir.linkcount -= 1;
-                //    } else {panic!("We changed from a directory that was not a directory in chdir!");}
-                //} else {panic!("We changed from a directory that was not a directory in chdir!");}
+                //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
+                dir.linkcount += 1;
 
-                self.changedir(truepath);
-
-                //increment refcount of new cwd inode to ensure that you can't remove a directory,
-                //currently unimplmented
-                //dir.linkcount += 1;
-
-                0 //chdir has succeeded!;
             } else {
-                syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory")
+                return syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory");
             }
         } else {
-            syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
+            return syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist");
         }
+        //at this point, syscall isn't an error
+        let mut cwd_container = self.cwd.write().unwrap();
+
+        //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
+        if let Some(oldinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
+            if let Inode::Dir(ref mut olddir) = mutmetadata.inodetable.get_mut(&oldinodenum).unwrap() {
+                olddir.linkcount -= 1;
+            } else {panic!("We changed from a directory that was not a directory in chdir!");}
+        } else {panic!("We changed from a directory that was not a directory in chdir!");}
+
+        *cwd_container = interface::RustRfc::new(truepath);
+        0 //chdir has succeeded!;
     }
 }
