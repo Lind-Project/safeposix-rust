@@ -1117,14 +1117,14 @@ impl Cage {
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         
         //DUMMY VARIABLE FOR ARGS: -1
-        let mut fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
-            let filedesc_enum = wrappedfd.read().unwrap();
+            let mut filedesc_enum = wrappedfd.write().unwrap();
             let cmd_arg_pair = (cmd, arg);
             
             match cmd_arg_pair {
-                (F_GETFD, -1) => {
+                (F_GETFD, ..) => {
                     match &*filedesc_enum {
                         Pipe(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
                         Stream(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
@@ -1133,7 +1133,7 @@ impl Cage {
                     }
                 },
                 (F_SETFD, arg) if arg >= 0 => {
-                    match &*filedesc_enum {
+                    match &mut *filedesc_enum {
                         Pipe(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
                             return 0;
@@ -1152,7 +1152,7 @@ impl Cage {
                         },
                     }
                 },
-                (F_GETFL, -1) => {
+                (F_GETFL, ..) => {
                     match &*filedesc_enum {
                         Pipe(obj) => {return obj.flags;},
                         Stream(obj) => {return obj.flags;},
@@ -1167,7 +1167,7 @@ impl Cage {
                 },
                 (F_DUPFD, arg) if arg >= 0 => {
                     //check that the type of x is an int or a long 
-                    match &*filedesc_enum {
+                    match &mut *filedesc_enum {
                         Pipe(ref mut obj) => {
                             obj.flags = arg;
                             return 0;
@@ -1187,7 +1187,7 @@ impl Cage {
                     }
                 },
                 //TO DO: implement. this one is saying get the signals
-                (F_GETOWN, -1) => {
+                (F_GETOWN, ..) => {
                     match &*filedesc_enum {
                         Pipe(_) => {
                             //TO DO: traditional SIGIO behavior
