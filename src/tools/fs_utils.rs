@@ -147,35 +147,55 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args = env::args();
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
                         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
 
-    if args.len() == 1 {
+    args.next();//first arg is executable, we don't care
+    let command = if let Some(cmd) = args.next() {
+        cmd.as_str()
+    } else {
         return; //print usage
-    }
-    let command = args[1].as_str();
+    };
 
     match command {
         "help" | "usage" => {
         }
         "cp" => {
+            let _source = args.next().unwrap();
+            let _dest = args.next().unwrap();
         }
         "update" => {
+            let _source = args.next().unwrap();
+            let _dest = args.next().unwrap();
         }
-        "find" => {
+        "ls" => {
+            let _file = args.next().unwrap();
+        }
+        "tree" => {
+            let _rootdir = if let Some(dirstr) = args.next() {
+                dirstr.as_str()
+            } else {"/"};
         }
         "format" => {
+            FilesystemMetadata::blank_fs_init();
         }
         "deltree" => {
+            let _rootdir = args.next().unwrap();
         }
         "rm" => {
+            for _file in args {
+            }
         }
         "mkdir" => {
+            for _dir in args {
+            }
         }
         "rmdir" => {
+            for _dir in args {
+            }
         }
         _ => {
             return; //error message later
