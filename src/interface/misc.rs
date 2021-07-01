@@ -11,8 +11,8 @@ pub use std::collections::HashMap as RustHashMap;
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;
 
-pub use libc::mmap;
-pub use std::ffi::c_void;
+use libc::mmap;
+use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
