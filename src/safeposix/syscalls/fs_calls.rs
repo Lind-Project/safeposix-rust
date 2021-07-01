@@ -946,10 +946,10 @@ impl Cage {
     }
 
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
-        let writer;
-        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
+        let mut writer;
+        let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
             writer = self.filedescriptortable.write().unwrap(); 
-            &writer
+            &mut writer
         };
         
         //checking if the new fd is out of range
@@ -965,9 +965,16 @@ impl Cage {
         //need to add close helper and reference
         match fdtable.get(&newfd) {
             Some(_) => {return Self::_close_helper(&self, newfd, Some(&fdtable), false);},
-            None => {} //link the new fd entry to the old one [Cage add_to_table or something]
+            None => {
+                if let Some(wrappedfd) = fdtable.get(&oldfd) { //this line seems redundant after the checks in the actual syscalls
+                    let mut filedesc_enum = wrappedfd.read().unwrap();
+                    fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
+                } else {
+                    panic!("Why did it fail the second check?");
+                }
+            } 
         }
-        return 0;
+        return newfd;
     }
 
     //------------------------------------CLOSE SYSCALL------------------------------------
