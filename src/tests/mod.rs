@@ -1,7 +1,7 @@
 mod fs_tests;
 
 use crate::interface;
-use crate::safeposix::{cage::*};
+use crate::safeposix::{cage::*, filesystem::*};
 
 pub fn str2cbuf(ruststr: &str) -> *mut u8 {
     let cbuflenexpected = ruststr.len();
@@ -25,6 +25,7 @@ pub fn init_cage() -> Cage {
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), 
                         parent: 0, 
                         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+    incref_root();
     cage.load_lower_handle_stubs();
     cage
 }

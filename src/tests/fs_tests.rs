@@ -22,7 +22,8 @@ mod fs_tests {
 
         //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
         assert_eq!(metadatastring1.len(), metadatastring2.len()); 
-
+        drop(metadata);
+        assert_eq!(cage.exit_syscall(), 0);
     }
 
     #[test]
@@ -45,6 +46,7 @@ mod fs_tests {
         let mut readbuf2 = sizecbuf(12);
         assert_eq!(cage.read_syscall(fd, readbuf2.as_mut_ptr(), 12), 12);
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
+        assert_eq!(cage.exit_syscall(), 0);
     }
 
     #[test]
@@ -65,6 +67,7 @@ mod fs_tests {
         let mut readbuf2 = sizecbuf(12);
         assert_eq!(cage.pread_syscall(fd, readbuf2.as_mut_ptr(), 12, 0), 12);
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
+        assert_eq!(cage.exit_syscall(), 0);
     }
 
     #[test]
@@ -81,9 +84,12 @@ mod fs_tests {
         assert_eq!(cage.pread_syscall(fd, readbufzero.as_mut_ptr(), 1000, 0), 1000);
         assert_eq!(cbuf2str(&readbufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
 
-        let fd2 = cage.open_syscall("/dev/urandom", O_RDWR, S_IRWXA);
+        assert_eq!(cage.chdir_syscall("dev"), 0);
+
+        let fd2 = cage.open_syscall("./urandom", O_RDWR, S_IRWXA);
         assert!(fd2 >= 0);
         let mut readbufrand = sizecbuf(1000);
         assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
+        assert_eq!(cage.exit_syscall(), 0);
     }
 }
