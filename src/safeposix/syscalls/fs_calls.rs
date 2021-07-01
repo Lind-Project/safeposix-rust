@@ -924,14 +924,14 @@ impl Cage {
         //checking whether the fd exists in the file table and is higher than the starting file descriptor
         if let Some(_) = fdtable.get(&fd) {
             if fd >= STARTINGFD {
-                return syscall_error(Errno::EBADF, "dup_syscall", "provided file descriptor is out of range");
+                return syscall_error(Errno::EBADF, "dup", "provided file descriptor is out of range");
             }
 
             //error below may need to be changed -- called if error getting file descriptor
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
             return Self::_dup2_helper(&self, fd, nextfd, Some(&fdtable))
         } else {
-            return syscall_error(Errno::EBADF, "dup_syscall", "file descriptor not found")
+            return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
         }
     }
 
@@ -941,7 +941,7 @@ impl Cage {
         if let Some(_) = fdtable.get(&oldfd) {
             return Self::_dup2_helper(&self, oldfd, newfd, Some(&fdtable));
         } else {
-            return syscall_error(Errno::EBADF, "dup2_syscall","Invalid old file descriptor.");
+            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         }
     }
 
@@ -954,7 +954,7 @@ impl Cage {
         
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd <= STARTINGFD {
-            return syscall_error(Errno::EBADF, "dup2_helper", "provided file descriptor is out of range");
+            return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
 
         //if the file descriptors are equal, return the new one
@@ -976,7 +976,7 @@ impl Cage {
         let fdtable = self.filedescriptortable.write().unwrap();
         match fdtable.get(&fd) {
             Some(_) => {return Self::_close_helper(self, fd, Some(&fdtable), true);},
-            None => {return syscall_error(Errno::EBADF, "close_syscall", "invalid file descriptor");},
+            None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
     }
 
@@ -1097,7 +1097,7 @@ impl Cage {
             }
             return 0; //_close_helper has succeeded!
         } else {
-            return syscall_error(Errno::ENOENT, "_close_helper", "invalid file descriptor");
+            return syscall_error(Errno::ENOENT, "close or dup", "invalid file descriptor");
         }
     }
 
@@ -1115,15 +1115,15 @@ impl Cage {
     //------------------------------------FCNTL SYSCALL------------------------------------
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
-        
-        //DUMMY VARIABLE FOR ARGS: -1
         let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             let cmd_arg_pair = (cmd, arg);
             
+            //matching the tuple
             match cmd_arg_pair {
+                //because the arg parameter is not used in certain commands, it can be anything (..)
                 (F_GETFD, ..) => {
                     match &*filedesc_enum {
                         Pipe(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
@@ -1132,9 +1132,12 @@ impl Cage {
                         File(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
                     }
                 },
+                // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
                     match &mut *filedesc_enum {
+                        //Match type (since each has a different file descriptor type)
                         Pipe(ref mut obj) => {
+                            //bitwise or on the flags
                             obj.flags = obj.flags | O_CLOEXEC;
                             return 0;
                         },
@@ -1153,6 +1156,7 @@ impl Cage {
                     }
                 },
                 (F_GETFL, ..) => {
+                    //for get, we just need to return the flags
                     match &*filedesc_enum {
                         Pipe(obj) => {return obj.flags;},
                         Stream(obj) => {return obj.flags;},
@@ -1160,13 +1164,9 @@ impl Cage {
                         File(obj) => {return obj.flags;},
                     }
                 },
+
                 (F_SETFL, arg) if arg >= 0 => {
-                    //check that the type of x is an int or a long 
-                    Self::dup_syscall(self, fd, Some(arg));
-                    return 0;
-                },
-                (F_DUPFD, arg) if arg >= 0 => {
-                    //check that the type of x is an int or a long 
+                    //TO DO: check that the type of x is an int or a long 
                     match &mut *filedesc_enum {
                         Pipe(ref mut obj) => {
                             obj.flags = arg;
@@ -1185,6 +1185,11 @@ impl Cage {
                             return 0;
                         },
                     }
+                },
+                (F_DUPFD, arg) if arg >= 0 => {
+                    //TO DO: check that the type of x is an int or a long 
+                    Self::dup_syscall(self, fd, Some(arg));
+                    return 0;
                 },
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
@@ -1208,20 +1213,83 @@ impl Cage {
                     }
                 },
                 (F_SETOWN, arg) if arg >= 0 => {
-                    //check that the type is an int or a long
                     //this would return the PID if positive and the process group if negative,
                     //either way do nothing and return success
                     return 0;
                 },
-                _ => {return syscall_error(Errno::EINVAL, "fcntl_syscall", "Arguments provided do not match implemented parameters");},
+                _ => {return syscall_error(Errno::EINVAL, "fcntl", "Arguments provided do not match implemented parameters");},
             }
         } else {
-            return syscall_error(Errno::EBADF, "fcntl_syscall", "Invalid file descriptor");
+            return syscall_error(Errno::EBADF, "fcntl", "Invalid file descriptor");
+        }
+    }
+
+    //------------------------------------CHMOD SYSCALL------------------------------------
+
+    pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+        let mut metadata = FS_METADATA.write().unwrap();
+        let truepath = normpath(convpath(path), self);
+
+        //check if there is a valid path or not there to an inode
+        if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
+            let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
+            match thisinode {
+                Inode::File(ref mut general_inode) => {
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                    } else {
+                        //there doesn't seem to be a good syscall error errno for this
+                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+                    }
+                    //persist metadata
+                    return 0;
+                },
+                Inode::CharDev(ref mut dev_inode) => {
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode
+                    } else {
+                        //there doesn't seem to be a good syscall error errno for this
+                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+                    }
+                    //persist metadata
+                    return 0;
+                },
+                Inode::Dir(ref mut dir_inode) => {
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode
+                    } else {
+                        //there doesn't seem to be a good syscall error errno for this
+                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+                    }
+                    //persist metadata
+                    return 0;
+                },
+                Inode::Pipe(ref mut general_inode) => {
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                    } else {
+                        //there doesn't seem to be a good syscall error errno for this
+                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+                    }
+                    //persist metadata
+                    return 0;
+                },
+                Inode::Socket(ref mut general_inode) => {
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                    } else {
+                        //there doesn't seem to be a good syscall error errno for this
+                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+                    }
+                    //persist metadata
+                    return 0;
+                },
+            }
+        } else {
+            return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
