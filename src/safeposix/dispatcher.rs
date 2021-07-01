@@ -196,7 +196,7 @@ pub extern "C" fn lindrustfinalize() {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub mod dispatch_tests {
     use super::*;
     pub fn cagetest() {
         lindrustinit();

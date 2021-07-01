@@ -75,7 +75,7 @@ impl Cage {
 
       decref_dir(&mut mutmetadata, &*cwd_container);
 
-      //may not be removable in case of lindrustfinalize
+      //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
       CAGE_TABLE.write().unwrap().remove(&self.cageid);
 
       //fdtable will be dropped at end of dispatcher scope because of Arc

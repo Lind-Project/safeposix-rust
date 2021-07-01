@@ -10,7 +10,7 @@ mod fs_tests {
         rdwrtest();
         prdwrtest();
         chardevtest();
-        tests::cagetest();
+        dispatch_tests::cagetest();
     }
 
     pub fn persistencetest() {

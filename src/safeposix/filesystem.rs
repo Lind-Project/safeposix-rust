@@ -110,18 +110,16 @@ pub fn load_fs() {
         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
 
     let mut mutmetadata = FS_METADATA.write().unwrap();
+
+    // If the metadata file exists, just close the file for later restore
+    // If it doesn't, lets create a new one, load special files, and persist it.
     if interface::pathexists(METADATAFILENAME.to_string()) {
         let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
 
-        // If the metadata file exists, just close the file for later restore
-        // If it doesn't, lets create a new one and persist it.
         metadata_fileobj.close().unwrap();
         restore_metadata(&mut mutmetadata);
-
-        persist_metadata(&mutmetadata);
     } else {
-       persist_metadata(&FilesystemMetadata::blank_fs_init());
-       restore_metadata(&mut mutmetadata);
+       *mutmetadata = FilesystemMetadata::blank_fs_init();
        drop(mutmetadata);
 
        load_fs_special_files(&utilcage);
@@ -274,7 +272,7 @@ pub fn decref_dir(mutmetadata: &mut FilesystemMetadata, cwd_container: &interfac
         if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
             cwddir.refcount -= 1;
 
-            //if the directory has been removed but we this cwd was the last open handle to it
+            //if the directory has been removed but this cwd was the last open handle to it
             if cwddir.refcount == 0 && cwddir.linkcount == 0 {
                 mutmetadata.inodetable.remove(&cwdinodenum);
             }
