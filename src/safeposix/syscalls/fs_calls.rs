@@ -1289,6 +1289,40 @@ impl Cage {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
     }
+
+    //------------------------------------FLOCK SYSCALL------------------------------------
+
+    pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
+        //TO DO: Implement advisory lock
+        let fdtable = self.filedescriptortable.read().unwrap();
+        match fdtable.get(&fd) {
+            Some(filedesc) => {
+                //if anything besides allowed flags, then fail
+                if 0 == operation & !(LOCK_SH|LOCK_EX|LOCK_NB|LOCK_UN) {
+                    return syscall_error(Errno::EINVAL, "flock", "operation is invalid");
+                }
+                if 0 == operation & LOCK_SH {
+                    //TO DO: raise unimplemented error
+                    return syscall_error(Errno::ENOSYS, "flock", "this operation has not been implemented yet");
+                }
+                //check whether the lock is blocking or not
+                if operation & LOCK_EX == 0 && operation & LOCK_NB == 0 {
+                    //if lock.acquire(False) then return 0, else syscall error
+                    return 0;
+                } else if 0 == operation & LOCK_EX {
+                    //fd lock acquire(true)
+                    return 0;
+                }
+                if 0 == operation & LOCK_UN {
+                    //release the lock
+                    return 0;
+                }
+                panic!("Should not be possible to hit this code");
+            },
+            None => {return syscall_error(Errno::EBADF, "flock", "invalid file descriptor");},
+        }
+    }
+
 }
 
 #[cfg(test)]

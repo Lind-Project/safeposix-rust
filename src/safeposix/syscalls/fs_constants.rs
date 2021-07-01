@@ -85,6 +85,11 @@ pub const S_IFREG: i32 = 0o100000;
 pub const S_IFSOCK: i32 = 0o140000;
 pub const S_FILETYPEFLAGS: i32 = 0o170000;
 
+//for flock syscall
+pub const LOCK_SH: i32 = 1;
+pub const LOCK_EX: i32 = 2;
+pub const LOCK_UN: i32 = 8;
+pub const LOCK_NB: i32 = 4;
 
 pub const SEEK_SET: i32 = 0;
 pub const SEEK_CUR: i32 = 1;
