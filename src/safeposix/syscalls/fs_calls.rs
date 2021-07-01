@@ -325,9 +325,9 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount) = match inodeobj {
-                    Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount)},
-                    Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount)},
+                let (currefcount, curlinkcount, has_fobj) = match inodeobj {
+                    Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
+                    Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                     _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
                 }; //count current number of links and references
@@ -345,8 +345,10 @@ impl Cage {
 
                         //actually remove file and the handle to it
                         mutmetadata.inodetable.remove(&inodenum);
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                        interface::removefile(sysfilename).unwrap();
+                        if has_fobj {
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
+                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
@@ -956,6 +958,7 @@ impl Cage {
         let mut cwd_container = self.cwd.write().unwrap();
 
         //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
+        println!("decref in chdir");
         decref_dir(&mut mutmetadata, &*cwd_container);
 
         *cwd_container = interface::RustRfc::new(truepath);

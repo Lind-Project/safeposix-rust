@@ -34,6 +34,7 @@ pub struct GenericInode {
     pub gid: u32,
     pub mode: u32,
     pub linkcount: u32,
+    #[serde(skip)] //skips serializing and deserializing field, will populate with u32 default of 0 (refcount should not be persisted)
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
@@ -46,6 +47,7 @@ pub struct DeviceInode {
     pub gid: u32,
     pub mode: u32,
     pub linkcount: u32,
+    #[serde(skip)] //skips serializing and deserializing field, will populate with u32 default of 0 (refcount should not be persisted)
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
@@ -60,6 +62,7 @@ pub struct DirectoryInode {
     pub gid: u32,
     pub mode: u32,
     pub linkcount: u32,
+    #[serde(skip)] //skips serializing and deserializing field, will populate with u32 default of 0 (refcount should not be persisted)
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
@@ -106,20 +109,26 @@ pub fn load_fs() {
         parent: 0, 
         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
 
-    let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true);
-    
-    // If the metadata file exists, just close the file for later restore
-    // If it doesn't, lets create a new one and persist it.
-    match metadata_fileobj {
-        Ok(file) => {file.close().unwrap();}
-        Err(_e) => {persist_metadata(&FilesystemMetadata::blank_fs_init());}
-    };
-
-    // Restore metadata to global
     let mut mutmetadata = FS_METADATA.write().unwrap();
-    restore_metadata(&mut mutmetadata);
+    if interface::pathexists(METADATAFILENAME.to_string()) {
+        let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
 
-    load_fs_special_files(&utilcage);
+        // If the metadata file exists, just close the file for later restore
+        // If it doesn't, lets create a new one and persist it.
+        metadata_fileobj.close().unwrap();
+        restore_metadata(&mut mutmetadata);
+
+        persist_metadata(&mutmetadata);
+    } else {
+       persist_metadata(&FilesystemMetadata::blank_fs_init());
+       restore_metadata(&mut mutmetadata);
+       drop(mutmetadata);
+
+       load_fs_special_files(&utilcage);
+
+       let metadata = FS_METADATA.read().unwrap();
+       persist_metadata(&metadata);
+    }
 
 }
 
@@ -263,12 +272,12 @@ pub fn incref_root() {
 pub fn decref_dir(mutmetadata: &mut FilesystemMetadata, cwd_container: &interface::RustPathBuf) {
     if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
         if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
-              cwddir.refcount -= 1;
+            cwddir.refcount -= 1;
 
-              //if the directory has been removed but we this cwd was the last open handle to it
-              if cwddir.refcount == 0 && cwddir.linkcount == 0 {
-                  mutmetadata.inodetable.remove(&cwdinodenum);
-              }
+            //if the directory has been removed but we this cwd was the last open handle to it
+            if cwddir.refcount == 0 && cwddir.linkcount == 0 {
+                mutmetadata.inodetable.remove(&cwdinodenum);
+            }
         } else {panic!("Cage had a cwd that was not a directory!");}
     } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
 }

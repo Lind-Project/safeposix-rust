@@ -1,13 +1,23 @@
 #[cfg(test)]
 mod fs_tests {
     use crate::interface;
-    use crate::safeposix::{cage::*, filesystem};
+    use crate::safeposix::{cage::*, filesystem, dispatcher::*};
     use super::super::*;
 
     #[test]
-    pub fn persistencetest() {
-        let cage = init_cage();
+    pub fn test_fs() {
+        persistencetest();
+        rdwrtest();
+        prdwrtest();
+        chardevtest();
+        tests::cagetest();
+    }
 
+    pub fn persistencetest() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        cage.unlink_syscall("/testfile");
         let fd = cage.open_syscall("/testfile", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
 
@@ -23,14 +33,17 @@ mod fs_tests {
         //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
         assert_eq!(metadatastring1.len(), metadatastring2.len()); 
         drop(metadata);
+        incref_root();
+
         assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
 
-    #[test]
     pub fn rdwrtest() {
-        let cage = init_cage();
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
  
         assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
@@ -47,13 +60,15 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd, readbuf2.as_mut_ptr(), 12), 12);
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
         assert_eq!(cage.exit_syscall(), 0);
+
+        lindrustfinalize();
     }
 
-    #[test]
     pub fn prdwrtest() {
-        let cage = init_cage();
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
 
         assert_eq!(cage.pwrite_syscall(fd, str2cbuf("hello there!"), 12, 0), 12);
@@ -67,13 +82,14 @@ mod fs_tests {
         let mut readbuf2 = sizecbuf(12);
         assert_eq!(cage.pread_syscall(fd, readbuf2.as_mut_ptr(), 12, 0), 12);
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
+
         assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
 
-    #[test]
-    pub fn devzerotest() {
-        let cage = init_cage();
-        filesystem::load_fs_special_files(&cage);
+    pub fn chardevtest() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
         assert!(fd >= 0);
@@ -91,5 +107,6 @@ mod fs_tests {
         let mut readbufrand = sizecbuf(1000);
         assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
         assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
 }

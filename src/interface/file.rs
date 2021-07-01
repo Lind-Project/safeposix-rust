@@ -87,6 +87,12 @@ pub struct EmulatedFile {
     filesize: usize,
 }
 
+pub fn pathexists(filename: String) -> bool {
+    assert_is_allowed_filename(&filename);
+    let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+    path.exists()
+}
+
 impl EmulatedFile {
 
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
