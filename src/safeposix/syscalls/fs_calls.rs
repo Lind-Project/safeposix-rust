@@ -914,7 +914,7 @@ impl Cage {
     //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
 
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let mut fdtable = self.filedescriptortable.write().unwrap();
 
         let start_fd = match start_desc {
             Some(start_desc) => start_desc,
@@ -929,23 +929,23 @@ impl Cage {
 
             //error below may need to be changed -- called if error getting file descriptor
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
-            return Self::_dup2_helper(&self, fd, nextfd, Some(&fdtable))
+            return Self::_dup2_helper(&self, fd, nextfd, Some(&mut fdtable))
         } else {
             return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
         }
     }
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let mut fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(_) = fdtable.get(&oldfd) {
-            return Self::_dup2_helper(&self, oldfd, newfd, Some(&fdtable));
+            return Self::_dup2_helper(&self, oldfd, newfd, Some(&mut fdtable));
         } else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         }
     }
 
-    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
+    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
         let mut writer;
         let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
             writer = self.filedescriptortable.write().unwrap(); 
@@ -966,12 +966,7 @@ impl Cage {
         match fdtable.get(&newfd) {
             Some(_) => {return Self::_close_helper(&self, newfd, Some(&fdtable), false);},
             None => {
-                if let Some(wrappedfd) = fdtable.get(&oldfd) { //this line seems redundant after the checks in the actual syscalls
-                    let mut filedesc_enum = wrappedfd.read().unwrap();
-                    fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
-                } else {
-                    panic!("Why did it fail the second check?");
-                }
+                fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
             } 
         }
         return newfd;
