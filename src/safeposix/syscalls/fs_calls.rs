@@ -344,7 +344,6 @@ impl Cage {
         } else {
             syscall_error(Errno::ENOENT, "stat", "path refers to an invalid file")
         }
-
     }
 
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
