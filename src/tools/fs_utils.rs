@@ -6,6 +6,7 @@
 use std::env;
 use std::fs::File;
 use std::io::{Read, prelude};
+use std::iter::repeat;
 
 mod interface;
 mod safeposix;
@@ -162,6 +163,56 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
     println!("Copied {:?} as {} ({})", hostfilepath, lindfilepath, inode);
 }
 
+fn visit_children<T>(cage: &Cage, path: String, dirvisitor: fn(&Cage, T), nondirvisitor: fn(&Cage, T)) {
+}
+
+fn lind_deltree(cage: &Cage, path: String) {
+    let mut lindstat_res: StatData;
+    let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
+    if !is_dir(lindstat_res.st_mode) {panic!("Delree must be run on a directory!");}
+    visit_children(cage, path, |childcage, childpath| {
+        lind_deltree(childcage, childpath);
+    }, |childcage, childpath| {
+        childcage.unlink_syscall(childpath.as_str());
+    });
+    cage.rmdir_syscall(path.as_str());
+}
+
+fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
+    let mut lindstat_res: StatData;
+    let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
+    if !is_dir(lindstat_res.st_mode) {panic!("Tree must be run on a directory!");}
+    visit_children(cage, path, |childcage, (childpath, childindentlevel)| {
+        print!("{}", "|   ".repeat(childindentlevel));
+        if childindentlevel > 0 {
+            print!("{}", "|---");
+        }
+        println!("{}", childpath);
+        lind_tree(childcage, childpath, childindentlevel + 1);
+    }, |childcage, (childpath, childindentlevel)| {
+        print!("{}", "|   ".repeat(childindentlevel));
+        if childindentlevel > 0 {
+            print!("{}", "|---");
+        }
+        println!("{}", childpath);
+    });
+}
+
+fn lind_ls(cage: &Cage, path: String) {
+    let mut lindstat_res: StatData;
+    let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
+    if is_dir(lindstat_res.st_mode) {
+        visit_children(cage, path, |childcage, childpath: String| {
+            print!("{}/ ", childpath);
+        }, |childcage, childpath| {
+            print!("{} ", childpath);
+        });
+    } else {
+        print!("{} ", path);
+    }
+    println!();
+}
+
 fn print_usage() {
     println!("
 Usage: lind_fs_utils [commandname] [arguments...]
@@ -227,20 +278,23 @@ fn main() {
             update_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest);
         }
         "ls" => {
-            let _file = args.next().expect("ls needs 1 argument");
+            let file = args.next().expect("ls needs 1 argument");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("ls cannot take more than 1 argument"));
+            lind_ls(&utilcage, file);
         }
         "tree" => {
-            let _rootdir = if let Some(dirstr) = args.next() {
+            let rootdir = if let Some(dirstr) = args.next() {
                 dirstr.as_str()
-            } else {"/"};
+            } else {"/"}.to_string();
+            lind_tree(&utilcage, rootdir, 0);
         }
         "format" => {
             *FS_METADATA.write().unwrap() = FilesystemMetadata::blank_fs_init();
         }
         "deltree" => {
-            let _rootdir = args.next().expect("deltree needs 1 argument");
+            let rootdir = args.next().expect("deltree needs 1 argument");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("deltree cannot take more than 1 argument"));
+            lind_deltree(&utilcage, rootdir);
         }
         "rm" => {
             for file in args {
@@ -253,7 +307,8 @@ fn main() {
             }
         }
         "rmdir" => {
-            for _dir in args {
+            for dir in args {
+                utilcage.rmdir_syscall(dir.as_str());
             }
         }
         _ => {
