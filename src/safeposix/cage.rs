@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::interface;
 
-use super::syscalls::fs_constants::*;
+pub use super::syscalls::fs_constants::*;
 use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
@@ -25,7 +25,7 @@ pub struct FileDesc {
 #[derive(Debug)]
 pub struct StreamDesc {
     pub position: usize,
-    //pub inode: usize, inode for stream is implicitly STREAMINODE
+    pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
     pub flags: i32
 }
 
@@ -49,7 +49,7 @@ pub struct PipeDesc {
     pub flags: i32
 }
 
-type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::RustRfc<FileDescriptor>>>>;
+type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
@@ -86,7 +86,7 @@ impl Cage {
             ourwriter = self.filedescriptortable.write().unwrap();
             &mut ourwriter
         };
-        writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(descriptor))));
+        writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
 
     pub fn rm_from_fd_table(&mut self, fd: &i32) {
@@ -100,12 +100,13 @@ impl Cage {
     }
 
     pub fn load_lower_handle_stubs(&mut self) {
-        let stdin = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, flags: O_RDONLY}))));
-        let stdout = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, flags: O_WRONLY}))));
-        let stderr = interface::RustRfc::new(interface::RustLock::new(interface::RustRfc::new(FileDescriptor::Stream(StreamDesc {position: 0, flags: O_WRONLY}))));
+        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY})));
+        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY})));
+        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY})));
         let mut fdtable = self.filedescriptortable.write().unwrap();
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
         fdtable.insert(2, stderr);
     }
+
 }

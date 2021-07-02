@@ -10,10 +10,19 @@ pub use std::collections::HashMap as RustHashMap;
 
 pub use std::sync::RwLock as RustLock;
 pub use std::sync::Arc as RustRfc;
-pub use std::thread::{current as rust_gettid, ThreadId as RustThreadId};
 
-pub use serde::{Serialize as RustSerialize, Deserialize as RustDeserialize};
+use libc::mmap;
+use std::ffi::c_void;
 
+pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
+
+pub use serde_json::{to_string as serde_serialize_to_string, from_str as serde_deserialize_from_string};
+
+pub fn log_from_ptr(buf: *const u8) {
+    if let Ok(s) = unsafe{std::ffi::CStr::from_ptr(buf as *const i8).to_str()} {
+      log_to_stdout(s);
+    }
+}
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
     print!("{}", s);
@@ -24,13 +33,15 @@ pub fn log_to_stderr(s: &str) {
     eprintln!("{}", s);
 }
 
-// Return a string of random bytes with length 1024
-pub fn randombytes() -> Vec<u8> {
-    let mut f = File::open("/dev/urandom").unwrap();
-    let mut buf = vec![0u8; 1024];
-    f.read_exact(buf.as_mut_slice()).unwrap();
-
-    buf
+pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
+    f.read(slice).unwrap() as i32
+}
+pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    for i in 0..count {slice[i] = 0u8;}
+    count as i32
 }
 
 // Wrapper to return a dictionary (hashmap)
@@ -42,14 +53,6 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> &'a str {
     std::ffi::CStr::from_ptr(cstr).to_str().unwrap()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    pub fn misctester() {
-        //we clamp the ascii values so that from_utf8 does not fail
-        log_to_stdout(std::str::from_utf8(&randombytes().into_iter().map(|x| if x < 128 {x} else {72}).collect::<Vec<u8>>().as_slice()).unwrap());
-        let _fd_table = RustHashMap::<&str, u32>::new();
-
-    }
+pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
+    return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
 }

@@ -65,8 +65,26 @@ pub const S_IFREG: i32 = 0o100000;
 pub const S_IFSOCK: i32 = 0o140000;
 pub const S_FILETYPEFLAGS: i32 = 0o170000;
 
+//for mmap/munmap syscall
+pub const MAP_SHARED: i32 = 1;
+pub const MAP_PRIVATE: i32 = 2;
+pub const MAP_FIXED: i32 = 16;
+pub const MAP_ANONYMOUS: i32 = 32;
+pub const MAP_HUGE_SHIFT: i32 = 26;
+pub const MAP_HUGETLB: i32 = 262144; //0x40000
+
+pub const PROT_NONE: i32 = 0;
+pub const PROT_READ: i32 = 1;
+pub const PROT_WRITE: i32 = 2;
+pub const PROT_EXEC: i32 = 4;
+
+
+pub const SEEK_SET: i32 = 0;
+pub const SEEK_CUR: i32 = 1;
+pub const SEEK_END: i32 = 2;
+
 //device info for char files
-#[derive(PartialEq,Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
 pub struct DevNo {
   pub major: u32,
   pub minor: u32
@@ -108,10 +126,31 @@ pub fn is_dir(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFDIR
 }
 
+pub fn is_wronly(flags: i32) -> bool {
+  (flags & O_RDWRFLAGS) == O_WRONLY
+}
+pub fn is_rdonly(flags: i32) -> bool {
+  (flags & O_RDWRFLAGS) == O_RDONLY
+}
+
 //the same as the glibc makedev
 pub fn makedev(dev: &DevNo) -> u64 {
     ((dev.major as u64 & 0x00000fff) <<  8) |
     ((dev.major as u64 & 0xfffff000) << 32) |
     ((dev.minor as u64 & 0x000000ff) <<  0) |
     ((dev.minor as u64 & 0xffffff00) << 12)
+}
+
+//the same as the glibc major and minor functions
+pub fn major(devnum: u64) -> u32 {
+    (((devnum & 0x00000000000fff00) >>  8) |
+     ((devnum & 0xfffff00000000000) >> 32)) as u32
+}
+pub fn minor(devnum: u64) -> u32 {
+    (((devnum & 0x00000000000000ff) >>  0) |
+     ((devnum & 0x00000ffffff00000) >> 12)) as u32
+}
+
+pub fn devtuple(devnum: u64) -> DevNo {
+    DevNo{major: major(devnum), minor: minor(devnum)}
 }
