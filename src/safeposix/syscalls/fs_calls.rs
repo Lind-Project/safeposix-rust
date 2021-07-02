@@ -172,6 +172,7 @@ impl Cage {
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
+                    parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
@@ -226,6 +227,7 @@ impl Cage {
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
+                    parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
@@ -323,9 +325,9 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount) = match inodeobj {
-                    Inode::File(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
-                    Inode::CharDev(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                let (currefcount, curlinkcount, has_fobj) = match inodeobj {
+                    Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
+                    Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                     _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
                 }; //count current number of links and references
@@ -343,8 +345,10 @@ impl Cage {
 
                         //actually remove file and the handle to it
                         mutmetadata.inodetable.remove(&inodenum);
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                        interface::removefile(sysfilename).unwrap();
+                        if has_fobj {
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
+                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
@@ -935,33 +939,29 @@ impl Cage {
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
-        let mutmetadata = FS_METADATA.write().unwrap();
+        let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
-            if let Inode::Dir(dir) = mutmetadata.inodetable.get(&inodenum).unwrap() {
+            if let Inode::Dir(ref mut dir) = mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
 
-                //decrement refcount of previous cwd inode, however this is complex because of cage
-                //initialization and deinitialization concerns so we leave it unimplemented for now
-                //if let Some(oldinodenum) = metawalk(&self.cwd, Some(&mutmetadata)) {
-                //    if let Inode::Dir(olddir) = mutmetadata.inodetable.get(&oldinodenum).unwrap() {
-                //        olddir.linkcount -= 1;
-                //    } else {panic!("We changed from a directory that was not a directory in chdir!");}
-                //} else {panic!("We changed from a directory that was not a directory in chdir!");}
+                //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
+                dir.refcount += 1;
 
-                self.changedir(truepath);
-
-                //increment refcount of new cwd inode to ensure that you can't remove a directory,
-                //currently unimplmented
-                //dir.linkcount += 1;
-
-                0 //chdir has succeeded!;
             } else {
-                syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory")
+                return syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory");
             }
         } else {
-            syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
+            return syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist");
         }
+        //at this point, syscall isn't an error
+        let mut cwd_container = self.cwd.write().unwrap();
+
+        //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
+        decref_dir(&mut mutmetadata, &*cwd_container);
+
+        *cwd_container = interface::RustRfc::new(truepath);
+        0 //chdir has succeeded!;
     }
 
     //------------------MMAP SYSCALL------------------
