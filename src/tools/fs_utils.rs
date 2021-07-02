@@ -9,7 +9,7 @@ use std::io::{Read, prelude};
 
 mod interface;
 mod safeposix;
-use safeposix::{cage::*, filesystem::*};
+use safeposix::{cage::*, filesystem::*, dispatcher::{lindrustfinalize, lindrustinit}};
 //assume deserialization
 
 fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
@@ -21,6 +21,7 @@ fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindf
         panic!("Cannot locate file on host fs: {:?}", hostfilepath);
     }
 
+    //update directly if not a directory on the host, otherwise recursively handle children
     if hostfilepath.is_file() {
         update_into_lind(cage, hostfilepath, lindfilepath);
     } else {
@@ -37,10 +38,11 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
         return; //error message
     }
     let fmetadata = hostfilepath.metadata().unwrap();
-    //let host_mtime = fmetadata.modified();
+
     let host_size = fmetadata.len();
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(lindfilepath.as_str(), &mut lindstat_res);
+
     let lind_exists;
     let lind_isfile;
     let lind_size;
@@ -58,6 +60,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
         return; //error message later
     }
 
+    //compare files to tell whether they are identical
     let samefile = if host_size as usize == lind_size {
         let mut hostslice = vec![0u8; lind_size];
         let mut lindslice = vec![0u8; lind_size];
@@ -71,7 +74,8 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
         false
     };
 
-    if samefile {
+    //if they are not the same file, remove the lind file and replace it with the host file
+    if !samefile {
         if lind_exists {
             cage.unlink_syscall(lindfilepath.as_str());
         }
@@ -90,6 +94,7 @@ fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
         panic!("Cannot locate file on host fs: {:?}", hostfilepath);
     }
 
+    //update directly if not a directory on the host, otherwise recursively handle children
     if hostfilepath.is_file() {
         cp_into_lind(cage, hostfilepath, lindfilepath, create_missing_dirs);
     } else if hostfilepath.is_dir() {
@@ -111,15 +116,22 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
 
     let lindtruepath = normpath(convpath(lindfilepath.as_str()), cage);
     let mutmetadata = FS_METADATA.write().unwrap();
+
+    //if a directory in the lindfilepath does not exist in the lind file system, create it!
     let mut ancestor = interface::RustPathBuf::from("/");
     for component in lindtruepath.parent().unwrap().components() {
         ancestor.push(component);
         let mut lindstat_res: StatData;
+
+        //check whether file exists
         let stat_us = cage.stat_syscall(format!("{:?}", ancestor).as_str(), &mut lindstat_res);
         if stat_us == 0 {continue;}
         if stat_us != -(Errno::ENOENT as i32) {
             panic!("Fatal error in trying to get lind file path");
         }
+
+        //check whether we are supposed to create missing directories, and whether we'd be
+        //clobbering anything to do so (if so error out)
         if create_missing_dirs && is_dir(lindstat_res.st_mode) {
             cage.mkdir_syscall(format!("{:?}", ancestor).as_str(), S_IRWXA); //let's not mirror stat data
         } else {
@@ -127,16 +139,20 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
         }
     }
 
+    //copy file contents into lind file system
     let host_fileobj = File::open(hostfilepath).unwrap();
-    let mut filecontents = Vec::new();
+    let mut filecontents: Vec<u8> = Vec::new();
     host_fileobj.read_to_end(&mut filecontents);
 
     let lindfd = cage.open_syscall(format!("{:?}", lindtruepath).as_str(), O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
     let veclen = filecontents.len();
     let fileslice = filecontents.as_slice();
     let writtenlen = cage.write_syscall(lindfd, fileslice.as_ptr(), veclen);
+
+    //confirm that write succeeded
     assert_eq!(veclen as i32, writtenlen);
 
+    //get diagnostic data to print
     let mut lindstat_res: StatData;
     let stat_us = cage.fstat_syscall(lindfd, &mut lindstat_res);
     let inode = lindstat_res.st_ino;
@@ -146,7 +162,40 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
     println!("Copied {:?} as {} ({})", hostfilepath, lindfilepath, inode);
 }
 
+fn print_usage() {
+    println!("
+Usage: lind_fs_utils [commandname] [arguments...]
+
+Where commandname is one of the following:
+
+cp [hostsource] [linddest]      : Copies files from the host file system into the lind filesystem.
+                                  For example, cp bar/etc/passwd /etc/passwd will copy the
+                                  former file in the host file system to the latter in lind's fs.
+                                  Directories are handled recursively, cp bar/etc /etc/ will make a
+                                  directory at /etc in the lind fs, and then populate it with all
+                                  of the files in the root fs.
+deltree [linddir]               : Delete a directory on the lind file system and all it contains
+format                          : Make a new blank fs, removing the current one
+help                            : Print this message
+ls [lindpath]                   : List the contents of a lind file system directory
+mkdir [linddir1...]             : Create a lind file system directory (for each arg)
+rm [lindfile1...]               : Delete a file on the lind file system
+rmdir [linddir1...]             : Delete a directory on the lind file system
+tree [startlindpath]            : Print the lindfs file tree starting at the specified directory
+                                  Assumes root directory if no starting path is specified.
+update [hostsource] [linddest]  : Copies files from the host file system into the lind filesystem.
+                                  Will not copy files if the host and lind files are identical.
+                                  For example, update bar/etc/passwd /etc/passwd will copy the
+                                  former file in the host file system to the latter in lind's fs if
+                                  the latter does not exist or is not identical to the former.
+                                  Directories are handled recursively, cp bar/etc /etc/ will make a
+                                  directory at /etc in the lind fs, and then populate it with all
+                                  of the files in the root fs, with identical files being skipped.
+");
+}
+
 fn main() {
+    lindrustinit();
     let args = env::args();
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
@@ -157,22 +206,29 @@ fn main() {
     let command = if let Some(cmd) = args.next() {
         cmd.as_str()
     } else {
+        print_usage();
         return; //print usage
     };
 
     match command {
         "help" | "usage" => {
+            print_usage();
         }
         "cp" => {
-            let _source = args.next().unwrap();
-            let _dest = args.next().unwrap();
+            let source = args.next().expect("cp needs 2 arguments");
+            let dest = args.next().expect("cp needs 2 arguments");
+            args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("cp cannot take more than 2 arguments"));
+            cp_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest, true);
         }
         "update" => {
-            let _source = args.next().unwrap();
-            let _dest = args.next().unwrap();
+            let source = args.next().expect("update needs 2 arguments");
+            let dest = args.next().expect("update needs 2 arguments");
+            args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("update cannot take more than 2 arguments"));
+            update_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest);
         }
         "ls" => {
-            let _file = args.next().unwrap();
+            let _file = args.next().expect("ls needs 1 argument");
+            args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("ls cannot take more than 1 argument"));
         }
         "tree" => {
             let _rootdir = if let Some(dirstr) = args.next() {
@@ -180,17 +236,20 @@ fn main() {
             } else {"/"};
         }
         "format" => {
-            FilesystemMetadata::blank_fs_init();
+            *FS_METADATA.write().unwrap() = FilesystemMetadata::blank_fs_init();
         }
         "deltree" => {
-            let _rootdir = args.next().unwrap();
+            let _rootdir = args.next().expect("deltree needs 1 argument");
+            args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("deltree cannot take more than 1 argument"));
         }
         "rm" => {
-            for _file in args {
+            for file in args {
+                utilcage.unlink_syscall(file.as_str());
             }
         }
         "mkdir" => {
-            for _dir in args {
+            for dir in args {
+                utilcage.mkdir_syscall(dir.as_str(), S_IRWXA);
             }
         }
         "rmdir" => {
@@ -201,4 +260,5 @@ fn main() {
             return; //error message later
         }
     }
+    lindrustfinalize();
 }
