@@ -16,7 +16,8 @@ use safeposix::{cage::*, filesystem::*, dispatcher::{lindrustfinalize, lindrusti
 fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
     if !hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
-            return; //print error todo, ignore broken symlink on host fs
+            println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
+            return;
         } //if read_link succeeds it's a symlink
     } else {
         panic!("Cannot locate file on host fs: {:?}", hostfilepath);
@@ -36,7 +37,8 @@ fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindf
 
 fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
     if !hostfilepath.exists() || !hostfilepath.is_file() {
-        return; //error message
+        println!("{:?} does not exist or is not a regular file, skipping", hostfilepath);
+        return;
     }
     let fmetadata = hostfilepath.metadata().unwrap();
 
@@ -58,6 +60,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
     }
 
     if lind_exists && !lind_isfile {
+        println!("{:?} on lind file system is not a regular file, skipping", hostfilepath);
         return; //error message later
     }
 
@@ -79,8 +82,10 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
     if !samefile {
         if lind_exists {
             cage.unlink_syscall(lindfilepath.as_str());
+            println!("removing {} on lind file system", lindfilepath);
         }
         cp_into_lind(cage, hostfilepath, lindfilepath, true);
+        println!("copied {:?} from host as {} on lind", hostfilepath, lindfilepath);
     } else {
         println!("Same files on host and lind--{} and {:?}, skipping", lindfilepath, hostfilepath);
     }
@@ -89,7 +94,8 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
 fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String, create_missing_dirs: bool) {
     if !hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
-            return; //print error todo, ignore broken symlink on host fs
+            println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
+            return;
         } //if read_link succeeds it's a symlink
     } else {
         panic!("Cannot locate file on host fs: {:?}", hostfilepath);
@@ -116,7 +122,6 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
     }
 
     let lindtruepath = normpath(convpath(lindfilepath.as_str()), cage);
-    let mutmetadata = FS_METADATA.write().unwrap();
 
     //if a directory in the lindfilepath does not exist in the lind file system, create it!
     let mut ancestor = interface::RustPathBuf::from("/");
@@ -170,6 +175,7 @@ fn lind_deltree(cage: &Cage, path: String) {
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
     if !is_dir(lindstat_res.st_mode) {panic!("Delree must be run on a directory!");}
+
     visit_children(cage, path, |childcage, childpath| {
         lind_deltree(childcage, childpath);
     }, |childcage, childpath| {
@@ -182,6 +188,7 @@ fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
     if !is_dir(lindstat_res.st_mode) {panic!("Tree must be run on a directory!");}
+
     visit_children(cage, path, |childcage, (childpath, childindentlevel)| {
         print!("{}", "|   ".repeat(childindentlevel));
         if childindentlevel > 0 {
@@ -201,6 +208,7 @@ fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
 fn lind_ls(cage: &Cage, path: String) {
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
+
     if is_dir(lindstat_res.st_mode) {
         visit_children(cage, path, |childcage, childpath: String| {
             print!("{}/ ", childpath);
@@ -265,52 +273,62 @@ fn main() {
         "help" | "usage" => {
             print_usage();
         }
+
         "cp" => {
             let source = args.next().expect("cp needs 2 arguments");
             let dest = args.next().expect("cp needs 2 arguments");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("cp cannot take more than 2 arguments"));
             cp_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest, true);
         }
+
         "update" => {
             let source = args.next().expect("update needs 2 arguments");
             let dest = args.next().expect("update needs 2 arguments");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("update cannot take more than 2 arguments"));
             update_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest);
         }
+
         "ls" => {
             let file = args.next().expect("ls needs 1 argument");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("ls cannot take more than 1 argument"));
             lind_ls(&utilcage, file);
         }
+
         "tree" => {
             let rootdir = if let Some(dirstr) = args.next() {
                 dirstr.as_str()
             } else {"/"}.to_string();
             lind_tree(&utilcage, rootdir, 0);
         }
+
         "format" => {
             *FS_METADATA.write().unwrap() = FilesystemMetadata::blank_fs_init();
         }
+
         "deltree" => {
             let rootdir = args.next().expect("deltree needs 1 argument");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("deltree cannot take more than 1 argument"));
             lind_deltree(&utilcage, rootdir);
         }
+
         "rm" => {
             for file in args {
                 utilcage.unlink_syscall(file.as_str());
             }
         }
+
         "mkdir" => {
             for dir in args {
                 utilcage.mkdir_syscall(dir.as_str(), S_IRWXA);
             }
         }
+
         "rmdir" => {
             for dir in args {
                 utilcage.rmdir_syscall(dir.as_str());
             }
         }
+
         _ => {
             return; //error message later
         }
