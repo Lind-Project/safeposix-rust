@@ -1294,8 +1294,6 @@ impl Cage {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
                     }
-                    //persist metadata
-                    return 0;
                 },
                 Inode::CharDev(ref mut dev_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
@@ -1304,8 +1302,6 @@ impl Cage {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
                     }
-                    //persist metadata
-                    return 0;
                 },
                 Inode::Dir(ref mut dir_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
@@ -1314,8 +1310,6 @@ impl Cage {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
                     }
-                    //persist metadata
-                    return 0;
                 },
                 Inode::Pipe(ref mut general_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
@@ -1324,8 +1318,6 @@ impl Cage {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
                     }
-                    //persist metadata
-                    return 0;
                 },
                 Inode::Socket(ref mut general_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
@@ -1334,13 +1326,15 @@ impl Cage {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
                     }
-                    //persist metadata
-                    return 0;
                 },
+
+                persist_metadata(&metadata);
+                return 0; //success!
             }
         } else {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
+
     }
 
     //------------------------------------FLOCK SYSCALL------------------------------------
