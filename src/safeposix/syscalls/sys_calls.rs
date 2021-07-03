@@ -2,7 +2,7 @@
 
 use crate::interface;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*};
-use crate::safeposix::filesystem::{FS_METADATA, Inode};
+use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 
 use super::sys_constants::*;
 
@@ -13,7 +13,7 @@ impl Cage {
     //construct new cage struct with a cloned fdtable
     let mut newfdtable = interface::RustHashMap::new();
     {
-      let mut fsm = FS_METADATA.write().unwrap();
+      let mut mutmetadata = FS_METADATA.write().unwrap();
       for (key, value) in self.filedescriptortable.read().unwrap().iter() {
           let fd = value.read().unwrap();
 
@@ -22,7 +22,7 @@ impl Cage {
 
           if let Some(inodenum) = inodenum_option {
             //increment the reference count on the inode
-            let inode = fsm.inodetable.get_mut(&inodenum).unwrap();
+            let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
             match inode {
                 Inode::File(f) => {f.refcount += 1;}
                 Inode::CharDev(f) => {f.refcount += 1;}
@@ -33,6 +33,13 @@ impl Cage {
           }
 
           newfdtable.insert(*key, value.clone()); //clone (increment) the reference counter, and add to hashmap
+
+          let cwd_container = self.cwd.read().unwrap();
+          if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
+              if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
+                  cwddir.refcount += 1;
+              } else {panic!("We changed from a directory that was not a directory in chdir!");}
+          } else {panic!("We changed from a directory that was not a directory in chdir!");}
       }
     }
     let cageobj = Cage {
@@ -61,9 +68,18 @@ impl Cage {
   }
 
   pub fn exit_syscall(&self) -> i32 {
-    CAGE_TABLE.write().unwrap().remove(&self.cageid);
-    //fdtable will be dropped at end of dispatcher scope because of Arc
-    0
+      //get file descriptor table into a vector
+      //call close_syscall (or helper?) on each element of the vector
+      let mut mutmetadata = FS_METADATA.write().unwrap();
+      let cwd_container = self.cwd.read().unwrap();
+
+      decref_dir(&mut mutmetadata, &*cwd_container);
+
+      //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
+      CAGE_TABLE.write().unwrap().remove(&self.cageid);
+
+      //fdtable will be dropped at end of dispatcher scope because of Arc
+      0
   }
 
   pub fn getpid_syscall(&self) -> i32 {

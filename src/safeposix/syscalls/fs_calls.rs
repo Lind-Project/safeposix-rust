@@ -44,7 +44,7 @@ impl Cage {
                     return syscall_error(Errno::ENOENT, "open", "tried to open a file that did not exist, and O_CREAT was not specified");
                 }
 
-                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 if S_IFCHR == (S_IFCHR & flags) {
                     return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
@@ -66,11 +66,11 @@ impl Cage {
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                    ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-                //persist metadata?
+                persist_metadata(&mutmetadata);
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -133,7 +133,60 @@ impl Cage {
         thisfd //open returns the opened file descriptr
     }
 
-    //------------------------------------MKNOD SYSCALL------------------------------------
+    //------------------MKDIR SYSCALL------------------
+
+    pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
+        //Check that path is not empty
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "mkdir", "given path was null");}
+
+        let truepath = normpath(convpath(path), self);
+
+        let mut mutmetadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
+            //If neither the file nor parent exists
+            (None, None) => {
+                syscall_error(Errno::ENOENT, "mkdir", "a directory component in pathname does not exist or is a dangling symbolic link")
+            }
+
+            //If the file doesn't exist but the parent does
+            (None, Some(pardirinode)) => {
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+
+                let effective_mode = S_IFREG as u32 | mode;
+
+                //assert sane mode bits
+                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                    return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
+                }
+
+                let time = interface::timestamp(); //We do a real timestamp now
+                let newinode = Inode::Dir(DirectoryInode {
+                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                    mode: effective_mode, linkcount: 2, refcount: 0,
+                    atime: time, ctime: time, mtime: time, 
+                    filename_to_inode_dict: init_filename_to_inode_dict(pardirinode)
+                });
+
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    parentdir.filename_to_inode_dict.insert(filename, newinodenum);
+                    parentdir.linkcount += 1;
+                } //insert a reference to the file in the parent directory
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+
+                persist_metadata(&mutmetadata);
+                0 //mknod has succeeded
+            }
+
+            (Some(_), ..) => {
+                syscall_error(Errno::EEXIST, "mkdir", "pathname already exists, cannot create directory")
+            }
+        }
+    }
+
+    //------------------MKNOD SYSCALL------------------
 
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
         //Check that path is not empty
@@ -151,7 +204,7 @@ impl Cage {
 
             //If the file doesn't exist but the parent does
             (None, Some(pardirinode)) => {
-                let filename = truepath.file_name(); //for now we assume this is sane, but maybe this should be checked later
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 let effective_mode = S_IFREG as u32 | mode;
 
@@ -172,14 +225,16 @@ impl Cage {
 
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
-                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), newinodenum);
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                    parentdir.filename_to_inode_dict.insert(filename, newinodenum);
+                    parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
-                //persist metadata?
+                persist_metadata(&mutmetadata);
                 0 //mknod has succeeded
             }
+
             (Some(_), ..) => {
                 syscall_error(Errno::EEXIST, "mknod", "pathname already exists, cannot create device file")
             }
@@ -193,7 +248,7 @@ impl Cage {
         if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given newpath was null");}
         let trueoldpath = normpath(convpath(oldpath), self);
         let truenewpath = normpath(convpath(newpath), self);
-        let filename = truenewpath.file_name();
+        let filename = truenewpath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
@@ -213,7 +268,7 @@ impl Cage {
 
                             (None, Some(pardirinode)) => {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
                                 0 //link has succeeded
@@ -230,7 +285,7 @@ impl Cage {
 
                             (None, Some(pardirinode)) => {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                                    ind.filename_to_inode_dict.insert(filename.unwrap().to_owned(), inodenum);
+                                    ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
                                 0 //link has succeeded
@@ -270,9 +325,9 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount) = match inodeobj {
-                    Inode::File(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
-                    Inode::CharDev(f) => {f.refcount -= 1; f.linkcount -= 1; (f.refcount, f.linkcount)},
+                let (currefcount, curlinkcount, has_fobj) = match inodeobj {
+                    Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
+                    Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                     _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
                 }; //count current number of links and references
@@ -281,7 +336,7 @@ impl Cage {
                 let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
-                directory_parent_inode_obj.filename_to_inode_dict.remove(truepath.file_name().unwrap());
+                directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
                 directory_parent_inode_obj.linkcount -= 1;
                 //remove reference to file in parent directory
 
@@ -290,8 +345,10 @@ impl Cage {
 
                         //actually remove file and the handle to it
                         mutmetadata.inodetable.remove(&inodenum);
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                        interface::removefile(sysfilename).unwrap();
+                        if has_fobj {
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
+                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
@@ -616,7 +673,7 @@ impl Cage {
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
                                 } //update file size if necessary
-                                //persist metadata
+                                persist_metadata(&metadata);
 
                                 byteswritten as i32
                             } else {
@@ -713,7 +770,7 @@ impl Cage {
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
                             } //update file size if necessary
-                            //persist metadata
+                            persist_metadata(&metadata);
 
                             retval
                         }
@@ -881,33 +938,29 @@ impl Cage {
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
-        let mutmetadata = FS_METADATA.write().unwrap();
+        let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
-            if let Inode::Dir(dir) = mutmetadata.inodetable.get(&inodenum).unwrap() {
+            if let Inode::Dir(ref mut dir) = mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
 
-                //decrement refcount of previous cwd inode, however this is complex because of cage
-                //initialization and deinitialization concerns so we leave it unimplemented for now
-                //if let Some(oldinodenum) = metawalk(&self.cwd, Some(&mutmetadata)) {
-                //    if let Inode::Dir(olddir) = mutmetadata.inodetable.get(&oldinodenum).unwrap() {
-                //        olddir.linkcount -= 1;
-                //    } else {panic!("We changed from a directory that was not a directory in chdir!");}
-                //} else {panic!("We changed from a directory that was not a directory in chdir!");}
+                //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
+                dir.refcount += 1;
 
-                self.changedir(truepath);
-
-                //increment refcount of new cwd inode to ensure that you can't remove a directory,
-                //currently unimplmented
-                //dir.linkcount += 1;
-
-                0 //chdir has succeeded!;
             } else {
-                syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory")
+                return syscall_error(Errno::ENOTDIR, "chdir", "the last component in path is not a directory");
             }
         } else {
-            syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
+            return syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist");
         }
+        //at this point, syscall isn't an error
+        let mut cwd_container = self.cwd.write().unwrap();
+
+        //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
+        decref_dir(&mut mutmetadata, &*cwd_container);
+
+        *cwd_container = interface::RustRfc::new(truepath);
+        0 //chdir has succeeded!;
     }
 
     //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
@@ -1325,71 +1378,72 @@ impl Cage {
 
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    pub fn rdwrtest() {
-        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-        cage.load_lower_handle_stubs();
-        let fd = cage.open_syscall("/foobar", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
- 
-        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
-        assert_eq!(len1, 12);
-        assert_eq!(cage.write_syscall(fd, ptr1, len1), len1 as i32);
+    //------------------MMAP SYSCALL------------------
+    
+    pub fn mmap_syscall(&self, addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
+        if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
 
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut v = vec![0u8; 5];
-        let readbuf1 = v.as_mut_slice();
-        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr1, 5), 5);
-        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
-        println!("{:?}", bufbuf);
-        assert_eq!(bufbuf, "hello");
+        if 0 == flags & (MAP_PRIVATE | MAP_SHARED) {
+            syscall_error(Errno::EINVAL, "mmap", "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)");
+        }
 
-        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
-        assert_eq!(len2, 6);
-        assert_eq!(cage.write_syscall(fd, ptr2, len2), len2 as i32);
+        if 0 != flags & MAP_ANONYMOUS {
+            return interface::libc_mmap(addr, len, prot, flags, 0, -1);
+        }
 
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut v = vec![0u8; 12];
-        let readbuf2 = v.as_mut_slice();
-        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
-        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
-        println!("{:?}", bufbuf2);
-        assert_eq!(bufbuf2, "hello world!");
+        let fdtable = self.filedescriptortable.read().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fildes) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            //confirm fd type is mappable
+            match &mut *filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //confirm inode type is mappable
+                    match inodeobj {
+                        Inode::File(normalfile_inode_obj) => {
+                            //if we want to write our changes back to the file the file needs to be open for reading and writing
+                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
+                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
+                            }
+                            let filesize = normalfile_inode_obj.size;
+                            if off < 0 || off > filesize as i64 {
+                                return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
+                            }
+                            //because of NaCl's internal workings we must allow mappings to extend past the end of a file
+                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
+                            //this is the system fd number--the number of the lind.<inodenum> file in our host system
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
+
+
+                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
+                        }
+
+                        Inode::CharDev(_chardev_inode_obj) => {
+                            syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
+                        }
+
+                        _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+                    }
+                }
+                _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "mmap", "invalid file descriptor")
+        }
     }
 
-    #[test]
-    pub fn prdwrtest() {
-        let mut cage = Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-        cage.load_lower_handle_stubs();
-        let fd = cage.open_syscall("/foobar2", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        let (ptr1, len1, _) = "hello there!".to_string().into_raw_parts();
-        assert_eq!(len1, 12);
-        assert_eq!(cage.pwrite_syscall(fd, ptr1, len1, 0), len1 as i32);
-
-        let mut v = vec![0u8; 5];
-        let readbuf1 = v.as_mut_slice();
-        let readptr1 = readbuf1.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.pread_syscall(fd, readptr1, 5, 0), 5);
-        let bufbuf = std::str::from_utf8(readbuf1).unwrap();
-        println!("{:?}", bufbuf);
-        assert_eq!(bufbuf, "hello");
-
-        let (ptr2, len2, _) = " world".to_string().into_raw_parts();
-        assert_eq!(len2, 6);
-        assert_eq!(cage.pwrite_syscall(fd, ptr2, len2, 5), len2 as i32);
-
-        let mut v = vec![0u8; 12];
-        let readbuf2 = v.as_mut_slice();
-        let readptr2 = readbuf2.as_mut_ptr() as *mut u8;
-        assert_eq!(cage.read_syscall(fd, readptr2, 1000), 12);
-        let bufbuf2 = std::str::from_utf8(readbuf2).unwrap();
-        println!("{:?}", bufbuf2);
-        assert_eq!(bufbuf2, "hello world!");
-        //assert_eq!(cage.mknod_syscall("/null", S_IFCHR as u32 | S_IWUSR, makedev(&DevNo{major: 1, minor: 5})), 0);
+    //------------------MUNMAP SYSCALL------------------
+    
+    pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
+        if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
+        //NaCl's munmap implementation actually just writes over the previously mapped data with PROT_NONE
+        //This frees all of the resources except page table space, and is put inside safeposix for consistency
+        interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
     }
+
 }

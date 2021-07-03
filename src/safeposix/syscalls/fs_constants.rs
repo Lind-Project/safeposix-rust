@@ -90,13 +90,26 @@ pub const LOCK_SH: i32 = 1;
 pub const LOCK_EX: i32 = 2;
 pub const LOCK_UN: i32 = 8;
 pub const LOCK_NB: i32 = 4;
+//for mmap/munmap syscall
+pub const MAP_SHARED: i32 = 1;
+pub const MAP_PRIVATE: i32 = 2;
+pub const MAP_FIXED: i32 = 16;
+pub const MAP_ANONYMOUS: i32 = 32;
+pub const MAP_HUGE_SHIFT: i32 = 26;
+pub const MAP_HUGETLB: i32 = 262144; //0x40000
+
+pub const PROT_NONE: i32 = 0;
+pub const PROT_READ: i32 = 1;
+pub const PROT_WRITE: i32 = 2;
+pub const PROT_EXEC: i32 = 4;
+
 
 pub const SEEK_SET: i32 = 0;
 pub const SEEK_CUR: i32 = 1;
 pub const SEEK_END: i32 = 2;
 
 //device info for char files
-#[derive(PartialEq,Eq,Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
 pub struct DevNo {
   pub major: u32,
   pub minor: u32

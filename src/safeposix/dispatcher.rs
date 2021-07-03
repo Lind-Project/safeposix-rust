@@ -67,7 +67,7 @@ const PWRITE_SYSCALL: i32 = 127;
 use crate::interface;
 use super::cage::{CAGE_TABLE, Cage};
 use super::syscalls::{sys_constants::*, fs_constants::*};
-use super::filesystem::{FS_METADATA};
+use super::filesystem::{FS_METADATA, load_fs, incref_root};
 
 
 #[repr(C)]
@@ -75,6 +75,7 @@ pub union Arg {
   dispatch_int: i32,
   dispatch_uint: u32,
   dispatch_ulong: u64,
+  dispatch_long: i64,
   dispatch_usize: usize, //For types not specified to be a given length, but often set to word size (i.e. size_t)
   dispatch_isize: isize, //For types not specified to be a given length, but often set to word size (i.e. off_t)
   dispatch_cbuf: *const u8, //Typically corresponds to an immutable void* pointer as in write
@@ -125,6 +126,13 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         FXSTAT_SYSCALL => {
             cage.fstat_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_statdatastruct})
+        }
+        MMAP_SYSCALL => {
+            cage.mmap_syscall(unsafe{arg1.dispatch_mutcbuf}, unsafe{arg2.dispatch_usize}, unsafe{arg3.dispatch_int}, 
+                              unsafe{arg4.dispatch_int}, unsafe{arg5.dispatch_int}, unsafe{arg6.dispatch_long})
+        }
+        MUNMAP_SYSCALL => {
+            cage.munmap_syscall(unsafe{arg1.dispatch_mutcbuf}, unsafe{arg2.dispatch_usize})
         }
         GETPPID_SYSCALL => {
             cage.getppid_syscall()
@@ -177,13 +185,37 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    pub fn cagetest() {
+pub extern "C" fn lindrustinit() {
+    load_fs();
+    incref_root();
+    let mut mutcagetable = CAGE_TABLE.write().unwrap();
 
-        {CAGE_TABLE.write().unwrap().insert(1, interface::RustRfc::new(Cage{cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())}));}
+
+    //init cage is its own parent
+    let mut initcage = Cage{
+        cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), 
+        parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+    initcage.load_lower_handle_stubs();
+    mutcagetable.insert(1, interface::RustRfc::new(initcage));
+
+}
+
+pub extern "C" fn lindrustfinalize() {
+    //wipe all keys from hashmap, i.e. free all cages
+    let mut cagetable = CAGE_TABLE.write().unwrap();
+    let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
+    drop(cagetable);
+    for (_cageid, cage) in drainedcages {
+        cage.exit_syscall();
+    }
+}
+
+#[cfg(test)]
+pub mod dispatch_tests {
+    use super::*;
+    pub fn cagetest() {
+        lindrustinit();
+
         {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
         {println!("{:?}", CAGE_TABLE.read().unwrap());};
         {println!("{:?}", FS_METADATA.read().unwrap().inodetable);};
@@ -194,5 +226,6 @@ mod tests {
         dispatcher(7, EXIT_SYSCALL, Arg {dispatch_ulong: 61_u64}, Arg {dispatch_int: 33987}, Arg {dispatch_int: 123452}, Arg {dispatch_int: -98493}, Arg {dispatch_int: -1}, Arg {dispatch_int: 0});
         {println!("{:?}", CAGE_TABLE.read().unwrap());};
 
+        lindrustfinalize();
     }
 }
