@@ -49,7 +49,7 @@ pub struct PipeDesc {
     pub flags: i32
 }
 
-pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
+type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
 
 #[derive(Debug)]
 pub struct Cage {
