@@ -966,17 +966,15 @@ impl Cage {
 
     //------------------GETDENTS SYSCALL------------------
     
-    pub fn getdents_syscall(&self, fd: i32, bufsize: usize, vec: &mut Vec<(usize, interface::OsStringKey, u32, usize)>) -> i32 {
-        let mut fdtable = self.filedescriptortable.read().unwrap();
- 
+    pub fn getdents_syscall(&self, fd: i32, bufsize: usize, dirent: &mut Dirent) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+        let mut curr_dirent = dirent;
+        
         if let Some(wrappedfd) = fdtable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write().unwrap();
+            let mut filedesc_enum = wrappedfd.write().unwrap();   
             
             match &mut *filedesc_enum {
-                File(ref mut normalfile_filedesc_obj) => {
-                    if S_IFCHR == (S_IFCHR & bufsize) {
-                        return syscall_error(Errno::EINVAL, "getdents", "Invalid type for buffer size");
-                    }
+                File(ref mut filedesc_obj) => {
                     if bufsize < 24 {
                         return syscall_error(Errno::EINVAL, "getdents", "Buffer size too small");
                     }
@@ -993,12 +991,16 @@ impl Cage {
 
                             for (filename, inode) in dir_inode_obj.filename_to_inode_dict.enumerate() {
                                 if curr_pos >= position {
-                                    curr_size = (((20 + filename.len()) + 7) / 8) * 8;
+                                    curr_size = (((std::mem::sizeof::<Dirent>() + filename.len()) + 7) / 8) * 8;
                                     bufcount += curr_size;
-                                    if bufcount > bufsize {break;}
-                                    vec.push((inode, filename, dir_inode_obj.mode, curr_size));
+                                    if bufcount >= bufsize {break;}
+                                    curr_dirent.d_ino = inode;
+                                    curr_dirent.d_reclen = curr_size;
+                                    curr_dirent.d_name = filename;
+                                    curr_dirent.d_type = mode_to_type(dir_inode_obj.mode);
                                 }
                                 curr_pos += 1;
+                                curr_dirent = *curr_dirent.d_next;
                             }
                             normalfile_filedesc_obj.position = std::cmp::min(position + vec.len(), dir_inode_obj.filename_to_inode_dict.len());
                             return 0;

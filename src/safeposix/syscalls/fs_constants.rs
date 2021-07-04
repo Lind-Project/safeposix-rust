@@ -101,6 +101,23 @@ pub struct StatData {
   pub st_ctim: (u64, u64)
 }
 
+pub struct Dirent {
+  pub d_ino: usize,
+  pub d_next: *Dirent,
+  pub d_reclen: usize,
+  pub d_name: interface::OsStringKey,
+  pub d_type: i32
+}
+
+pub fn mode_to_type(mode: u32) -> i32 {
+  if mode as i32 & S_FILETYPEFLAGS == S_IFBLK { return S_IFBLK; }
+  if mode as i32 & S_FILETYPEFLAGS == S_IFDIR { return S_IFDIR; }
+  if mode as i32 & S_FILETYPEFLAGS == S_IFIFO { return S_IFIFO; }
+  if mode as i32 & S_FILETYPEFLAGS == S_IFLNK { return S_IFLNK; }
+  if mode as i32 & S_FILETYPEFLAGS == S_IFREG { return S_IFREG; }
+  if mode as i32 & S_FILETYPEFLAGS == S_IFSOCK { return S_IFSOCK; }
+}
+
 pub fn is_reg(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
 }
