@@ -114,6 +114,14 @@ pub struct StatData {
   pub st_ctim: (u64, u64)
 }
 
+/// Represents a Dirent struct without the string, as rust has no flexible array member support
+#[repr(C, packed(1))]
+pub struct ClippedDirent {
+    d_ino: u64,
+    d_off: u64,
+    d_reclen: u16,
+}
+
 pub fn is_reg(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
 }
