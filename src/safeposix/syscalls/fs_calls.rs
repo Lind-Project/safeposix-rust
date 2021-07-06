@@ -1014,7 +1014,7 @@ impl Cage {
             return newfd;
         }
 
-        if fdtable.contains_key(&newfd) {Self::_close_helper(&self, newfd, Some(fdtable), false);}    
+        if fdtable.contains_key(&newfd) {Self::_close_helper(&self, newfd, Some(fdtable));}    
         fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
         return newfd;
     }
@@ -1024,19 +1024,20 @@ impl Cage {
     pub fn close_syscall(&self, fd: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
         match fdtable.get(&fd) {
-            Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable), true);},
+            Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable));},
             None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
     }
 
-    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&mut FdTable>, is_close_syscall: bool) -> i32 {
+    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
         let mut writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
             &mut writer
         };
 
-        let filedesc_enum = fdtable.get(&fd).unwrap().write().unwrap();
+        let filedesc = fdtable.get(&fd).unwrap();
+        let filedesc_enum = filedesc.write().unwrap();
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Decide how to proceed depending on the fd type.
