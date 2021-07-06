@@ -1036,7 +1036,7 @@ impl Cage {
             &mut writer
         };
 
-        let filedesc = fdtable.get(&fd).unwrap();
+        let filedesc = fdtable.get_mut(&fd).unwrap();
         let filedesc_enum = filedesc.write().unwrap();
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
@@ -1076,11 +1076,9 @@ impl Cage {
                         //if it's not a reg file, then we have nothing to close
                         //Inode::File is a regular file by default
                         
-                        if normalfile_inode_obj.linkcount == 0 {
-                            if normalfile_inode_obj.refcount == 0 {
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                interface::removefile(sysfilename).unwrap();
-                            }   
+                        if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
                             //removing the file from the entire filesystem
                             mutmetadata.inodetable.remove(&inodenum);
                             fobjtable.get(&inodenum).unwrap().close().unwrap();
@@ -1097,12 +1095,10 @@ impl Cage {
                                 None => {return 0;}
                             }
                         }
-                        if dir_inode_obj.linkcount == 0 {
+                        if dir_inode_obj.linkcount == 0 && dir_inode_obj.refcount == 0 {
                             //removing the file from the entire filesystem
-                            if dir_inode_obj.refcount == 0 {
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                interface::removefile(sysfilename).unwrap();
-                            }
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
                             mutmetadata.inodetable.remove(&inodenum);                          
                         } 
                     },
@@ -1118,12 +1114,10 @@ impl Cage {
                         }
 
                         //if there are still references to the file, then do nothing to the file
-                        if char_inode_obj.linkcount == 0 {
+                        if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                             //removing the file from the entire filesystem
-                            if char_inode_obj.refcount == 0 {
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                interface::removefile(sysfilename).unwrap();
-                            }
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
                             mutmetadata.inodetable.remove(&inodenum);
                         } 
                     },
@@ -1131,7 +1125,7 @@ impl Cage {
                 }
             },
         }
-        fdtable.remove(&fd);
+        Self::rm_from_fd_table(self, &fd);
         return 0; //_close_helper has succeeded!
     }
 
