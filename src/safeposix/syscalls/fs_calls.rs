@@ -1261,47 +1261,28 @@ impl Cage {
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
             let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
-            match thisinode {
-                Inode::File(ref mut general_inode) => {
-                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+            if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                match thisinode {
+                    Inode::File(ref mut general_inode) => {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
-                    } else {
-                        //there doesn't seem to be a good syscall error errno for this
-                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
-                    }
-                },
-                Inode::CharDev(ref mut dev_inode) => {
-                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
-                    } else {
-                        //there doesn't seem to be a good syscall error errno for this
-                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
-                    }
-                },
-                Inode::Dir(ref mut dir_inode) => {
-                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                    },
+                    Inode::CharDev(ref mut dev_inode) => {
+                            dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
+                    },
+                    Inode::Dir(ref mut dir_inode) => {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
-                    } else {
-                        //there doesn't seem to be a good syscall error errno for this
-                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
-                    }
-                },
-                Inode::Pipe(ref mut general_inode) => {
-                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                    },
+                    Inode::Pipe(ref mut general_inode) => {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
-                    } else {
-                        //there doesn't seem to be a good syscall error errno for this
-                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
-                    }
-                },
-                Inode::Socket(ref mut general_inode) => {
-                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                    },
+                    Inode::Socket(ref mut general_inode) => {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
-                    } else {
-                        //there doesn't seem to be a good syscall error errno for this
-                        return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
-                    }
-                },
+                    },
+                }
+            }
+            else {
+                //there doesn't seem to be a good syscall error errno for this
+                return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
             }
         } else {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
