@@ -1014,7 +1014,7 @@ impl Cage {
             return newfd;
         }
 
-        if fdtable.contains_key(&newfd) {return Self::_close_helper(&self, newfd, Some(&fdtable), false);}    
+        if fdtable.contains_key(&newfd) {Self::_close_helper(&self, newfd, Some(fdtable), false);}    
         fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
         return newfd;
     }
@@ -1022,21 +1022,21 @@ impl Cage {
     //------------------------------------CLOSE SYSCALL------------------------------------
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
-        let fdtable = self.filedescriptortable.write().unwrap();
+        let mut fdtable = self.filedescriptortable.write().unwrap();
         match fdtable.get(&fd) {
-            Some(_) => {return Self::_close_helper(self, fd, Some(&fdtable), true);},
+            Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable), true);},
             None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
     }
 
-    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>, is_close_syscall: bool) -> i32 {
-        let writer;
+    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&mut FdTable>, is_close_syscall: bool) -> i32 {
+        let mut writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
-            &writer
+            &mut writer
         };
 
-        let filedesc_enum = fdtable.get(&fd).unwrap().read().unwrap();
+        let filedesc_enum = fdtable.get(&fd).unwrap().write().unwrap();
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Decide how to proceed depending on the fd type.
@@ -1045,7 +1045,7 @@ impl Cage {
         //one less reference to the file.
         match &*filedesc_enum {
             //if we are a socket, we dont change disk metadata
-            Stream(_) => {return 0;},
+            Stream(_) => {},
             Socket(_) => {
                 Self::_cleanup_socket(self, &fd, false);
                 },
@@ -1073,28 +1073,17 @@ impl Cage {
                         normalfile_inode_obj.refcount -= 1;
 
                         //if it's not a reg file, then we have nothing to close
-                        if !is_reg(normalfile_inode_obj.mode) {
-                            match fobjtable.get(&inodenum) {
-                                Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                                None => {return 0;}
-                            }
-                        }
-
-                        fobjtable.get(&inodenum).unwrap().close().unwrap();
-                        fobjtable.remove(&inodenum);
-
-                        //if there are still references to the file, then do nothing to the file
-                        if normalfile_inode_obj.refcount != 0 {
-                            return 0;
-                        }
+                        //Inode::File is a regular file by default
                         
-                        if normalfile_inode_obj.linkcount == 0  {
-                            
+                        if normalfile_inode_obj.linkcount == 0 {
+                            if normalfile_inode_obj.refcount == 0 {
+                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                interface::removefile(sysfilename).unwrap();
+                            }   
                             //removing the file from the entire filesystem
                             mutmetadata.inodetable.remove(&inodenum);
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-    
+                            fobjtable.get(&inodenum).unwrap().close().unwrap();
+                            fobjtable.remove(&inodenum);  
                         } 
                     },
                     Inode::Dir(ref mut dir_inode_obj) => {
@@ -1107,19 +1096,13 @@ impl Cage {
                                 None => {return 0;}
                             }
                         }
-
-                        //if there are still references to the file, then do nothing to the file
-                        if dir_inode_obj.refcount != 0 {
-                            return 0;
-                        }
-                        
-                        if dir_inode_obj.linkcount == 0  {
-                            
+                        if dir_inode_obj.linkcount == 0 {
                             //removing the file from the entire filesystem
-                            mutmetadata.inodetable.remove(&inodenum);
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-    
+                            if dir_inode_obj.refcount == 0 {
+                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                interface::removefile(sysfilename).unwrap();
+                            }
+                            mutmetadata.inodetable.remove(&inodenum);                          
                         } 
                     },
                     Inode::CharDev(ref mut char_inode_obj) => {
@@ -1134,23 +1117,20 @@ impl Cage {
                         }
 
                         //if there are still references to the file, then do nothing to the file
-                        if char_inode_obj.refcount != 0 {
-                            return 0;
-                        }
-                        
-                        if char_inode_obj.linkcount == 0  {
-                            
+                        if char_inode_obj.linkcount == 0 {
                             //removing the file from the entire filesystem
+                            if char_inode_obj.refcount == 0 {
+                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                interface::removefile(sysfilename).unwrap();
+                            }
                             mutmetadata.inodetable.remove(&inodenum);
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-    
                         } 
                     },
                     Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
                 }
             },
         }
+        fdtable.remove(&fd);
         return 0; //_close_helper has succeeded!
     }
 
@@ -1297,7 +1277,7 @@ impl Cage {
                 },
                 Inode::CharDev(ref mut dev_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode
+                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
                     } else {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
@@ -1305,7 +1285,7 @@ impl Cage {
                 },
                 Inode::Dir(ref mut dir_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode
+                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     } else {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
@@ -1313,7 +1293,7 @@ impl Cage {
                 },
                 Inode::Pipe(ref mut general_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
                     } else {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
@@ -1321,20 +1301,18 @@ impl Cage {
                 },
                 Inode::Socket(ref mut general_inode) => {
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
                     } else {
                         //there doesn't seem to be a good syscall error errno for this
                         return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
                     }
                 },
-
-                persist_metadata(&metadata);
-                return 0; //success!
             }
         } else {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
-
+        persist_metadata(&metadata);
+        return 0; //success!
     }
 
     //------------------------------------FLOCK SYSCALL------------------------------------
@@ -1369,8 +1347,6 @@ impl Cage {
             None => {return syscall_error(Errno::EBADF, "flock", "invalid file descriptor");},
         }
     }
-
-}
 
     //------------------MMAP SYSCALL------------------
     
