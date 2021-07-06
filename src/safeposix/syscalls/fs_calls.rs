@@ -1036,7 +1036,7 @@ impl Cage {
             &mut writer
         };
 
-        let filedesc = fdtable.get_mut(&fd).unwrap();
+        let filedesc = fdtable.get(&fd).unwrap();
         let filedesc_enum = filedesc.write().unwrap();
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
