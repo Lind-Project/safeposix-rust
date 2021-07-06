@@ -5,9 +5,11 @@
 
 mod comm;
 mod file;
+mod pipe;
 mod misc;
 mod timer;
 pub use comm::*;
 pub use file::*;
+pub use pipe::*;
 pub use misc::*;
 pub use timer::*;

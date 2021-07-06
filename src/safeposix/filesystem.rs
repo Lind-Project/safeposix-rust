@@ -17,6 +17,12 @@ type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
 pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
     interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
 
+pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<interface::EmulatedPipe>>>> = 
+    interface::RustLazyGlobal::new(|| 
+        interface::RustLock::new(interface::new_hashmap())
+    );
+
+
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub enum Inode {
     File(GenericInode),
