@@ -168,15 +168,15 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
     println!("Copied {:?} as {} ({})", hostfilepath, lindfilepath, inode);
 }
 
-fn visit_children<T>(cage: &Cage, path: String, dirvisitor: fn(&Cage, T), nondirvisitor: fn(&Cage, T)) {
+fn visit_children<T>(cage: &Cage, path: String, arg: Option<usize>, dirvisitor: fn(&Cage, T), nondirvisitor: fn(&Cage, T)) {
 }
 
 fn lind_deltree(cage: &Cage, path: String) {
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
-    if !is_dir(lindstat_res.st_mode) {panic!("Delree must be run on a directory!");}
+    if !is_dir(lindstat_res.st_mode) {panic!("Deltree must be run on a directory!");}
 
-    visit_children(cage, path, |childcage, childpath| {
+    visit_children(cage, path, None, |childcage, childpath| {
         lind_deltree(childcage, childpath);
     }, |childcage, childpath| {
         childcage.unlink_syscall(childpath.as_str());
@@ -189,7 +189,7 @@ fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
     if !is_dir(lindstat_res.st_mode) {panic!("Tree must be run on a directory!");}
 
-    visit_children(cage, path, |childcage, (childpath, childindentlevel)| {
+    visit_children(cage, path, Some(indentlevel), |childcage, (childpath, childindentlevel)| {
         print!("{}", "|   ".repeat(childindentlevel));
         if childindentlevel > 0 {
             print!("{}", "|---");
@@ -210,7 +210,7 @@ fn lind_ls(cage: &Cage, path: String) {
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
 
     if is_dir(lindstat_res.st_mode) {
-        visit_children(cage, path, |childcage, childpath: String| {
+        visit_children(cage, path, None, |childcage, childpath: String| {
             print!("{}/ ", childpath);
         }, |childcage, childpath| {
             print!("{} ", childpath);
