@@ -3,6 +3,14 @@
 #![feature(vec_into_raw_parts)]
 #![allow(unused)]
 
+/// Author: Jonathan Singer
+///
+/// This file provides a command line interface for interacting in certain ways with the lind file
+/// system from the host, such as copying files from the host into lind, removing files and
+/// directories, and listing files in the lind fs, and more
+///
+/// This interface should be sufficient for anything we'd need to do between lind and the host
+
 use std::env;
 use std::fs::File;
 use std::io::{Read, prelude};
@@ -20,7 +28,8 @@ fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindf
             return;
         } //if read_link succeeds it's a symlink
     } else {
-        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+        eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
+        return;
     }
 
     //update directly if not a directory on the host, otherwise recursively handle children
@@ -98,7 +107,8 @@ fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
             return;
         } //if read_link succeeds it's a symlink
     } else {
-        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+        eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
+        return
     }
 
     //update directly if not a directory on the host, otherwise recursively handle children
@@ -115,10 +125,12 @@ fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
 
 fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String, create_missing_dirs: bool) {
     if !hostfilepath.exists() {
-        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+        eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
+        return
     }
     if !hostfilepath.is_file() {
-        panic!("Cannot locate file on host fs: {:?}", hostfilepath);
+        eprintln!("File is not a regular file on host fs: {:?}", hostfilepath);
+        return
     }
 
     let lindtruepath = normpath(convpath(lindfilepath.as_str()), cage);
@@ -133,7 +145,8 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
         let stat_us = cage.stat_syscall(format!("{:?}", ancestor).as_str(), &mut lindstat_res);
         if stat_us == 0 {continue;}
         if stat_us != -(Errno::ENOENT as i32) {
-            panic!("Fatal error in trying to get lind file path");
+            eprintln!("Fatal error in trying to get lind file path");
+            return;
         }
 
         //check whether we are supposed to create missing directories, and whether we'd be
@@ -141,7 +154,8 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
         if create_missing_dirs && is_dir(lindstat_res.st_mode) {
             cage.mkdir_syscall(format!("{:?}", ancestor).as_str(), S_IRWXA); //let's not mirror stat data
         } else {
-            panic!("Lind fs path does not exist but should not be created {:?}", ancestor);
+            eprintln!("Lind fs path does not exist but should not be created {:?}", ancestor);
+            return;
         }
     }
 
@@ -174,7 +188,10 @@ fn visit_children<T>(cage: &Cage, path: String, arg: Option<usize>, dirvisitor: 
 fn lind_deltree(cage: &Cage, path: String) {
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
-    if !is_dir(lindstat_res.st_mode) {panic!("Deltree must be run on a directory!");}
+    if !is_dir(lindstat_res.st_mode) {
+        eprintln!("Deltree must be run on a directory!");
+        return;
+    }
 
     visit_children(cage, path, None, |childcage, childpath| {
         lind_deltree(childcage, childpath);
@@ -187,7 +204,10 @@ fn lind_deltree(cage: &Cage, path: String) {
 fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
     let mut lindstat_res: StatData;
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
-    if !is_dir(lindstat_res.st_mode) {panic!("Tree must be run on a directory!");}
+    if !is_dir(lindstat_res.st_mode) {
+        eprintln!("Tree must be run on a directory!");
+        return;
+    }
 
     visit_children(cage, path, Some(indentlevel), |childcage, (childpath, childindentlevel)| {
         print!("{}", "|   ".repeat(childindentlevel));
@@ -302,7 +322,13 @@ fn main() {
         }
 
         "format" => {
-            *FS_METADATA.write().unwrap() = FilesystemMetadata::blank_fs_init();
+            let metadata = FS_METADATA.write().unwrap();
+            *metadata = FilesystemMetadata::blank_fs_init();
+            drop(metadata);
+            load_fs_special_files(&utilcage);
+
+            let metadata2 = FS_METADATA.read().unwrap();
+            persist_metadata(&*metadata2);
         }
 
         "deltree" => {
@@ -330,7 +356,8 @@ fn main() {
         }
 
         _ => {
-            return; //error message later
+            eprintln!("Error, command unknown");
+            return;
         }
     }
     lindrustfinalize();
