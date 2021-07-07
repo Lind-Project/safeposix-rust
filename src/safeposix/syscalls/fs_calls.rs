@@ -126,7 +126,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, access_lock: interface::RustLock::new(())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -1294,33 +1294,96 @@ impl Cage {
     //------------------------------------FLOCK SYSCALL------------------------------------
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
-        //TO DO: Implement advisory lock
-        let fdtable = self.filedescriptortable.read().unwrap();
-        match fdtable.get(&fd) {
-            Some(filedesc) => {
-                //if anything besides allowed flags, then fail
-                if 0 == operation & !(LOCK_SH|LOCK_EX|LOCK_NB|LOCK_UN) {
-                    return syscall_error(Errno::EINVAL, "flock", "operation is invalid");
-                }
-                if 0 == operation & LOCK_SH {
-                    //TO DO: raise unimplemented error
-                    return syscall_error(Errno::ENOSYS, "flock", "this operation has not been implemented yet");
-                }
-                //check whether the lock is blocking or not
-                if operation & LOCK_EX == 0 && operation & LOCK_NB == 0 {
-                    //if lock.acquire(False) then return 0, else syscall error
-                    return 0;
-                } else if 0 == operation & LOCK_EX {
-                    //fd lock acquire(true)
-                    return 0;
-                }
-                if 0 == operation & LOCK_UN {
-                    //release the lock
-                    return 0;
-                }
-                panic!("Should not be possible to hit this code");
-            },
-            None => {return syscall_error(Errno::EBADF, "flock", "invalid file descriptor");},
+        
+        //checking whether the operation is valid
+        if 0 == operation & !(LOCK_SH|LOCK_EX|LOCK_NB|LOCK_UN) {
+            return syscall_error(Errno::EINVAL, "flock", "operation is invalid");
+        }
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc_enum = wrappedfd.write().unwrap();
+            match &*filedesc_enum {
+                File(filedesc) => {
+                    //check whether the lock is blocking or not
+                    if operation & LOCK_SH == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.read();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    } else if operation & LOCK_EX == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.write();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } 
+                    panic!("Should not be possible to hit this code");
+                },
+                Stream(filedesc) => {
+                    //check whether the lock is blocking or not
+                    if operation & LOCK_SH == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.read();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    } else if operation & LOCK_EX == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.write();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } 
+                    panic!("Should not be possible to hit this code");
+                },
+                Socket(filedesc) => {
+                    //check whether the lock is blocking or not
+                    if operation & LOCK_SH == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.read();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    } else if operation & LOCK_EX == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.write();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } 
+                    panic!("Should not be possible to hit this code");
+                },
+                Pipe(filedesc) => {
+                    //check whether the lock is blocking or not
+                    if operation & LOCK_SH == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.read();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    } else if operation & LOCK_EX == 0 {
+                        if operation & LOCK_NB == 0 {
+                            filedesc.access_lock.write();
+                            return 0;
+                        }
+                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } 
+                    panic!("Should not be possible to hit this code");
+                },
+            }
+        } else {
+           return syscall_error(Errno::EBADF, "flock", "invalid file descriptor");
         }
     }
 
