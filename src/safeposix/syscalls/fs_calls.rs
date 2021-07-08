@@ -126,7 +126,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, access_lock: interface::RustLock::new(())});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, access_lock: interface::RustLock::new(()), readLock: Vec::new(), writeLock: None});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -1309,7 +1309,10 @@ impl Cage {
                     //check whether the lock is blocking or not
                     if operation & LOCK_SH == 0 {
                         if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.read();
+                            match filedesc.access_lock.read() {
+                                Ok(res) => {filedesc.readLock.push(res);},
+                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                            }
                             return 0;
                         }
                         if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
