@@ -1354,6 +1354,8 @@ impl Cage {
                         }
                         if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
                         else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } else if operation & LOCK_UN == 0 {
+                        //Implement unlock
                     } 
                     panic!("Should not be possible to hit this code");
                 },
@@ -1376,6 +1378,8 @@ impl Cage {
                         }
                         if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
                         else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } else if operation & LOCK_UN == 0 {
+                        //Implement unlock
                     } 
                     panic!("Should not be possible to hit this code");
                 },
@@ -1398,6 +1402,8 @@ impl Cage {
                         }
                         if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
                         else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    } else if operation & LOCK_UN == 0 {
+                        //Implement unlock
                     } 
                     panic!("Should not be possible to hit this code");
                 },
