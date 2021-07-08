@@ -1315,8 +1315,14 @@ impl Cage {
                             }
                             return 0;
                         }
-                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+
+                        if let guard = filedesc.access_lock.try_read().unwrap() {
+                            filedesc.readLock.push(guard);
+                            return 0;
+                        } 
+                        else {
+                            return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");
+                        }
                     } else if operation & LOCK_EX == 0 {
                         if operation & LOCK_NB == 0 {
                             filedesc.access_lock.write();
@@ -1324,14 +1330,19 @@ impl Cage {
                         }
                         if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
                         else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    } 
+                    } else if operation & LOCK_UN == 0 {
+                        //Implement unlock
+                    }
                     panic!("Should not be possible to hit this code");
                 },
                 Stream(filedesc) => {
                     //check whether the lock is blocking or not
                     if operation & LOCK_SH == 0 {
                         if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.read();
+                            match filedesc.access_lock.read() {
+                                Ok(res) => {filedesc.readLock.push(res);},
+                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                            }
                             return 0;
                         }
                         if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
@@ -1350,7 +1361,10 @@ impl Cage {
                     //check whether the lock is blocking or not
                     if operation & LOCK_SH == 0 {
                         if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.read();
+                            match filedesc.access_lock.read() {
+                                Ok(res) => {filedesc.readLock.push(res);},
+                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                            }
                             return 0;
                         }
                         if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
@@ -1369,7 +1383,10 @@ impl Cage {
                     //check whether the lock is blocking or not
                     if operation & LOCK_SH == 0 {
                         if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.read();
+                            match filedesc.access_lock.read() {
+                                Ok(res) => {filedesc.readLock.push(res);},
+                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                            }
                             return 0;
                         }
                         if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
