@@ -1089,37 +1089,20 @@ impl Cage {
                         dir_inode_obj.refcount -= 1;
 
                         //if it's not a reg file, then we have nothing to close
-                        if !is_reg(dir_inode_obj.mode) {
-                            match fobjtable.get(&inodenum) {
-                                Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                                None => {return 0;}
-                            }
+                        match fobjtable.get(&inodenum) {
+                            Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                            None => {}
                         }
-                        if dir_inode_obj.linkcount == 0 && dir_inode_obj.refcount == 0 {
-                            //removing the file from the entire filesystem
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-                            mutmetadata.inodetable.remove(&inodenum);                          
-                        } 
+                         
                     },
                     Inode::CharDev(ref mut char_inode_obj) => {
                         char_inode_obj.refcount -= 1;
 
                         //if it's not a reg file, then we have nothing to close
-                        if !is_reg(char_inode_obj.mode) {
-                            match fobjtable.get(&inodenum) {
-                                Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                                None => {return 0;}
-                            }
+                        match fobjtable.get(&inodenum) {
+                            Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                            None => {return 0;}
                         }
-
-                        //if there are still references to the file, then do nothing to the file
-                        if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
-                            //removing the file from the entire filesystem
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-                            mutmetadata.inodetable.remove(&inodenum);
-                        } 
                     },
                     Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
                 }
