@@ -58,7 +58,8 @@ pub struct PipeDesc {
     pub flags: i32,
     // pub access_lock: interface::RustLock<()>,
     // pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
-    // pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>}
+    // pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>
+}
 
 pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
 
