@@ -1093,7 +1093,10 @@ impl Cage {
                             Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
                             None => {}
                         }
-                         
+                        if dir_inode_obj.linkcount == 0 && dir_inode_obj.refcount == 0 {
+                            //removing the file from the metadata 
+                            mutmetadata.inodetable.remove(&inodenum);
+                        } 
                     },
                     Inode::CharDev(ref mut char_inode_obj) => {
                         char_inode_obj.refcount -= 1;
@@ -1103,6 +1106,10 @@ impl Cage {
                             Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
                             None => {}
                         }
+                        if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
+                            //removing the file from the metadata 
+                            mutmetadata.inodetable.remove(&inodenum);
+                        } 
                     },
                     Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
                 }
