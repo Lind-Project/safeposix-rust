@@ -20,9 +20,9 @@ pub struct FileDesc {
     pub position: usize,
     pub inode: usize,
     pub flags: i32,
-    pub access_lock: interface::RustLock<()>,
-    pub readLock: Vec<interface::RustLockReadGuard<()>>,
-    pub writeLock: Option<interface::RustLockWriteGuard<()>>
+    // pub access_lock: interface::RustLock<()>,
+    // pub readLock: Vec<interface::RustLockReadGuard<()>>,
+    // pub writeLock: Option<interface::RustLockWriteGuard<()>>
 }
 
 #[derive(Debug)]
@@ -30,9 +30,9 @@ pub struct StreamDesc {
     pub position: usize,
     pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
     pub flags: i32,
-    pub access_lock: interface::RustLock<()>,
-    pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
-    pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>
+    // pub access_lock: interface::RustLock<()>,
+    // pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
+    // pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>
 }
 
 #[derive(Debug)]
@@ -47,18 +47,18 @@ pub struct SocketDesc {
     pub state: usize,
     pub flags: i32,
     pub errno: usize,
-    pub access_lock: interface::RustLock<()>,
-    pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
-    pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>
+    // pub access_lock: interface::RustLock<()>,
+    // pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
+    // pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>
 }
 
 #[derive(Debug)]
 pub struct PipeDesc {
     pub pipe: usize,
     pub flags: i32,
-    pub access_lock: interface::RustLock<()>,
-    pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
-    pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>}
+    // pub access_lock: interface::RustLock<()>,
+    // pub readLock: Vec<interface::RustLockReadGuard<'static, ()>>,
+    // pub writeLock: Option<interface::RustLockWriteGuard<'static, ()>>}
 
 pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
 
