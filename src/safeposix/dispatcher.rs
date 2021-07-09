@@ -179,6 +179,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         DUP2_SYSCALL => {
             cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
         }
+        FLOCK_SYSCALL => {
+            cage.flock_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
+        }
         _ => {//unknown syscall
             -1
         }
