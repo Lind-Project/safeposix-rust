@@ -1101,7 +1101,7 @@ impl Cage {
                         //if it's not a reg file, then we have nothing to close
                         match fobjtable.get(&inodenum) {
                             Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                            None => {return 0;}
+                            None => {}
                         }
                     },
                     Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
