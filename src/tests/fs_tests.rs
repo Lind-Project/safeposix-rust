@@ -8,7 +8,7 @@ mod fs_tests {
     pub fn test_fs() {
         persistencetest();
         rdwrtest();
-        // prdwrtest(); //this test keeps failing for me
+        prdwrtest(); //this test keeps failing for me
         chardevtest();
         dispatch_tests::cagetest();
         // ut_lind_fs_simple();
@@ -112,7 +112,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-    #[test]
+
     pub fn ut_lind_fs_simple() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -145,26 +145,24 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-    #[test]
     pub fn ut_lind_fs_dup() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let mode: i32 = 438;   // 0666
-        let name = String::from("double_open_file");
+        let name = String::from("/double_open_file");
 
-        // let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
-
-        // assert!(fd >= 0);
-        // assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
+        let fd = cage.open_syscall(&name, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
 
         //duplicate the file descriptor
-        let fd2 = cage.dup_syscall(fd);
+        let fd2 = cage.dup_syscall(fd, None);
         assert!(fd != fd2);
 
-        //essentially a no-op, but duplicate again -- they should be diff fd's
-        let fd3 = cage.dup_syscall(fd);
+        //essentially a no-op, but duplicate again -- they should be diff &fd's
+        let fd3 = cage.dup_syscall(fd, None);
         assert!(fd != fd2 && fd != fd3);
 
         //We don't need all three, though:
@@ -174,21 +172,24 @@ mod fs_tests {
         assert_eq!(cage.lseek_syscall(fd,0,SEEK_CUR), cage.lseek_syscall(fd2,0,SEEK_CUR));
 
         // write some data to move the first position
-        assert_eq!(cage.write_syscall(fd,str2cbuf("yo")), 2);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("yo"), 2), 2);
 
         //Make sure that they are still in the same place:
+        let mut buffer = str2cbuf("");
         assert_eq!(cage.lseek_syscall(fd,0,SEEK_CUR), cage.lseek_syscall(fd2,0,SEEK_CUR));
-        assert_eq!(cage.read_syscall(fd, 10), "hiyo");
+        assert_eq!(cage.read_syscall(fd, buffer, 10), 4);
 
         cage.close_syscall(fd);
 
-        //the other fd should still work
-        assert_eq!(cage.write_syscall(fd, str2cbuf("raar"), 4), 4);
+        //the other &fd should still work
+        assert_eq!(cage.write_syscall(fd2, str2cbuf("raar"), 4), 4);
         cage.lseek_syscall(fd2,0,SEEK_CUR);
-        assert_eq!(cage.read_syscall(fd2, 10), "hiyoraar");
+
+        let mut buffer2 = str2cbuf("");
+        assert_eq!(cage.read_syscall(fd2, buffer, 10), 8);
         cage.close_syscall(fd2);
-        
-        // assert_eq!(cage.exit_syscall(), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
 }
