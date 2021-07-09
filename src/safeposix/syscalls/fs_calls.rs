@@ -126,7 +126,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, access_lock: interface::RustLock::new(()), readLock: Vec::new(), writeLock: None});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -1307,109 +1307,113 @@ impl Cage {
             match &*filedesc_enum {
                 File(filedesc) => {
                     //check whether the lock is blocking or not
-                    if operation & LOCK_SH == 0 {
-                        if operation & LOCK_NB == 0 {
-                            match filedesc.access_lock.read() {
-                                Ok(res) => {filedesc.readLock.push(res);},
-                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                            }
-                            return 0;
-                        }
+                    // if operation & LOCK_SH == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         match filedesc.access_lock.read() {
+                    //             Ok(res) => {filedesc.readLock.push(res);},
+                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                    //         }
+                    //         return 0;
+                    //     }
 
-                        if let guard = filedesc.access_lock.try_read().unwrap() {
-                            filedesc.readLock.push(guard);
-                            return 0;
-                        } 
-                        else {
-                            return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");
-                        }
-                    } else if operation & LOCK_EX == 0 {
-                        if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.write();
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    } else if operation & LOCK_UN == 0 {
-                        if let Some(_) = filedesc.readLock.pop() {return 0;}
-                        else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    }
-                    panic!("Should not be possible to hit this code");
+                    //     if let guard = filedesc.access_lock.try_read().unwrap() {
+                    //         filedesc.readLock.push(guard);
+                    //         return 0;
+                    //     } 
+                    //     else {
+                    //         return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");
+                    //     }
+                    // } else if operation & LOCK_EX == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         filedesc.access_lock.write();
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    // } else if operation & LOCK_UN == 0 {
+                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
+                    // }
+                    // panic!("Should not be possible to hit this code");
+                    return 0;
                 },
                 Stream(filedesc) => {
                     //check whether the lock is blocking or not
-                    if operation & LOCK_SH == 0 {
-                        if operation & LOCK_NB == 0 {
-                            match filedesc.access_lock.read() {
-                                Ok(res) => {filedesc.readLock.push(res);},
-                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                            }
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
-                    } else if operation & LOCK_EX == 0 {
-                        if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.write();
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    } else if operation & LOCK_UN == 0 {
-                        if let Some(_) = filedesc.readLock.pop() {return 0;}
-                        else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    } 
-                    panic!("Should not be possible to hit this code");
+                    // if operation & LOCK_SH == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         match filedesc.access_lock.read() {
+                    //             Ok(res) => {filedesc.readLock.push(res);},
+                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                    //         }
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    // } else if operation & LOCK_EX == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         filedesc.access_lock.write();
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    // } else if operation & LOCK_UN == 0 {
+                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
+                    // } 
+                    // panic!("Should not be possible to hit this code");
+                    return 0;
                 },
                 Socket(filedesc) => {
                     //check whether the lock is blocking or not
-                    if operation & LOCK_SH == 0 {
-                        if operation & LOCK_NB == 0 {
-                            match filedesc.access_lock.read() {
-                                Ok(res) => {filedesc.readLock.push(res);},
-                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                            }
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
-                    } else if operation & LOCK_EX == 0 {
-                        if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.write();
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    } else if operation & LOCK_UN == 0 {
-                        if let Some(_) = filedesc.readLock.pop() {return 0;}
-                        else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    } 
-                    panic!("Should not be possible to hit this code");
+                    // if operation & LOCK_SH == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         match filedesc.access_lock.read() {
+                    //             Ok(res) => {filedesc.readLock.push(res);},
+                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                    //         }
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    // } else if operation & LOCK_EX == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         filedesc.access_lock.write();
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    // } else if operation & LOCK_UN == 0 {
+                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
+                    // } 
+                    // panic!("Should not be possible to hit this code");
+                    return 0;
                 },
                 Pipe(filedesc) => {
                     //check whether the lock is blocking or not
-                    if operation & LOCK_SH == 0 {
-                        if operation & LOCK_NB == 0 {
-                            match filedesc.access_lock.read() {
-                                Ok(res) => {filedesc.readLock.push(res);},
-                                Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                            }
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
-                    } else if operation & LOCK_EX == 0 {
-                        if operation & LOCK_NB == 0 {
-                            filedesc.access_lock.write();
-                            return 0;
-                        }
-                        if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                        else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    } else if operation & LOCK_UN == 0 {
-                        if let Some(_) = filedesc.readLock.pop() {return 0;}
-                        else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    } 
-                    panic!("Should not be possible to hit this code");
+                    // if operation & LOCK_SH == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         match filedesc.access_lock.read() {
+                    //             Ok(res) => {filedesc.readLock.push(res);},
+                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
+                    //         }
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
+                    // } else if operation & LOCK_EX == 0 {
+                    //     if operation & LOCK_NB == 0 {
+                    //         filedesc.access_lock.write();
+                    //         return 0;
+                    //     }
+                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
+                    // } else if operation & LOCK_UN == 0 {
+                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
+                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
+                    // } 
+                    // panic!("Should not be possible to hit this code");
+                    return 0;
                 },
             }
         } else {
