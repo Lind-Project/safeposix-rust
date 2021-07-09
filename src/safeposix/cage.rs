@@ -112,9 +112,9 @@ impl Cage {
     }
 
     pub fn load_lower_handle_stubs(&mut self) {
-        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, access_lock: interface::RustLock::new(()), readLock: Vec::new(), writeLock: None})));
-        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, access_lock: interface::RustLock::new(()), readLock: Vec::new(), writeLock: None})));
-        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY,  access_lock: interface::RustLock::new(()), readLock: Vec::new(), writeLock: None})));
+        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY})));
+        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY})));
+        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY})));
         let mut fdtable = self.filedescriptortable.write().unwrap();
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
