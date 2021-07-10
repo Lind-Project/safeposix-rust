@@ -896,7 +896,6 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
         let metadata = FS_METADATA.read().unwrap();
 
-
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
             let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
@@ -968,12 +967,13 @@ impl Cage {
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
+        //if a starting fd was passed, then use that as the starting point, but otherwise, use the designated minimum of STARTINGFD
         let start_fd = match start_desc {
             Some(start_desc) => start_desc,
             None => STARTINGFD,
         };
 
-        //checking whether the fd exists in the file table and is higher than the starting file descriptor
+        //checking whether the fd exists in the file table and is higher than the starting file descriptor or not
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
@@ -986,6 +986,7 @@ impl Cage {
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
+        //if the old fd exists, execute the helper, else return error
         if let Some(_) = fdtable.get(&oldfd) {
             return Self::_dup2_helper(&self, oldfd, newfd, Some(&mut fdtable));
         } else {
@@ -994,6 +995,8 @@ impl Cage {
     }
 
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
+        
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
         let mut writer;
         let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
             writer = self.filedescriptortable.write().unwrap(); 
@@ -1010,6 +1013,7 @@ impl Cage {
             return newfd;
         }
 
+        //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
         if fdtable.contains_key(&newfd) {
             let close_result = Self::_close_helper(&self, newfd, Some(fdtable));
             if close_result != 0 {
@@ -1024,6 +1028,8 @@ impl Cage {
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
+        
+        //check that the fd is valid
         match fdtable.get(&fd) {
             Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable));},
             None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
@@ -1031,18 +1037,20 @@ impl Cage {
     }
 
     pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
         let mut writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             writer = self.filedescriptortable.write().unwrap(); 
             &mut writer
         };
 
+        //unpacking and getting the type to match for
         let locked_filedesc = fdtable.get(&fd).unwrap();
         let filedesc_enum = locked_filedesc.read().unwrap();
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Decide how to proceed depending on the fd type.
-        //First we check in the file descriptor to handle sockets, streams, and pipes,
+        //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
         //and if it is a normal file descriptor we decrement the refcount to reflect
         //one less reference to the file.
         match &*filedesc_enum {
@@ -1078,9 +1086,9 @@ impl Cage {
                         //Inode::File is a regular file by default
                         
                         if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
+                            //removing the file from the entire filesystem (interface, metadata, and object table)
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename).unwrap();
-                            //removing the file from the entire filesystem
                             mutmetadata.inodetable.remove(&inodenum);
                             fobjtable.remove(&inodenum);  
                         } 
@@ -1115,6 +1123,7 @@ impl Cage {
                 }
             },
         }
+        //removing inode from fd table
         Self::rm_from_fd_table(self, &fd);
         return 0; //_close_helper has succeeded!
     }
