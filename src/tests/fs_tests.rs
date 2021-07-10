@@ -8,9 +8,11 @@ mod fs_tests {
     pub fn test_fs() {
         persistencetest();
         rdwrtest();
-        prdwrtest();
+        prdwrtest(); //this test keeps failing for me
         chardevtest();
         dispatch_tests::cagetest();
+        // ut_lind_fs_simple();
+        // ut_lind_fs_dup();
     }
 
     pub fn persistencetest() {
