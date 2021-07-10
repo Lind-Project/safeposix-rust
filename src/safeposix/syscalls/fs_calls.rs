@@ -1045,86 +1045,88 @@ impl Cage {
         };
 
         //unpacking and getting the type to match for
-        let locked_filedesc = fdtable.get(&fd).unwrap();
-        let filedesc_enum = locked_filedesc.read().unwrap();
-        let mut mutmetadata = FS_METADATA.write().unwrap();
+        {
+            let locked_filedesc = fdtable.get(&fd).unwrap();
+            let filedesc_enum = locked_filedesc.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
 
-        //Decide how to proceed depending on the fd type.
-        //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
-        //and if it is a normal file descriptor we decrement the refcount to reflect
-        //one less reference to the file.
-        match &*filedesc_enum {
-            //if we are a socket, we dont change disk metadata
-            Stream(_) => {},
-            Socket(_) => {
-                Self::_cleanup_socket(self, &fd, false);
+            //Decide how to proceed depending on the fd type.
+            //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
+            //and if it is a normal file descriptor we decrement the refcount to reflect
+            //one less reference to the file.
+            match &*filedesc_enum {
+                //if we are a socket, we dont change disk metadata
+                Stream(_) => {},
+                Socket(_) => {
+                    Self::_cleanup_socket(self, &fd, false);
+                    },
+                Pipe(pipe_filedesc_obj) => {
+                    let pipenumber = pipe_filedesc_obj.pipe;
+                    let read_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_RDONLY);
+                    let write_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_WRONLY);
+
+                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // let pipetable.pipenumber.eof = true;
+                    }
+
+                    if read_references + write_references == 1 {
+                        //del pipetable.pipenumber
+                    }
                 },
-            Pipe(pipe_filedesc_obj) => {
-                let pipenumber = pipe_filedesc_obj.pipe;
-                let read_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_RDONLY);
-                let write_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_WRONLY);
+                //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
 
-                if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
-                    // let pipetable.pipenumber.eof = true;
-                }
+                    match inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount -= 1;
 
-                if read_references + write_references == 1 {
-                    //del pipetable.pipenumber
-                }
-            },
-            //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator
-            File(normalfile_filedesc_obj) => {
-                let inodenum = normalfile_filedesc_obj.inode;
-                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            //if it's not a reg file, then we have nothing to close
+                            //Inode::File is a regular file by default
+                            
+                            if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
+                                //removing the file from the entire filesystem (interface, metadata, and object table)
+                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                interface::removefile(sysfilename).unwrap();
+                                mutmetadata.inodetable.remove(&inodenum);
+                                fobjtable.remove(&inodenum);  
+                            } 
+                        },
+                        Inode::Dir(ref mut dir_inode_obj) => {
+                            dir_inode_obj.refcount -= 1;
 
-                match inodeobj {
-                    Inode::File(ref mut normalfile_inode_obj) => {
-                        normalfile_inode_obj.refcount -= 1;
+                            //if it's not a reg file, then we have nothing to close
+                            match fobjtable.get(&inodenum) {
+                                Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                                None => {}
+                            }
+                            if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
+                                //removing the file from the metadata 
+                                mutmetadata.inodetable.remove(&inodenum);
+                            } 
+                        },
+                        Inode::CharDev(ref mut char_inode_obj) => {
+                            char_inode_obj.refcount -= 1;
 
-                        //if it's not a reg file, then we have nothing to close
-                        //Inode::File is a regular file by default
-                        
-                        if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
-                            //removing the file from the entire filesystem (interface, metadata, and object table)
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-                            mutmetadata.inodetable.remove(&inodenum);
-                            fobjtable.remove(&inodenum);  
-                        } 
-                    },
-                    Inode::Dir(ref mut dir_inode_obj) => {
-                        dir_inode_obj.refcount -= 1;
-
-                        //if it's not a reg file, then we have nothing to close
-                        match fobjtable.get(&inodenum) {
-                            Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                            None => {}
-                        }
-                        if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
-                            //removing the file from the metadata 
-                            mutmetadata.inodetable.remove(&inodenum);
-                        } 
-                    },
-                    Inode::CharDev(ref mut char_inode_obj) => {
-                        char_inode_obj.refcount -= 1;
-
-                        //if it's not a reg file, then we have nothing to close
-                        match fobjtable.get(&inodenum) {
-                            Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                            None => {}
-                        }
-                        if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
-                            //removing the file from the metadata 
-                            mutmetadata.inodetable.remove(&inodenum);
-                        } 
-                    },
-                    Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
-                }
-            },
+                            //if it's not a reg file, then we have nothing to close
+                            match fobjtable.get(&inodenum) {
+                                Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                                None => {}
+                            }
+                            if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
+                                //removing the file from the metadata 
+                                mutmetadata.inodetable.remove(&inodenum);
+                            } 
+                        },
+                        Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
+                    }
+                },
+            }
         }
         //removing inode from fd table
-        Self::rm_from_fd_table(self, &fd);
+        fdtable.remove(&fd);
         return 0; //_close_helper has succeeded!
     }
 
