@@ -975,10 +975,6 @@ impl Cage {
 
         //checking whether the fd exists in the file table and is higher than the starting file descriptor
         if let Some(_) = fdtable.get(&fd) {
-            if fd >= STARTINGFD {
-                return syscall_error(Errno::EBADF, "dup", "provided file descriptor is out of range");
-            }
-
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
             return Self::_dup2_helper(&self, fd, nextfd, Some(&mut fdtable))
@@ -1005,7 +1001,7 @@ impl Cage {
         };
         
         //checking if the new fd is out of range
-        if newfd >= MAXFD || newfd <= STARTINGFD {
+        if newfd >= MAXFD || newfd < 0 {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
 
@@ -1014,7 +1010,12 @@ impl Cage {
             return newfd;
         }
 
-        if fdtable.contains_key(&newfd) {Self::_close_helper(&self, newfd, Some(fdtable));}    
+        if fdtable.contains_key(&newfd) {
+            let close_result = Self::_close_helper(&self, newfd, Some(fdtable));
+            if close_result != 0 {
+                return close_result;
+            }
+        }    
         fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
         return newfd;
     }
@@ -1036,8 +1037,8 @@ impl Cage {
             &mut writer
         };
 
-        let filedesc = fdtable.get(&fd).unwrap();
-        let filedesc_enum = filedesc.write().unwrap();
+        let locked_filedesc = fdtable.get(&fd).unwrap();
+        let filedesc_enum = locked_filedesc.read().unwrap();
         let mut mutmetadata = FS_METADATA.write().unwrap();
 
         //Decide how to proceed depending on the fd type.
@@ -1081,7 +1082,6 @@ impl Cage {
                             interface::removefile(sysfilename).unwrap();
                             //removing the file from the entire filesystem
                             mutmetadata.inodetable.remove(&inodenum);
-                            fobjtable.get(&inodenum).unwrap().close().unwrap();
                             fobjtable.remove(&inodenum);  
                         } 
                     },
@@ -1089,35 +1089,25 @@ impl Cage {
                         dir_inode_obj.refcount -= 1;
 
                         //if it's not a reg file, then we have nothing to close
-                        if !is_reg(dir_inode_obj.mode) {
-                            match fobjtable.get(&inodenum) {
-                                Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                                None => {return 0;}
-                            }
+                        match fobjtable.get(&inodenum) {
+                            Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                            None => {}
                         }
-                        if dir_inode_obj.linkcount == 0 && dir_inode_obj.refcount == 0 {
-                            //removing the file from the entire filesystem
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
-                            mutmetadata.inodetable.remove(&inodenum);                          
+                        if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
+                            //removing the file from the metadata 
+                            mutmetadata.inodetable.remove(&inodenum);
                         } 
                     },
                     Inode::CharDev(ref mut char_inode_obj) => {
                         char_inode_obj.refcount -= 1;
 
                         //if it's not a reg file, then we have nothing to close
-                        if !is_reg(char_inode_obj.mode) {
-                            match fobjtable.get(&inodenum) {
-                                Some(_) => {syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                                None => {return 0;}
-                            }
+                        match fobjtable.get(&inodenum) {
+                            Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                            None => {}
                         }
-
-                        //if there are still references to the file, then do nothing to the file
                         if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
-                            //removing the file from the entire filesystem
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename).unwrap();
+                            //removing the file from the metadata 
                             mutmetadata.inodetable.remove(&inodenum);
                         } 
                     },
@@ -1167,21 +1157,18 @@ impl Cage {
                         Pipe(ref mut obj) => {
                             //bitwise or on the flags
                             obj.flags = obj.flags | O_CLOEXEC;
-                            return 0;
                         },
                         Stream(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
-                            return 0;
                         },
                         Socket(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
-                            return 0;
                         },
                         File(ref mut obj) => {
                             obj.flags = obj.flags | O_CLOEXEC;
-                            return 0;
                         },
                     }
+                    return 0;
                 },
                 (F_GETFL, ..) => {
                     //for get, we just need to return the flags
@@ -1198,47 +1185,40 @@ impl Cage {
                     match &mut *filedesc_enum {
                         Pipe(ref mut obj) => {
                             obj.flags = arg;
-                            return 0;
                         },
                         Stream(ref mut obj) => {
                             obj.flags = arg;
-                            return 0;
                         },
                         Socket(ref mut obj) => {
                             obj.flags = arg;
-                            return 0;
                         },
                         File(ref mut obj) => {
                             obj.flags = arg;
-                            return 0;
                         },
                     }
+                    return 0;
                 },
                 (F_DUPFD, arg) if arg >= 0 => {
                     //TO DO: check that the type of x is an int or a long 
-                    Self::dup_syscall(self, fd, Some(arg));
-                    return 0;
+                    return Self::dup_syscall(self, fd, Some(arg));
                 },
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
                     match &*filedesc_enum {
                         Pipe(_) => {
                             //TO DO: traditional SIGIO behavior
-                            return 0;
                         },
                         Stream(_) => {
                             //TO DO: traditional SIGIO behavior
-                            return 0;
                         },
                         Socket(_) => {
                             //TO DO: traditional SIGIO behavior
-                            return 0;
                         },
                         File(_) => {
                             //TO DO: traditional SIGIO behavior
-                            return 0;
                         },
                     }
+                    return 0;
                 },
                 (F_SETOWN, arg) if arg >= 0 => {
                     //this would return the PID if positive and the process group if negative,
@@ -1267,7 +1247,7 @@ impl Cage {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
                     },
                     Inode::CharDev(ref mut dev_inode) => {
-                            dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
+                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
                     },
                     Inode::Dir(ref mut dir_inode) => {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
@@ -1289,136 +1269,6 @@ impl Cage {
         }
         persist_metadata(&metadata);
         return 0; //success!
-    }
-
-    //------------------------------------FLOCK SYSCALL------------------------------------
-
-    pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
-        
-        //checking whether the operation is valid
-        if 0 == operation & !(LOCK_SH|LOCK_EX|LOCK_NB|LOCK_UN) {
-            return syscall_error(Errno::EINVAL, "flock", "operation is invalid");
-        }
-
-        let mut fdtable = self.filedescriptortable.write().unwrap();
-
-        if let Some(wrappedfd) = fdtable.get(&fd) {
-            let filedesc_enum = wrappedfd.write().unwrap();
-            match &*filedesc_enum {
-                File(filedesc) => {
-                    //check whether the lock is blocking or not
-                    // if operation & LOCK_SH == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         match filedesc.access_lock.read() {
-                    //             Ok(res) => {filedesc.readLock.push(res);},
-                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                    //         }
-                    //         return 0;
-                    //     }
-
-                    //     if let guard = filedesc.access_lock.try_read().unwrap() {
-                    //         filedesc.readLock.push(guard);
-                    //         return 0;
-                    //     } 
-                    //     else {
-                    //         return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");
-                    //     }
-                    // } else if operation & LOCK_EX == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         filedesc.access_lock.write();
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    // } else if operation & LOCK_UN == 0 {
-                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    // }
-                    // panic!("Should not be possible to hit this code");
-                    return 0;
-                },
-                Stream(filedesc) => {
-                    //check whether the lock is blocking or not
-                    // if operation & LOCK_SH == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         match filedesc.access_lock.read() {
-                    //             Ok(res) => {filedesc.readLock.push(res);},
-                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                    //         }
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
-                    // } else if operation & LOCK_EX == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         filedesc.access_lock.write();
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    // } else if operation & LOCK_UN == 0 {
-                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    // } 
-                    // panic!("Should not be possible to hit this code");
-                    return 0;
-                },
-                Socket(filedesc) => {
-                    //check whether the lock is blocking or not
-                    // if operation & LOCK_SH == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         match filedesc.access_lock.read() {
-                    //             Ok(res) => {filedesc.readLock.push(res);},
-                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                    //         }
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
-                    // } else if operation & LOCK_EX == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         filedesc.access_lock.write();
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    // } else if operation & LOCK_UN == 0 {
-                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    // } 
-                    // panic!("Should not be possible to hit this code");
-                    return 0;
-                },
-                Pipe(filedesc) => {
-                    //check whether the lock is blocking or not
-                    // if operation & LOCK_SH == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         match filedesc.access_lock.read() {
-                    //             Ok(res) => {filedesc.readLock.push(res);},
-                    //             Err(_) => {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");},
-                    //         }
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_read().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "shared lock couldn't be acquired");}
-                    // } else if operation & LOCK_EX == 0 {
-                    //     if operation & LOCK_NB == 0 {
-                    //         filedesc.access_lock.write();
-                    //         return 0;
-                    //     }
-                    //     if let guard = filedesc.access_lock.try_write().unwrap() {return 0;} 
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock couldn't be acquired");}
-                    // } else if operation & LOCK_UN == 0 {
-                    //     if let Some(_) = filedesc.readLock.pop() {return 0;}
-                    //     else {return syscall_error(Errno::EAGAIN, "flock", "file is already unlocked");} 
-                    // } 
-                    // panic!("Should not be possible to hit this code");
-                    return 0;
-                },
-            }
-        } else {
-           return syscall_error(Errno::EBADF, "flock", "invalid file descriptor");
-        }
     }
 
     //------------------MMAP SYSCALL------------------

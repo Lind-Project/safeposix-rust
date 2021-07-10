@@ -112,13 +112,13 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-
+    #[test]
     pub fn ut_lind_fs_simple() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        assert_eq!(cage.access_syscall("/", F_OK), 0);
-        assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
+        // assert_eq!(cage.access_syscall("/", F_OK), 0);
+        // assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
 
         let mut statdata = StatData{
             st_dev: 0,
@@ -137,7 +137,10 @@ mod fs_tests {
         };
         assert_eq!(cage.stat_syscall("/", &mut statdata), 0);
         //ensure that there are two hard links
-        // assert_eq!(statdata.st_nlink, 2); //why is this test failing?
+        assert_eq!(statdata.st_nlink, 2); //why is this test failing?
+
+        // let metadata = FS_METADATA.read().unwrap();
+        // println!("{:?}", metadata.inodetable);
         //ensure that there is no associated size
         assert_eq!(statdata.st_size, 0);
         
@@ -145,6 +148,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
