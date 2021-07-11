@@ -157,10 +157,10 @@ mod fs_tests {
         let fd = cage.open_syscall(&name, flags, S_IRWXA);
         let mut temp_buffer = sizecbuf(2);
         assert!(fd >= 0);
-        assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(fd, temp_buffer.as_mut_ptr(), 2), 2);
-        assert_eq!(cbuf2str(&temp_buffer), "hi");
+        assert_eq!(cbuf2str(&temp_buffer), "12");
 
         //duplicate the file descriptor
         let fd2 = cage.dup_syscall(fd, None);
@@ -177,26 +177,68 @@ mod fs_tests {
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_END), 2);
 
         // write some data to move the first position
-        assert_eq!(cage.write_syscall(fd, str2cbuf("yo"), 2), 2);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("34"), 2), 2);
 
         //Make sure that they are still in the same place:
         let mut buffer = sizecbuf(4);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), cage.lseek_syscall(fd2, 0, SEEK_SET));
         assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 4), 4);
-        assert_eq!(cbuf2str(&buffer), "hiyo");
+        assert_eq!(cbuf2str(&buffer), "1234");
 
         // cage.close_syscall(fd);
 
         //the other &fd should still work
-        assert_eq!(cage.write_syscall(fd2, str2cbuf("raar"), 4), 4);
+        assert_eq!(cage.write_syscall(fd2, str2cbuf("5678"), 4), 4);
         cage.lseek_syscall(fd2,0,SEEK_CUR);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         let mut buffer2 = sizecbuf(8);
         assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 8), 8);
         // cage.close_syscall(fd2);
-        assert_eq!(cbuf2str(&buffer2), "hiyoraar");
+        assert_eq!(cbuf2str(&buffer2), "12345678");
 
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_dup2() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let mode: i32 = 438;   // 0666
+        let name = String::from("/dup2file");
+
+        let fd = cage.open_syscall(&name, flags, S_IRWXA);
+
+        assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
+
+        let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
+
+        //should be a no-op
+        let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
+
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2, 0, SEEK_CUR));
+        assert_eq!(cage.write_syscall(fd, str2cbuf("34"), 2), 2);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2, 0, SEEK_CUR));
+
+        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+
+        let mut buffer = sizecbuf(10);
+        assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 10), 4);
+        assert_eq!(cbuf2str(&buffer), "1234");
+
+        // assert_eq!(cage.close_syscall(fd), 0);
+
+        let mut buffer2 = sizecbuf(10);
+        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_CUR), 0);
+        assert_eq!(cage.write_syscall(fd2, str2cbuf("5678"), 4), 4);
+
+        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 10), 8);
+        assert_eq!(cbuf2str(&buffer), "12345678");
+
+         // assert_eq!(cage.close_syscall(fd2), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
