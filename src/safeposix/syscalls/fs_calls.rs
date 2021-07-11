@@ -963,4 +963,71 @@ impl Cage {
             syscall_error(Errno::ENOENT, "chdir", "the directory referred to in path does not exist")
         }
     }
+
+    //------------------RMDIR SYSCALL------------------
+
+    pub fn rmdir_syscall(&self, path: &str) -> i32 {
+        if path.len() == 0 {return syscall_error(Errno::ENOENT, "rmdir", "Given path is null");}
+
+        let truepath = normpath(convpath(path), self);
+        let mut metadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(truepath.as_path(), Some(&metadata)) {
+            (None, ..) => {
+                syscall_error(Errno::EEXIST, "rmdir", "Path does not exist")
+            }
+            (Some(_), None) {
+                syscall_error(Errno::EINVAL, "rmdir", "Cannot remove root directory")
+            }
+            (Some(inodenum), Some(parent_inodenum)) => {
+                let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
+
+                match inodeobj {
+                    Inode::Dir(_) => {
+                        metadata.inodetable.remove(inodenum);
+                        if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                            parent_dir.filename_to_inode_dict.remove(truepath.file_name().unwrap().to_owned());
+                            parent_dir.linkcount -= 1;
+                        }
+                        return 0;
+                    }
+                    _ => {return syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory");}
+                }
+            }
+        }
+    }
+
+    //------------------RENAME SYSCALL------------------
+
+    pub fn rename_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
+        if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "rename", "Old path is null");}
+        if newpath.len() == 0 {return syscall_error(Errno::ENOENT, "rename", "New path is null");}
+
+        let true_oldpath = normpath(convpath(oldpath), self);
+        let true_newpath = normpath(convpath(newpath), self);
+        let mut metadata = FS_METADATA.write().unwrap();
+
+        match metawalkandparent(true_oldpath.as_path(), Some(&metadata)) {
+            (None, ..) => {
+                syscall_error(Errno::EEXIST, "rename", "Old path does not exist")
+            }
+            (Some(_), None) {
+                syscall_error(Errno::EINVAL, "rmdir", "Cannot rename root directory")
+            }
+            (Some(inodenum), Some(parent_inodenum)) => {
+                let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
+
+                match inodeobj {
+                    Inode::Dir(_) => {
+                        if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                            parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_owned(), inodenum);
+                            parent_dir.filename_to_inode_dict.remove(true_oldpath.file_name().unwrap().to_owned());
+                        }
+                        return 0;
+                    }
+                    _ => {return syscall_error(Errno::ENOTDIR, "rename", "Old path is not a directory");}
+                }
+            }
+        }
+    }
 }
