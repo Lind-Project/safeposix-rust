@@ -527,7 +527,6 @@ impl Cage {
                                 //move position forward by the number of bytes we've read
 
                                 normalfile_filedesc_obj.position += bytesread;
-                                println!("READ: {:?} POSITION: {:?}", bytesread, normalfile_filedesc_obj.position);
                                 bytesread as i32
                             } else {
                                0 //0 bytes read, but not an error value that can/should be passed to the user

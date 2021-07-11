@@ -152,11 +152,15 @@ mod fs_tests {
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let mode: i32 = 438;   // 0666
-        let name = String::from("/double_open_file");
+        let name = String::from("/dupfile");
 
         let fd = cage.open_syscall(&name, flags, S_IRWXA);
+        let mut temp_buffer = sizecbuf(2);
         assert!(fd >= 0);
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(fd, temp_buffer.as_mut_ptr(), 2), 2);
+        assert_eq!(cbuf2str(&temp_buffer), "hi");
 
         //duplicate the file descriptor
         let fd2 = cage.dup_syscall(fd, None);
@@ -167,28 +171,30 @@ mod fs_tests {
         assert!(fd != fd2 && fd != fd3);
 
         //We don't need all three, though:
-        cage.close_syscall(fd3);
+        // cage.close_syscall(fd3);
 
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2,0,SEEK_CUR));
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_END), 2);
+        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_END), 2);
 
         // write some data to move the first position
         assert_eq!(cage.write_syscall(fd, str2cbuf("yo"), 2), 2);
 
         //Make sure that they are still in the same place:
         let mut buffer = sizecbuf(4);
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2,0,SEEK_CUR));
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), cage.lseek_syscall(fd2, 0, SEEK_SET));
         assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 4), 4);
         assert_eq!(cbuf2str(&buffer), "hiyo");
 
-        cage.close_syscall(fd);
+        // cage.close_syscall(fd);
 
         //the other &fd should still work
         assert_eq!(cage.write_syscall(fd2, str2cbuf("raar"), 4), 4);
         cage.lseek_syscall(fd2,0,SEEK_CUR);
 
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         let mut buffer2 = sizecbuf(8);
         assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 8), 8);
-        cage.close_syscall(fd2);
+        // cage.close_syscall(fd2);
         assert_eq!(cbuf2str(&buffer2), "hiyoraar");
 
         assert_eq!(cage.exit_syscall(), 0);
