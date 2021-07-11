@@ -501,7 +501,7 @@ impl Cage {
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
- 
+        
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
@@ -525,7 +525,9 @@ impl Cage {
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
+
                                 normalfile_filedesc_obj.position += bytesread;
+                                println!("READ: {:?} POSITION: {:?}", bytesread, normalfile_filedesc_obj.position);
                                 bytesread as i32
                             } else {
                                0 //0 bytes read, but not an error value that can/should be passed to the user
@@ -658,10 +660,10 @@ impl Cage {
                             if blankbytecount > 0 {
                                 if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
                                     if byteswritten != blankbytecount as usize {
-                                        panic!("Write of blank bytes for pwrite failed!");
+                                        panic!("Write of blank bytes for write failed!");
                                     }
                                 } else {
-                                    panic!("Write of blank bytes for pwrite failed!");
+                                    panic!("Write of blank bytes for write failed!");
                                 }
                             }
 
@@ -674,7 +676,7 @@ impl Cage {
                                     normalfile_inode_obj.size = newposition;
                                 } //update file size if necessary
                                 persist_metadata(&metadata);
-
+                                
                                 byteswritten as i32
                             } else {
                                 0 //0 bytes written, but not an error value that can/should be passed to the user
