@@ -1009,6 +1009,34 @@ impl Cage {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
 
+        {
+            let locked_filedesc = fdtable.get(&oldfd).unwrap();
+            let filedesc_enum = locked_filedesc.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    //incrementing the ref count so that when close is executed on the dup'd file
+                    //the original file does not get a negative ref count
+                    match inodeobj {
+                        Inode::File(fileObj) => {
+                            fileObj.refcount += 1;
+                        },
+                        Inode::Dir(dirObj) => {
+                            dirObj.refcount += 1;
+                        },
+                        Inode::CharDev(charDevObj) => {
+                            charDevObj.refcount += 1;
+                        },
+                        _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+                    }
+                },
+                _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+            }
+        }
+
         //if the file descriptors are equal, return the new one
         if newfd == oldfd {
             return newfd;
