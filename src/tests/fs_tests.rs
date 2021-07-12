@@ -6,11 +6,12 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
+        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
-        ut_lind_fs_simple();
         persistencetest();
         rdwrtest();
         prdwrtest();
@@ -320,7 +321,7 @@ mod fs_tests {
         //ensure that there are two hard links
 
         //TO DO: Fix the test underneath this
-        // assert_eq!(statdata2.st_nlink, 3); //now this is 6 no matter what?
+        assert_eq!(statdata2.st_nlink, 3); //now this is 6 no matter what?
 
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
