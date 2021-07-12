@@ -21,7 +21,7 @@ mod safeposix;
 use safeposix::{cage::*, filesystem::*, dispatcher::{lindrustfinalize, lindrustinit}};
 //assume deserialization
 
-fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
+fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
     if !hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
@@ -39,12 +39,12 @@ fn update_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindf
         let children = hostfilepath.read_dir().unwrap();
         for wrappedchild in children {
             let child = wrappedchild.unwrap();
-            update_dir_into_lind(cage, child.path(), format!("{}/{:?}", lindfilepath, child.file_name()));
+            update_dir_into_lind(cage, child.path().as_path(), format!("{}/{:?}", lindfilepath, child.file_name()).as_str());
         }
     }
 }
 
-fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String) {
+fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
     if !hostfilepath.exists() || !hostfilepath.is_file() {
         println!("{:?} does not exist or is not a regular file, skipping", hostfilepath);
         return;
@@ -52,8 +52,8 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
     let fmetadata = hostfilepath.metadata().unwrap();
 
     let host_size = fmetadata.len();
-    let mut lindstat_res: StatData;
-    let stat_us = cage.stat_syscall(lindfilepath.as_str(), &mut lindstat_res);
+    let mut lindstat_res: StatData = StatData::default();
+    let stat_us = cage.stat_syscall(lindfilepath, &mut lindstat_res);
 
     let lind_exists;
     let lind_isfile;
@@ -77,9 +77,9 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
     let samefile = if host_size as usize == lind_size {
         let mut hostslice = vec![0u8; lind_size];
         let mut lindslice = vec![0u8; lind_size];
-        let hostfile = File::open(hostfilepath).unwrap();
+        let mut hostfile = File::open(hostfilepath).unwrap();
         hostfile.read(hostslice.as_mut_slice());
-        let lindfd = cage.open_syscall(lindfilepath.as_str(), O_RDONLY, 0);
+        let lindfd = cage.open_syscall(lindfilepath, O_RDONLY, 0);
         cage.read_syscall(lindfd, lindslice.as_mut_ptr(), lind_size);
         cage.close_syscall(lindfd);
         hostslice == lindslice
@@ -90,7 +90,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
     //if they are not the same file, remove the lind file and replace it with the host file
     if !samefile {
         if lind_exists {
-            cage.unlink_syscall(lindfilepath.as_str());
+            cage.unlink_syscall(lindfilepath);
             println!("removing {} on lind file system", lindfilepath);
         }
         cp_into_lind(cage, hostfilepath, lindfilepath, true);
@@ -100,7 +100,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
     }
 }
 
-fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String, create_missing_dirs: bool) {
+fn cp_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str, create_missing_dirs: bool) {
     if !hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
@@ -118,12 +118,12 @@ fn cp_dir_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilep
         let children = hostfilepath.read_dir().unwrap();
         for wrappedchild in children {
             let child = wrappedchild.unwrap();
-            cp_dir_into_lind(cage, child.path(), format!("{}/{:?}", lindfilepath, child.file_name()), create_missing_dirs);
+            cp_dir_into_lind(cage, child.path().as_path(), format!("{}/{:?}", lindfilepath, child.file_name()).as_str(), create_missing_dirs);
         }
     }
 }
 
-fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath: String, create_missing_dirs: bool) {
+fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str, create_missing_dirs: bool) {
     if !hostfilepath.exists() {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
         return
@@ -133,13 +133,13 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
         return
     }
 
-    let lindtruepath = normpath(convpath(lindfilepath.as_str()), cage);
+    let lindtruepath = normpath(convpath(lindfilepath), cage);
 
     //if a directory in the lindfilepath does not exist in the lind file system, create it!
     let mut ancestor = interface::RustPathBuf::from("/");
     for component in lindtruepath.parent().unwrap().components() {
         ancestor.push(component);
-        let mut lindstat_res: StatData;
+        let mut lindstat_res: StatData = StatData::default();
 
         //check whether file exists
         let stat_us = cage.stat_syscall(format!("{:?}", ancestor).as_str(), &mut lindstat_res);
@@ -160,7 +160,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
     }
 
     //copy file contents into lind file system
-    let host_fileobj = File::open(hostfilepath).unwrap();
+    let mut host_fileobj = File::open(hostfilepath).unwrap();
     let mut filecontents: Vec<u8> = Vec::new();
     host_fileobj.read_to_end(&mut filecontents);
 
@@ -173,7 +173,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: interface::RustPathBuf, lindfilepath:
     assert_eq!(veclen as i32, writtenlen);
 
     //get diagnostic data to print
-    let mut lindstat_res: StatData;
+    let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.fstat_syscall(lindfd, &mut lindstat_res);
     let inode = lindstat_res.st_ino;
 
@@ -186,7 +186,7 @@ fn visit_children<T>(cage: &Cage, path: String, arg: Option<usize>, dirvisitor: 
 }
 
 fn lind_deltree(cage: &Cage, path: String) {
-    let mut lindstat_res: StatData;
+    let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
     if !is_dir(lindstat_res.st_mode) {
         eprintln!("Deltree must be run on a directory!");
@@ -202,7 +202,7 @@ fn lind_deltree(cage: &Cage, path: String) {
 }
 
 fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
-    let mut lindstat_res: StatData;
+    let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
     if !is_dir(lindstat_res.st_mode) {
         eprintln!("Tree must be run on a directory!");
@@ -226,7 +226,7 @@ fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
 }
 
 fn lind_ls(cage: &Cage, path: String) {
-    let mut lindstat_res: StatData;
+    let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
 
     if is_dir(lindstat_res.st_mode) {
@@ -275,7 +275,7 @@ update [hostsource] [linddest]  : Copies files from the host file system into th
 
 fn main() {
     lindrustinit();
-    let args = env::args();
+    let mut args = env::args();
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
@@ -283,13 +283,13 @@ fn main() {
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {
-        cmd.as_str()
+        cmd
     } else {
         print_usage();
         return; //print usage
     };
 
-    match command {
+    match command.as_str() {
         "help" | "usage" => {
             print_usage();
         }
@@ -298,14 +298,14 @@ fn main() {
             let source = args.next().expect("cp needs 2 arguments");
             let dest = args.next().expect("cp needs 2 arguments");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("cp cannot take more than 2 arguments"));
-            cp_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest, true);
+            cp_dir_into_lind(&utilcage, interface::RustPath::new(source.as_str()), dest.as_str(), true);
         }
 
         "update" => {
             let source = args.next().expect("update needs 2 arguments");
             let dest = args.next().expect("update needs 2 arguments");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("update cannot take more than 2 arguments"));
-            update_dir_into_lind(&utilcage, interface::RustPathBuf::from(source), dest);
+            update_dir_into_lind(&utilcage, interface::RustPath::new(source.as_str()), dest.as_str());
         }
 
         "ls" => {
@@ -316,13 +316,13 @@ fn main() {
 
         "tree" => {
             let rootdir = if let Some(dirstr) = args.next() {
-                dirstr.as_str()
-            } else {"/"}.to_string();
+                dirstr
+            } else {"/".to_string()};
             lind_tree(&utilcage, rootdir, 0);
         }
 
         "format" => {
-            let metadata = FS_METADATA.write().unwrap();
+            let mut metadata = FS_METADATA.write().unwrap();
             *metadata = FilesystemMetadata::blank_fs_init();
             drop(metadata);
             load_fs_special_files(&utilcage);

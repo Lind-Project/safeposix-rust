@@ -97,6 +97,7 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 pub const FILEDATAPREFIX: &str = "linddata.";
 
 #[repr(C)]
+#[derive(Default)]
 pub struct StatData {
   pub st_dev: u64,
   pub st_ino: usize,
