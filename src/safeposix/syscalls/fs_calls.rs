@@ -973,7 +973,7 @@ impl Cage {
             None => STARTINGFD,
         };
 
-        //checking whether the fd exists in the file table and is higher than the starting file descriptor or not
+        //checking whether the fd exists in the file table
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
