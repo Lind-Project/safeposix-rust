@@ -171,7 +171,7 @@ mod fs_tests {
         assert!(fd != fd2 && fd != fd3);
 
         //We don't need all three, though:
-        // cage.close_syscall(fd3);
+        cage.close_syscall(fd3);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_END), 2);
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_END), 2);
@@ -185,16 +185,16 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 4), 4);
         assert_eq!(cbuf2str(&buffer), "1234");
 
-        // cage.close_syscall(fd);
+        cage.close_syscall(fd);
 
         //the other &fd should still work
         assert_eq!(cage.write_syscall(fd2, str2cbuf("5678"), 4), 4);
         cage.lseek_syscall(fd2,0,SEEK_CUR);
 
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
         let mut buffer2 = sizecbuf(8);
         assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 8), 8);
-        // cage.close_syscall(fd2);
+        cage.close_syscall(fd2);
         assert_eq!(cbuf2str(&buffer2), "12345678");
 
         assert_eq!(cage.exit_syscall(), 0);
@@ -228,7 +228,7 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 10), 4);
         assert_eq!(cbuf2str(&buffer), "1234");
 
-        // assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.close_syscall(fd), 0);
 
         let mut buffer2 = sizecbuf(10);
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_CUR), 0);
@@ -238,7 +238,7 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 10), 8);
         assert_eq!(cbuf2str(&buffer), "12345678");
 
-         // assert_eq!(cage.close_syscall(fd2), 0);
+         assert_eq!(cage.close_syscall(fd2), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
