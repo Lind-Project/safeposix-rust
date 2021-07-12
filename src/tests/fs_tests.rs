@@ -263,42 +263,4 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
-
-
-
-    pub fn ut_lind_fs_simple() {
-        lindrustinit();
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        assert_eq!(cage.access_syscall("/", F_OK), 0);
-        assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
-
-        let mut statdata2 = StatData{
-            st_dev: 0,
-            st_ino: 0,
-            st_mode: 0,
-            st_nlink: 0,
-            st_uid: 0,
-            st_gid: 0,
-            st_rdev: 0,
-            st_size: 0,
-            st_blksize: 0,
-            st_blocks: 0,
-            st_atim: (0, 0),
-            st_mtim: (0, 0),
-            st_ctim: (0, 0)
-        };
-
-        assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
-        //ensure that there are two hard links
-
-        //TO DO: Fix the test underneath this
-        // assert_eq!(statdata2.st_nlink, 3); //now this is 6 no matter what?
-
-        //ensure that there is no associated size
-        assert_eq!(statdata2.st_size, 0);
-        
-        assert_eq!(cage.exit_syscall(), 0);
-        lindrustfinalize();
-    }
 }
