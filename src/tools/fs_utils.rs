@@ -182,7 +182,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
     println!("Copied {:?} as {} ({})", hostfilepath, lindfilepath, inode);
 }
 
-fn visit_children<T>(cage: &Cage, path: String, arg: Option<usize>, dirvisitor: fn(&Cage, T), nondirvisitor: fn(&Cage, T)) {
+fn visit_children(cage: &Cage, path: String, arg: Option<usize>, visitor: fn(&Cage, String, bool, Option<usize>)) {
 }
 
 fn lind_deltree(cage: &Cage, path: String) {
@@ -193,10 +193,12 @@ fn lind_deltree(cage: &Cage, path: String) {
         return;
     }
 
-    visit_children(cage, path, None, |childcage, childpath| {
-        lind_deltree(childcage, childpath);
-    }, |childcage, childpath| {
-        childcage.unlink_syscall(childpath.as_str());
+    visit_children(cage, path, None, |childcage, childpath, isdir, _| {
+        if isdir {
+            lind_deltree(childcage, childpath);
+        } else {
+            childcage.unlink_syscall(childpath.as_str());
+        }
     });
     cage.rmdir_syscall(path.as_str());
 }
@@ -209,19 +211,16 @@ fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
         return;
     }
 
-    visit_children(cage, path, Some(indentlevel), |childcage, (childpath, childindentlevel)| {
+    visit_children(cage, path, Some(indentlevel), |childcage, childpath, isdir, childindentlevelopt| {
+        let childindentlevel = childindentlevelopt.unwrap();
         print!("{}", "|   ".repeat(childindentlevel));
         if childindentlevel > 0 {
             print!("{}", "|---");
         }
         println!("{}", childpath);
-        lind_tree(childcage, childpath, childindentlevel + 1);
-    }, |childcage, (childpath, childindentlevel)| {
-        print!("{}", "|   ".repeat(childindentlevel));
-        if childindentlevel > 0 {
-            print!("{}", "|---");
+        if isdir {
+            lind_tree(childcage, childpath, childindentlevel + 1);
         }
-        println!("{}", childpath);
     });
 }
 
@@ -230,10 +229,9 @@ fn lind_ls(cage: &Cage, path: String) {
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
 
     if is_dir(lindstat_res.st_mode) {
-        visit_children(cage, path, None, |childcage, childpath: String| {
-            print!("{}/ ", childpath);
-        }, |childcage, childpath| {
-            print!("{} ", childpath);
+        visit_children(cage, path, None, |childcage, childpath, isdir, _| {
+            if isdir {print!("{}/ ", childpath);}
+            else {print!("{} ", childpath);}
         });
     } else {
         print!("{} ", path);
@@ -318,6 +316,7 @@ fn main() {
             let rootdir = if let Some(dirstr) = args.next() {
                 dirstr
             } else {"/".to_string()};
+            println!("{}", rootdir);
             lind_tree(&utilcage, rootdir, 0);
         }
 
