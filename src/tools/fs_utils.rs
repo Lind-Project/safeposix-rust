@@ -229,7 +229,7 @@ fn lind_ls(cage: &Cage, path: String) {
     let stat_us = cage.stat_syscall(path.as_str(), &mut lindstat_res);
 
     if is_dir(lindstat_res.st_mode) {
-        visit_children(cage, path, None, |childcage, childpath, isdir, _| {
+        visit_children(cage, path, None, |_childcage, childpath, isdir, _| {
             if isdir {print!("{}/ ", childpath);}
             else {print!("{} ", childpath);}
         });
