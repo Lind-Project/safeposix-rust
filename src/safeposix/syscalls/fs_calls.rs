@@ -272,6 +272,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
+                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -289,6 +290,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
+                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -353,6 +355,7 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
+                persist_metadata(&mutmetadata);
 
                 0 //unlink has succeeded
             }

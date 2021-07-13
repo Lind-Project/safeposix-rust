@@ -337,6 +337,7 @@ fn main() {
 
             let metadata2 = FS_METADATA.read().unwrap();
             persist_metadata(&*metadata2);
+            return;
         }
 
         "deltree" => {
