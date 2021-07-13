@@ -153,7 +153,7 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                let effective_mode = S_IFREG as u32 | mode;
+                let effective_mode = S_IFDIR as u32 | mode;
 
                 //assert sane mode bits
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
@@ -974,7 +974,7 @@ impl Cage {
             None => STARTINGFD,
         };
 
-        //checking whether the fd exists in the file table and is higher than the starting file descriptor or not
+        //checking whether the fd exists in the file table
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
@@ -1021,14 +1021,14 @@ impl Cage {
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
                     match inodeobj {
-                        Inode::File(fileObj) => {
-                            fileObj.refcount += 1;
+                        Inode::File(normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount += 1;
                         },
-                        Inode::Dir(dirObj) => {
-                            dirObj.refcount += 1;
+                        Inode::Dir(dir_inode_obj) => {
+                            dir_inode_obj.refcount += 1;
                         },
-                        Inode::CharDev(charDevObj) => {
-                            charDevObj.refcount += 1;
+                        Inode::CharDev(chardev_inode_obj) => {
+                            chardev_inode_obj.refcount += 1;
                         },
                         _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
@@ -1036,7 +1036,7 @@ impl Cage {
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
-
+        
         //if the file descriptors are equal, return the new one
         if newfd == oldfd {
             return newfd;
@@ -1087,13 +1087,14 @@ impl Cage {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {},
                 Socket(_) => {
-                    Self::_cleanup_socket(self, &fd, false);
+                    //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
-                    let pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_RDONLY);
-                    let write_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_WRONLY);
+                    let _pipenumber = pipe_filedesc_obj.pipe;
+                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
+                    let write_references = 0;
 
+                    //Code below needs to reflect addition of pipes
                     if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
                         // let pipetable.pipenumber.eof = true;
                     }
@@ -1157,17 +1158,6 @@ impl Cage {
         //removing inode from fd table
         fdtable.remove(&fd);
         return 0; //_close_helper has succeeded!
-    }
-
-    pub fn _lookup_refs_by_pipe_end(&self, pipenumber: usize, flags: i32) -> i32 {
-        let pipe_references = 0;
-        //NOT COMPLETE
-        return 0;
-    }
-    
-    pub fn _cleanup_socket(&self, fd: &i32, partial: bool) -> i32 {
-        //NOT COMPELTE
-        return 0;
     }
     
     //------------------------------------FCNTL SYSCALL------------------------------------

@@ -134,6 +134,15 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         MUNMAP_SYSCALL => {
             cage.munmap_syscall(unsafe{arg1.dispatch_mutcbuf}, unsafe{arg2.dispatch_usize})
         }
+        DUP_SYSCALL => {
+            cage.dup_syscall(unsafe{arg1.dispatch_int}, None)
+        }
+        DUP2_SYSCALL => {
+            cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
+        }
+        FCNTL_SYSCALL => {
+            cage.fcntl_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_int})
+        }
         GETPPID_SYSCALL => {
             cage.getppid_syscall()
         }
