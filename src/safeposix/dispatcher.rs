@@ -118,6 +118,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         WRITE_SYSCALL => {
             cage.write_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_cbuf}, unsafe{arg3.dispatch_usize})
         }
+        CLOSE_SYSCALL => {
+            cage.close_syscall(unsafe{arg1.dispatch_int})
+        }
         LSEEK_SYSCALL => {
             cage.lseek_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_isize}, unsafe{arg3.dispatch_int})
         }
@@ -131,6 +134,15 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         MUNMAP_SYSCALL => {
             cage.munmap_syscall(unsafe{arg1.dispatch_mutcbuf}, unsafe{arg2.dispatch_usize})
         }
+        DUP_SYSCALL => {
+            cage.dup_syscall(unsafe{arg1.dispatch_int}, None)
+        }
+        DUP2_SYSCALL => {
+            cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
+        }
+        FCNTL_SYSCALL => {
+            cage.fcntl_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_int})
+        }
         GETPPID_SYSCALL => {
             cage.getppid_syscall()
         }
@@ -140,11 +152,14 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         EXIT_SYSCALL => {
             cage.exit_syscall()
         }
-        EXEC_SYSCALL => {
-            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
+        FLOCK_SYSCALL => {
+            cage.flock_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
         }
         FORK_SYSCALL => {
             cage.fork_syscall(unsafe{arg1.dispatch_ulong})
+        }
+        EXEC_SYSCALL => {
+            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
         }
         GETUID_SYSCALL => {
             cage.getuid_syscall()

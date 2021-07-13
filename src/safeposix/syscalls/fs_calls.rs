@@ -1,16 +1,14 @@
 // File system related system calls
-use libc::{LOCK_NB,LOCK_UN,LOCK_SH,LOCK_EX};
-
 use crate::interface;
 
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
 use crate::safeposix::filesystem::*;
 use super::errnos::*;
 
 impl Cage {
 
-    //------------------OPEN SYSCALL------------------
+    //------------------------------------OPEN SYSCALL------------------------------------
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         //Check that path is not empty
@@ -154,7 +152,7 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                let effective_mode = S_IFREG as u32 | mode;
+                let effective_mode = S_IFDIR as u32 | mode;
 
                 //assert sane mode bits
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
@@ -242,7 +240,7 @@ impl Cage {
         }
     }
 
-    //------------------LINK SYSCALL------------------
+    //------------------------------------LINK SYSCALL------------------------------------
 
     pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
         if oldpath.len() == 0 {return syscall_error(Errno::ENOENT, "link", "given oldpath was null");}
@@ -303,7 +301,7 @@ impl Cage {
         }
     }
 
-    //------------------UNLINK SYSCALL------------------
+    //------------------------------------UNLINK SYSCALL------------------------------------
 
     pub fn unlink_syscall(&self, path: &str) -> i32 {
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
@@ -360,13 +358,13 @@ impl Cage {
         }
     }
 
-    //------------------CREAT SYSCALL------------------
+    //------------------------------------CREAT SYSCALL------------------------------------
     
     pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
         self.open_syscall(path, O_CREAT | O_TRUNC | O_WRONLY, mode)
     }
 
-    //------------------STAT SYSCALL------------------
+    //------------------------------------STAT SYSCALL------------------------------------
 
     pub fn stat_syscall(&self, path: &str, statbuf: &mut StatData) -> i32 {
         let truepath = normpath(convpath(path), self);
@@ -402,7 +400,6 @@ impl Cage {
         } else {
             syscall_error(Errno::ENOENT, "stat", "path refers to an invalid file")
         }
-
     }
 
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
@@ -453,7 +450,7 @@ impl Cage {
     }
 
 
-    //------------------FSTAT SYSCALL------------------
+    //------------------------------------FSTAT SYSCALL------------------------------------
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -499,7 +496,7 @@ impl Cage {
         }
     }
 
-    //------------------READ SYSCALL------------------
+    //------------------------------------READ SYSCALL------------------------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -559,7 +556,7 @@ impl Cage {
         }
     }
 
-    //------------------PREAD SYSCALL------------------
+    //------------------------------------PREAD SYSCALL------------------------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
  
@@ -624,7 +621,7 @@ impl Cage {
         }
     }
 
-    //------------------WRITE SYSCALL------------------
+    //------------------------------------WRITE SYSCALL------------------------------------
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -716,7 +713,7 @@ impl Cage {
         }
     }
 
-    //------------------PWRITE SYSCALL------------------
+    //------------------------------------PWRITE SYSCALL------------------------------------
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -813,7 +810,7 @@ impl Cage {
         }
     }
 
-    //------------------LSEEK SYSCALL------------------
+    //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
  
@@ -892,12 +889,11 @@ impl Cage {
     }
 
 
-    //------------------ACCESS SYSCALL------------------
+    //------------------------------------ACCESS SYSCALL------------------------------------
 
     pub fn access_syscall(&self, path: &str, amode: u32) -> i32 {
         let truepath = normpath(convpath(path), self);
         let metadata = FS_METADATA.read().unwrap();
-
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
@@ -936,7 +932,7 @@ impl Cage {
         }
     }
 
-    //------------------CHDIR SYSCALL------------------
+    //------------------------------------CHDIR SYSCALL------------------------------------
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
@@ -963,6 +959,344 @@ impl Cage {
 
         *cwd_container = interface::RustRfc::new(truepath);
         0 //chdir has succeeded!;
+    }
+
+    //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
+
+    pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        //if a starting fd was passed, then use that as the starting point, but otherwise, use the designated minimum of STARTINGFD
+        let start_fd = match start_desc {
+            Some(start_desc) => start_desc,
+            None => STARTINGFD,
+        };
+
+        //checking whether the fd exists in the file table
+        if let Some(_) = fdtable.get(&fd) {
+            let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
+            else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
+            return Self::_dup2_helper(&self, fd, nextfd, Some(&mut fdtable))
+        } else {
+            return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
+        }
+    }
+
+    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        //if the old fd exists, execute the helper, else return error
+        if let Some(_) = fdtable.get(&oldfd) {
+            return Self::_dup2_helper(&self, oldfd, newfd, Some(&mut fdtable));
+        } else {
+            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
+        }
+    }
+
+    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
+        
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
+        let mut writer;
+        let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
+            writer = self.filedescriptortable.write().unwrap(); 
+            &mut writer
+        };
+        
+        //checking if the new fd is out of range
+        if newfd >= MAXFD || newfd < 0 {
+            return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
+        }
+
+        {
+            let locked_filedesc = fdtable.get(&oldfd).unwrap();
+            let filedesc_enum = locked_filedesc.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    //incrementing the ref count so that when close is executed on the dup'd file
+                    //the original file does not get a negative ref count
+                    match inodeobj {
+                        Inode::File(normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount += 1;
+                        },
+                        Inode::Dir(dir_inode_obj) => {
+                            dir_inode_obj.refcount += 1;
+                        },
+                        Inode::CharDev(chardev_inode_obj) => {
+                            chardev_inode_obj.refcount += 1;
+                        },
+                        _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+                    }
+                },
+                _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+            }
+        }
+        
+        //if the file descriptors are equal, return the new one
+        if newfd == oldfd {
+            return newfd;
+        }
+
+        //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
+        if fdtable.contains_key(&newfd) {
+            let close_result = Self::_close_helper(&self, newfd, Some(fdtable));
+            if close_result != 0 {
+                return close_result;
+            }
+        }    
+        fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
+        return newfd;
+    }
+
+    //------------------------------------CLOSE SYSCALL------------------------------------
+
+    pub fn close_syscall(&self, fd: i32) -> i32 {
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        
+        //check that the fd is valid
+        match fdtable.get(&fd) {
+            Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable));},
+            None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
+        }
+    }
+
+    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
+        let mut writer;
+        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
+            writer = self.filedescriptortable.write().unwrap(); 
+            &mut writer
+        };
+
+        //unpacking and getting the type to match for
+        {
+            let locked_filedesc = fdtable.get(&fd).unwrap();
+            let filedesc_enum = locked_filedesc.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            //Decide how to proceed depending on the fd type.
+            //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
+            //and if it is a normal file descriptor we decrement the refcount to reflect
+            //one less reference to the file.
+            match &*filedesc_enum {
+                //if we are a socket, we dont change disk metadata
+                Stream(_) => {},
+                Socket(_) => {
+                    //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
+                    },
+                Pipe(pipe_filedesc_obj) => {
+                    let _pipenumber = pipe_filedesc_obj.pipe;
+                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
+                    let write_references = 0;
+
+                    //Code below needs to reflect addition of pipes
+                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // let pipetable.pipenumber.eof = true;
+                    }
+
+                    if read_references + write_references == 1 {
+                        //del pipetable.pipenumber
+                    }
+                },
+                //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+
+                    match inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount -= 1;
+
+                            //if it's not a reg file, then we have nothing to close
+                            //Inode::File is a regular file by default
+                            
+                            if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
+                                //removing the file from the entire filesystem (interface, metadata, and object table)
+                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                interface::removefile(sysfilename).unwrap();
+                                mutmetadata.inodetable.remove(&inodenum);
+                                fobjtable.remove(&inodenum);  
+                            } 
+                        },
+                        Inode::Dir(ref mut dir_inode_obj) => {
+                            dir_inode_obj.refcount -= 1;
+
+                            //if it's not a reg file, then we have nothing to close
+                            match fobjtable.get(&inodenum) {
+                                Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                                None => {}
+                            }
+                            if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
+                                //removing the file from the metadata 
+                                mutmetadata.inodetable.remove(&inodenum);
+                            } 
+                        },
+                        Inode::CharDev(ref mut char_inode_obj) => {
+                            char_inode_obj.refcount -= 1;
+
+                            //if it's not a reg file, then we have nothing to close
+                            match fobjtable.get(&inodenum) {
+                                Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                                None => {}
+                            }
+                            if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
+                                //removing the file from the metadata 
+                                mutmetadata.inodetable.remove(&inodenum);
+                            } 
+                        },
+                        Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
+                    }
+                },
+            }
+        }
+        //removing inode from fd table
+        fdtable.remove(&fd);
+        return 0; //_close_helper has succeeded!
+    }
+    
+    //------------------------------------FCNTL SYSCALL------------------------------------
+    
+    pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            let cmd_arg_pair = (cmd, arg);
+            
+            //matching the tuple
+            match cmd_arg_pair {
+                //because the arg parameter is not used in certain commands, it can be anything (..)
+                (F_GETFD, ..) => {
+                    match &*filedesc_enum {
+                        Pipe(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                        Stream(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                        Socket(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                        File(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
+                    }
+                },
+                // set the flags but make sure that the flags are valid
+                (F_SETFD, arg) if arg >= 0 => {
+                    match &mut *filedesc_enum {
+                        //Match type (since each has a different file descriptor type)
+                        Pipe(ref mut obj) => {
+                            //bitwise or on the flags
+                            obj.flags = obj.flags | O_CLOEXEC;
+                        },
+                        Stream(ref mut obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                        },
+                        Socket(ref mut obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                        },
+                        File(ref mut obj) => {
+                            obj.flags = obj.flags | O_CLOEXEC;
+                        },
+                    }
+                    return 0;
+                },
+                (F_GETFL, ..) => {
+                    //for get, we just need to return the flags
+                    match &*filedesc_enum {
+                        Pipe(obj) => {return obj.flags;},
+                        Stream(obj) => {return obj.flags;},
+                        Socket(obj) => {return obj.flags;},
+                        File(obj) => {return obj.flags;},
+                    }
+                },
+
+                (F_SETFL, arg) if arg >= 0 => {
+                    //TO DO: check that the type of x is an int or a long 
+                    match &mut *filedesc_enum {
+                        Pipe(ref mut obj) => {
+                            obj.flags = arg;
+                        },
+                        Stream(ref mut obj) => {
+                            obj.flags = arg;
+                        },
+                        Socket(ref mut obj) => {
+                            obj.flags = arg;
+                        },
+                        File(ref mut obj) => {
+                            obj.flags = arg;
+                        },
+                    }
+                    return 0;
+                },
+                (F_DUPFD, arg) if arg >= 0 => {
+                    //TO DO: check that the type of x is an int or a long 
+                    return Self::dup_syscall(self, fd, Some(arg));
+                },
+                //TO DO: implement. this one is saying get the signals
+                (F_GETOWN, ..) => {
+                    match &*filedesc_enum {
+                        Pipe(_) => {
+                            //TO DO: traditional SIGIO behavior
+                        },
+                        Stream(_) => {
+                            //TO DO: traditional SIGIO behavior
+                        },
+                        Socket(_) => {
+                            //TO DO: traditional SIGIO behavior
+                        },
+                        File(_) => {
+                            //TO DO: traditional SIGIO behavior
+                        },
+                    }
+                    return 0;
+                },
+                (F_SETOWN, arg) if arg >= 0 => {
+                    //this would return the PID if positive and the process group if negative,
+                    //either way do nothing and return success
+                    return 0;
+                },
+                _ => {return syscall_error(Errno::EINVAL, "fcntl", "Arguments provided do not match implemented parameters");},
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "fcntl", "Invalid file descriptor");
+        }
+    }
+
+    //------------------------------------CHMOD SYSCALL------------------------------------
+
+    pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+        let mut metadata = FS_METADATA.write().unwrap();
+        let truepath = normpath(convpath(path), self);
+
+        //check if there is a valid path or not there to an inode
+        if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
+            let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
+            if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                match thisinode {
+                    Inode::File(ref mut general_inode) => {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                    },
+                    Inode::CharDev(ref mut dev_inode) => {
+                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
+                    },
+                    Inode::Dir(ref mut dir_inode) => {
+                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
+                    },
+                    Inode::Pipe(ref mut general_inode) => {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
+                    },
+                    Inode::Socket(ref mut general_inode) => {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
+                    },
+                }
+            }
+            else {
+                //there doesn't seem to be a good syscall error errno for this
+                return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+            }
+        } else {
+            return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
+        }
+        persist_metadata(&metadata);
+        return 0; //success!
     }
 
     //------------------MMAP SYSCALL------------------
