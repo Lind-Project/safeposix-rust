@@ -58,7 +58,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
     let lind_exists;
     let lind_isfile;
     let lind_size;
-    if stat_us >= 0 {
+    if stat_us < 0 {
         lind_exists = false;
         lind_isfile = false;
         lind_size = 0;
@@ -94,7 +94,6 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
             println!("removing {} on lind file system", lindfilepath);
         }
         cp_into_lind(cage, hostfilepath, lindfilepath, true);
-        println!("copied {:?} from host as {} on lind", hostfilepath, lindfilepath);
     } else {
         println!("Same files on host and lind--{} and {:?}, skipping", lindfilepath, hostfilepath);
     }
@@ -143,7 +142,13 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 
         //check whether file exists
         let stat_us = cage.stat_syscall(ancestor.to_str().unwrap(), &mut lindstat_res);
-        if stat_us == 0 {continue;}
+        if stat_us == 0 {
+            if !is_dir(lindstat_res.st_mode) {
+                eprintln!("Fatal error in trying to create child of non-directory file");
+                return;
+            }
+            continue;
+        }
         if stat_us != -(Errno::ENOENT as i32) {
             eprintln!("Fatal error in trying to get lind file path");
             return;
@@ -151,8 +156,11 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 
         //check whether we are supposed to create missing directories, and whether we'd be
         //clobbering anything to do so (if so error out)
-        if create_missing_dirs && ancestor.is_dir() {
-            cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA); //let's not mirror stat data
+        if create_missing_dirs {
+            if cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA) != 0 { //let's not mirror stat data
+                eprintln!("Lind fs path does not exist but should not be created (is rooted at non-directory) {:?}", ancestor);
+                return;
+            }
         } else {
             eprintln!("Lind fs path does not exist but should not be created {:?}", ancestor);
             return;
