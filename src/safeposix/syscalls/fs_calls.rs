@@ -153,7 +153,7 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                let effective_mode = S_IFREG as u32 | mode;
+                let effective_mode = S_IFDIR as u32 | mode;
 
                 //assert sane mode bits
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
@@ -1095,8 +1095,13 @@ impl Cage {
                     },
                 Pipe(pipe_filedesc_obj) => {
                     let pipenumber = pipe_filedesc_obj.pipe;
+<<<<<<< Updated upstream
                     let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
                     let write_references = 0;
+=======
+                    let read_references = 0; // HAS TO BE IMPLEMENTED
+                    let write_references = 0;// HAS TO BE IMPLEMENTED
+>>>>>>> Stashed changes
 
                     //Code below needs to reflect addition of pipes
                     if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {

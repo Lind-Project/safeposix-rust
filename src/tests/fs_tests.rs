@@ -10,6 +10,7 @@ mod fs_tests {
 
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
+        ut_lind_fs_dir_mode();
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
         persistencetest();
@@ -187,6 +188,42 @@ mod fs_tests {
         assert_eq!(cage.access_syscall(&String::from("subdir1"), F_OK), 0);
         assert_eq!(cage.chdir_syscall("/subdir1/subdir2/subdir3"), 0);
         assert_eq!(cage.access_syscall(&String::from("../../../subdir1"), F_OK), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_fs_dir_mode() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let filepath1 = String::from("/subdirDirMode1");
+        let filepath2 = String::from("/subdirDirMode2");
+        let mut statdata = StatData{
+            st_dev: 0,
+            st_ino: 0,
+            st_mode: 0,
+            st_nlink: 0,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            st_size: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atim: (0, 0),
+            st_mtim: (0, 0),
+            st_ctim: (0, 0)
+        };
+
+        assert_eq!(cage.mkdir_syscall(&filepath1, S_IRWXA), 0);
+        cage.stat_syscall(&filepath1, &mut statdata);
+        assert_eq!(statdata.st_mode, S_IRWXA | S_IFDIR as u32);
+        
+        assert_eq!(cage.mkdir_syscall(&filepath2, 0), 0);
+        cage.stat_syscall(&filepath2, &mut statdata);
+        assert_eq!(statdata.st_mode, S_IFDIR as u32);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
