@@ -974,7 +974,7 @@ impl Cage {
             None => STARTINGFD,
         };
 
-        //checking whether the fd exists in the file table and is higher than the starting file descriptor or not
+        //checking whether the fd exists in the file table
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
@@ -1036,7 +1036,11 @@ impl Cage {
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 8bb04d868e541e28ef5321c3b4a68f40ad7282d1
         //if the file descriptors are equal, return the new one
         if newfd == oldfd {
             return newfd;
@@ -1091,9 +1095,10 @@ impl Cage {
                     },
                 Pipe(pipe_filedesc_obj) => {
                     let pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_RDONLY);
-                    let write_references = Self::_lookup_refs_by_pipe_end(self, pipenumber, O_WRONLY);
+                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
+                    let write_references = 0;
 
+                    //Code below needs to reflect addition of pipes
                     if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
                         // let pipetable.pipenumber.eof = true;
                     }
@@ -1157,17 +1162,6 @@ impl Cage {
         //removing inode from fd table
         fdtable.remove(&fd);
         return 0; //_close_helper has succeeded!
-    }
-
-    pub fn _lookup_refs_by_pipe_end(&self, pipenumber: usize, flags: i32) -> i32 {
-        let pipe_references = 0;
-        //NOT COMPLETE
-        return 0;
-    }
-    
-    pub fn _cleanup_socket(&self, fd: &i32, partial: bool) -> i32 {
-        //NOT COMPELTE
-        return 0;
     }
     
     //------------------------------------FCNTL SYSCALL------------------------------------
