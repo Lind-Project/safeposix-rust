@@ -1086,7 +1086,7 @@ impl Cage {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {},
                 Socket(_) => {
-                    Self::_cleanup_socket(self, &fd, false);
+                    //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
                     let pipenumber = pipe_filedesc_obj.pipe;
