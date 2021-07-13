@@ -19,14 +19,14 @@ pub enum FileDescriptor {
 pub struct FileDesc {
     pub position: usize,
     pub inode: usize,
-    pub flags: i32
+    pub flags: i32,
 }
 
 #[derive(Debug)]
 pub struct StreamDesc {
     pub position: usize,
     pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
-    pub flags: i32
+    pub flags: i32,
 }
 
 #[derive(Debug)]
@@ -40,16 +40,17 @@ pub struct SocketDesc {
     pub rcvbuf: usize,
     pub state: usize,
     pub flags: i32,
-    pub errno: usize
+    pub errno: usize,
 }
 
 #[derive(Debug)]
 pub struct PipeDesc {
     pub pipe: usize,
-    pub flags: i32
+    pub flags: i32,
 }
 
-type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
+pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
+
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
@@ -80,7 +81,7 @@ impl Cage {
         None
     }
 
-    pub fn add_to_fd_table(&mut self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
+    pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
         let mut ourwriter;
         let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
             ourwriter = self.filedescriptortable.write().unwrap();
@@ -89,7 +90,7 @@ impl Cage {
         writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
 
-    pub fn rm_from_fd_table(&mut self, fd: &i32) {
+    pub fn rm_from_fd_table(&self, fd: &i32) {
         self.filedescriptortable.write().unwrap().remove(fd);
     }
 
