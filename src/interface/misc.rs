@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::Read;
 pub use std::collections::HashMap as RustHashMap;
 
-pub use std::sync::RwLock as RustLock;
+pub use std::sync::{RwLock as RustLock, RwLockReadGuard as RustLockReadGuard, RwLockWriteGuard as RustLockWriteGuard};
 pub use std::sync::Arc as RustRfc;
 
 use libc::mmap;
