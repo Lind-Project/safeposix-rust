@@ -1090,8 +1090,8 @@ impl Cage {
                     },
                 Pipe(pipe_filedesc_obj) => {
                     let pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
-                    let write_references = 0;
+                    let read_references = 0; // HAS TO BE IMPLEMENTED
+                    let write_references = 0;// HAS TO BE IMPLEMENTED
 
                     //Code below needs to reflect addition of pipes
                     if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
