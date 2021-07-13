@@ -153,7 +153,7 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                let effective_mode = S_IFREG as u32 | mode;
+                let effective_mode = S_IFDIR as u32 | mode;
 
                 //assert sane mode bits
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
