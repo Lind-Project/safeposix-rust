@@ -11,13 +11,56 @@ mod fs_tests {
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dir_mode();
+        ut_lind_fs_dir_multiple();
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
+        ut_lind_fs_fdflags();
+        ut_lind_fs_file_link_unlink();
+        ut_lind_fs_file_lseek_past_end();
+
         persistencetest();
         rdwrtest();
         prdwrtest();
         chardevtest();
         dispatch_tests::cagetest();
+    }
+
+
+
+    pub fn ut_lind_fs_simple() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        assert_eq!(cage.access_syscall("/", F_OK), 0);
+        assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
+
+        let mut statdata2 = StatData{
+            st_dev: 0,
+            st_ino: 0,
+            st_mode: 0,
+            st_nlink: 0,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            st_size: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atim: (0, 0),
+            st_mtim: (0, 0),
+            st_ctim: (0, 0)
+        };
+
+        assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
+        //ensure that there are two hard links
+
+        //TO DO: Fix the test underneath this
+        assert_eq!(statdata2.st_nlink, 3); //now this is 6 no matter what?
+
+        //ensure that there is no associated size
+        assert_eq!(statdata2.st_size, 0);
+        
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
 
 
@@ -231,6 +274,43 @@ mod fs_tests {
 
 
 
+    pub fn ut_lind_fs_dir_multiple() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        cage.mkdir_syscall(&String::from("/subdirMultiple1"), S_IRWXA);
+        cage.mkdir_syscall(&String::from("/subdirMultiple1/subdirMultiple2"), S_IRWXA);
+        cage.mkdir_syscall(&String::from("/subdirMultiple1/subdirMultiple2/subdirMultiple3"), 0);
+
+        let mut statdata = StatData{
+            st_dev: 0,
+            st_ino: 0,
+            st_mode: 0,
+            st_nlink: 0,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            st_size: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atim: (0, 0),
+            st_mtim: (0, 0),
+            st_ctim: (0, 0)
+        };
+
+        //ensure that the file is a dir with all of the correct bits on for nodes
+        cage.stat_syscall("/subdirMultiple1/subdirMultiple2", &mut statdata);
+        assert_eq!(statdata.st_mode, S_IRWXA | S_IFDIR as u32);
+
+        cage.stat_syscall("/subdirMultiple1/subdirMultiple2/subdirMultiple3", &mut statdata);
+        assert_eq!(statdata.st_mode, S_IFDIR as u32);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
     pub fn ut_lind_fs_dup() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -331,14 +411,51 @@ mod fs_tests {
 
 
 
-    pub fn ut_lind_fs_simple() {
+    pub fn ut_lind_fs_fdflags() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        assert_eq!(cage.access_syscall("/", F_OK), 0);
-        assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
+        let path = String::from("/fdFlagsFile");
 
-        let mut statdata2 = StatData{
+        let fd = cage.creat_syscall(&path, S_IRWXA);
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        let readFd = cage.open_syscall(&path, O_RDONLY, S_IRWXA);
+        cage.lseek_syscall(readFd, 0, SEEK_SET);
+        assert_ne!(cage.write_syscall(readFd, str2cbuf("Hello! This should not write."), 28), 28);
+
+        let mut buf = sizecbuf(100);
+        cage.lseek_syscall(readFd, 0, SEEK_SET);
+        assert_eq!(cage.read_syscall(readFd, buf.as_mut_ptr(), 100), 0);
+        assert_eq!(cage.close_syscall(readFd), 0);
+
+        let writeFd = cage.open_syscall(&path, O_WRONLY, S_IRWXA);
+        let mut buf2 = sizecbuf(100);
+        cage.lseek_syscall(writeFd, 0, SEEK_SET);
+        assert_ne!(cage.read_syscall(writeFd, buf2.as_mut_ptr(), 100), 0);
+
+        cage.lseek_syscall(writeFd, 0, SEEK_SET);
+        assert_eq!(cage.write_syscall(writeFd, str2cbuf("Hello! This should not write."), 28), 28);
+        assert_eq!(cage.close_syscall(writeFd), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_fs_file_link_unlink() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let path = String::from("/fileLink");
+        let path2 = String::from("/fileLink2");
+
+        let fd = cage.open_syscall(&path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        cage.lseek_syscall(fd, 0, SEEK_SET);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
+
+        let mut statdata = StatData {
             st_dev: 0,
             st_ino: 0,
             st_mode: 0,
@@ -354,15 +471,65 @@ mod fs_tests {
             st_ctim: (0, 0)
         };
 
-        assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
-        //ensure that there are two hard links
+        cage.stat_syscall(&path, &mut statdata);
+        assert_eq!(statdata.st_size, 2);
+        assert_eq!(statdata.st_nlink, 1);
 
-        //TO DO: Fix the test underneath this
-        assert_eq!(statdata2.st_nlink, 3); //now this is 6 no matter what?
+        let mut statdata2 = StatData {
+            st_dev: 0,
+            st_ino: 0,
+            st_mode: 0,
+            st_nlink: 0,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            st_size: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atim: (0, 0),
+            st_mtim: (0, 0),
+            st_ctim: (0, 0)
+        };
 
-        //ensure that there is no associated size
-        assert_eq!(statdata2.st_size, 0);
-        
+        //make sure that this has the same traits as the other file that we linked
+        // and make sure that the link count on the orig file has increased
+        assert_eq!(cage.link_syscall(&path, &path2), 0);
+        cage.stat_syscall(&path2, &mut statdata2);
+        assert_eq!(statdata.st_dev, statdata2.st_dev);
+        assert_eq!(statdata.st_nlink, 2);
+
+        //now we unlink
+        assert_eq!(cage.unlink_syscall(&path), 0);
+        cage.stat_syscall(&path2, &mut statdata2);
+        assert_eq!(statdata2.st_nlink, 1);
+
+        //it shouldn't work to stat the orig since it is gone
+        assert_eq!(cage.stat_syscall(&path, &mut statdata), 0);
+        assert_eq!(cage.unlink_syscall(&path2), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_file_lseek_past_end() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let path = String::from("/lseekPastEnd");
+
+        let fd = cage.open_syscall(&path, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello"), 5), 5);
+
+        //seek past the end and then write
+        assert_eq!(cage.lseek_syscall(fd, 10, SEEK_SET), 10);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("123456"), 6), 6);
+
+        let mut buf = sizecbuf(16);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(fd, buf.as_mut_ptr(), 20), 16);
+        assert_eq!(cbuf2str(&buf), "hello\0\0\0\0\0123456");
+
+        assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }

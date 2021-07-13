@@ -1021,14 +1021,14 @@ impl Cage {
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
                     match inodeobj {
-                        Inode::File(fileObj) => {
-                            fileObj.refcount += 1;
+                        Inode::File(normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount += 1;
                         },
-                        Inode::Dir(dirObj) => {
-                            dirObj.refcount += 1;
+                        Inode::Dir(dir_inode_obj) => {
+                            dir_inode_obj.refcount += 1;
                         },
-                        Inode::CharDev(charDevObj) => {
-                            charDevObj.refcount += 1;
+                        Inode::CharDev(chardev_inode_obj) => {
+                            chardev_inode_obj.refcount += 1;
                         },
                         _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
@@ -1036,6 +1036,7 @@ impl Cage {
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
+        
         //if the file descriptors are equal, return the new one
         if newfd == oldfd {
             return newfd;
@@ -1089,9 +1090,9 @@ impl Cage {
                     //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
-                    let pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = 0; // HAS TO BE IMPLEMENTED
-                    let write_references = 0;// HAS TO BE IMPLEMENTED
+                    let _pipenumber = pipe_filedesc_obj.pipe;
+                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
+                    let write_references = 0;
 
                     //Code below needs to reflect addition of pipes
                     if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
