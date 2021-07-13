@@ -1036,11 +1036,6 @@ impl Cage {
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
-<<<<<<< HEAD
-
-=======
-        
->>>>>>> 8bb04d868e541e28ef5321c3b4a68f40ad7282d1
         //if the file descriptors are equal, return the new one
         if newfd == oldfd {
             return newfd;
@@ -1095,13 +1090,8 @@ impl Cage {
                     },
                 Pipe(pipe_filedesc_obj) => {
                     let pipenumber = pipe_filedesc_obj.pipe;
-<<<<<<< Updated upstream
                     let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
                     let write_references = 0;
-=======
-                    let read_references = 0; // HAS TO BE IMPLEMENTED
-                    let write_references = 0;// HAS TO BE IMPLEMENTED
->>>>>>> Stashed changes
 
                     //Code below needs to reflect addition of pipes
                     if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
