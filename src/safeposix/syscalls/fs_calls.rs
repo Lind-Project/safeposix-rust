@@ -1,5 +1,4 @@
 // File system related system calls
-
 use crate::interface;
 
 use super::fs_constants::*;
@@ -126,7 +125,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::AdvisoryLock::new()});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -1366,6 +1365,51 @@ impl Cage {
         //NaCl's munmap implementation actually just writes over the previously mapped data with PROT_NONE
         //This frees all of the resources except page table space, and is put inside safeposix for consistency
         interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
+    }
+
+    //------------------FLOCK SYSCALL------------------
+
+    pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc_enum = wrappedfd.read().unwrap();
+
+            let lock = match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {&normalfile_filedesc_obj.advlock}
+                Socket(socket_filedesc_obj) => {&socket_filedesc_obj.advlock}
+                Stream(stream_filedesc_obj) => {&stream_filedesc_obj.advlock}
+                Pipe(pipe_filedesc_obj) => {&pipe_filedesc_obj.advlock}
+            };
+            match operation & (LOCK_SH | LOCK_EX | LOCK_UN) {
+                LOCK_SH => {
+                    if operation & LOCK_NB == LOCK_NB {
+                        //EAGAIN and EWOULDBLOCK are the same
+                        if !lock.try_lock_sh() {return syscall_error(Errno::EAGAIN, "flock", "shared lock would block")};
+                    } else {
+                        lock.lock_sh();
+                    }
+                }
+                LOCK_EX => {
+                    if operation & LOCK_NB == LOCK_NB {
+                        if !lock.try_lock_ex() {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock would block")};
+                    } else {
+                        lock.lock_ex();
+                    }
+                }
+                LOCK_UN => {
+                    if operation & LOCK_NB == LOCK_NB {
+                        lock.unlock();
+                    } else {
+                        lock.unlock();
+                    }
+                }
+                _ => {return syscall_error(Errno::EINVAL, "flock", "unknown operation");}
+            }
+            0 //flock has  succeeded!
+        } else {
+            syscall_error(Errno::ENOENT, "flock", "invalid file descriptor")
+        }
     }
 
 }
