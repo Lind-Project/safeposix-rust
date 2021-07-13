@@ -22,7 +22,7 @@ use safeposix::{cage::*, filesystem::*, dispatcher::{lindrustfinalize, lindrusti
 //assume deserialization
 
 fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
-    if !hostfilepath.exists() {
+    if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
             return;
@@ -39,7 +39,7 @@ fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfil
         let children = hostfilepath.read_dir().unwrap();
         for wrappedchild in children {
             let child = wrappedchild.unwrap();
-            update_dir_into_lind(cage, child.path().as_path(), format!("{}/{:?}", lindfilepath, child.file_name()).as_str());
+            update_dir_into_lind(cage, child.path().as_path(), format!("{}/{}", lindfilepath, child.file_name().to_str().unwrap()).as_str());
         }
     }
 }
@@ -101,7 +101,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
 }
 
 fn cp_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str, create_missing_dirs: bool) {
-    if !hostfilepath.exists() {
+    if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
             return;
@@ -118,7 +118,7 @@ fn cp_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
         let children = hostfilepath.read_dir().unwrap();
         for wrappedchild in children {
             let child = wrappedchild.unwrap();
-            cp_dir_into_lind(cage, child.path().as_path(), format!("{}/{:?}", lindfilepath, child.file_name()).as_str(), create_missing_dirs);
+            cp_dir_into_lind(cage, child.path().as_path(), format!("{}/{}", lindfilepath, child.file_name().to_str().unwrap()).as_str(), create_missing_dirs);
         }
     }
 }
@@ -142,7 +142,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
         let mut lindstat_res: StatData = StatData::default();
 
         //check whether file exists
-        let stat_us = cage.stat_syscall(format!("{:?}", ancestor).as_str(), &mut lindstat_res);
+        let stat_us = cage.stat_syscall(ancestor.to_str().unwrap(), &mut lindstat_res);
         if stat_us == 0 {continue;}
         if stat_us != -(Errno::ENOENT as i32) {
             eprintln!("Fatal error in trying to get lind file path");
@@ -151,8 +151,8 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 
         //check whether we are supposed to create missing directories, and whether we'd be
         //clobbering anything to do so (if so error out)
-        if create_missing_dirs && is_dir(lindstat_res.st_mode) {
-            cage.mkdir_syscall(format!("{:?}", ancestor).as_str(), S_IRWXA); //let's not mirror stat data
+        if create_missing_dirs && ancestor.is_dir() {
+            cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA); //let's not mirror stat data
         } else {
             eprintln!("Lind fs path does not exist but should not be created {:?}", ancestor);
             return;
@@ -164,7 +164,8 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
     let mut filecontents: Vec<u8> = Vec::new();
     host_fileobj.read_to_end(&mut filecontents);
 
-    let lindfd = cage.open_syscall(format!("{:?}", lindtruepath).as_str(), O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+    let lindfd = cage.open_syscall(lindtruepath.to_str().unwrap(), O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+    assert!(lindfd >= 0);
     let veclen = filecontents.len();
     let fileslice = filecontents.as_slice();
     let writtenlen = cage.write_syscall(lindfd, fileslice.as_ptr(), veclen);
@@ -200,7 +201,7 @@ fn lind_deltree(cage: &Cage, path: String) {
             childcage.unlink_syscall(childpath.as_str());
         }
     });
-    cage.rmdir_syscall(path.as_str());
+    //cage.rmdir_syscall(path.as_str());
 }
 
 fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
@@ -350,7 +351,7 @@ fn main() {
 
         "rmdir" => {
             for dir in args {
-                utilcage.rmdir_syscall(dir.as_str());
+                //utilcage.rmdir_syscall(dir.as_str());
             }
         }
 
