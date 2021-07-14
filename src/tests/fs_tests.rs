@@ -29,6 +29,7 @@ mod fs_tests {
         let fd = cage.open_syscall("/testfile", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
 
+        assert_eq!(cage.close_syscall(fd), 0);
         let mut metadata = filesystem::FS_METADATA.write().unwrap(); 
         filesystem::persist_metadata(&metadata);
 
@@ -69,7 +70,11 @@ mod fs_tests {
         let mut readbuf2 = sizecbuf(12);
         assert_eq!(cage.read_syscall(fd, readbuf2.as_mut_ptr(), 12), 12);
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
+
+        //let's test exit's ability to close everything
+        assert_ne!(cage.filedescriptortable.read().unwrap().len(), 0);
         assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.filedescriptortable.read().unwrap().len(), 0);
 
         lindrustfinalize();
     }
@@ -95,8 +100,10 @@ mod fs_tests {
         assert_eq!(cage.pread_syscall(fd, readbuf2.as_mut_ptr(), 12, 0), 12);
         assert_eq!(cbuf2str(&readbuf2), "hello world!");
 
-        assert_eq!(cage.exit_syscall(), 0);
+        //let's test lindrustfinalize's ability to call exit to close everything
+        assert_ne!(cage.filedescriptortable.read().unwrap().len(), 0);
         lindrustfinalize();
+        assert_eq!(cage.filedescriptortable.read().unwrap().len(), 0);
     }
 
 
@@ -115,11 +122,13 @@ mod fs_tests {
         assert_eq!(cbuf2str(&readbufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
 
         assert_eq!(cage.chdir_syscall("dev"), 0);
+        assert_eq!(cage.close_syscall(fd), 0);
 
         let fd2 = cage.open_syscall("./urandom", O_RDWR, S_IRWXA);
         assert!(fd2 >= 0);
         let mut readbufrand = sizecbuf(1000);
         assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
+        assert_eq!(cage.close_syscall(fd2), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }

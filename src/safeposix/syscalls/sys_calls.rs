@@ -68,9 +68,18 @@ impl Cage {
     }
 
     pub fn exit_syscall(&self) -> i32 {
+        //close all remaining files in the fdtable
+        {
+            let mut fdtable = self.filedescriptortable.write().unwrap();
+            let files2close = fdtable.keys().map(|x| *x).collect::<Vec<i32>>();
+            for fd in files2close {
+                self._close_helper(fd, Some(&mut *fdtable));
+            }
+        }
+
         //get file descriptor table into a vector
-        //call close_syscall (or helper?) on each element of the vector
         let mut mutmetadata = FS_METADATA.write().unwrap();
+
         let cwd_container = self.cwd.read().unwrap();
 
         decref_dir(&mut mutmetadata, &*cwd_container);
