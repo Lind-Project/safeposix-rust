@@ -544,4 +544,41 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
+
+
+
+    pub fn ut_lind_fs_fstat_complex() {
+        lindrustinit();
+        load_fs();
+
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let path = String::from("/complexFile");
+
+        let fd = cage.open_syscall(&path, O_CREAT | O_WRONLY, S_IRWXA);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("testing"), 4), 4);
+
+        let mut statdata = StatData {
+            st_dev: 0,
+            st_ino: 0,
+            st_mode: 0,
+            st_nlink: 0,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            st_size: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atim: (0, 0),
+            st_mtim: (0, 0),
+            st_ctim: (0, 0)
+        };
+
+        cage.fstat_syscall(fd, &mut statdata);
+        assert_eq!(statdata.st_size, 4);
+        assert_eq!(statdata.st_nlink, 1);
+
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
 }
