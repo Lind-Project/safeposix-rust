@@ -67,7 +67,7 @@ impl Cage {
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
-                } //insert a reference to the fifle in the parent directory
+                } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
                 persist_metadata(&mutmetadata);
             }
@@ -1119,8 +1119,7 @@ impl Cage {
                             if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
                                 //removing the file from the entire filesystem (interface, metadata, and object table)
                                 mutmetadata.inodetable.remove(&inodenum);
-                                fobjtable.get(&inodenum).unwrap().close().unwrap();
-                                fobjtable.remove(&inodenum);  
+                                fobjtable.remove(&inodenum).unwrap().close().unwrap(); 
                                 let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                 interface::removefile(sysfilename).unwrap();
                             } 
