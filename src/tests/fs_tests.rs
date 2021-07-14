@@ -494,6 +494,7 @@ mod fs_tests {
         //make sure that this has the same traits as the other file that we linked
         // and make sure that the link count on the orig file has increased
         assert_eq!(cage.link_syscall(&path, &path2), 0);
+        cage.stat_syscall(&path, &mut statdata);
         cage.stat_syscall(&path2, &mut statdata2);
         assert_eq!(statdata.st_dev, statdata2.st_dev);
         assert_eq!(statdata.st_nlink, 2);
@@ -504,7 +505,7 @@ mod fs_tests {
         assert_eq!(statdata2.st_nlink, 1);
 
         //it shouldn't work to stat the orig since it is gone
-        assert_eq!(cage.stat_syscall(&path, &mut statdata), 0);
+        assert_ne!(cage.stat_syscall(&path, &mut statdata), 0);
         assert_eq!(cage.unlink_syscall(&path2), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
