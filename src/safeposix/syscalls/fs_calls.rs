@@ -1,5 +1,4 @@
 // File system related system calls
-
 use crate::interface;
 
 use super::fs_constants::*;
@@ -109,9 +108,9 @@ impl Cage {
 
             //increment number of open handles to the file, retrieve other data from inode
             match inodeobj {
-                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1}
-                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1}
-                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1}
+                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 _ => {panic!("How did you even manage to open another kind of file like that?");}
             }
 
@@ -126,7 +125,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::AdvisoryLock::new()});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -160,16 +159,17 @@ impl Cage {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
+                let newinodenum = mutmetadata.nextinode;
+                mutmetadata.nextinode += 1;
                 let time = interface::timestamp(); //We do a real timestamp now
+
                 let newinode = Inode::Dir(DirectoryInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                     mode: effective_mode, linkcount: 2, refcount: 0,
                     atime: time, ctime: time, mtime: time, 
-                    filename_to_inode_dict: init_filename_to_inode_dict(pardirinode)
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
                 if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
@@ -1167,98 +1167,48 @@ impl Cage {
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
-            let cmd_arg_pair = (cmd, arg);
+
+            let flags = match &mut *filedesc_enum {
+                Pipe(obj) => {&mut obj.flags},
+                Stream(obj) => {&mut obj.flags},
+                Socket(obj) => {&mut obj.flags},
+                File(obj) => {&mut obj.flags},
+            };
             
             //matching the tuple
-            match cmd_arg_pair {
+            match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
                 (F_GETFD, ..) => {
-                    match &*filedesc_enum {
-                        Pipe(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
-                        Stream(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
-                        Socket(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
-                        File(obj) => {return ((obj.flags & O_CLOEXEC) != 0) as i32;},
-                    }
-                },
+                    ((*flags & O_CLOEXEC) != 0) as i32
+                }
                 // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
-                    match &mut *filedesc_enum {
-                        //Match type (since each has a different file descriptor type)
-                        Pipe(ref mut obj) => {
-                            //bitwise or on the flags
-                            obj.flags = obj.flags | O_CLOEXEC;
-                        },
-                        Stream(ref mut obj) => {
-                            obj.flags = obj.flags | O_CLOEXEC;
-                        },
-                        Socket(ref mut obj) => {
-                            obj.flags = obj.flags | O_CLOEXEC;
-                        },
-                        File(ref mut obj) => {
-                            obj.flags = obj.flags | O_CLOEXEC;
-                        },
-                    }
-                    return 0;
-                },
+                    *flags |= O_CLOEXEC;
+                    0
+                }
                 (F_GETFL, ..) => {
                     //for get, we just need to return the flags
-                    match &*filedesc_enum {
-                        Pipe(obj) => {return obj.flags;},
-                        Stream(obj) => {return obj.flags;},
-                        Socket(obj) => {return obj.flags;},
-                        File(obj) => {return obj.flags;},
-                    }
-                },
-
+                    *flags
+                }
                 (F_SETFL, arg) if arg >= 0 => {
-                    //TO DO: check that the type of x is an int or a long 
-                    match &mut *filedesc_enum {
-                        Pipe(ref mut obj) => {
-                            obj.flags = arg;
-                        },
-                        Stream(ref mut obj) => {
-                            obj.flags = arg;
-                        },
-                        Socket(ref mut obj) => {
-                            obj.flags = arg;
-                        },
-                        File(ref mut obj) => {
-                            obj.flags = arg;
-                        },
-                    }
-                    return 0;
-                },
+                    *flags = arg;
+                    0
+                }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    //TO DO: check that the type of x is an int or a long 
-                    return Self::dup_syscall(self, fd, Some(arg));
-                },
+                    Self::dup_syscall(self, fd, Some(arg))
+                }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
-                    match &*filedesc_enum {
-                        Pipe(_) => {
-                            //TO DO: traditional SIGIO behavior
-                        },
-                        Stream(_) => {
-                            //TO DO: traditional SIGIO behavior
-                        },
-                        Socket(_) => {
-                            //TO DO: traditional SIGIO behavior
-                        },
-                        File(_) => {
-                            //TO DO: traditional SIGIO behavior
-                        },
-                    }
-                    return 0;
-                },
+                    0 //TO DO: traditional SIGIO behavior
+                }
                 (F_SETOWN, arg) if arg >= 0 => {
-                    //this would return the PID if positive and the process group if negative,
+                    0 //this would return the PID if positive and the process group if negative,
                     //either way do nothing and return success
-                    return 0;
-                },
-                _ => {return syscall_error(Errno::EINVAL, "fcntl", "Arguments provided do not match implemented parameters");},
+                }
+                _ => {syscall_error(Errno::EINVAL, "fcntl", "Arguments provided do not match implemented parameters")}
             }
         } else {
-            return syscall_error(Errno::EBADF, "fcntl", "Invalid file descriptor");
+            syscall_error(Errno::EBADF, "fcntl", "Invalid file descriptor")
         }
     }
 
@@ -1367,6 +1317,51 @@ impl Cage {
         //NaCl's munmap implementation actually just writes over the previously mapped data with PROT_NONE
         //This frees all of the resources except page table space, and is put inside safeposix for consistency
         interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
+    }
+
+    //------------------FLOCK SYSCALL------------------
+
+    pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc_enum = wrappedfd.read().unwrap();
+
+            let lock = match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {&normalfile_filedesc_obj.advlock}
+                Socket(socket_filedesc_obj) => {&socket_filedesc_obj.advlock}
+                Stream(stream_filedesc_obj) => {&stream_filedesc_obj.advlock}
+                Pipe(pipe_filedesc_obj) => {&pipe_filedesc_obj.advlock}
+            };
+            match operation & (LOCK_SH | LOCK_EX | LOCK_UN) {
+                LOCK_SH => {
+                    if operation & LOCK_NB == LOCK_NB {
+                        //EAGAIN and EWOULDBLOCK are the same
+                        if !lock.try_lock_sh() {return syscall_error(Errno::EAGAIN, "flock", "shared lock would block")};
+                    } else {
+                        lock.lock_sh();
+                    }
+                }
+                LOCK_EX => {
+                    if operation & LOCK_NB == LOCK_NB {
+                        if !lock.try_lock_ex() {return syscall_error(Errno::EAGAIN, "flock", "exclusive lock would block")};
+                    } else {
+                        lock.lock_ex();
+                    }
+                }
+                LOCK_UN => {
+                    if operation & LOCK_NB == LOCK_NB {
+                        lock.unlock();
+                    } else {
+                        lock.unlock();
+                    }
+                }
+                _ => {return syscall_error(Errno::EINVAL, "flock", "unknown operation");}
+            }
+            0 //flock has  succeeded!
+        } else {
+            syscall_error(Errno::ENOENT, "flock", "invalid file descriptor")
+        }
     }
 
 }

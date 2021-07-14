@@ -152,11 +152,14 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         EXIT_SYSCALL => {
             cage.exit_syscall()
         }
-        EXEC_SYSCALL => {
-            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
+        FLOCK_SYSCALL => {
+            cage.flock_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
         }
         FORK_SYSCALL => {
             cage.fork_syscall(unsafe{arg1.dispatch_ulong})
+        }
+        EXEC_SYSCALL => {
+            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
         }
         GETUID_SYSCALL => {
             cage.getuid_syscall()
