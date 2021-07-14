@@ -23,8 +23,8 @@ mod fs_tests {
         ut_lind_fs_getuid();
         ut_lind_fs_load_fs();
 
-        ut_lind_fs_persistance_setup();
-        // ut_lind_fs_persistance_test();
+        ut_lind_fs_persistence_setup();
+        ut_lind_fs_persistence_test();
 
 
         persistencetest();
@@ -645,7 +645,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_persistance_setup() {
+    pub fn ut_lind_fs_persistence_setup() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
@@ -683,13 +683,43 @@ mod fs_tests {
         {
             let metadata = FS_METADATA.read().unwrap();
             persist_metadata(&*metadata);
+            let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
+            let result = path.unwrap().metadata().unwrap().permissions();
+            assert_ne!(result.mode() & (S_IWUSR | S_IWGRP | S_IWOTH), 0);
+        }
+
+        assert_eq!(cage.close_syscall(fd2), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_fs_persistence_test() {
+
+        //check that the setup was run first
+        {
+            let mut metadata = FS_METADATA.write().unwrap();
+            persist_metadata(&*metadata);
             // let path = normpath(convpath(METADATAFILENAME), &cage);
             let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
             let result = path.unwrap().metadata().unwrap().permissions();
-            assert_ne!(result.mode() | 0o222, 0);
+            assert_ne!(result.mode() & (S_IWUSR | S_IWGRP | S_IWOTH), 0);
+
+            //restore the metadata
+            restore_metadata(&mut metadata);
         }
 
-        assert_eq!(cage.close_syscall(fd), 0);
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        //taken from the set up call:
+        let path1 = String::from("/simpleFileName");
+
+        //if everything works, then try to open the files from the metadata
+        //it should exist
+        let fd = cage.open_syscall(&path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+
+        assert_ne!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
