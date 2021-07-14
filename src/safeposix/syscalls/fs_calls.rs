@@ -67,7 +67,7 @@ impl Cage {
                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
-                } //insert a reference to the file in the parent directory
+                } //insert a reference to the fifle in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
                 persist_metadata(&mutmetadata);
             }

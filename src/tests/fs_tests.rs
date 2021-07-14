@@ -6,17 +6,18 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        // ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        ut_lind_fs_chmod();
-        ut_lind_fs_dir_chdir();
-        ut_lind_fs_dir_mode();
-        ut_lind_fs_dir_multiple();
-        ut_lind_fs_dup();
-        ut_lind_fs_dup2();
-        ut_lind_fs_fdflags();
-        ut_lind_fs_file_link_unlink();
-        ut_lind_fs_file_lseek_past_end();
+        // ut_lind_fs_chmod();
+        // ut_lind_fs_dir_chdir();
+        // ut_lind_fs_dir_mode();
+        // ut_lind_fs_dir_multiple();
+        // ut_lind_fs_dup();
+        // ut_lind_fs_dup2();
+        // ut_lind_fs_fdflags();
+        // ut_lind_fs_file_link_unlink();
+        // ut_lind_fs_file_lseek_past_end();
+        ut_lind_fs_fstat_complex();
 
         persistencetest();
         rdwrtest();
@@ -54,7 +55,7 @@ mod fs_tests {
         //ensure that there are two hard links
 
         //TO DO: Fix the test underneath this
-        assert_eq!(statdata2.st_nlink, 3); //now this is 6 no matter what?
+        assert_eq!(statdata2.st_nlink, 3); //becomes six when data files are left from previous tests
 
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
@@ -254,6 +255,7 @@ mod fs_tests {
 
         let filepath1 = String::from("/subdirDirMode1");
         let filepath2 = String::from("/subdirDirMode2");
+        
         let mut statdata = StatData{
             st_dev: 0,
             st_ino: 0,
@@ -549,7 +551,6 @@ mod fs_tests {
 
     pub fn ut_lind_fs_fstat_complex() {
         lindrustinit();
-        load_fs();
 
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let path = String::from("/complexFile");
