@@ -179,6 +179,18 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         PWRITE_SYSCALL => {
             cage.pwrite_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_cbuf}, unsafe{arg3.dispatch_usize}, unsafe{arg4.dispatch_isize})
         }
+        CHMOD_SYSCALL => {
+            cage.chmod_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_uint})
+        }
+        FCNTL_SYSCALL => {
+            cage.fcntl_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_int})
+        }
+        DUP_SYSCALL => {
+            cage.dup_syscall(unsafe{arg1.dispatch_int}, None)
+        }
+        DUP2_SYSCALL => {
+            cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
+        }
         _ => {//unknown syscall
             -1
         }
