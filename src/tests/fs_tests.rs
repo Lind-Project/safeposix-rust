@@ -46,7 +46,7 @@ mod fs_tests {
         assert_eq!(cage.access_syscall("/", F_OK), 0);
         assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
 
-        let mut statdata2 = _init_blank_statdata();
+        let mut statdata2 = StatData::default();
 
         assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
         //ensure that there are two hard links
@@ -185,7 +185,7 @@ mod fs_tests {
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = String::from("/chmodTestFile");
 
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         let fd = cage.open_syscall(&filepath, flags, S_IRWXA);
         assert_eq!(cage.stat_syscall(&filepath, &mut statdata), 0);
@@ -239,7 +239,7 @@ mod fs_tests {
         let filepath1 = String::from("/subdirDirMode1");
         let filepath2 = String::from("/subdirDirMode2");
         
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         assert_eq!(cage.mkdir_syscall(&filepath1, S_IRWXA), 0);
         cage.stat_syscall(&filepath1, &mut statdata);
@@ -263,7 +263,7 @@ mod fs_tests {
         cage.mkdir_syscall(&String::from("/subdirMultiple1/subdirMultiple2"), S_IRWXA);
         cage.mkdir_syscall(&String::from("/subdirMultiple1/subdirMultiple2/subdirMultiple3"), 0);
 
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         //ensure that the file is a dir with all of the correct bits on for nodes
         cage.stat_syscall("/subdirMultiple1/subdirMultiple2", &mut statdata);
@@ -422,13 +422,13 @@ mod fs_tests {
         cage.lseek_syscall(fd, 0, SEEK_SET);
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
 
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         cage.stat_syscall(&path, &mut statdata);
         assert_eq!(statdata.st_size, 2);
         assert_eq!(statdata.st_nlink, 1);
 
-        let mut statdata2 = _init_blank_statdata();
+        let mut statdata2 = StatData::default();
 
         //make sure that this has the same traits as the other file that we linked
         // and make sure that the link count on the orig file has increased
@@ -487,7 +487,7 @@ mod fs_tests {
         let fd = cage.open_syscall(&path, O_CREAT | O_WRONLY, S_IRWXA);
         assert_eq!(cage.write_syscall(fd, str2cbuf("testing"), 4), 4);
 
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         cage.fstat_syscall(fd, &mut statdata);
         assert_eq!(statdata.st_size, 4);
@@ -520,7 +520,7 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         //testing that all of the dev files made it out safe and sound
         cage.stat_syscall(&String::from("/dev"), &mut statdata);
@@ -633,7 +633,7 @@ mod fs_tests {
         let fd = cage.open_syscall(&path, O_RDWR, S_IRWXA);
 
         //checking the metadata of the file:
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
         //should be a chr file, so let's check this
         let mut buf = sizecbuf(4);
@@ -641,13 +641,12 @@ mod fs_tests {
         assert_eq!(statdata.st_mode & S_FILETYPEFLAGS as u32, S_IFCHR as u32);
         assert_eq!(statdata.st_rdev, dev);
         assert_eq!(cage.write_syscall(fd, str2cbuf("test"), 4), 4);
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(fd, buf.as_mut_ptr(), 4), 0);
         assert_eq!(cbuf2str(&buf), "\0\0\0\0");
         assert_eq!(cage.close_syscall(fd), 0);
 
 
-        let mut statdata2 = _init_blank_statdata();
+        let mut statdata2 = StatData::default();
 
         //try it again with /dev/random
         let dev2 = makedev(&DevNo {major: 1, minor: 8});
@@ -661,9 +660,7 @@ mod fs_tests {
         assert_eq!(cage.fstat_syscall(fd2, &mut statdata2), 0);
         assert_eq!(statdata2.st_mode & S_FILETYPEFLAGS as u32, S_IFCHR as u32);
         assert_eq!(statdata2.st_rdev, dev2);
-        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
         assert_eq!(cage.write_syscall(fd2, str2cbuf("testing"), 7), 7);
-        assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
         assert_ne!(cage.read_syscall(fd2, buf2.as_mut_ptr(), 7), 0);
         assert_eq!(cage.close_syscall(fd2), 0);
 
@@ -735,9 +732,9 @@ mod fs_tests {
 
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
         
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
 
-        let mut statdata2 = _init_blank_statdata();
+        let mut statdata2 = StatData::default();
 
         cage.fstat_syscall(fd, &mut statdata);
         assert_eq!(statdata.st_size, 2);
@@ -763,7 +760,7 @@ mod fs_tests {
         let path = String::from("/fooFileMode");
         let fd = cage.open_syscall(&path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
-        let mut statdata = _init_blank_statdata();
+        let mut statdata = StatData::default();
         assert_eq!(cage.stat_syscall(&path, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
@@ -778,26 +775,5 @@ mod fs_tests {
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
-    }
-
-
-
-    //helper function to clean up the code a little bit
-    pub fn _init_blank_statdata() -> StatData {
-        return StatData{
-            st_dev: 0,
-            st_ino: 0,
-            st_mode: 0,
-            st_nlink: 0,
-            st_uid: 0,
-            st_gid: 0,
-            st_rdev: 0,
-            st_size: 0,
-            st_blksize: 0,
-            st_blocks: 0,
-            st_atim: (0, 0),
-            st_mtim: (0, 0),
-            st_ctim: (0, 0)
-        };
     }
 }

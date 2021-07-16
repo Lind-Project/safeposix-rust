@@ -122,7 +122,7 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 pub const FILEDATAPREFIX: &str = "linddata.";
 
 //derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct StatData {
   pub st_dev: u64,
