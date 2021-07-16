@@ -451,7 +451,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-    
+
 
     pub fn ut_lind_fs_file_lseek_past_end() {
         lindrustinit();
@@ -638,7 +638,7 @@ mod fs_tests {
         //should be a chr file, so let's check this
         let mut buf = sizecbuf(4);
         assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
-        assert_eq!(statdata.st_mode & S_FILETYPEFLAGS as u32, (S_IFCHR | S_IFREG) as u32);
+        assert_eq!(statdata.st_mode & S_FILETYPEFLAGS as u32, S_IFCHR as u32);
         assert_eq!(statdata.st_rdev, dev);
         assert_eq!(cage.write_syscall(fd, str2cbuf("test"), 4), 4);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
@@ -659,7 +659,7 @@ mod fs_tests {
         
         let mut buf2 = sizecbuf(4);
         assert_eq!(cage.fstat_syscall(fd2, &mut statdata2), 0);
-        assert_eq!(statdata2.st_mode & S_FILETYPEFLAGS as u32, (S_IFCHR | S_IFREG) as u32);
+        assert_eq!(statdata2.st_mode & S_FILETYPEFLAGS as u32, S_IFCHR as u32);
         assert_eq!(statdata2.st_rdev, dev2);
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
         assert_eq!(cage.write_syscall(fd2, str2cbuf("testing"), 7), 7);
