@@ -1118,10 +1118,10 @@ impl Cage {
                             
                             if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
                                 //removing the file from the entire filesystem (interface, metadata, and object table)
+                                mutmetadata.inodetable.remove(&inodenum);
+                                fobjtable.remove(&inodenum).unwrap().close().unwrap(); 
                                 let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                 interface::removefile(sysfilename).unwrap();
-                                mutmetadata.inodetable.remove(&inodenum);
-                                fobjtable.remove(&inodenum);  
                             } 
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
