@@ -177,7 +177,7 @@ impl Cage {
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
                 persist_metadata(&mutmetadata);
-                0 //mknod has succeeded
+                0 //mkdir has succeeded
             }
 
             (Some(_), ..) => {
@@ -208,14 +208,13 @@ impl Cage {
 
                 let effective_mode = S_IFREG as u32 | mode;
 
-                //assert sane mode bits
+                //assert same mode bits
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
                 }
                 if mode as i32 & S_IFCHR == 0 {
                     return syscall_error(Errno::EINVAL, "mknod", "only character files are supported");
                 }
-
                 let time = interface::timestamp(); //We do a real timestamp now
                 let newinode = Inode::CharDev(DeviceInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,

@@ -41,7 +41,7 @@ pub const DEFAULT_UID: u32 = 1000;
 pub const DEFAULT_GID: u32 = 1000;
 
 //Standard flag combinations
-pub const S_IRWXA: u32 = 0o777;
+pub const S_IRWXA: u32 = 0o777; //0b0000000111111111
 pub const S_IRWXU: u32 = 0o700;
 pub const S_IRUSR: u32 = 0o400;
 pub const S_IWUSR: u32 = 0o200;
@@ -76,14 +76,14 @@ pub const F_GETLEASE: i32 = 1025;
 pub const F_NOTIFY: i32 = 1026;
 
 //File types for open/stat etc.
-pub const S_IFBLK: i32 = 0o60000;
-pub const S_IFCHR: i32 = 0o20000;
+pub const S_IFBLK: i32 = 0o60000; 
+pub const S_IFCHR: i32 = 0o20000;   //0b0010000000000000
 pub const S_IFDIR: i32 = 0o40000;
-pub const S_IFIFO: i32 = 0o10000;
-pub const S_IFLNK: i32 = 0o120000;
-pub const S_IFREG: i32 = 0o100000;
-pub const S_IFSOCK: i32 = 0o140000;
-pub const S_FILETYPEFLAGS: i32 = 0o170000;
+pub const S_IFIFO: i32 = 0o10000;   
+pub const S_IFLNK: i32 = 0o120000;  
+pub const S_IFREG: i32 = 0o100000;  //0b1000000000000000
+pub const S_IFSOCK: i32 = 0o140000;        
+pub const S_FILETYPEFLAGS: i32 = 0o170000; //0b1111000000000000
 
 //for flock syscall
 pub const LOCK_SH: i32 = 1;
@@ -121,6 +121,8 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
+//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
+#[derive(Eq, PartialEq)]
 #[repr(C)]
 pub struct StatData {
   pub st_dev: u64,
