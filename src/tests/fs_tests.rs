@@ -451,6 +451,8 @@ mod fs_tests {
         lindrustfinalize();
     }
 
+    
+
     pub fn ut_lind_fs_file_lseek_past_end() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -535,6 +537,8 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
+
+
 
     pub fn ut_lind_fs_persistence_setup() {
         lindrustinit();
@@ -667,6 +671,8 @@ mod fs_tests {
         lindrustfinalize();
     }
 
+
+
     pub fn ut_lind_fs_multiple_open() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -696,7 +702,11 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd3, buf.as_mut_ptr(), 5), 5);
         assert_eq!(cbuf2str(&buf), "\0\0boo");
 
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
+
+
 
     pub fn ut_lind_fs_rmdir() {
         lindrustinit();
@@ -715,6 +725,8 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
+
+
 
     pub fn ut_lind_fs_stat_file_complex() {
         lindrustinit();
