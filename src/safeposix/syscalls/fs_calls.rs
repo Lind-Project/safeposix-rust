@@ -472,26 +472,102 @@ impl Cage {
                     match inode {
                         Inode::File(f) => {
                             Self::_istat_helper(&f, statbuf);
-                        }
+                        },
                         Inode::CharDev(f) => {
                             Self::_istat_helper_chr_file(&f, statbuf);
-                        }
+                        },
                         Inode::Dir(f) => {
                             Self::_istat_helper_dir(&f, statbuf);
-                        }
+                        },
                         _ => {panic!("A file fd points to a socket or pipe");}
                     }
-                }
+                },
                 Socket(_) => {
                     return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
-                    }
-                Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);}
+                },
+                Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);},
                 Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
             }
             0 //fstat has succeeded!
         } else {
             syscall_error(Errno::ENOENT, "fstat", "invalid file descriptor")
         }
+    }
+
+    //------------------------------------STATFS SYSCALL------------------------------------
+
+    pub fn statfs_syscall(&self, path: &str, databuf: &mut FSData) -> i32 {
+        let truepath = normpath(convpath(path), self);
+        let metadata = FS_METADATA.read().unwrap();
+
+        //Walk the file tree to get inode from path
+        if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
+            let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
+            
+            //populate the dev id field -- can be done outside of the helper
+            databuf.f_fsid = metadata.dev_id;
+
+            //delegate the rest of populating statbuf to the relevant helper
+            match inodeobj {
+                Inode::Pipe(_) => {
+                    panic!("How did you even manage to refer to a pipe using a path?");
+                },
+                Inode::Socket(_) => {
+                    panic!("How did you even manage to refer to a socket using a path?");
+                },
+                _ => {
+                    return Self::_istatfs_helper(self, databuf);
+                }
+            }
+        } else {
+            syscall_error(Errno::ENOENT, "stat", "path refers to an invalid file")
+        }
+    }
+
+    //------------------------------------FSTATFS SYSCALL------------------------------------
+
+    pub fn fstatfs_syscall(&self, fd: &i32, databuf: &mut FSData) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc_enum = wrappedfd.read().unwrap();
+            let metadata = FS_METADATA.read().unwrap();
+            
+            //populate the dev id field -- can be done outside of the helper
+            databuf.f_fsid = metadata.dev_id;
+
+            match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    match inodeobj {
+                        //can't statfs pipe or socket
+                        Inode::Socket(_) | Inode::Pipe(_) => {panic!("How did you get through the first filter?");},
+                        _ => {
+                            return Self::_istatfs_helper(self, databuf);
+                        }
+                    }
+                },
+                Socket(_) | Pipe(_) | Stream(_) => {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, or pipe");}
+            }
+        }
+        return syscall_error(Errno::EBADF, "statfs", "invalid file descriptor");
+    }
+    
+    pub fn _istatfs_helper(&self, databuf: &mut FSData) -> i32 {
+        
+        databuf.f_type = 0xBEEFC0DE; //unassigned 
+        databuf.f_bsize = 4096;
+        databuf.f_blocks = 0; //int(limits['diskused']) / 4096
+        databuf.f_bfree = 1024 * 1024 * 1024; //(int(limits['diskused']-usage['diskused'])) / 4096
+        databuf.f_bavail = 1024 * 1024 * 1024; //(int(limits['diskused']-usage['diskused'])) / 4096
+        databuf.f_files = 1024*1024*1024;
+        databuf.f_ffiles = 1024*1024*515;
+        databuf.f_namelen = 254;
+        databuf.f_frsize = 4096;
+        databuf.f_spare = [0; 32];
+
+        0 //success!
     }
 
     //------------------------------------READ SYSCALL------------------------------------
@@ -1248,7 +1324,7 @@ impl Cage {
         return 0; //success!
     }
 
-    //------------------MMAP SYSCALL------------------
+    //------------------------------------MMAP SYSCALL------------------------------------
     
     pub fn mmap_syscall(&self, addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
         if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
@@ -1307,7 +1383,7 @@ impl Cage {
         }
     }
 
-    //------------------MUNMAP SYSCALL------------------
+    //------------------------------------MUNMAP SYSCALL------------------------------------
     
     pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
         if len == 0 {syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");}
@@ -1316,7 +1392,7 @@ impl Cage {
         interface::libc_mmap(addr, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0)
     }
 
-    //------------------FLOCK SYSCALL------------------
+    //------------------------------------FLOCK SYSCALL------------------------------------
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();

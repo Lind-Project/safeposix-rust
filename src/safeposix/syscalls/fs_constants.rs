@@ -141,6 +141,28 @@ pub struct StatData {
   pub st_ctim: (u64, u64)
 }
 
+//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
+#[derive(Eq, PartialEq, Default)]
+#[repr(C)]
+pub struct FSData {
+  pub f_type: u32,
+  pub f_bsize: u32,
+  pub f_blocks: u32,
+  pub f_bfree: u32,
+  pub f_bavail: u32,
+  //total files in the file system -- should be infinite
+  pub f_files: u64,
+  //free files in the file system -- should be infinite
+  pub f_ffiles: u64,
+  pub f_fsid: u64,
+  //not really a limit for naming, but 254 works
+  pub f_namelen: u32,
+  //arbitrary val for blocksize as well
+  pub f_frsize: u32,
+  //supposed to be 5 bytes, so let's use null characters -- using 8 bytes in this case
+  pub f_spare: [u8; 32]
+}
+
 pub fn is_reg(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
 }
