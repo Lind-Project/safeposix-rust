@@ -1363,7 +1363,7 @@ impl Cage {
             syscall_error(Errno::ENOENT, "flock", "invalid file descriptor")
         }
     }
-    
+
     //------------------RMDIR SYSCALL------------------
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
@@ -1419,7 +1419,7 @@ impl Cage {
                 syscall_error(Errno::EEXIST, "rename", "Old path does not exist")
             }
             (Some(_), None) {
-                syscall_error(Errno::EINVAL, "rmdir", "Cannot rename root directory")
+                syscall_error(Errno::EINVAL, "rename", "Cannot rename root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
                 let (.., new_par_inodenum) = metawalkandparent(true_newpath.as_path(), Some(&metadata));
