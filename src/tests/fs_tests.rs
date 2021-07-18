@@ -9,7 +9,7 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        ut_lind_fs_fstat_complex();
+        ut_lind_fs_simple();
 
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
@@ -30,6 +30,7 @@ mod fs_tests {
         ut_lind_fs_rmdir();
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
+        ut_lind_fs_statfs();
 
         persistencetest();
         rdwrtest();
@@ -52,7 +53,6 @@ mod fs_tests {
         assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
         //ensure that there are two hard links
 
-        //TO DO: Fix the test underneath this
         assert_eq!(statdata2.st_nlink, 3); //becomes six when data files are left from previous tests
 
         //ensure that there is no associated size
@@ -772,6 +772,21 @@ mod fs_tests {
 
         //check that stat can be done on the current (root) dir
         assert_eq!(cage.stat_syscall(".", &mut statdata), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+    
+    pub fn  ut_lind_fs_statfs() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let mut fsdata = FSData::default();
+
+        assert_eq!(cage.statfs_syscall("/", &mut fsdata), 0);
+        assert_eq!(fsdata.f_type, 0xBEEFC0DE);
+        assert_eq!(fsdata.f_bsize, 4096);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();

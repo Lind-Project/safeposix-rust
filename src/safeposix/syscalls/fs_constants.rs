@@ -148,8 +148,8 @@ pub struct FSData {
   pub f_type: u32,
   pub f_bsize: u32,
   pub f_blocks: u32,
-  pub f_bfree: u32,
-  pub f_bavail: u32,
+  pub f_bfree: u64,
+  pub f_bavail: u64,
   //total files in the file system -- should be infinite
   pub f_files: u64,
   //free files in the file system -- should be infinite

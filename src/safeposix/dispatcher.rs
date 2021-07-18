@@ -128,10 +128,10 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         FXSTAT_SYSCALL => {
             cage.fstat_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_statdatastruct})
         }
-        XSTATFS_SYSCALL => {
+        STATFS_SYSCALL => {
             cage.statfs_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{&mut *arg2.dispatch_fsdatastruct})
         }
-        FXSTATFS_SYSCALL => {
+        FSTATFS_SYSCALL => {
             cage.fstatfs_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_fsdatastruct})
         }
         MMAP_SYSCALL => {

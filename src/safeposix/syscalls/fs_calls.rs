@@ -526,7 +526,7 @@ impl Cage {
 
     //------------------------------------FSTATFS SYSCALL------------------------------------
 
-    pub fn fstatfs_syscall(&self, fd: &i32, databuf: &mut FSData) -> i32 {
+    pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
