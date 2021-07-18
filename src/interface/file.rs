@@ -13,6 +13,8 @@ pub use std::ffi::OsString as OsStringKey;
 use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::SyncLazy as RustLazyGlobal;
 
+use std::os::unix::io::{AsRawFd, RawFd};
+
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> Vec<String> {
@@ -39,11 +41,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path).unwrap();
-
-    if !absolute_filename.exists() {
-        panic!("FileNotFoundError");
-    }
+    let absolute_filename = fs::canonicalize(&path)?; //will return an error if the file does not exist
 
     fs::remove_file(absolute_filename)?;
 
@@ -89,6 +87,12 @@ pub struct EmulatedFile {
     filesize: usize,
 }
 
+pub fn pathexists(filename: String) -> bool {
+    assert_is_allowed_filename(&filename);
+    let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+    path.exists()
+}
+
 impl EmulatedFile {
 
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
@@ -131,7 +135,6 @@ impl EmulatedFile {
 
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
-
         let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts_mut(ptr, length)
@@ -182,6 +185,51 @@ impl EmulatedFile {
         Ok(bytes_written)
     }
 
+    // Reads entire file into provided C-buffer
+    pub fn readfile_to_new_string(&self, offset: usize) -> std::io::Result<String> {
+
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut stringbuf = String::new();
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                fobj.read_to_string(&mut stringbuf)?;
+                fobj.sync_data()?;
+                Ok(stringbuf) // return new buf string
+            }
+        }
+    }
+
+    // Write to entire file from provided C-buffer
+    pub fn writefile_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
+
+        let length = buf.len();
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let mut fobj = f.lock().unwrap();
+                if offset > self.filesize {
+                    panic!("Seek offset extends past the EOF!");
+                }
+                fobj.seek(SeekFrom::Start(offset as u64))?;
+                fobj.write(buf.as_bytes())?;
+                fobj.sync_data()?;
+            }
+        }
+
+        if offset + length > self.filesize {
+            self.filesize = offset + length;
+        }
+
+        Ok(())
+    }
+
     pub fn zerofill_at(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {
         let bytes_written;
         let buf = vec![0; count];
@@ -204,6 +252,15 @@ impl EmulatedFile {
         }
 
         Ok(bytes_written)
+    }
+    
+    //gets the raw fd handle (integer) from a rust fileobject
+    pub fn as_fd_handle_raw_int(&self) -> i32 {
+        if let Some(wrapped_barefile) = &self.fobj {
+            wrapped_barefile.lock().unwrap().as_raw_fd() as i32
+        } else {
+            -1
+        }
     }
 }
 
