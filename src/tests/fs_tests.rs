@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod fs_tests {
     use crate::interface;
-    use crate::safeposix::{cage::*, filesystem, dispatcher::*};
+    use crate::safeposix::{cage::*, filesystem, dispatcher::*, syscalls::errnos::*};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
+    
 
     #[test]
     pub fn test_fs() {
@@ -183,23 +184,23 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = String::from("/chmodTestFile");
+        let filepath = "/chmodTestFile";
 
         let mut statdata = StatData::default();
 
-        let fd = cage.open_syscall(&filepath, flags, S_IRWXA);
-        assert_eq!(cage.stat_syscall(&filepath, &mut statdata), 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
-        cage.chmod_syscall(&filepath, S_IRUSR | S_IRGRP);
-        assert_eq!(cage.stat_syscall(&filepath, &mut statdata), 0);
+        assert_eq!(cage.chmod_syscall(filepath, S_IRUSR | S_IRGRP), 0);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
 
-        cage.chmod_syscall(&filepath, S_IRWXA);
-        assert_eq!(cage.stat_syscall(&filepath, &mut statdata), 0);
+        assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
-        cage.close_syscall(fd);
+        assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
@@ -212,19 +213,19 @@ mod fs_tests {
         
         //testing the ability to make and change to directories
 
-        assert_eq!(cage.mkdir_syscall(&String::from("/subdir1"), S_IRWXA), 0);
-        assert_eq!(cage.mkdir_syscall(&String::from("/subdir1/subdir2"), S_IRWXA), 0);
-        assert_eq!(cage.mkdir_syscall(&String::from("/subdir1/subdir2/subdir3"), 0), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2/subdir3", 0), 0);
         
-        assert_eq!(cage.access_syscall(&String::from("subdir1"), F_OK), 0);
+        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
 
-        assert_eq!(cage.access_syscall(&String::from("subdir2"), F_OK), 0);
+        assert_eq!(cage.access_syscall("subdir2", F_OK), 0);
         assert_eq!(cage.chdir_syscall(".."), 0);
 
-        assert_eq!(cage.access_syscall(&String::from("subdir1"), F_OK), 0);
+        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.chdir_syscall("/subdir1/subdir2/subdir3"), 0);
-        assert_eq!(cage.access_syscall(&String::from("../../../subdir1"), F_OK), 0);
+        assert_eq!(cage.access_syscall("../../../subdir1", F_OK), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -236,17 +237,17 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let filepath1 = String::from("/subdirDirMode1");
-        let filepath2 = String::from("/subdirDirMode2");
+        let filepath1 = "/subdirDirMode1";
+        let filepath2 = "/subdirDirMode2";
         
         let mut statdata = StatData::default();
 
-        assert_eq!(cage.mkdir_syscall(&filepath1, S_IRWXA), 0);
-        cage.stat_syscall(&filepath1, &mut statdata);
+        assert_eq!(cage.mkdir_syscall(filepath1, S_IRWXA), 0);
+        assert_eq!(cage.stat_syscall(filepath1, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFDIR as u32);
         
-        assert_eq!(cage.mkdir_syscall(&filepath2, 0), 0);
-        cage.stat_syscall(&filepath2, &mut statdata);
+        assert_eq!(cage.mkdir_syscall(filepath2, 0), 0);
+        assert_eq!(cage.stat_syscall(filepath2, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFDIR as u32);
 
         assert_eq!(cage.exit_syscall(), 0);
@@ -259,17 +260,17 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        cage.mkdir_syscall(&String::from("/subdirMultiple1"), S_IRWXA);
-        cage.mkdir_syscall(&String::from("/subdirMultiple1/subdirMultiple2"), S_IRWXA);
-        cage.mkdir_syscall(&String::from("/subdirMultiple1/subdirMultiple2/subdirMultiple3"), 0);
+        assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2/subdirMultiple3", 0), 0);
 
         let mut statdata = StatData::default();
 
         //ensure that the file is a dir with all of the correct bits on for nodes
-        cage.stat_syscall("/subdirMultiple1/subdirMultiple2", &mut statdata);
+        assert_eq!(cage.stat_syscall("/subdirMultiple1/subdirMultiple2", &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFDIR as u32);
 
-        cage.stat_syscall("/subdirMultiple1/subdirMultiple2/subdirMultiple3", &mut statdata);
+        assert_eq!(cage.stat_syscall("/subdirMultiple1/subdirMultiple2/subdirMultiple3", &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFDIR as u32);
 
         assert_eq!(cage.exit_syscall(), 0);
@@ -284,9 +285,9 @@ mod fs_tests {
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let mode: i32 = 438;   // 0666
-        let filepath = String::from("/dupfile");
+        let filepath = "/dupfile";
 
-        let fd = cage.open_syscall(&filepath, flags, S_IRWXA);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         let mut temp_buffer = sizecbuf(2);
         assert!(fd >= 0);
         assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
@@ -303,7 +304,7 @@ mod fs_tests {
         assert!(fd != fd2 && fd != fd3);
 
         //We don't need all three, though:
-        cage.close_syscall(fd3);
+        assert_eq!(cage.close_syscall(fd3), 0);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_END), 2);
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_END), 2);
@@ -317,7 +318,7 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 4), 4);
         assert_eq!(cbuf2str(&buffer), "1234");
 
-        cage.close_syscall(fd);
+        assert_eq!(cage.close_syscall(fd), 0);
 
         //the other &fd should still work
         assert_eq!(cage.write_syscall(fd2, str2cbuf("5678"), 4), 4);
@@ -326,7 +327,7 @@ mod fs_tests {
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
         let mut buffer2 = sizecbuf(8);
         assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 8), 8);
-        cage.close_syscall(fd2);
+        assert_eq!(cage.close_syscall(fd2), 0);
         assert_eq!(cbuf2str(&buffer2), "12345678");
 
         assert_eq!(cage.exit_syscall(), 0);
@@ -341,9 +342,9 @@ mod fs_tests {
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let mode: i32 = 438;   // 0666
-        let filepath = String::from("/dup2file");
+        let filepath = "/dup2file";
 
-        let fd = cage.open_syscall(&filepath, flags, S_IRWXA);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
 
         assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
 
@@ -371,7 +372,7 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 8), 8);
         assert_eq!(cbuf2str(&buffer2), "12345678");
 
-         assert_eq!(cage.close_syscall(fd2), 0);
+        assert_eq!(cage.close_syscall(fd2), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
@@ -382,27 +383,27 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let path = String::from("/fdFlagsFile");
+        let path = "/fdFlagsFile";
 
-        let fd = cage.creat_syscall(&path, S_IRWXA);
+        let fd = cage.creat_syscall(path, S_IRWXA);
         assert_eq!(cage.close_syscall(fd), 0);
 
-        let readFd = cage.open_syscall(&path, O_RDONLY, S_IRWXA);
-        cage.lseek_syscall(readFd, 0, SEEK_SET);
-        assert_ne!(cage.write_syscall(readFd, str2cbuf("Hello! This should not write."), 28), 28);
+        let readFd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
+        assert_eq!(cage.lseek_syscall(readFd, 0, SEEK_SET), 0);
+        assert_eq!(cage.write_syscall(readFd, str2cbuf("Hello! This should not write."), 28), -(Errno::EBADF as i32));
 
         let mut buf = sizecbuf(100);
-        cage.lseek_syscall(readFd, 0, SEEK_SET);
+        assert_eq!(cage.lseek_syscall(readFd, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(readFd, buf.as_mut_ptr(), 100), 0);
         assert_eq!(cage.close_syscall(readFd), 0);
 
-        let writeFd = cage.open_syscall(&path, O_WRONLY, S_IRWXA);
+        let writeFd = cage.open_syscall(path, O_WRONLY, S_IRWXA);
         let mut buf2 = sizecbuf(100);
-        cage.lseek_syscall(writeFd, 0, SEEK_SET);
-        assert_ne!(cage.read_syscall(writeFd, buf2.as_mut_ptr(), 100), 0);
+        assert_eq!(cage.lseek_syscall(writeFd, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(writeFd, buf2.as_mut_ptr(), 100), -(Errno::EBADF as i32));
 
-        cage.lseek_syscall(writeFd, 0, SEEK_SET);
-        assert_eq!(cage.write_syscall(writeFd, str2cbuf("Hello! This should not write."), 28), 28);
+        assert_eq!(cage.lseek_syscall(writeFd, 0, SEEK_SET), 0);
+        assert_eq!(cage.write_syscall(writeFd, str2cbuf("Hello! This should write."), 24), 24);
         assert_eq!(cage.close_syscall(writeFd), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
@@ -415,16 +416,16 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let path = String::from("/fileLink");
-        let path2 = String::from("/fileLink2");
+        let path = "/fileLink";
+        let path2 = "/fileLink2";
 
-        let fd = cage.open_syscall(&path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
-        cage.lseek_syscall(fd, 0, SEEK_SET);
+        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
 
         let mut statdata = StatData::default();
 
-        cage.stat_syscall(&path, &mut statdata);
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
         assert_eq!(statdata.st_size, 2);
         assert_eq!(statdata.st_nlink, 1);
 
@@ -432,20 +433,20 @@ mod fs_tests {
 
         //make sure that this has the same traits as the other file that we linked
         // and make sure that the link count on the orig file has increased
-        assert_eq!(cage.link_syscall(&path, &path2), 0);
-        cage.stat_syscall(&path, &mut statdata);
-        cage.stat_syscall(&path2, &mut statdata2);
+        assert_eq!(cage.link_syscall(path, path2), 0);
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(cage.stat_syscall(path2, &mut statdata2), 0);
         assert!(statdata == statdata2);
         assert_eq!(statdata.st_nlink, 2);
 
         //now we unlink
-        assert_eq!(cage.unlink_syscall(&path), 0);
-        cage.stat_syscall(&path2, &mut statdata2);
+        assert_eq!(cage.unlink_syscall(path), 0);
+        assert_eq!(cage.stat_syscall(path2, &mut statdata2), 0);
         assert_eq!(statdata2.st_nlink, 1);
 
         //it shouldn't work to stat the orig since it is gone
-        assert_ne!(cage.stat_syscall(&path, &mut statdata), 0);
-        assert_eq!(cage.unlink_syscall(&path2), 0);
+        assert_ne!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(cage.unlink_syscall(path2), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -457,9 +458,9 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let path = String::from("/lseekPastEnd");
+        let path = "/lseekPastEnd";
 
-        let fd = cage.open_syscall(&path, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert_eq!(cage.write_syscall(fd, str2cbuf("hello"), 5), 5);
 
         //seek past the end and then write
@@ -482,14 +483,14 @@ mod fs_tests {
         lindrustinit();
 
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-        let path = String::from("/complexFile");
+        let path = "/complexFile";
 
-        let fd = cage.open_syscall(&path, O_CREAT | O_WRONLY, S_IRWXA);
+        let fd = cage.open_syscall(path, O_CREAT | O_WRONLY, S_IRWXA);
         assert_eq!(cage.write_syscall(fd, str2cbuf("testing"), 4), 4);
 
         let mut statdata = StatData::default();
 
-        cage.fstat_syscall(fd, &mut statdata);
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
         assert_eq!(statdata.st_size, 4);
         assert_eq!(statdata.st_nlink, 1);
 
@@ -505,10 +506,10 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //testing to make sure that all of the gid and uid values are good to go when system is initialized
-        assert_eq!(cage.getgid_syscall(), 1000);
-        assert_eq!(cage.getegid_syscall(), 1000);
-        assert_eq!(cage.getuid_syscall(), 1000);
-        assert_eq!(cage.geteuid_syscall(), 1000);
+        assert_eq!(cage.getgid_syscall() as u32, DEFAULT_GID);
+        assert_eq!(cage.getegid_syscall() as u32, DEFAULT_GID);
+        assert_eq!(cage.getuid_syscall() as u32, DEFAULT_UID);
+        assert_eq!(cage.geteuid_syscall() as u32, DEFAULT_UID);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -523,15 +524,15 @@ mod fs_tests {
         let mut statdata = StatData::default();
 
         //testing that all of the dev files made it out safe and sound
-        cage.stat_syscall(&String::from("/dev"), &mut statdata);
+        cage.stat_syscall("/dev", &mut statdata);
 
-        assert_eq!(cage.stat_syscall(&String::from("/dev/null"), &mut statdata), 0);
+        assert_eq!(cage.stat_syscall("/dev/null", &mut statdata), 0);
         assert_eq!(statdata.st_rdev, makedev(&DevNo {major: 1, minor: 3}));
         
-        assert_eq!(cage.stat_syscall(&String::from("/dev/random"), &mut statdata), 0);
+        assert_eq!(cage.stat_syscall("/dev/random", &mut statdata), 0);
         assert_eq!(statdata.st_rdev, makedev(&DevNo {major: 1, minor: 8}));
 
-        assert_eq!(cage.stat_syscall(&String::from("/dev/urandom"), &mut statdata), 0);
+        assert_eq!(cage.stat_syscall("/dev/urandom", &mut statdata), 0);
         assert_eq!(statdata.st_rdev, makedev(&DevNo {major: 1, minor: 9}));
 
         assert_eq!(cage.exit_syscall(), 0);
@@ -544,9 +545,9 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let path1 = String::from("/simpleFileName");
-        let path2 = String::from("/simpelFileName2");
-        let fd = cage.open_syscall(&path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let path1 = "/simpleFileName";
+        let path2 = "/simpelFileName2";
+        let fd = cage.open_syscall(path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         //testing that the read and write work as expected
 
         //just read the first 5 bytes of the file
@@ -566,12 +567,12 @@ mod fs_tests {
         assert_eq!(cage.close_syscall(fd), 0);
     
         //open another one and then remove it
-        let fd2 = cage.open_syscall(&path2, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-        let message = String::from("================================================================================================");
-        assert_eq!(cage.write_syscall(fd2, str2cbuf(&message), message.len()), message.len() as i32);
+        let fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let message = "================================================================================================";
+        assert_eq!(cage.write_syscall(fd2, str2cbuf(message), message.len()), message.len() as i32);
          
         //close the file descriptor
-        assert_eq!(cage.unlink_syscall(&path2), 0);
+        assert_eq!(cage.unlink_syscall(path2), 0);
 
         //have to retieve the metadata lock after the open syscall gets it
         {
@@ -607,11 +608,11 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         //taken from the set up call:
-        let path1 = String::from("/simpleFileName");
+        let path1 = "/simpleFileName";
 
         //if everything works, then try to open the files from the metadata
         //it should exist
-        let fd = cage.open_syscall(&path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let fd = cage.open_syscall(path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
 
         assert_ne!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(), 0);
@@ -625,12 +626,12 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let dev = makedev(&DevNo {major: 1, minor: 3});
-        let path = String::from("/null");
+        let path = "/null";
 
         //now we are going to mknod /dev/null with create, read and write flags and permissions
         //and then makr sure that it exists
-        cage.mknod_syscall(&path, S_IFCHR as u32, dev);
-        let fd = cage.open_syscall(&path, O_RDWR, S_IRWXA);
+        assert_eq!(cage.mknod_syscall(path, S_IFCHR as u32, dev), 0);
+        let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
 
         //checking the metadata of the file:
         let mut statdata = StatData::default();
@@ -650,11 +651,11 @@ mod fs_tests {
 
         //try it again with /dev/random
         let dev2 = makedev(&DevNo {major: 1, minor: 8});
-        let path2 = String::from("/random");
+        let path2 = "/random";
 
         //making the node and then making sure that it exists
-        cage.mknod_syscall(&path2, S_IFCHR as u32, dev2);
-        let fd2 = cage.open_syscall(&path2, O_RDWR, S_IRWXA);
+        assert_eq!(cage.mknod_syscall(path2, S_IFCHR as u32, dev2), 0);
+        let fd2 = cage.open_syscall(path2, O_RDWR, S_IRWXA);
         
         let mut buf2 = sizecbuf(4);
         assert_eq!(cage.fstat_syscall(fd2, &mut statdata2), 0);
@@ -681,17 +682,17 @@ mod fs_tests {
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let mode: u32 = 438;   // 0666
-        let name = String::from("double_open_file");
+        let name = "double_open_file";
 
         let mut readbuf = sizecbuf(2);
-        let fd3 = cage.open_syscall(&name, flags, mode);
+        let fd3 = cage.open_syscall(name, flags, mode);
         assert_eq!(cage.write_syscall(fd3, str2cbuf("hi"), 2), 2);
         assert_eq!(cage.lseek_syscall(fd3, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(fd3, readbuf.as_mut_ptr(), 2), 2);
         assert_eq!(cbuf2str(&readbuf), "hi");
         
 
-        let fd4 = cage.open_syscall(&name, flags, mode);
+        let fd4 = cage.open_syscall(name, flags, mode);
         let mut buf = sizecbuf(5);
         assert_eq!(cage.lseek_syscall(fd3, 2, SEEK_SET), 2);
         assert_eq!(cage.write_syscall(fd3, str2cbuf("boo"), 3), 3);
@@ -733,16 +734,15 @@ mod fs_tests {
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
         
         let mut statdata = StatData::default();
-
         let mut statdata2 = StatData::default();
 
-        cage.fstat_syscall(fd, &mut statdata);
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
         assert_eq!(statdata.st_size, 2);
         assert_eq!(statdata.st_nlink, 1);
 
         assert_eq!(cage.link_syscall("/fooComplex", "/barComplex"), 0);
-        cage.stat_syscall("/fooComplex", &mut statdata);
-        cage.stat_syscall("/barComplex", &mut statdata2);
+        assert_eq!(cage.stat_syscall("/fooComplex", &mut statdata), 0);
+        assert_eq!(cage.stat_syscall("/barComplex", &mut statdata2), 0);
 
         //check that they are the same and that the link count is 0
         assert!(statdata == statdata2);
@@ -757,17 +757,17 @@ mod fs_tests {
     pub fn ut_lind_fs_stat_file_mode() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-        let path = String::from("/fooFileMode");
-        let fd = cage.open_syscall(&path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        let path = "/fooFileMode";
+        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
         let mut statdata = StatData::default();
-        assert_eq!(cage.stat_syscall(&path, &mut statdata), 0);
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
         //make a file without permissions and check that it is a reg file without permissions
-        let path2 = String::from("/fooFileMode2");
-        let fd2 = cage.open_syscall(&path2, O_CREAT | O_EXCL | O_WRONLY, 0);
-        assert_eq!(cage.stat_syscall(&path2, &mut statdata), 0);
+        let path2 = "/fooFileMode2";
+        let fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
+        assert_eq!(cage.stat_syscall(path2, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFREG as u32);
 
         //check that stat can be done on the current (root) dir
