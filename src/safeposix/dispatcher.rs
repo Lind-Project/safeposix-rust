@@ -107,6 +107,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         CHDIR_SYSCALL => {
             cage.chdir_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
         }
+        XSTAT_SYSCALL => {
+            cage.stat_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{&mut *arg2.dispatch_statdatastruct})
+        }
         OPEN_SYSCALL => {
             cage.open_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_uint})
         }
@@ -122,14 +125,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         LSEEK_SYSCALL => {
             cage.lseek_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_isize}, unsafe{arg3.dispatch_int})
         }
-        XSTAT_SYSCALL => {
-            cage.stat_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{&mut *arg2.dispatch_statdatastruct})
-        }
         FXSTAT_SYSCALL => {
             cage.fstat_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_statdatastruct})
-        }
-        STATFS_SYSCALL => {
-            cage.statfs_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{&mut *arg2.dispatch_fsdatastruct})
         }
         FSTATFS_SYSCALL => {
             cage.fstatfs_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_fsdatastruct})
@@ -147,11 +144,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         DUP2_SYSCALL => {
             cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
         }
+        STATFS_SYSCALL => {
+            cage.statfs_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{&mut *arg2.dispatch_fsdatastruct})
+        }
         FCNTL_SYSCALL => {
             cage.fcntl_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_int})
         }
         GETPPID_SYSCALL => {
             cage.getppid_syscall()
+        }
+        GETPID_SYSCALL => {
+            cage.getpid_syscall()
         }
         EXIT_SYSCALL => {
             cage.exit_syscall()
@@ -168,8 +171,14 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         GETUID_SYSCALL => {
             cage.getuid_syscall()
         }
+        GETEUID_SYSCALL => {
+            cage.geteuid_syscall()
+        }
         GETGID_SYSCALL => {
             cage.getgid_syscall()
+        }
+        GETEGID_SYSCALL => {
+            cage.getegid_syscall()
         }
         PREAD_SYSCALL => {
             cage.pread_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_mutcbuf}, unsafe{arg3.dispatch_usize}, unsafe{arg4.dispatch_isize})
@@ -179,6 +188,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         CHMOD_SYSCALL => {
             cage.chmod_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_uint})
+        }
+        FCNTL_SYSCALL => {
+            cage.fcntl_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_int})
         }
         _ => {//unknown syscall
             -1

@@ -145,9 +145,9 @@ pub struct StatData {
 #[derive(Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct FSData {
-  pub f_type: u32,
-  pub f_bsize: u32,
-  pub f_blocks: u32,
+  pub f_type: u64,
+  pub f_bsize: u64,
+  pub f_blocks: u64,
   pub f_bfree: u64,
   pub f_bavail: u64,
   //total files in the file system -- should be infinite
@@ -156,10 +156,9 @@ pub struct FSData {
   pub f_ffiles: u64,
   pub f_fsid: u64,
   //not really a limit for naming, but 254 works
-  pub f_namelen: u32,
+  pub f_namelen: u64,
   //arbitrary val for blocksize as well
-  pub f_frsize: u32,
-  //supposed to be 5 bytes, so let's use null characters -- using 8 bytes in this case
+  pub f_frsize: u64,
   pub f_spare: [u8; 32]
 }
 

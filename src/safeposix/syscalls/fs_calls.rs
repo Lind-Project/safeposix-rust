@@ -472,20 +472,20 @@ impl Cage {
                     match inode {
                         Inode::File(f) => {
                             Self::_istat_helper(&f, statbuf);
-                        },
+                        }
                         Inode::CharDev(f) => {
                             Self::_istat_helper_chr_file(&f, statbuf);
-                        },
+                        }
                         Inode::Dir(f) => {
                             Self::_istat_helper_dir(&f, statbuf);
-                        },
+                        }
                         _ => {panic!("A file fd points to a socket or pipe");}
                     }
-                },
+                }
                 Socket(_) => {
                     return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
-                },
-                Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);},
+                }
+                Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);}
                 Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
             }
             0 //fstat has succeeded!
