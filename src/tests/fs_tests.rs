@@ -348,11 +348,13 @@ mod fs_tests {
 
         assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
 
+        //trying to dup fd into fd + 1
         let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
 
-        //should be a no-op
+        //should be a no-op since the last line did the same thing
         let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
 
+        //read/write tests for the files
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2, 0, SEEK_CUR));
         assert_eq!(cage.write_syscall(fd, str2cbuf("34"), 2), 2);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2, 0, SEEK_CUR));
