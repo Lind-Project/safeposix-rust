@@ -70,7 +70,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
 
     if lind_exists && !lind_isfile {
         println!("{:?} on lind file system is not a regular file, skipping", hostfilepath);
-        return; //error message later
+        return;
     }
 
     //compare files to tell whether they are identical
