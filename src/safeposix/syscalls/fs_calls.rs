@@ -1376,7 +1376,7 @@ impl Cage {
             (None, ..) => {
                 syscall_error(Errno::EEXIST, "rmdir", "Path does not exist")
             }
-            (Some(_), None) {
+            (Some(_), None) => {
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
@@ -1386,17 +1386,17 @@ impl Cage {
                     Inode::Dir(dir_obj) => {
                         if dir_obj.linkcount > 2 {return syscall_error(Errno::EEXIST, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {return syscall_error(Errno::ENOTDIR, "rmdir", "Mode is not set to directory");}
-                        if dir_obj.mode as u32 & S_IWOTH != 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
+                        if dir_obj.mode as u32 & S_IWOTH == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
-                        metadata.inodetable.remove(inodenum);
+                        metadata.inodetable.remove(&inodenum);
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
-                            if parent_dir.mode as u32 & S_IWOTH != 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
+                            if parent_dir.mode as u32 & S_IWOTH == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
-                            parent_dir.filename_to_inode_dict.remove(truepath.file_name().unwrap().to_owned());
+                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string());
                             parent_dir.linkcount -= 1;
                         }
-                        return 0;
+                        0
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
                 }
@@ -1418,18 +1418,19 @@ impl Cage {
             (None, ..) => {
                 syscall_error(Errno::EEXIST, "rename", "Old path does not exist")
             }
-            (Some(_), None) {
+            (Some(_), None) => {
                 syscall_error(Errno::EINVAL, "rename", "Cannot rename root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
-                let (.., new_par_inodenum) = metawalkandparent(true_newpath.as_path(), Some(&metadata));
-                if new_par_inodenum != parent_inodenum {
+                let (_, new_par_inodenum) = metawalkandparent(true_newpath.as_path(), Some(&metadata));
+                if new_par_inodenum != Some(parent_inodenum) {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
-                let parent_dir = metadata.inodetable.get_mut(&parent_inodenum).unwrap();
-                parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_owned(), inodenum);
-                parent_dir.filename_to_inode_dict.remove(true_oldpath.file_name().unwrap().to_owned());
+                if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                    parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
+                    parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
+                }
                 0
             }
         }
