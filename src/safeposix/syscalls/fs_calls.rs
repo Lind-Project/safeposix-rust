@@ -1372,31 +1372,38 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
         let mut metadata = FS_METADATA.write().unwrap();
 
+        // try to get inodenum of input path and its parent
         match metawalkandparent(truepath.as_path(), Some(&metadata)) {
             (None, ..) => {
                 syscall_error(Errno::EEXIST, "rmdir", "Path does not exist")
             }
-            (Some(_), None) => {
+            (Some(_), None) => { // path exists but parent does not => path is root dir
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
                 let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
 
                 match inodeobj {
+                    // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
                         if dir_obj.linkcount > 2 {return syscall_error(Errno::EEXIST, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {return syscall_error(Errno::ENOTDIR, "rmdir", "Mode is not set to directory");}
+
+                        // check if dir has write permission
                         if dir_obj.mode as u32 & S_IWOTH == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
+                        // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum);
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                            // check if parent dir has write permission
                             if parent_dir.mode as u32 & S_IWOTH == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
+                            // remove entry of corresponding filename from filename-inode dict
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string());
-                            parent_dir.linkcount -= 1;
+                            parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
-                        0
+                        0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
                 }
@@ -1414,24 +1421,32 @@ impl Cage {
         let true_newpath = normpath(convpath(newpath), self);
         let mut metadata = FS_METADATA.write().unwrap();
 
+        // try to get inodenum of old path and its parent
         match metawalkandparent(true_oldpath.as_path(), Some(&metadata)) {
             (None, ..) => {
                 syscall_error(Errno::EEXIST, "rename", "Old path does not exist")
             }
             (Some(_), None) => {
-                syscall_error(Errno::EINVAL, "rename", "Cannot rename root directory")
+                syscall_error(Errno::EBUSY, "rename", "Cannot rename root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
+                // make sure file is not moved to another dir 
+                // get inodenum for parent of new path
                 let (_, new_par_inodenum) = metawalkandparent(true_newpath.as_path(), Some(&metadata));
+                // check if old and new paths share parent
                 if new_par_inodenum != Some(parent_inodenum) {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
+                
                 let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
                 if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                    // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
+
+                    // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                 }
-                0
+                0 // success
             }
         }
     }
