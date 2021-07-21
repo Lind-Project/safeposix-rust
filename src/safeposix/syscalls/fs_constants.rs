@@ -41,7 +41,7 @@ pub const DEFAULT_UID: u32 = 1000;
 pub const DEFAULT_GID: u32 = 1000;
 
 //Standard flag combinations
-pub const S_IRWXA: u32 = 0o777; //0b0000000111111111
+pub const S_IRWXA: u32 = 0o777; 
 pub const S_IRWXU: u32 = 0o700;
 pub const S_IRUSR: u32 = 0o400;
 pub const S_IWUSR: u32 = 0o200;
@@ -96,7 +96,7 @@ pub const MAP_PRIVATE: i32 = 2;
 pub const MAP_FIXED: i32 = 16;
 pub const MAP_ANONYMOUS: i32 = 32;
 pub const MAP_HUGE_SHIFT: i32 = 26;
-pub const MAP_HUGETLB: i32 = 262144; //0x40000
+pub const MAP_HUGETLB: i32 = 262144; 
 
 pub const PROT_NONE: i32 = 0;
 pub const PROT_READ: i32 = 1;
