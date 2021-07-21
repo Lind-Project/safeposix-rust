@@ -191,9 +191,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         DUP2_SYSCALL => {
             cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
         }
-        //GETDENTS_SYSCALL => {
-            //cage.getdents_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_usize}, (0..unsafe{arg3.dispatch_uint}).map(|x| unsafe{&*(ClippedDirent, Vec<u8>)}).collect::<(ClippedDirent, Vec<u8>)>())
-        //}
+        GETDENTS_SYSCALL => {
+            let mut dents_vec: Vec<(ClippedDirent, Vec<u8>)> = Vec::new();
+            let res = cage.getdents_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_usize}, &mut dents_vec);
+            pack_dirents(dents_vec, unsafe{arg3.dispatch_mutcbuf});
+            res
+        }
         _ => {//unknown syscall
             -1
         }
@@ -217,7 +220,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 ///
 /// There is enough information to produce a tuple vector that can satisfy these assumptions well
 /// in getdents syscall, and thus all the work to satisfy these assumptions should be done there
-pub extern "C" fn pack_dirents(dirtuplevec: Vec<(ClippedDirent, Vec<u8>)>, baseptr: *mut u8) {
+fn pack_dirents(dirtuplevec: Vec<(ClippedDirent, Vec<u8>)>, baseptr: *mut u8) {
   let mut curptr = baseptr;
 
   //for each tuple we write in the ClippedDirent struct, and then the padded name vec
