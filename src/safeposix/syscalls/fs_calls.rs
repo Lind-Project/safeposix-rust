@@ -1364,4 +1364,75 @@ impl Cage {
         }
     }
 
+    //------------------GETDENTS SYSCALL------------------
+
+    pub fn getdents_syscall(&self, fd: i32, bufsize: usize, vec: &mut Vec<(ClippedDirent, Vec<u8>)>) -> i32 {
+        
+        // make sure bufsize is at least greater than size of a ClippedDirent struct
+        let dirent_size = std::mem::size_of::<ClippedDirent>();
+        if bufsize <= dirent_size {
+            return syscall_error(Errno::EINVAL, "getdents", "Buffer size too small");
+        }
+        
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) { // check if fd is valid
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            
+            match &mut *filedesc_enum {
+                // only proceed when fd represents a file
+                File(ref mut normalfile_filedesc_obj) => {
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    match inodeobj {
+                        // only proceed when inode is a dir
+                        Inode::Dir(dir_inode_obj) => {
+                            let position = normalfile_filedesc_obj.position;
+                            let mut bufcount = 0;
+                            let mut curr_size = 0;
+                            let mut curr_pos = 0;
+                            let mut vec_idx = 0;
+                            let mut count = 0;
+
+                            for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
+                                if curr_pos >= position {
+                                    vec[vec_idx].1 = filename.as_bytes().to_vec();
+                                    for n in 0..(vec.len() + 7) / 8 * 8 - vec.len() {
+                                        vec[vec_idx].1.push(00);
+                                    }
+                                    vec[vec_idx].1.push(libc::DT_UNKNOWN);
+                                    curr_size = dirent_size + vec.len();
+                                    bufcount += curr_size;
+                                    if bufcount > bufsize {break;}
+                                    vec[vec_idx].0.d_ino = inode as u64;
+                                    vec[vec_idx].0.d_off = bufcount as u64;
+                                    vec[vec_idx].0.d_reclen = curr_size as u16;
+                                    count += 1;
+                                }
+                                curr_pos += 1;
+                            }
+                            normalfile_filedesc_obj.position = std::cmp::min(position + count, dir_inode_obj.filename_to_inode_dict.len());
+                            0
+                        }
+                        _ => {
+                            return syscall_error(Errno::EINVAL, "getdents", "File descriptor does not refer to a directory");
+                        }
+                    }
+                }
+                // raise error when fd represents a socket, pipe, or stream
+                Socket(_) => {
+                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents on a socket")
+                }
+                Stream(_) => {
+                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents on a stream")
+                }
+                Pipe(_) => {
+                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents on a pipe")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor")
+        }
+    }
 }

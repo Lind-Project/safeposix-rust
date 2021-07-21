@@ -142,9 +142,9 @@ pub struct StatData {
 /// Represents a Dirent struct without the string, as rust has no flexible array member support
 #[repr(C, packed(1))]
 pub struct ClippedDirent {
-    d_ino: u64,
-    d_off: u64,
-    d_reclen: u16,
+    pub d_ino: u64,
+    pub d_off: u64,
+    pub d_reclen: u16
 }
 
 pub fn is_reg(mode: u32) -> bool {
