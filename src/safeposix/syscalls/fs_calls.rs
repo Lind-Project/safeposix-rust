@@ -1386,18 +1386,18 @@ impl Cage {
                 match inodeobj {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
-                        if dir_obj.linkcount > 2 {return syscall_error(Errno::EEXIST, "rmdir", "Directory is not empty");}
-                        if !is_dir(dir_obj.mode) {return syscall_error(Errno::ENOTDIR, "rmdir", "Mode is not set to directory");}
+                        if dir_obj.linkcount > 2 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
+                        if !is_dir(dir_obj.mode) {panic!("The dir does not have its mode set to dir");}
 
                         // check if dir has write permission
-                        if dir_obj.mode as u32 & S_IWOTH == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
+                        if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum);
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
-                            if parent_dir.mode as u32 & S_IWOTH == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
+                            if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
                             // remove entry of corresponding filename from filename-inode dict
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string());

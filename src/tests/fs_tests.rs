@@ -589,10 +589,10 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let path = String::from("/parent_dir/dir");
-        assert_eq!(cage.mkdir_syscall(&String::from("/parent_dir"), S_IRWXA), 0);
-        assert_eq!(cage.mkdir_syscall(&path, S_IRWXA), 0);
-        assert_eq!(cage.rmdir_syscall(&path), 0);
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(cage.rmdir_syscall(path), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -602,9 +602,9 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let old_path = String::from("/test_dir");
-        assert_eq!(cage.mkdir_syscall(&old_path, S_IRWXA), 0);
-        assert_eq!(cage.rename_syscall(&old_path, &String::from("/test_dir_renamed")), 0);
+        let old_path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
+        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
