@@ -96,7 +96,7 @@ pub const MAP_PRIVATE: i32 = 2;
 pub const MAP_FIXED: i32 = 16;
 pub const MAP_ANONYMOUS: i32 = 32;
 pub const MAP_HUGE_SHIFT: i32 = 26;
-pub const MAP_HUGETLB: i32 = 262144; 
+pub const MAP_HUGETLB: i32 = 262144;
 
 pub const PROT_NONE: i32 = 0;
 pub const PROT_READ: i32 = 1;
