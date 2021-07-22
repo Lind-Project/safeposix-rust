@@ -27,7 +27,8 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let bcount: i32 = 128 * 1024;
-        let textstring = std::iter::repeat("1234567890ABCDEF").take(bcount as usize).collect::<String>();
+        let textstring = std::iter::repeat("1234567890ABCDEF").take(bcount as usize / 16).collect::<String>();
+        assert_eq!(bcount, textstring.len() as i32);
         let textstr = textstring.as_str();
         let textbuf = str2cbuf(textstr);
         let mut otherbuf = sizecbuf(bcount as usize);
