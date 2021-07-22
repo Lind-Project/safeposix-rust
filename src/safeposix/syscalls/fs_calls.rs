@@ -206,7 +206,7 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                //assert same mode bits
+                //assert sane mode bits (asserting that the mode bits make sense)
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
                 }
