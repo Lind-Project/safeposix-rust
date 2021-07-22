@@ -26,8 +26,8 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let bcount: i32 = (128/16) * 1024;
-        let textstring = std::iter::repeat("1234567890ABCDEF").take((bcount / 16) as usize).collect::<String>();
+        let bcount: i32 = 128 * 1024;
+        let textstring = std::iter::repeat("1234567890ABCDEF").take(bcount as usize).collect::<String>();
         let textstr = textstring.as_str();
         let textbuf = str2cbuf(textstr);
         let mut otherbuf = sizecbuf(bcount as usize);
