@@ -708,26 +708,6 @@ mod fs_tests {
 
 
 
-    pub fn ut_lind_fs_rmdir() {
-        lindrustinit();
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        assert_eq!(cage.mkdir_syscall("/fooRmDir", S_IRWXA), 0);
-        assert_eq!(cage.mkdir_syscall("/fooRmDir/barRmDir", S_IRWXA), 0);
-        assert_eq!(cage.access_syscall("/fooRmDir/barRmDir", F_OK), 0);
-
-        //should not be able to remove the parent directory:
-        //WILL UNCOMMENT ONCE KAITLYN'S PR IS THROUGH
-        // assert_ne!(cage.rmdir_syscall("/fooRmDir"), 0);
-        // assert_eq!(cage.rmdir_syscall("/fooRmDir/barRmDir"), 0);  
-        // assert_ne!(cage.access_syscall("/fooRmDir/barRmDir", F_OK), 0);  
-
-        assert_eq!(cage.exit_syscall(), 0);
-        lindrustfinalize();
-    }
-
-
-
     pub fn ut_lind_fs_stat_file_complex() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
