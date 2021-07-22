@@ -12,6 +12,7 @@ pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustP
 pub use std::ffi::OsString as OsStringKey;
 use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::SyncLazy as RustLazyGlobal;
+use super::*;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
@@ -159,6 +160,7 @@ impl EmulatedFile {
     pub fn writeat(&mut self, ptr: *const u8, length: usize, offset: usize) -> std::io::Result<usize> {
 
         let bytes_written;
+        let st = starttimer();
 
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -181,6 +183,8 @@ impl EmulatedFile {
         if offset + length > self.filesize {
             self.filesize = offset + length;
         }
+        
+        println!("{}ns for writeat", readtimer(st).as_nanos());
 
         Ok(bytes_written)
     }
