@@ -6,7 +6,7 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        // ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
