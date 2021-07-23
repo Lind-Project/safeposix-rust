@@ -6,18 +6,20 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        // ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        // ut_lind_fs_chmod();
-        // ut_lind_fs_dir_chdir();
-        // ut_lind_fs_dir_mode();
-        // ut_lind_fs_dir_multiple();
-        // ut_lind_fs_dup();
-        // ut_lind_fs_dup2();
-        // ut_lind_fs_fdflags();
-        // ut_lind_fs_file_link_unlink();
-        // ut_lind_fs_file_lseek_past_end();
+        ut_lind_fs_chmod();
+        ut_lind_fs_dir_chdir();
+        ut_lind_fs_dir_mode();
+        ut_lind_fs_dir_multiple();
+        ut_lind_fs_dup();
+        ut_lind_fs_dup2();
+        ut_lind_fs_fdflags();
+        ut_lind_fs_file_link_unlink();
+        ut_lind_fs_file_lseek_past_end();
         ut_lind_fs_fstat_complex();
+        ut_lind_fs_rmdir();
+        ut_lind_fs_rename();
 
         persistencetest();
         rdwrtest();
@@ -579,6 +581,31 @@ mod fs_tests {
         assert_eq!(statdata.st_nlink, 1);
 
         assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_rmdir() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(cage.rmdir_syscall(path), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_rename() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let old_path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
+        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
+
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
