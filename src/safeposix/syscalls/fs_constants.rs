@@ -79,19 +79,11 @@ pub const F_NOTIFY: i32 = 1026;
 pub const S_IFBLK: i32 = 0o60000;
 pub const S_IFCHR: i32 = 0o20000;
 pub const S_IFDIR: i32 = 0o40000;
-<<<<<<< HEAD
-pub const S_IFIFO: i32 = 0o10000;  
-pub const S_IFLNK: i32 = 0o120000;  
-pub const S_IFREG: i32 = 0o100000;  
-pub const S_IFSOCK: i32 = 0o140000;        
-pub const S_FILETYPEFLAGS: i32 = 0o170000; 
-=======
 pub const S_IFIFO: i32 = 0o10000;
 pub const S_IFLNK: i32 = 0o120000;
 pub const S_IFREG: i32 = 0o100000;
 pub const S_IFSOCK: i32 = 0o140000;
 pub const S_FILETYPEFLAGS: i32 = 0o170000;
->>>>>>> 66dbe1ee05a344d6f5f2c90ff10eeead54eb687e
 
 //for flock syscall
 pub const LOCK_SH: i32 = 1;

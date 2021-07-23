@@ -28,10 +28,18 @@ pub fn get_usize(union_argument: Arg) -> usize {
 
 pub fn get_cbuf(union_argument: Arg) -> *const u8 {
     unsafe{union_argument.dispatch_cbuf}
+    // let value = unsafe{union_argument.dispatch_cbuf};
+    // let ptr: *const u8 = &*value;
+    // assert!(!ptr.is_null());
+    // value
 }
 
 pub fn get_mutcbuf(union_argument: Arg) -> *mut u8 {
     unsafe{union_argument.dispatch_mutcbuf}
+    // let mut value = unsafe{union_argument.dispatch_mutcbuf};
+    // let ptr: *mut u8 = &*value;
+    // assert!(!ptr.is_null());
+    // value
 }
 
 pub fn get_cstr(union_argument: Arg) -> &'static str {
@@ -40,12 +48,15 @@ pub fn get_cstr(union_argument: Arg) -> &'static str {
 
 pub fn get_cstrarr(union_argument: Arg) -> *const *const i8 {
     unsafe{union_argument.dispatch_cstrarr}
+    // let ptr = unsafe{union_argument.dispatch_cstrarr}.as_ptr();
+    // assert!(!ptr.is_null());
+    // union_argument.dispatch_cstrarr
 }
 
-pub fn get_statdatastruct(union_argument: Arg) -> *mut StatData {
+pub fn get_statdatastruct(union_argument: Arg) -> &'static mut StatData { 
     unsafe{&mut *union_argument.dispatch_statdatastruct}
 }
 
-pub fn get_fsdatastruct(union_argument: Arg) -> *mut FSData {
+pub fn get_fsdatastruct(union_argument: Arg) -> &'static mut FSData {
     unsafe{&mut *union_argument.dispatch_fsdatastruct}
 }
