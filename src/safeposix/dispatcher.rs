@@ -163,26 +163,50 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             cage.fstat_syscall(interface::get_int(arg1), interface::get_statdatastruct(arg2))
         }
         FSTATFS_SYSCALL => {
-            cage.fstatfs_syscall(interface::get_int(arg1), interface::get_fsdatastruct(arg2))
+            let int1 = interface::get_int(arg1)?;
+            let statdata2 = interface::get_fsdatastruct(arg2)?;
+
+            cage.fstatfs_syscall(int1, statdata2)
         }
         MMAP_SYSCALL => {
-            cage.mmap_syscall(interface::get_mutcbuf(arg1), interface::get_usize(arg2), interface::get_int(arg3), 
-                                    interface::get_int(arg4), interface::get_int(arg5), interface::get_long(arg6))
+            let mutcbuf1 = interface::get_mutcbuf(arg1)?;
+            let usize2 = interface::get_usize(arg2)?;
+            let int3 = interface::get_int(arg3)?;
+            let int4 = interface::get_int(arg4)?;
+            let int5 = interface::get_int(arg5)?;
+            let long6 = interface::get_long(arg6)?;
+
+            cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6)
         }
         MUNMAP_SYSCALL => {
-            cage.munmap_syscall(interface::get_mutcbuf(arg1), interface::get_usize(arg2))
+            let mutcbuf1 = interface::get_mutcbuf(arg1)?;
+            let usize2 = interface::get_usize(arg2)?;
+
+            cage.munmap_syscall(mutcbuf1, usize2)
         }
         DUP_SYSCALL => {
-            cage.dup_syscall(interface::get_int(arg1), None)
+            let int1 = interface::get_int(arg1)?;
+
+            cage.dup_syscall(int1, None)
         }
         DUP2_SYSCALL => {
-            cage.dup2_syscall(interface::get_int(arg1), interface::get_int(arg2))
+            let int1 = interface::get_int(arg1)?;
+            let int2 = interface::get_int(arg2)?;
+
+            cage.dup2_syscall(int1, int2)
         }
         STATFS_SYSCALL => {
-            cage.statfs_syscall(interface::get_cstr(arg1), interface::get_fsdatastruct(arg2))
+            let cstr1 = interface::get_cstr(arg1)?;
+            let fsdata2 = interface::get_fsdatastruct(arg2)?;
+
+            cage.statfs_syscall(cstr1, fsdata2)
         }
         FCNTL_SYSCALL => {
-            cage.fcntl_syscall(interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
+            let int1 = interface::get_int(arg1)?;
+            let int2 = interface::get_int(arg2)?;
+            let int3 = interface::get_int(arg3)?;
+
+            cage.fcntl_syscall(int1, int2, int3)
         }
         GETPPID_SYSCALL => {
             cage.getppid_syscall()
@@ -194,13 +218,20 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             cage.exit_syscall()
         }
         FLOCK_SYSCALL => {
-            cage.flock_syscall(interface::get_int(arg1), interface::get_int(arg2))
+            let int1 = interface::get_int(arg1)?;
+            let int2 = interface::get_int(arg2)?;
+
+            cage.flock_syscall(int1, int2)
         }
         FORK_SYSCALL => {
-            cage.fork_syscall(interface::get_ulong(arg1))
+            let ulong1 = interface::get_ulong(arg1)
+
+            cage.fork_syscall(ulong1)
         }
         EXEC_SYSCALL => {
-            cage.exec_syscall(interface::get_ulong(arg1))
+            let ulong1 = interface::get_ulong(arg1)
+
+            cage.exec_syscall(ulong1)
         }
         GETUID_SYSCALL => {
             cage.getuid_syscall()
@@ -215,10 +246,20 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             cage.getegid_syscall()
         }
         PREAD_SYSCALL => {
-            cage.pread_syscall(interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_isize(arg4))
+            let int1 = interface::get_int(arg1)
+            let mutcbuf2 = interface::get_mutcbuf(arg2)
+            let usize3 = interface::get_usize(arg3)
+            let isize4 = interface::get_isize(arg4)
+
+            cage.pread_syscall(int1, mutcbuf2, usize3, isize4)
         }
         PWRITE_SYSCALL => {
-            cage.pwrite_syscall(interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_isize(arg4))
+            let int1 = interface::get_int(arg1)
+            let mutcbuf2 = interface::get_mutcbuf(arg2)
+            let usize3 = interface::get_usize(arg3)
+            let isize4 = interface::get_isize(arg4)
+
+            cage.pwrite_syscall(int1, mutcbuf2, usize3, isize4)
         }
         CHMOD_SYSCALL => {
             cage.chmod_syscall(interface::get_cstr(arg1), interface::get_uint(arg2))

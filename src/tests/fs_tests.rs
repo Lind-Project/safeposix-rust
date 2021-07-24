@@ -33,7 +33,6 @@ mod fs_tests {
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
 
-
         persistencetest();
         rdwrtest();
         prdwrtest();
@@ -724,6 +723,20 @@ mod fs_tests {
 
 
 
+    pub fn ut_lind_fs_rename() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let old_path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
+        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
     pub fn ut_lind_fs_stat_file_complex() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -786,20 +799,6 @@ mod fs_tests {
         assert_eq!(fsdata.f_type, 0xBEEFC0DE);
         assert_eq!(fsdata.f_bsize, 4096);
         
-        assert_eq!(cage.exit_syscall(), 0);
-        lindrustfinalize();
-    }
-
-    
-
-    pub fn ut_lind_fs_rename() {
-        lindrustinit();
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        let old_path = "/test_dir";
-        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
-        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
-
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
