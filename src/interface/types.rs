@@ -1,62 +1,98 @@
-use crate::safeposix::dispatcher::*;
-use crate::safeposix::cage::*;
+use crate::safeposix::{dispatcher::*, syscalls::errnos::*, cage::*};
 use crate::interface;
 
-pub fn get_int(union_argument: Arg) -> i32 {
-    unsafe{union_argument.dispatch_int}
+pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
+    let data = unsafe{union_argument.dispatch_int};
+    let typeChecker = Arg{dispatch_long: 0};
+    typeChecker.dispatch_int = 0xffffffff;
+    if (data & ~unsafe{typeChecker.dispatch_long}) == 0 {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
-pub fn get_uint(union_argument: Arg) -> u32 {
-    unsafe{union_argument.dispatch_uint}
+pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
+    let data = unsafe{union_argument.dispatch_uint};
+    let typeChecker = Arg{dispatch_long: 0};
+    typeChecker.dispatch_uint = 0xffffffff;
+    if (data & ~unsafe{typeChecker.dispatch_long}) == 0 {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
-pub fn get_long(union_argument: Arg) -> i64 {
-    unsafe{union_argument.dispatch_long}
+pub fn get_long(union_argument: Arg) -> Result<i64, i32> {
+    if let data = unsafe{union_argument.dispatch_long} {
+        Ok(data)
+    }
+    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
-pub fn get_ulong(union_argument: Arg) -> u64 {
-    unsafe{union_argument.dispatch_ulong}
+pub fn get_ulong(union_argument: Arg) -> Result<u64, i32> {
+    if let data = unsafe{union_argument.dispatch_ulong} {
+        Ok(data)
+    }
+    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
-pub fn get_isize(union_argument: Arg) -> isize {
-    unsafe{union_argument.dispatch_isize}
+pub fn get_isize(union_argument: Arg) -> Result<isize, i32> {
+    if let data = unsafe{union_argument.dispatch_isize} {
+        Ok(data)
+    }
+    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
-pub fn get_usize(union_argument: Arg) -> usize {
-    unsafe{union_argument.dispatch_usize}
+pub fn get_usize(union_argument: Arg) -> Result<usize, i32> {
+    if let data = unsafe{union_argument.dispatch_usize} {
+        Ok(data)
+    }
+    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
-pub fn get_cbuf(union_argument: Arg) -> *const u8 {
-    unsafe{union_argument.dispatch_cbuf}
-    // let value = unsafe{union_argument.dispatch_cbuf};
-    // let ptr: *const u8 = &*value;
-    // assert!(!ptr.is_null());
-    // value
+pub fn get_cbuf(union_argument: Arg) -> Result<*const u8, i32> {
+    let data = unsafe{union_argument.dispatch_cbuf};
+    if !data.is_null() {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
 }
 
-pub fn get_mutcbuf(union_argument: Arg) -> *mut u8 {
-    unsafe{union_argument.dispatch_mutcbuf}
-    // let mut value = unsafe{union_argument.dispatch_mutcbuf};
-    // let ptr: *mut u8 = &*value;
-    // assert!(!ptr.is_null());
-    // value
+pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
+    let data = unsafe{union_argument.dispatch_mutcbuf};
+    if !data.is_null() {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
 }
 
-pub fn get_cstr(union_argument: Arg) -> &'static str {
-    unsafe{interface::charstar_to_ruststr(union_argument.dispatch_cstr)}
+pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
+    let data = unsafe{interface::charstar_to_ruststr(union_argument.dispatch_cstr)};
+    if !data.is_null() {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
 }
 
-pub fn get_cstrarr(union_argument: Arg) -> *const *const i8 {
-    unsafe{union_argument.dispatch_cstrarr}
-    // let ptr = unsafe{union_argument.dispatch_cstrarr}.as_ptr();
-    // assert!(!ptr.is_null());
-    // union_argument.dispatch_cstrarr
+pub fn get_cstrarr(union_argument: Arg) -> Result<*const *const i8, i32> {
+    let data = unsafe{union_argument.dispatch_cstrarr};
+    if !data.is_null() {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
 }
 
-pub fn get_statdatastruct(union_argument: Arg) -> &'static mut StatData { 
-    unsafe{&mut *union_argument.dispatch_statdatastruct}
+pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i32> { 
+    let data = unsafe{&mut *union_argument.dispatch_statdatastruct};
+    if !data.is_null(){
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
 }
 
-pub fn get_fsdatastruct(union_argument: Arg) -> &'static mut FSData {
-    unsafe{&mut *union_argument.dispatch_fsdatastruct}
+pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> {
+    let data = unsafe{&mut *union_argument.dispatch_fsdatastruct};
+    if !data.is_null() {
+        return Ok(data);
+    }
+    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
 }
