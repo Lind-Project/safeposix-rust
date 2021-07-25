@@ -191,6 +191,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         DUP2_SYSCALL => {
             cage.dup2_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_int})
         }
+        RMDIR_SYSCALL => {
+            cage.rmdir_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
+        }
+        RENAME_SYSCALL => {
+            cage.rename_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{interface::charstar_to_ruststr(arg2.dispatch_cstr)})
+        }
         GETDENTS_SYSCALL => {
             let mut dents_vec: Vec<(ClippedDirent, Vec<u8>)> = Vec::new();
             let res = cage.getdents_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_usize}, &mut dents_vec);
