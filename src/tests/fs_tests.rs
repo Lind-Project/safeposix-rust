@@ -582,4 +582,23 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
+
+    pub fn ut_lind_fs_getdents() {
+        lindrustinit();
+
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let bufsize = 128;
+        let mut dents_vec: Vec<(ClippedDirent, Vec<u8>)> = Vec::new();
+        let mut temp: u8 = 0;
+        let baseptr: *mut u8 = &mut temp;
+        
+        let fd = cage.open_syscall("/getdents", O_CREAT, S_IRWXA);
+        assert_eq!(cage.getdents_syscall(fd, bufsize, &mut dents_vec), 0);
+        pack_dirents(dents_vec, baseptr);
+
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
 }
