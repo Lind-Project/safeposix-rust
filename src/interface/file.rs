@@ -265,28 +265,28 @@ impl EmulatedFile {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    extern crate libc;
-    use std::mem;
-    use super::*;
-    #[test]
-    pub fn filewritetest() {
-      println!("{:?}", listfiles());
-      let mut f = openfile("foobar".to_string(), true).expect("?!");
-      println!("{:?}", listfiles());
-      let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
-      unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
-      println!("{:?}", f.writeat(q, 9, 0));
-      let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
-      println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
-      println!("{:?}", f.readat(b, 9, 0));
-      println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
-      println!("{:?}", f.close());
-      unsafe {
-        libc::free(q as *mut libc::c_void);
-        libc::free(b as *mut libc::c_void);
-      }
-      println!("{:?}", removefile("foobar".to_string()));
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     extern crate libc;
+//     use std::mem;
+//     use super::*;
+//     #[test]
+//     pub fn filewritetest() {
+//       println!("{:?}", listfiles());
+//       let mut f = openfile("foobar".to_string(), true).expect("?!");
+//       println!("{:?}", listfiles());
+//       let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
+//       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
+//       println!("{:?}", f.writeat(q, 9, 0));
+//       let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
+//       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
+//       println!("{:?}", f.readat(b, 9, 0));
+//       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
+//       println!("{:?}", f.close());
+//       unsafe {
+//         libc::free(q as *mut libc::c_void);
+//         libc::free(b as *mut libc::c_void);
+//       }
+//       println!("{:?}", removefile("foobar".to_string()));
+//     }
+// }
