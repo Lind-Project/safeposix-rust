@@ -5,7 +5,7 @@ pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
     let data = unsafe{union_argument.dispatch_int};
     let typeChecker = Arg{dispatch_long: 0};
     typeChecker.dispatch_int = 0xffffffff;
-    if (data & ~unsafe{typeChecker.dispatch_long}) == 0 {
+    if (data as i64 & !unsafe{typeChecker.dispatch_long}) == 0 {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
@@ -13,9 +13,9 @@ pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
 
 pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
     let data = unsafe{union_argument.dispatch_uint};
-    let typeChecker = Arg{dispatch_long: 0};
+    let typeChecker = Arg{dispatch_ulong: 0};
     typeChecker.dispatch_uint = 0xffffffff;
-    if (data & ~unsafe{typeChecker.dispatch_long}) == 0 {
+    if (data as u64 & !unsafe{typeChecker.dispatch_ulong}) == 0 {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
@@ -23,28 +23,28 @@ pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
 
 pub fn get_long(union_argument: Arg) -> Result<i64, i32> {
     if let data = unsafe{union_argument.dispatch_long} {
-        Ok(data)
+        return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
 pub fn get_ulong(union_argument: Arg) -> Result<u64, i32> {
     if let data = unsafe{union_argument.dispatch_ulong} {
-        Ok(data)
+        return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
 pub fn get_isize(union_argument: Arg) -> Result<isize, i32> {
     if let data = unsafe{union_argument.dispatch_isize} {
-        Ok(data)
+        return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
 pub fn get_usize(union_argument: Arg) -> Result<usize, i32> {
     if let data = unsafe{union_argument.dispatch_usize} {
-        Ok(data)
+        return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
