@@ -9,7 +9,7 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        ut_lind_fs_simple();
+        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
@@ -27,6 +27,7 @@ mod fs_tests {
         ut_lind_fs_multiple_open();
         ut_lind_fs_persistence_setup();
         ut_lind_fs_persistence_test();
+        ut_lind_fs_rename();
         ut_lind_fs_rmdir();
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
@@ -707,6 +708,22 @@ mod fs_tests {
     }
 
 
+    
+
+    pub fn ut_lind_fs_rmdir() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(cage.rmdir_syscall(path), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
 
     pub fn ut_lind_fs_stat_file_complex() {
         lindrustinit();
@@ -769,6 +786,21 @@ mod fs_tests {
         assert_eq!(cage.statfs_syscall("/", &mut fsdata), 0);
         assert_eq!(fsdata.f_type, 0xBEEFC0DE);
         assert_eq!(fsdata.f_bsize, 4096);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    
+    pub fn ut_lind_fs_rename() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let old_path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
+        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
