@@ -3,12 +3,12 @@ use crate::interface;
 
 pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
     let data = unsafe{union_argument.dispatch_int};
-    let mut typeChecker = Arg{dispatch_long: 0};
+    let mut type_checker = Arg{dispatch_long: 0};
     //turn part of the union into 0xffffffff, but, Rust 
     //does not like just using the hex value so we are forced to use
     //a value of -1
-    typeChecker.dispatch_int = -1;
-    if (data as i64 & !unsafe{typeChecker.dispatch_long}) == 0 {
+    type_checker.dispatch_int = -1;
+    if (data as i64 & !unsafe{type_checker.dispatch_long}) == 0 {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
@@ -16,9 +16,9 @@ pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
 
 pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
     let data = unsafe{union_argument.dispatch_uint};
-    let mut typeChecker = Arg{dispatch_ulong: 0};
-    typeChecker.dispatch_uint = 0xffffffff;
-    if (data as u64 & !unsafe{typeChecker.dispatch_ulong}) == 0 {
+    let mut type_checker = Arg{dispatch_ulong: 0};
+    type_checker.dispatch_uint = 0xffffffff;
+    if (data as u64 & !unsafe{type_checker.dispatch_ulong}) == 0 {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
@@ -29,7 +29,6 @@ pub fn get_long(union_argument: Arg) -> Result<i64, i32> {
         return Ok(data);
     }
     unreachable!();
-    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
 pub fn get_ulong(union_argument: Arg) -> Result<u64, i32> {
@@ -37,7 +36,6 @@ pub fn get_ulong(union_argument: Arg) -> Result<u64, i32> {
         return Ok(data);
     }
     unreachable!();
-    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
 }
 
 pub fn get_isize(union_argument: Arg) -> Result<isize, i32> { // also should not return error
