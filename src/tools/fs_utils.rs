@@ -216,7 +216,7 @@ fn lind_deltree(cage: &Cage, path: String) {
             childcage.unlink_syscall(childpath.as_str());
         }
     });
-    //cage.rmdir_syscall(path.as_str());
+    cage.rmdir_syscall(path.as_str());
 }
 
 fn lind_tree(cage: &Cage, path: String, indentlevel: usize) {
@@ -367,7 +367,7 @@ fn main() {
 
         "rmdir" => {
             for dir in args {
-                //utilcage.rmdir_syscall(dir.as_str());
+                utilcage.rmdir_syscall(dir.as_str());
             }
         }
 
