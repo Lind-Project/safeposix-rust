@@ -197,9 +197,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 }
             }
         }
-        CLOSE_SYSCALL => {
-            cage.close_syscall(unsafe{arg1.dispatch_int})
-        }
         LSEEK_SYSCALL => {
             match (interface::get_int(arg1), interface::get_isize(arg2), interface::get_int(arg3)) {
                 (Ok(int1), Ok(isize2), Ok(int3)) => {
@@ -234,20 +231,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 }
             }
         }
-        FSTATFS_SYSCALL => {
-            cage.fstatfs_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_fsdatastruct})
-        }
         MMAP_SYSCALL => {
             match (interface::get_mutcbuf(arg1), interface::get_usize(arg2), interface::get_int(arg3), interface::get_int(arg4), interface::get_int(arg5), interface::get_long(arg6)) {
                 (Ok(mutcbuf1), Ok(usize2), Ok(int3), Ok(int4), Ok(int5), Ok(long6)) => {
                     return cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6);
                 } 
-                (Err(returned_error_code), ..) | 
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) | 
                 (.., Err(returned_error_code), _) | 
                 (.., Err(returned_error_code), _, _) | 
                 (.., Err(returned_error_code), _, _, _) | 
-                (.., Err(returned_error_code), _, _, _, _) | 
-                (.., Err(returned_error_code)) => {
+                (.., Err(returned_error_code), _, _, _, _)  => {
                     return returned_error_code;
                 }
             }
@@ -346,9 +340,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return returned_error_code;
                 }
             }
-        }
-        EXEC_SYSCALL => {
-            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
         }
         GETUID_SYSCALL => {
             cage.getuid_syscall()
