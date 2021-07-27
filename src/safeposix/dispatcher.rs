@@ -197,6 +197,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 }
             }
         }
+        CLOSE_SYSCALL => {
+            cage.close_syscall(unsafe{arg1.dispatch_int})
+        }
         LSEEK_SYSCALL => {
             match (interface::get_int(arg1), interface::get_isize(arg2), interface::get_int(arg3)) {
                 (Ok(int1), Ok(isize2), Ok(int3)) => {
@@ -230,6 +233,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return returned_error_code;
                 }
             }
+        }
+        FSTATFS_SYSCALL => {
+            cage.fstatfs_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_fsdatastruct})
         }
         MMAP_SYSCALL => {
             match (interface::get_mutcbuf(arg1), interface::get_usize(arg2), interface::get_int(arg3), interface::get_int(arg4), interface::get_int(arg5), interface::get_long(arg6)) {
@@ -341,6 +347,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 }
             }
         }
+        EXEC_SYSCALL => {
+            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
+        }
         GETUID_SYSCALL => {
             cage.getuid_syscall()
         }
@@ -392,6 +401,24 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         //         }
         //     }
         // }
+        RMDIR_SYSCALL => {
+            match interface::get_cstr(arg1) {
+                Ok(cstr1) => {
+                    return cage.rmdir_syscall(cstr1);
+                }
+            }
+        }
+        RENAME_SYSCALL => {
+            match (interface::get_cstr(arg1), interface::get_cstr(arg2)) {
+                (Ok(cstr1), Ok(cstr2)) => {
+                    return cage.rename_syscall(cstr1, cstr2);
+                }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
+        }
         _ => {//unknown syscall
             -1
         }

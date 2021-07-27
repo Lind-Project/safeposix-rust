@@ -5,7 +5,7 @@ use crate::interface;
 use super::syscalls::fs_constants::*;
 use super::cage::Cage;
 
-const METADATAFILENAME: &str = "lind.metadata";
+pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||
@@ -77,9 +77,9 @@ pub struct FilesystemMetadata {
     pub inodetable: interface::RustHashMap<usize, Inode>,
 }
 
-pub fn init_filename_to_inode_dict(parentinode: usize) -> interface::RustHashMap<String, usize> {
+pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> interface::RustHashMap<String, usize> {
     let mut retval = interface::RustHashMap::new();
-    retval.insert(".".to_string(), ROOTDIRECTORYINODE);
+    retval.insert(".".to_string(), curinode);
     retval.insert("..".to_string(), parentinode);
     retval
 }
@@ -94,7 +94,7 @@ impl FilesystemMetadata {
         //refcount is how many open file descriptors pointing to the directory exist, 0 as no cages exist yet
             mode: S_IFDIR as u32 | S_IRWXA, linkcount: 2, refcount: 0,
             atime: time, ctime: time, mtime: time,
-            filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE)};
+            filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE, ROOTDIRECTORYINODE)};
         retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirinode));
 
         retval
