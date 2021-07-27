@@ -93,32 +93,22 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
 
     //implement syscall method calling using matching
+    //COMMENT: I know that the plan is to return the error integer, but, that seems like it could introduce vulnerabilities
 
     match callnum {
         ACCESS_SYSCALL => {
-            let cstr1 = interface::get_cstr(arg1);
-            let uint2 = interface::get_uint(arg2);
-
-            match cstr1 {
-                Err(returned_error_code) => {
-                    return returned_error_code;
+            match (interface::get_cstr(arg1), interface::get_uint(arg2)) {
+                (Ok(cstr1), Ok(uint2)) => {
+                    return cage.access_syscall(cstr1, uint2);
                 }
-                Ok(cstr1) => {
-                    match uint2 {
-                        Err(returned_error_code) => {
-                            return returned_error_code;
-                        }
-                        Ok(uint2) => {
-                            return cage.access_syscall(cstr1, uint2);
-                        }
-                    }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
                 }
             }
         }
         UNLINK_SYSCALL => {
-            let cstr1 = interface::get_cstr(arg1);
-
-            match cstr1 {
+            match interface::get_cstr(arg1) {
                 Ok(cstr1) => {
                     return cage.unlink_syscall(cstr1);
                 }
@@ -128,14 +118,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             }
         }
         LINK_SYSCALL => {
-            match interface::get_cstr(arg1), interface::get_cstr(arg2) {
-                Ok(cstr1), Ok(cstr2) => {
+            match (interface::get_cstr(arg1), interface::get_cstr(arg2)) {
+                (Ok(cstr1), Ok(cstr2)) => {
                     cage.link_syscall(cstr1, cstr2)
                 }
-                Err(returned_error_code), _ {
-                    return returned_error_code;
-                }
-                _, Err(returned_error_code) {
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -143,85 +131,131 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             
         }
         CHDIR_SYSCALL => {
-            let cstr1 = interface::get_cstr(arg1);
-
-            cage.chdir_syscall(cstr1)
+            match interface::get_cstr(arg1) {
+                Ok(cstr1) => {
+                    return cage.chdir_syscall(cstr1);
+                }
+                Err(returned_error_code) => {
+                    return returned_error_code;
+                }
+            }
         }
         XSTAT_SYSCALL => {
-            let cstr1 = interface::get_cstr(arg1);
-            let statdata2 = interface::get_statdatastruct(arg2);
-
-            cage.stat_syscall(cstr1, statdata2)
+            match (interface::get_cstr(arg1), interface::get_statdatastruct(arg2)) {
+                (Ok(cstr1), Ok(statdata2)) => {
+                    return cage.stat_syscall(cstr1, statdata2);
+                }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         OPEN_SYSCALL => {
-            let cstr1 = interface::get_cstr(arg1);
-            let int2 = interface::get_int(arg2);
-            let uint3 = interface::get_uint(arg3);
-
-            cage.open_syscall(cstr1, int2, uint3)
+            match (interface::get_cstr(arg1), interface::get_int(arg2), interface::get_uint(arg3)) {
+                (Ok(cstr1), Ok(int2), Ok(uint3)) => {
+                    return cage.open_syscall(cstr1, int2, uint3);
+                }
+                (Err(returned_error_code), _, _) |
+                (_, Err(returned_error_code), _) |
+                (_, _, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         READ_SYSCALL => {
             match (interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3)) {
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3)) => {
-                    return cage.read_syscall(int1, mutcbuf2, usize3, isize4);
+                    return cage.read_syscall(int1, mutcbuf2, usize3);
                 }
-                (Err(returned_error_code), _, _) => {
-                    return returned_error_code;
-                }
-                (_, Err(returned_error_code), _) => {
-                    return returned_error_code;
-                }
+                (Err(returned_error_code), _, _) |
+                (_, Err(returned_error_code), _) |
                 (_, _, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
         }
         WRITE_SYSCALL => {
-            let int1 = interface::get_int(arg1);
-            let cbuf2 = interface::get_cbuf(arg2);
-            let usize3 = interface::get_usize(arg3);
-
-            cage.write_syscall(int1, cbuf2, usize3)
+            match (interface::get_int(arg1), interface::get_cbuf(arg2), interface::get_usize(arg3)) {
+                (Ok(int1), Ok(cbuf2), Ok(usize3)) => {
+                    return cage.write_syscall(int1, cbuf2, usize3);
+                }
+                (Err(returned_error_code), _, _) |
+                (_, Err(returned_error_code), _) |
+                (_, _, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         CLOSE_SYSCALL => {
-            let int1 = interface::get_int(arg1);
-
-            cage.close_syscall(int1)
+            match interface::get_int(arg1) {
+                Ok(int1) => {
+                    return cage.close_syscall(int1);
+                }
+                Err(returned_error_code) => {
+                    return returned_error_code;
+                }
+            }
         }
         LSEEK_SYSCALL => {
-            let int1 = interface::get_int(arg1);
-            let isize2 = interface::get_isize(arg2);
-            let int3 = interface::get_int(arg3);
-
-            cage.lseek_syscall(int1, isize2, int3)
+            match (interface::get_int(arg1), interface::get_isize(arg2), interface::get_int(arg3)) {
+                (Ok(int1), Ok(isize2), Ok(int3)) => {
+                    return cage.lseek_syscall(int1, isize2, int3);
+                }
+                (Err(returned_error_code), _, _) |
+                (_, Err(returned_error_code), _) |
+                (_, _, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         FXSTAT_SYSCALL => {
-            let int1 = interface::get_int(arg1);
-            let statdata2 = interface::get_statdatastruct(arg2);
-
-            cage.fstat_syscall(interface::get_int(arg1), interface::get_statdatastruct(arg2))
+            match (interface::get_int(arg1), interface::get_statdatastruct(arg2)) {
+                (Ok(int1), Ok(statdata2)) => {
+                    return cage.fstat_syscall(int1, statdata2);                    
+                }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         FSTATFS_SYSCALL => {
-            let int1 = interface::get_int(arg1);
-            let statdata2 = interface::get_fsdatastruct(arg2);
-
-            cage.fstatfs_syscall(int1, statdata2)
+            match (interface::get_int(arg1), interface::get_fsdatastruct(arg2)) {
+                (Ok(int1), Ok(fstatdata2)) => {
+                    return cage.fstatfs_syscall(int1, fstatdata2);                    
+                }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         MMAP_SYSCALL => {
-            let mutcbuf1 = interface::get_mutcbuf(arg1);
-            let usize2 = interface::get_usize(arg2);
-            let int3 = interface::get_int(arg3);
-            let int4 = interface::get_int(arg4);
-            let int5 = interface::get_int(arg5);
-            let long6 = interface::get_long(arg6);
-
-            cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6)
+            match (interface::get_mutcbuf(arg1), interface::get_usize(arg2), interface::get_int(arg3), interface::get_int(arg4), interface::get_int(arg5), interface::get_long(arg6)) {
+                (Ok(mutcbuf1), Ok(usize2), Ok(int3), Ok(int4), Ok(int5), Ok(long6)) => {
+                    return cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6);
+                } 
+                (Err(returned_error_code), _, _, _, _, _) | 
+                (_, Err(returned_error_code), _, _, _, _) | 
+                (_, _, Err(returned_error_code), _, _, _) | 
+                (_, _, _, Err(returned_error_code), _, _) | 
+                (_, _, _, _, Err(returned_error_code), _) | 
+                (_, _, _, _, _, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         MUNMAP_SYSCALL => {
-            let mutcbuf1 = interface::get_mutcbuf(arg1);
-            let usize2 = interface::get_usize(arg2);
-
-            cage.munmap_syscall(mutcbuf1, usize2)
+            match (interface::get_mutcbuf(arg1), interface::get_usize(arg2)) {
+                (Ok(mutcbuf1), Ok(usize2)) => {
+                    return cage.munmap_syscall(mutcbuf1, usize2);
+                }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         DUP_SYSCALL => {
             match interface::get_int(arg1) {
@@ -238,31 +272,30 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2)) => {
                     return cage.dup2_syscall(int1, int2);
                 }
-                (Err(returned_error_code), _) => {
-                    return returned_error_code;
-                }
+                (Err(returned_error_code), _) |
                 (_, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
         }
         STATFS_SYSCALL => {
-            let cstr1 = interface::get_cstr(arg1);
-            let fsdata2 = interface::get_fsdatastruct(arg2);
-
-            cage.statfs_syscall(cstr1, fsdata2)
+            match (interface::get_cstr(arg1), interface::get_fsdatastruct(arg2)) {
+                (Ok(cstr1), Ok(fsdata2)) => {
+                    return cage.statfs_syscall(cstr1, fsdata2);                    
+                }
+                (Err(returned_error_code), _) |
+                (_, Err(returned_error_code)) => {
+                    return returned_error_code;
+                }
+            }
         }
         FCNTL_SYSCALL => {
             match (interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3)) {
                 (Ok(int1), Ok(int2), Ok(int3)) => {
                     return cage.fcntl_syscall(int1, int2, int3);
                 }
-                (Err(returned_error_code), _, _) => {
-                    return returned_error_code;
-                }
-                (_, Err(returned_error_code), _) => {
-                    return returned_error_code;
-                }
+                (Err(returned_error_code), _, _) |
+                (_, Err(returned_error_code), _) |
                 (_, _, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
@@ -282,9 +315,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2)) => {
                     return cage.flock_syscall(int1, int2);
                 }
-                (Err(returned_error_code), _) => {
-                    return returned_error_code;
-                }
+                (Err(returned_error_code), _) |
                 (_, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
@@ -295,12 +326,18 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 Ok(ulong1) => {
                     return cage.fork_syscall(ulong1);
                 }
+                Err(returned_error_code) => {
+                    return returned_error_code;
+                }
             }
         }
         EXEC_SYSCALL => {
             match interface::get_ulong(arg1) {
                 Ok(ulong1) => {
                     return cage.exec_syscall(ulong1);
+                }
+                Err(returned_error_code) => {
+                    return returned_error_code;
                 }
             }
         }
@@ -321,15 +358,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3), Ok(isize4)) => {
                     return cage.pread_syscall(int1, mutcbuf2, usize3, isize4);
                 }
-                (Err(returned_error_code), _, _, _) => {
-                    return returned_error_code;
-                }
-                (_, Err(returned_error_code), _, _) => {
-                    return returned_error_code;
-                }
-                (_, _, Err(returned_error_code), _) => {
-                    return returned_error_code;
-                }
+                (Err(returned_error_code), _, _, _) |
+                (_, Err(returned_error_code), _, _) |
+                (_, _, Err(returned_error_code), _) |
                 (_, _, _, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
@@ -340,15 +371,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3), Ok(isize4)) => {
                     return cage.pwrite_syscall(int1, mutcbuf2, usize3, isize4);
                 }
-                (Err(returned_error_code), _, _, _) => {
-                    return returned_error_code;
-                }
-                (_, Err(returned_error_code), _, _) => {
-                    return returned_error_code;
-                }
-                (_, _, Err(returned_error_code), _) => {
-                    return returned_error_code;
-                }
+                (Err(returned_error_code), _, _, _) |
+                (_, Err(returned_error_code), _, _) |
+                (_, _, Err(returned_error_code), _) |
                 (_, _, _, Err(returned_error_code)) => {
                     return returned_error_code;
                 }
