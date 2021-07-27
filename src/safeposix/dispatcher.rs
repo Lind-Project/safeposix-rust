@@ -101,8 +101,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(uint2)) => {
                     return cage.access_syscall(cstr1, uint2);
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -122,8 +122,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(cstr2)) => {
                     cage.link_syscall(cstr1, cstr2)
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -145,8 +145,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(statdata2)) => {
                     return cage.stat_syscall(cstr1, statdata2);
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -156,9 +156,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(int2), Ok(uint3)) => {
                     return cage.open_syscall(cstr1, int2, uint3);
                 }
-                (Err(returned_error_code), _, _) |
-                (_, Err(returned_error_code), _) |
-                (_, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) => {
                     return returned_error_code;
                 }
             }
@@ -168,9 +168,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3)) => {
                     return cage.read_syscall(int1, mutcbuf2, usize3);
                 }
-                (Err(returned_error_code), _, _) |
-                (_, Err(returned_error_code), _) |
-                (_, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) => {
                     return returned_error_code;
                 }
             }
@@ -180,9 +180,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(cbuf2), Ok(usize3)) => {
                     return cage.write_syscall(int1, cbuf2, usize3);
                 }
-                (Err(returned_error_code), _, _) |
-                (_, Err(returned_error_code), _) |
-                (_, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) => {
                     return returned_error_code;
                 }
             }
@@ -205,9 +205,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(isize2), Ok(int3)) => {
                     return cage.lseek_syscall(int1, isize2, int3);
                 }
-                (Err(returned_error_code), _, _) |
-                (_, Err(returned_error_code), _) |
-                (_, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) => {
                     return returned_error_code;
                 }
             }
@@ -217,8 +217,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(statdata2)) => {
                     return cage.fstat_syscall(int1, statdata2);                    
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -228,8 +228,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(fstatdata2)) => {
                     return cage.fstatfs_syscall(int1, fstatdata2);                    
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -242,12 +242,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(mutcbuf1), Ok(usize2), Ok(int3), Ok(int4), Ok(int5), Ok(long6)) => {
                     return cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6);
                 } 
-                (Err(returned_error_code), _, _, _, _, _) | 
-                (_, Err(returned_error_code), _, _, _, _) | 
-                (_, _, Err(returned_error_code), _, _, _) | 
-                (_, _, _, Err(returned_error_code), _, _) | 
-                (_, _, _, _, Err(returned_error_code), _) | 
-                (_, _, _, _, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) | 
+                (.., Err(returned_error_code), _) | 
+                (.., Err(returned_error_code), _, _) | 
+                (.., Err(returned_error_code), _, _, _) | 
+                (.., Err(returned_error_code), _, _, _, _) | 
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -257,8 +257,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(mutcbuf1), Ok(usize2)) => {
                     return cage.munmap_syscall(mutcbuf1, usize2);
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -278,8 +278,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2)) => {
                     return cage.dup2_syscall(int1, int2);
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -289,8 +289,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(fsdata2)) => {
                     return cage.statfs_syscall(cstr1, fsdata2);                    
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -300,9 +300,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2), Ok(int3)) => {
                     return cage.fcntl_syscall(int1, int2, int3);
                 }
-                (Err(returned_error_code), _, _) |
-                (_, Err(returned_error_code), _) |
-                (_, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) => {
                     return returned_error_code;
                 }
             }
@@ -321,8 +321,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2)) => {
                     return cage.flock_syscall(int1, int2);
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -367,10 +367,10 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3), Ok(isize4)) => {
                     return cage.pread_syscall(int1, mutcbuf2, usize3, isize4);
                 }
-                (Err(returned_error_code), _, _, _) |
-                (_, Err(returned_error_code), _, _) |
-                (_, _, Err(returned_error_code), _) |
-                (_, _, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) |
+                (.., Err(returned_error_code), _, _) => {
                     return returned_error_code;
                 }
             }
@@ -380,10 +380,10 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3), Ok(isize4)) => {
                     return cage.pwrite_syscall(int1, mutcbuf2, usize3, isize4);
                 }
-                (Err(returned_error_code), _, _, _) |
-                (_, Err(returned_error_code), _, _) |
-                (_, _, Err(returned_error_code), _) |
-                (_, _, _, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _) |
+                (.., Err(returned_error_code), _, _) => {
                     return returned_error_code;
                 }
             }
@@ -416,8 +416,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(cstr2)) => {
                     return cage.rename_syscall(cstr1, cstr2);
                 }
-                (Err(returned_error_code), _) |
-                (_, Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
