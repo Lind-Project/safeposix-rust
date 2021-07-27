@@ -96,7 +96,7 @@ pub const MAP_PRIVATE: i32 = 2;
 pub const MAP_FIXED: i32 = 16;
 pub const MAP_ANONYMOUS: i32 = 32;
 pub const MAP_HUGE_SHIFT: i32 = 26;
-pub const MAP_HUGETLB: i32 = 262144; //0x40000
+pub const MAP_HUGETLB: i32 = 262144;
 
 pub const PROT_NONE: i32 = 0;
 pub const PROT_READ: i32 = 1;
@@ -121,6 +121,8 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
+//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
+#[derive(Eq, PartialEq, Default)]
 #[repr(C)]
 #[derive(Default)]
 pub struct StatData {
@@ -138,6 +140,27 @@ pub struct StatData {
   pub st_atim: (u64, u64),
   pub st_mtim: (u64, u64),
   pub st_ctim: (u64, u64)
+}
+
+//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
+#[derive(Eq, PartialEq, Default)]
+#[repr(C)]
+pub struct FSData {
+  pub f_type: u64,
+  pub f_bsize: u64,
+  pub f_blocks: u64,
+  pub f_bfree: u64,
+  pub f_bavail: u64,
+  //total files in the file system -- should be infinite
+  pub f_files: u64,
+  //free files in the file system -- should be infinite
+  pub f_ffiles: u64,
+  pub f_fsid: u64,
+  //not really a limit for naming, but 254 works
+  pub f_namelen: u64,
+  //arbitrary val for blocksize as well
+  pub f_frsize: u64,
+  pub f_spare: [u8; 32]
 }
 
 pub fn is_reg(mode: u32) -> bool {
