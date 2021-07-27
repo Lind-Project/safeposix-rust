@@ -124,7 +124,6 @@ pub const FILEDATAPREFIX: &str = "linddata.";
 //derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
 #[derive(Eq, PartialEq, Default)]
 #[repr(C)]
-#[derive(Default)]
 pub struct StatData {
   pub st_dev: u64,
   pub st_ino: usize,

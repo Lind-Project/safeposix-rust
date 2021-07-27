@@ -192,6 +192,13 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 }
 
 fn visit_children(cage: &Cage, path: String, arg: Option<usize>, visitor: fn(&Cage, String, bool, Option<usize>)) {
+    let direntvec = cage.getdents_syscall(path, 1000000);//arbitrarily large numbeer used here because we don't need to pack
+    for (_, name) in direntvec {
+        let childpath = [path, name].concat();
+        let mut lindstat_res: StatData = StatData::default();
+        let stat_us = cage.stat_syscall(childpath.as_str(), &mut lindstat_res);
+        visitor(cage, childpath, (stat_us & S_IFDIR) == S_IFDIR, arg);
+    }
 }
 
 fn lind_deltree(cage: &Cage, path: String) {
