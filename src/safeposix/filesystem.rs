@@ -5,7 +5,7 @@ use crate::interface;
 use super::syscalls::fs_constants::*;
 use super::cage::Cage;
 
-const METADATAFILENAME: &str = "lind.metadata";
+pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||

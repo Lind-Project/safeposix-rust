@@ -230,7 +230,7 @@ impl EmulatedFile {
         Ok(())
     }
 
-    pub fn zerofill_at(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {
+    pub fn zerofill_at(&mut self, offset: usize, count: usize) -> std::io::Result<usize> {
         let bytes_written;
         let buf = vec![0; count];
 
