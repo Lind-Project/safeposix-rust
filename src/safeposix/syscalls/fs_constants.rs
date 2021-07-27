@@ -57,6 +57,26 @@ pub const S_IROTH: u32 = 0o004;
 pub const S_IWOTH: u32 = 0o002;
 pub const S_IXOTH: u32 = 0o001;
 
+//Commands for FCNTL
+pub const F_DUPFD: i32= 0;
+pub const F_GETFD: i32= 1;
+pub const F_SETFD: i32= 2;
+pub const F_GETFL: i32= 3;
+pub const F_SETFL: i32= 4;
+pub const F_GETLK: i32= 5;
+pub const F_GETLK64: i32 = 5;
+pub const F_SETLK: i32 = 6;
+pub const F_SETLK64: i32 = 6;
+pub const F_SETLKW: i32 = 7;
+pub const F_SETLKW64: i32 = 7;
+pub const F_SETOWN: i32 = 8;
+pub const F_GETOWN: i32 = 9;
+pub const F_SETSIG: i32 = 10;
+pub const F_GETSIG: i32 = 11;
+pub const F_SETLEASE: i32 = 1024;
+pub const F_GETLEASE: i32 = 1025;
+pub const F_NOTIFY: i32 = 1026;
+
 //File types for open/stat etc.
 pub const S_IFBLK: i32 = 0o60000;
 pub const S_IFCHR: i32 = 0o20000;
@@ -67,13 +87,18 @@ pub const S_IFREG: i32 = 0o100000;
 pub const S_IFSOCK: i32 = 0o140000;
 pub const S_FILETYPEFLAGS: i32 = 0o170000;
 
+//for flock syscall
+pub const LOCK_SH: i32 = 1;
+pub const LOCK_EX: i32 = 2;
+pub const LOCK_UN: i32 = 8;
+pub const LOCK_NB: i32 = 4;
 //for mmap/munmap syscall
 pub const MAP_SHARED: i32 = 1;
 pub const MAP_PRIVATE: i32 = 2;
 pub const MAP_FIXED: i32 = 16;
 pub const MAP_ANONYMOUS: i32 = 32;
 pub const MAP_HUGE_SHIFT: i32 = 26;
-pub const MAP_HUGETLB: i32 = 262144; //0x40000
+pub const MAP_HUGETLB: i32 = 262144;
 
 pub const PROT_NONE: i32 = 0;
 pub const PROT_READ: i32 = 1;
@@ -98,6 +123,8 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
+//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
+#[derive(Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct StatData {
   pub st_dev: u64,
@@ -114,6 +141,27 @@ pub struct StatData {
   pub st_atim: (u64, u64),
   pub st_mtim: (u64, u64),
   pub st_ctim: (u64, u64)
+}
+
+//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
+#[derive(Eq, PartialEq, Default)]
+#[repr(C)]
+pub struct FSData {
+  pub f_type: u64,
+  pub f_bsize: u64,
+  pub f_blocks: u64,
+  pub f_bfree: u64,
+  pub f_bavail: u64,
+  //total files in the file system -- should be infinite
+  pub f_files: u64,
+  //free files in the file system -- should be infinite
+  pub f_ffiles: u64,
+  pub f_fsid: u64,
+  //not really a limit for naming, but 254 works
+  pub f_namelen: u64,
+  //arbitrary val for blocksize as well
+  pub f_frsize: u64,
+  pub f_spare: [u8; 32]
 }
 
 pub fn is_reg(mode: u32) -> bool {
