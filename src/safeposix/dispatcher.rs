@@ -406,6 +406,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 Ok(cstr1) => {
                     return cage.rmdir_syscall(cstr1);
                 }
+                Err(returned_error_code) => {
+                    return returned_error_code;
+                }
             }
         }
         RENAME_SYSCALL => {
