@@ -50,8 +50,8 @@ pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
 }
 
-pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> &'a str {
-    std::ffi::CStr::from_ptr(cstr).to_str().unwrap()
+pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Option<&'a str> {
+    Some(std::ffi::CStr::from_ptr(cstr).to_str().unwrap())
 }
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
