@@ -486,8 +486,8 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
                 }
                 Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);}
-                Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);},
-                Epoll(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);} //assuming feef0000 is ok
+                Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
+                Epoll(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
             }
             0 //fstat has succeeded!
         } else {

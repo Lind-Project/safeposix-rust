@@ -3,7 +3,7 @@
 use crate::interface;
 
 // Define constants using static or const
-// Imported into fs_calls file
+// Imported into net_calls file
 
 #[derive(Debug)]
 #[repr(C)]
