@@ -73,28 +73,32 @@ pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
     //  1: check that the pointer is not null
     //  2: push the data from that pointer onto the vector being returned
     //once we encounter a null pointer, we know that we have either hit the end of the array or another null pointer in the memory
-    let pointer = unsafe{union_argument.dispatch_cstrarr};
+    let mut pointer = unsafe{union_argument.dispatch_cstrarr};
     let mut data_vector: Vec<&str> = Vec::new();
    
-    while !pointer.is_null() {
-        if let character = unsafe{interface::charstar_to_ruststr(*pointer)} {
-            data_vector.push(character);
-            unsafe{pointer.offset(1)};
-        } else {
-            return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+    if !pointer.is_null(){
+        while unsafe{!(*pointer).is_null()} {
+            if let character_bytes = unsafe{interface::charstar_to_ruststr(*pointer)} {
+                data_vector.push(character_bytes);
+                pointer = pointer.wrapping_offset(1);
+            } else {
+                return Err(syscall_error(Errno::EILSEQ, "dispatcher", "could not parse input data to string"));
+            }
         }
+        return Ok(data_vector);
     }
-    return Ok(data_vector);   
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
 pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
     //first we check that the pointer is not null 
     //and then we check so that we can get data from the memory
     let pointer = unsafe{union_argument.dispatch_cstr};
+    let ret_data: &str;
     if !pointer.is_null() {
         let data = unsafe{interface::charstar_to_ruststr(pointer)};
-        if let ret_data = Some(data) {
-            return Ok(ret_data.unwrap());
+        if let ret_data = data {
+            return Ok(ret_data);
         }
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
@@ -102,16 +106,18 @@ pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
 
 pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i32> { 
     let data = unsafe{&mut *union_argument.dispatch_statdatastruct};
-    if let ret_data = Some(data) {
-        return Ok(ret_data.unwrap());
+    let ret_data: &mut StatData;
+    if let ret_data = data {
+        return Ok(ret_data);
     }
-    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
 pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> {
     let data = unsafe{&mut *union_argument.dispatch_fsdatastruct};
-    if let ret_data = Some(data) {
-        return Ok(ret_data.unwrap());
+    let ret_data: &mut FSData;
+    if let ret_data = data {
+        return Ok(ret_data);
     }
-    return Err(syscall_error(Errno::EILSEQ, "dispatcher", "input data not valid"));
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }

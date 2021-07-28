@@ -93,7 +93,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
 
     //implement syscall method calling using matching
-    //COMMENT: I know that the plan is to return the error integer, but, that seems like it could introduce vulnerabilities
 
     match callnum {
         ACCESS_SYSCALL => {
