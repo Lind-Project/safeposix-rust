@@ -58,6 +58,7 @@ impl Cage {
             Stream(_s) => true,//s.flags & CLOEXEC,
             Socket(_s) => true,//s.flags & CLOEXEC,
             Pipe(_p) => true,//p.flags & CLOEXEC
+            Epoll(_p) => true,//p.flags & CLOEXEC
         });
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
