@@ -1189,7 +1189,6 @@ impl Cage {
                         //del pipetable.pipenumber
                     }
                 },
-                //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
