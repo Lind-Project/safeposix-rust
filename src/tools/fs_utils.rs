@@ -312,14 +312,14 @@ fn main() {
             let source = args.next().expect("cp needs 2 arguments");
             let dest = args.next().expect("cp needs 2 arguments");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("cp cannot take more than 2 arguments"));
-            cp_dir_into_lind(&utilcage, interface::RustPath::new(source.as_str()), dest.as_str(), true);
+            cp_dir_into_lind(&utilcage, interface::RustPath::new(&source), dest.as_str(), true);
         }
 
         "update" => {
             let source = args.next().expect("update needs 2 arguments");
             let dest = args.next().expect("update needs 2 arguments");
             args.next().and_then::<String, fn(String) -> Option<String>>(|_| panic!("update cannot take more than 2 arguments"));
-            update_dir_into_lind(&utilcage, interface::RustPath::new(source.as_str()), dest.as_str());
+            update_dir_into_lind(&utilcage, interface::RustPath::new(&source), dest.as_str());
         }
 
         "ls" => {
@@ -331,7 +331,7 @@ fn main() {
         "tree" => {
             let rootdir = if let Some(dirstr) = args.next() {
                 dirstr
-            } else {"/".to_string()};
+            } else {"/".to_owned()};
             println!("{}", rootdir);
             lind_tree(&utilcage, rootdir, 0);
         }
