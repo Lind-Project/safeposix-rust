@@ -25,17 +25,11 @@ pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
 }
 
 pub fn get_long(union_argument: Arg) -> Result<i64, i32> {
-    if let data = unsafe{union_argument.dispatch_long} { //this should not return error 
-        return Ok(data);
-    }
-    unreachable!();
+    return Ok(unsafe{union_argument.dispatch_long})   //this should not return error 
 }
 
 pub fn get_ulong(union_argument: Arg) -> Result<u64, i32> {
-    if let data = unsafe{union_argument.dispatch_ulong} {   //this should not return error 
-        return Ok(data);
-    }
-    unreachable!();
+    return Ok(unsafe{union_argument.dispatch_ulong})   //this should not return error 
 }
 
 pub fn get_isize(union_argument: Arg) -> Result<isize, i32> { // also should not return error
@@ -68,17 +62,35 @@ pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
+pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
+   
+    //first we check that the pointer is not null 
+    //and then we check so that we can get data from the memory
+    
+    let pointer = unsafe{union_argument.dispatch_cstr};
+    if !pointer.is_null() {
+        if let Ok(ret_data) = unsafe{interface::charstar_to_ruststr(pointer)} {
+            return Ok(ret_data);
+        } else {
+            return Err(syscall_error(Errno::EILSEQ, "dispatcher", "could not parse input data to a string"));
+        }
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
 pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
+
     //iterate though the pointers in a function and:
     //  1: check that the pointer is not null
     //  2: push the data from that pointer onto the vector being returned
     //once we encounter a null pointer, we know that we have either hit the end of the array or another null pointer in the memory
+    
     let mut pointer = unsafe{union_argument.dispatch_cstrarr};
     let mut data_vector: Vec<&str> = Vec::new();
    
     if !pointer.is_null(){
         while unsafe{!(*pointer).is_null()} {
-            if let Some(character_bytes) = unsafe{interface::charstar_to_ruststr(*pointer)} {
+            if let Ok(character_bytes) = unsafe{interface::charstar_to_ruststr(*pointer)} {
                 data_vector.push(character_bytes);
                 pointer = pointer.wrapping_offset(1);
             } else {
@@ -90,26 +102,10 @@ pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
-    //first we check that the pointer is not null 
-    //and then we check so that we can get data from the memory
-    let pointer = unsafe{union_argument.dispatch_cstr};
-    if !pointer.is_null() {
-        let data = unsafe{interface::charstar_to_ruststr(pointer)};
-        if let Some(ret_data) = data {
-            return Ok(ret_data);
-        }
-    }
-    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
-}
-
 pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i32> { 
     let pointer = unsafe{union_argument.dispatch_statdatastruct};
     if !pointer.is_null() {    
-        let data = unsafe{&mut *pointer};
-        if let ret_data = data {
-            return Ok(ret_data);
-        }
+        return Ok(unsafe{&mut *pointer});
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
@@ -117,10 +113,7 @@ pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i
 pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> {
     let pointer = unsafe{union_argument.dispatch_fsdatastruct};
     if !pointer.is_null() {    
-        let data = unsafe{&mut *pointer};
-        if let ret_data = data {
-            return Ok(ret_data);
-        }
+        return Ok(unsafe{&mut *pointer});
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
