@@ -35,14 +35,14 @@ pub struct StreamDesc {
 
 #[derive(Debug)]
 pub struct SocketDesc {
-    pub mode: u32,
-    pub domain: usize,
-    pub socktype: usize,
-    pub protocol: usize,
-    pub options: usize,
+    pub mode: i32,
+    pub domain: i32,
+    pub socktype: i32,
+    pub protocol: i32,
+    pub options: i32,
     pub sndbuf: usize,
     pub rcvbuf: usize,
-    pub state: usize,
+    pub state: ConnState,
     pub flags: i32,
     pub errno: usize,
     pub advlock: interface::AdvisoryLock
