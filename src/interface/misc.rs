@@ -6,7 +6,7 @@
 
 use std::fs::File;
 use std::io::Read;
-pub use std::collections::HashMap as RustHashMap;
+pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet};
 pub use std::cmp::{max as rust_max, min as rust_min};
 
 pub use std::sync::{RwLock as RustLock, Arc as RustRfc};

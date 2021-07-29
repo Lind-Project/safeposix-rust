@@ -215,6 +215,74 @@ pub const PF_PPP: i32 = AF_PPP;
 pub const PF_RESERVED_36: i32 = AF_RESERVED_36;
 pub const PF_MAX: i32 = AF_MAX;
 
+
+//shutdown
+pub const SHUT_RD: i32 = 0;
+pub const SHUT_WR: i32 = 1;
+pub const SHUT_RDWR: i32 = 2;
+
+
+////////////////////// setsockopt / getsockopt...
+pub const SOL_SOCKET: i32 = 1;
+pub const SO_DEBUG: i32 = 1;
+pub const SO_REUSEADDR: i32 = 2;
+pub const SO_TYPE: i32 = 3;
+pub const SO_ERROR: i32 = 4;
+pub const SO_DONTROUTE: i32 = 5;
+pub const SO_BROADCAST: i32 = 6;
+pub const SO_SNDBUF: i32 = 7;
+pub const SO_RCVBUF: i32 = 8;
+pub const SO_SNDBUFFORCE: i32 = 32;
+pub const SO_RCVBUFFORCE: i32 = 33;
+pub const SO_KEEPALIVE: i32 = 9;
+pub const SO_OOBINLINE: i32 = 10;
+pub const SO_NO_CHECK: i32 = 11;
+pub const SO_PRIORITY: i32 = 12;
+pub const SO_LINGER: i32 = 13;
+pub const SO_BSDCOMPAT: i32 = 14;
+pub const SO_REUSEPORT: i32 = 15;
+pub const SO_PASSCRED: i32 = 16;
+pub const SO_PEERCRED: i32 = 17;
+pub const SO_RCVLOWAT: i32 = 18;
+pub const SO_SNDLOWAT: i32 = 19;
+pub const SO_RCVTIMEO: i32 = 20;
+pub const SO_SNDTIMEO: i32 = 21;
+
+pub const SO_SECURITY_AUTHENTICATION: i32 = 22;
+pub const SO_SECURITY_ENCRYPTION_TRANSPORT: i32 = 23;
+pub const SO_SECURITY_ENCRYPTION_NETWORK: i32 = 24;
+
+pub const SO_BINDTODEVICE: i32 = 25;
+
+/* Socket filtering */
+pub const SO_ATTACH_FILTER: i32 = 26;
+pub const SO_DETACH_FILTER: i32 = 27;
+
+pub const SO_PEERNAME: i32 = 28;
+pub const SO_TIMESTAMP: i32 = 29;
+pub const SCM_TIMESTAMP: i32 = SO_TIMESTAMP;
+
+pub const SO_ACCEPTCONN: i32 = 30;
+
+pub const SO_PEERSEC: i32 = 31;
+pub const SO_PASSSEC: i32 = 34;
+pub const SO_TIMESTAMPNS: i32 = 35;
+pub const SCM_TIMESTAMPNS: i32 = SO_TIMESTAMPNS;
+
+pub const SO_MARK: i32 = 36;
+
+pub const SO_TIMESTAMPING: i32 = 37;
+pub const SCM_TIMESTAMPING: i32 = SO_TIMESTAMPING;
+
+pub const SO_PROTOCOL: i32 = 38;
+pub const SO_DOMAIN: i32 = 39;
+
+pub const SO_RXQ_OVFL: i32 = 40;
+
+
+pub const MINSOCKOBJID: i32 = 0;
+pub const MAXSOCKOBJID: i32 = 1024;
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct EpollEvent {
