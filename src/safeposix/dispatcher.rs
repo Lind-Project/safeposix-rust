@@ -94,21 +94,29 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 
     //implement syscall method calling using matching
 
+    //in order to do effective error handling, types.rs returns a result for each of the data types housed in the argument unions
+    //so we take each argument, check if it is Ok() or an Err() and do the correct action based on that result
+
+    //if there is more than one argument, we check if all of the arguments are Ok() and if not, check which argument was an error
+    //the first match possibility is always the Ok() possibility whereas the next part is all possible error occurences in the union unpacking
+
+    //remember that the .. operator means "the rest of the arguments"
+
     match callnum {
         ACCESS_SYSCALL => {
             match (interface::get_cstr(arg1), interface::get_uint(arg2)) {
-                (Ok(cstr1), Ok(uint2)) => {
-                    return cage.access_syscall(cstr1, uint2);
+                (Ok(cstr1), Ok(uint2)) => {         //match to check if both of the arguments are ok
+                    return cage.access_syscall(cstr1, uint2); //if they are both ok, then return the syscall
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
-                    return returned_error_code;
+                (Err(returned_error_code), ..) |    //checking the first argument for errors...
+                (.., Err(returned_error_code)) => { //and then the second
+                    return returned_error_code;     //this will return with an error code if the Ok's weren't matched on
                 }
             }
         }
         UNLINK_SYSCALL => {
             match interface::get_cstr(arg1) {
-                Ok(cstr1) => {
+                Ok(cstr1) => {                      //only has one argument so does not have to be a tuple
                     return cage.unlink_syscall(cstr1);
                 }
                 Err(returned_error_code) => {
@@ -121,8 +129,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(cstr2)) => {
                     cage.link_syscall(cstr1, cstr2)
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                (Err(returned_error_code), ..) |    //check if the first argument is an error and, if not, check the other
+                (.., Err(returned_error_code)) => { //in the format of a tuple
                     return returned_error_code;
                 }
             }
@@ -155,10 +163,10 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(int2), Ok(uint3)) => {
                     return cage.open_syscall(cstr1, int2, uint3);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
-                (.., Err(returned_error_code), _) => {
-                    return returned_error_code;
+                (Err(returned_error_code), ..) |        //check if the first argument is an err
+                (.., Err(returned_error_code), _) |     //check if the second argument is an err
+                (.., Err(returned_error_code)) => {     //and finally, check if the last argument is an err
+                    return returned_error_code;         //there is no error-case which is not handled
                 }
             }
         }
@@ -168,8 +176,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return cage.read_syscall(int1, mutcbuf2, usize3);
                 }
                 (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
-                (.., Err(returned_error_code), _) => {
+                (.., Err(returned_error_code), _)|
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -180,8 +188,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return cage.write_syscall(int1, cbuf2, usize3);
                 }
                 (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
-                (.., Err(returned_error_code), _) => {
+                (.., Err(returned_error_code), _) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -202,8 +210,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return cage.lseek_syscall(int1, isize2, int3);
                 }
                 (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
-                (.., Err(returned_error_code), _) => {
+                (.., Err(returned_error_code), _) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -231,16 +239,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             }
         }
         MMAP_SYSCALL => {
+            //matches a tuple with the six arguments that are being passed to the system call to see if they are all Ok() or if one was an Err
             match (interface::get_mutcbuf(arg1), interface::get_usize(arg2), interface::get_int(arg3), interface::get_int(arg4), interface::get_int(arg5), interface::get_long(arg6)) {
                 (Ok(mutcbuf1), Ok(usize2), Ok(int3), Ok(int4), Ok(int5), Ok(long6)) => {
                     return cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6);
                 } 
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) | 
+                (Err(returned_error_code), ..) |            //checking if the first argument was an err
+                (.., Err(returned_error_code), _, _, _, _) |//second
+                (.., Err(returned_error_code), _, _, _) |   //third
+                (.., Err(returned_error_code), _, _) |      //you get the point...
                 (.., Err(returned_error_code), _) | 
-                (.., Err(returned_error_code), _, _) | 
-                (.., Err(returned_error_code), _, _, _) | 
-                (.., Err(returned_error_code), _, _, _, _)  => {
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -294,8 +303,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return cage.fcntl_syscall(int1, int2, int3);
                 }
                 (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
-                (.., Err(returned_error_code), _) => {
+                (.., Err(returned_error_code), _) |
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -358,9 +367,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return cage.pread_syscall(int1, mutcbuf2, usize3, isize4);
                 }
                 (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _, _) |
                 (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code), _, _) => {
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -371,9 +380,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                     return cage.pwrite_syscall(int1, mutcbuf2, usize3, isize4);
                 }
                 (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) |
+                (.., Err(returned_error_code), _, _) |
                 (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code), _, _) => {
+                (.., Err(returned_error_code)) => {
                     return returned_error_code;
                 }
             }
@@ -383,10 +392,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         //         (Ok(cstr1), Ok(uint2)) => {
         //             return cage.chmod_syscall(cstr1, uint2);
         //         }
-        //         (Err(returned_error_code), _) => {
-        //             return returned_error_code;
-        //         }
-        //         (_, Err(returned_error_code)) => {
+        //         (Err(returned_error_code), ..) |
+        //         (.., Err(returned_error_code)) => {
         //             return returned_error_code;
         //         }
         //     }
