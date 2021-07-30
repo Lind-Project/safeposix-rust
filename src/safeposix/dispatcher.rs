@@ -84,7 +84,8 @@ pub union Arg {
   pub dispatch_cstrarr: *const *const i8, //Typically corresponds to a passed in string array of type char* const[] as in execve
   pub dispatch_rlimitstruct: *mut Rlimit,
   pub dispatch_statdatastruct: *mut StatData,
-  pub dispatch_fsdatastruct: *mut FSData
+  pub dispatch_fsdatastruct: *mut FSData,
+  pub dispatch_pipearray: *mut PipeArray
 }
 
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
@@ -197,6 +198,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         RENAME_SYSCALL => {
             cage.rename_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{interface::charstar_to_ruststr(arg2.dispatch_cstr)})
+        }
+        PIPE_SYSCALL => {
+            cage.rename_syscall(unsafe{&mut *arg2.dispatch_statdatastruct})
         }
         _ => {//unknown syscall
             -1

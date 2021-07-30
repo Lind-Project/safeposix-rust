@@ -2,7 +2,7 @@
 use crate::interface;
 
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
+use crate::safeposix::cage::{CAGE_TABLE, PIPE_TABLE, Cage, FileDescriptor::*, FileDesc, PipeDesc, FdTable};
 use crate::safeposix::filesystem::*;
 use super::errnos::*;
 
@@ -622,8 +622,10 @@ impl Cage {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-                    //self._read_from_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "read", "reading from a pipe not implemented yet")
+
+                    // get the pipe, read from it, and return bytes read
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.read_from_pipe(buf, count) as i32
                 }
             }
         } else {
@@ -779,8 +781,10 @@ impl Cage {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
-                    //self._write_to_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "write", "writing to a pipe not implemented yet")
+                    // get the pipe, write to it, and return bytes written
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.write_to_pipe(buf, count) as i32
+  
                 }
             }
         } else {
@@ -1163,17 +1167,17 @@ impl Cage {
                     //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
-                    let _pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
-                    let write_references = 0;
-
+                    let mut pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+               
                     //Code below needs to reflect addition of pipes
-                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
-                        // let pipetable.pipenumber.eof = true;
+                    if pipe.refcount_write == 1 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // we're closing the last write end, lets set eof
+                        pipe.set_eof();
                     }
 
-                    if read_references + write_references == 1 {
-                        //del pipetable.pipenumber
+                    if pipe.refcount_write + pipe.refcount_read == 1 {
+                        // last reference, lets remove it
+                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap()
                     }
                 },
                 //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator
@@ -1522,5 +1526,45 @@ impl Cage {
                 0 // success
             }
         }
+    }
+
+    //------------------PIPE SYSCALL------------------
+
+    pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
+
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        // get next available pipe number, and set up pipe
+        let pipenumber = get_next_pipe();
+
+        let mut pipetable = PIPE_TABLE.write().unwrap();
+
+        pipetable.insert(pipenumber, interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY)));
+        
+        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
+        // append each to pipefds list
+
+        let flags = [O_RDONLY, O_WRONLY];
+        for flag in flags.iter() {
+
+            let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
+                fd
+            } else {
+                return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
+            };
+
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: *flag, advlock: interface::AdvisoryLock::new()});
+            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
+            fdtable.insert(thisfd, wrappedfd);
+
+            match *flag {
+                O_RDONLY => {pipefd.readfd = thisfd;},
+                O_WRONLY => {pipefd.writefd = thisfd;},
+                _ => panic!("How did you get here."),
+            }
+        }
+
+        0 // success
     }
 }

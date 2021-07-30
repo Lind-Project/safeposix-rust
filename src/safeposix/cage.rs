@@ -6,6 +6,10 @@ use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
+pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>>> = 
+    interface::RustLazyGlobal::new(|| 
+        interface::RustLock::new(interface::new_hashmap())
+);
 
 #[derive(Debug)]
 pub enum FileDescriptor {
@@ -48,7 +52,7 @@ pub struct SocketDesc {
 
 #[derive(Debug)]
 pub struct PipeDesc {
-    pub pipe: usize,
+    pub pipe: i32,
     pub flags: i32,
     pub advlock: interface::AdvisoryLock
 }
