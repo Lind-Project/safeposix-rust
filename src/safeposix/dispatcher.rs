@@ -87,6 +87,18 @@ pub union Arg {
   pub dispatch_fsdatastruct: *mut FSData
 }
 
+//This macro is used after type checking and conversion in the dispatcher, it creates a match
+//condition which will be met if any of the n arguments in the function are Err results, and will
+//put the value of the error in the ident specified by errname, checks args first to last
+macro_rules! err_check {
+    (6, $errname: ident) => {err_check!(5, $errname) | (_, _, _, _, _, Err($errname))};
+    (5, $errname: ident) => {err_check!(4, $errname) | (_, _, _, _, Err($errname), ..)};
+    (4, $errname: ident) => {err_check!(3, $errname) | (_, _, _, Err($errname), ..)};
+    (3, $errname: ident) => {err_check!(2, $errname) | (_, _, Err($errname), ..)};
+    (2, $errname: ident) => {err_check!(1, $errname) | (_, Err($errname), ..)};
+    (1, $errname: ident) => {(Err($errname), ..)};
+}
+
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
@@ -97,7 +109,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     //in order to do effective error handling, types.rs returns a result for each of the data types housed in the argument unions
     //so we take each argument, check if it is Ok() or an Err() and do the correct action based on that result
 
-    //if there is more than one argument, we check if all of the arguments are Ok() and if not, check which argument was an error
+    //if there is more than one argument, we check if all of the arguments are Ok() and if not, check which argument was an error using err_check
     //the first match possibility is always the Ok() possibility whereas the next part is all possible error occurences in the union unpacking
 
     //remember that the .. operator means "the rest of the arguments"
@@ -108,18 +120,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(uint2)) => {         //match to check if both of the arguments are ok
                     return cage.access_syscall(cstr1, uint2); //if they are both ok, then return the syscall
                 }
-                (Err(returned_error_code), ..) |    //checking the first argument for errors...
-                (.., Err(returned_error_code)) => { //and then the second
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;     //this will return with an error code if the Ok's weren't matched on
                 }
             }
         }
         UNLINK_SYSCALL => {
-            match interface::get_cstr(arg1) {
-                Ok(cstr1) => {                      //only has one argument so does not have to be a tuple
+            match (interface::get_cstr(arg1),) {
+                (Ok(cstr1),) => {
                     return cage.unlink_syscall(cstr1);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -129,8 +140,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(cstr2)) => {
                     cage.link_syscall(cstr1, cstr2)
                 }
-                (Err(returned_error_code), ..) |    //check if the first argument is an error and, if not, check the other
-                (.., Err(returned_error_code)) => { //in the format of a tuple
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -138,11 +148,11 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             
         }
         CHDIR_SYSCALL => {
-            match interface::get_cstr(arg1) {
-                Ok(cstr1) => {
+            match (interface::get_cstr(arg1),) {
+                (Ok(cstr1),) => {
                     return cage.chdir_syscall(cstr1);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -152,8 +162,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(statdata2)) => {
                     return cage.stat_syscall(cstr1, statdata2);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -163,10 +172,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(int2), Ok(uint3)) => {
                     return cage.open_syscall(cstr1, int2, uint3);
                 }
-                (Err(returned_error_code), ..) |        //check if the first argument is an err
-                (.., Err(returned_error_code), _) |     //check if the second argument is an err
-                (.., Err(returned_error_code)) => {     //and finally, check if the last argument is an err
-                    return returned_error_code;         //there is no error-case which is not handled
+                err_check!(3, returned_error_code) => {
+                    return returned_error_code;
                 }
             }
         }
@@ -175,9 +182,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3)) => {
                     return cage.read_syscall(int1, mutcbuf2, usize3);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code), _)|
-                (.., Err(returned_error_code)) => {
+                err_check!(3, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -187,19 +192,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(cbuf2), Ok(usize3)) => {
                     return cage.write_syscall(int1, cbuf2, usize3);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code)) => {
+                err_check!(3, returned_error_code) => {
                     return returned_error_code;
                 }
             }
         }
         CLOSE_SYSCALL => {
-            match interface::get_int(arg1) {
-                Ok(int1) => {
+            match (interface::get_int(arg1),) {
+                (Ok(int1),) => {
                     return cage.close_syscall(int1);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -209,9 +212,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(isize2), Ok(int3)) => {
                     return cage.lseek_syscall(int1, isize2, int3);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code)) => {
+                err_check!(3, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -221,8 +222,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(statdata2)) => {
                     return cage.fstat_syscall(int1, statdata2);                    
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -232,8 +232,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(fstatdata2)) => {
                     return cage.fstatfs_syscall(int1, fstatdata2);                    
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -244,12 +243,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(mutcbuf1), Ok(usize2), Ok(int3), Ok(int4), Ok(int5), Ok(long6)) => {
                     return cage.mmap_syscall(mutcbuf1, usize2, int3, int4, int5, long6);
                 } 
-                (Err(returned_error_code), ..) |            //checking if the first argument was an err
-                (.., Err(returned_error_code), _, _, _, _) |//second
-                (.., Err(returned_error_code), _, _, _) |   //third
-                (.., Err(returned_error_code), _, _) |      //you get the point...
-                (.., Err(returned_error_code), _) | 
-                (.., Err(returned_error_code)) => {
+                err_check!(6, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -259,18 +253,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(mutcbuf1), Ok(usize2)) => {
                     return cage.munmap_syscall(mutcbuf1, usize2);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
         }
         DUP_SYSCALL => {
-            match interface::get_int(arg1) {
-                Ok(int1) => {
+            match (interface::get_int(arg1),) {
+                (Ok(int1),) => {
                     return cage.dup_syscall(int1, None);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -280,8 +273,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2)) => {
                     return cage.dup2_syscall(int1, int2);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -291,8 +283,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(fsdata2)) => {
                     return cage.statfs_syscall(cstr1, fsdata2);                    
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -302,9 +293,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2), Ok(int3)) => {
                     return cage.fcntl_syscall(int1, int2, int3);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code)) => {
+                err_check!(3, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -323,28 +312,27 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(int2)) => {
                     return cage.flock_syscall(int1, int2);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
         }
         FORK_SYSCALL => {
-            match interface::get_ulong(arg1) {
-                Ok(ulong1) => {
+            match (interface::get_ulong(arg1),) {
+                (Ok(ulong1),) => {
                     return cage.fork_syscall(ulong1);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
         }
         EXEC_SYSCALL => {
-            match interface::get_ulong(arg1) {
-                Ok(ulong1) => {
+            match (interface::get_ulong(arg1),) {
+                (Ok(ulong1),) => {
                     return cage.exec_syscall(ulong1);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -366,10 +354,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3), Ok(isize4)) => {
                     return cage.pread_syscall(int1, mutcbuf2, usize3, isize4);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code), _, _) |
-                (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code)) => {
+                err_check!(4, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -379,10 +364,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(int1), Ok(mutcbuf2), Ok(usize3), Ok(isize4)) => {
                     return cage.pwrite_syscall(int1, mutcbuf2, usize3, isize4);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code), _, _) |
-                (.., Err(returned_error_code), _) |
-                (.., Err(returned_error_code)) => {
+                err_check!(4, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -392,18 +374,17 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         //         (Ok(cstr1), Ok(uint2)) => {
         //             return cage.chmod_syscall(cstr1, uint2);
         //         }
-        //         (Err(returned_error_code), ..) |
-        //         (.., Err(returned_error_code)) => {
+        //         err_check!(2, returned_error_code) => {
         //             return returned_error_code;
         //         }
         //     }
         // }
         RMDIR_SYSCALL => {
-            match interface::get_cstr(arg1) {
-                Ok(cstr1) => {
+            match (interface::get_cstr(arg1),) {
+                (Ok(cstr1),) => {
                     return cage.rmdir_syscall(cstr1);
                 }
-                Err(returned_error_code) => {
+                err_check!(1, returned_error_code) => {
                     return returned_error_code;
                 }
             }
@@ -413,8 +394,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 (Ok(cstr1), Ok(cstr2)) => {
                     return cage.rename_syscall(cstr1, cstr2);
                 }
-                (Err(returned_error_code), ..) |
-                (.., Err(returned_error_code)) => {
+                err_check!(2, returned_error_code) => {
                     return returned_error_code;
                 }
             }
