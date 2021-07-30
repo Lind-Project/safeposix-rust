@@ -487,6 +487,7 @@ impl Cage {
                 }
                 Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE, &metadata);}
                 Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
+                Epoll(_) => {self._stat_alt_helper(statbuf, 0xfeef0000, &metadata);}
             }
             0 //fstat has succeeded!
         } else {
@@ -548,7 +549,7 @@ impl Cage {
                         }
                     }
                 },
-                Socket(_) | Pipe(_) | Stream(_) => {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, or pipe");}
+                Socket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
             }
         }
         return syscall_error(Errno::EBADF, "statfs", "invalid file descriptor");
@@ -627,6 +628,7 @@ impl Cage {
                     let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
                     pipe.read_from_pipe(buf, count) as i32
                 }
+                Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
         } else {
             syscall_error(Errno::EBADF, "read", "invalid file descriptor")
@@ -681,6 +683,9 @@ impl Cage {
                 }
                 Pipe(_) => {
                     syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with a pipe, cannot seek")
+                }
+                Epoll(_) => {
+                    syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with an epollfd, cannot seek")
                 }
             }
         } else {
@@ -786,6 +791,7 @@ impl Cage {
                     pipe.write_to_pipe(buf, count) as i32
   
                 }
+                Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
         } else {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
@@ -871,6 +877,9 @@ impl Cage {
                 }
                 Pipe(_) => {
                     syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with a pipe, cannot seek")
+                }
+                Epoll(_) => {
+                    syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with an epollfd, cannot seek")
                 }
             }
         } else {
@@ -959,6 +968,9 @@ impl Cage {
                 }
                 Pipe(_) => {
                     syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with a pipe, cannot seek")
+                }
+                Epoll(_) => {
+                    syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with an epollfd, cannot seek")
                 }
             }
         } else {
@@ -1163,6 +1175,7 @@ impl Cage {
             match &*filedesc_enum {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {},
+                Epoll(_) => {}, //Epoll closing not implemented yet
                 Socket(_) => {
                     //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
@@ -1180,7 +1193,6 @@ impl Cage {
                         PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap()
                     }
                 },
-                //TO DO: check IS_EPOLL_FD and if true, call epoll_object_deallocator
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
@@ -1246,6 +1258,7 @@ impl Cage {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
             let flags = match &mut *filedesc_enum {
+                Epoll(obj) => {&mut obj.flags},
                 Pipe(obj) => {&mut obj.flags},
                 Stream(obj) => {&mut obj.flags},
                 Socket(obj) => {&mut obj.flags},
@@ -1409,6 +1422,7 @@ impl Cage {
                 Socket(socket_filedesc_obj) => {&socket_filedesc_obj.advlock}
                 Stream(stream_filedesc_obj) => {&stream_filedesc_obj.advlock}
                 Pipe(pipe_filedesc_obj) => {&pipe_filedesc_obj.advlock}
+                Epoll(epoll_filedesc_obj) => {&epoll_filedesc_obj.advlock}
             };
             match operation & (LOCK_SH | LOCK_EX | LOCK_UN) {
                 LOCK_SH => {
