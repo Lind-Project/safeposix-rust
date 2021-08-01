@@ -199,8 +199,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         GETDENTS_SYSCALL => {
             let mut dents_vec: Vec<(ClippedDirent, Vec<u8>)> = Vec::new();
-            let res = cage.getdents_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_usize}, &mut dents_vec);
-            pack_dirents(dents_vec, unsafe{arg3.dispatch_mutcbuf});
+            let res = cage.getdents_syscall(unsafe{arg1.dispatch_int}, unsafe{arg3.dispatch_usize}, &mut dents_vec);
+            pack_dirents(dents_vec, unsafe{arg2.dispatch_mutcbuf});
             res
         }
         _ => {//unknown syscall

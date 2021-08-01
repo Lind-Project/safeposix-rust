@@ -79,7 +79,7 @@ impl Cage {
                 }
 
                 if O_TRUNC == (flags & O_TRUNC) {
-                    //close the file object if another cage has it open 
+                    //close the file object if another cage has it open
                     let fobjtable = FILEOBJECTTABLE.read().unwrap();
                     if fobjtable.contains_key(&inodenum) {
                         fobjtable.get(&inodenum).unwrap().close().unwrap();
@@ -1464,9 +1464,9 @@ impl Cage {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) { // check if fd is valid
-            let mut filedesc_enum = wrappedfd.write().unwrap();
+            let filedesc_enum = wrappedfd.read().unwrap();
             
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 // only proceed when fd represents a file
                 File(ref mut normalfile_filedesc_obj) => {
                     let metadata = FS_METADATA.read().unwrap();
