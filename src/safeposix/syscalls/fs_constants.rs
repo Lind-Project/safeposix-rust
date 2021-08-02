@@ -41,9 +41,6 @@ pub const O_CLOEXEC: i32 = 0o2000000;
 
 pub const DEFAULTTIME: u64 = 1323630836;
 
-pub const DEFAULT_UID: u32 = 1000;
-pub const DEFAULT_GID: u32 = 1000;
-
 //Standard flag combinations
 pub const S_IRWXA: u32 = 0o777;
 pub const S_IRWXU: u32 = 0o700;

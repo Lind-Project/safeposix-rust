@@ -7,9 +7,12 @@ use crate::interface;
 
 use std::slice;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
+
+const O_RDONLY: i32 = 0o0;
+const O_WRONLY: i32 = 0o1;
 
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
@@ -18,8 +21,8 @@ pub fn new_pipe(size: usize) -> EmulatedPipe {
 pub struct EmulatedPipe {
     write_end: Arc<Mutex<Producer<u8>>>,
     read_end: Arc<Mutex<Consumer<u8>>>,
-    pub refcount_write: u32,
-    pub refcount_read: u32,
+    pub refcount_write: AtomicU32,
+    pub refcount_read: AtomicU32,
     size: usize,
     eof: AtomicBool,
 }
@@ -28,11 +31,37 @@ impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: 1, refcount_read: 1, size: size, eof: AtomicBool::new(false)}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: AtomicU32::new(1), refcount_read: AtomicU32::new(1), size: size, eof: AtomicBool::new(false)}
     }
 
     pub fn set_eof(&self) {
         self.eof.store(false, Ordering::SeqCst);
+    }
+
+    pub fn get_write_ref(&self) -> u32 {
+        self.refcount_write.load(Ordering::Relaxed)
+    }
+
+    pub fn get_read_ref(&self) -> u32 {
+        self.refcount_read.load(Ordering::Relaxed)
+    }
+
+    pub fn incr_ref(&self, flags: i32) {
+
+        match flags {
+            O_RDONLY => {self.refcount_read.fetch_add(1, Ordering::SeqCst);}
+            O_WRONLY => {self.refcount_write.fetch_add(1, Ordering::SeqCst);}
+            _ => panic!("Invalid pipe flags.")
+        }
+    }
+
+    pub fn decr_ref(&self, flags: i32) {
+
+        match flags {
+            O_RDONLY => {self.refcount_read.fetch_add(1, Ordering::SeqCst);}
+            O_WRONLY => {self.refcount_write.fetch_add(1, Ordering::SeqCst);}
+            _ => panic!("Invalid pipe flags.")
+        }
     }
 
     pub fn write_to_pipe(&self, ptr: *const u8, length: usize) -> usize {
@@ -101,7 +130,7 @@ mod tests {
         let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
         unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
 
-        let mut testpipe = new_pipe(256);
+        let testpipe = new_pipe(256);
 
         testpipe.write_to_pipe(q, 9);
 

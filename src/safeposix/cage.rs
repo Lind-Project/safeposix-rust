@@ -2,6 +2,7 @@
 use crate::interface;
 
 pub use super::syscalls::fs_constants::*;
+pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
@@ -129,4 +130,15 @@ impl Cage {
         fdtable.insert(2, stderr);
     }
 
+}
+
+pub fn get_next_pipe() -> i32 {
+    let table = PIPE_TABLE.read().unwrap();
+    for fd in STARTINGPIPE..MAXPIPE {
+        if !table.contains_key(&fd) {
+            return fd;
+        }
+    }
+
+    return -1;
 }

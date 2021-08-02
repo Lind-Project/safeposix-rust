@@ -2,7 +2,8 @@
 use crate::interface;
 
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, PIPE_TABLE, Cage, FileDescriptor::*, FileDesc, PipeDesc, FdTable};
+use super::sys_constants::*;
+use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use super::errnos::*;
 
@@ -1122,6 +1123,10 @@ impl Cage {
                         _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
                 },
+                Pipe(normalfile_filedesc_obj) => {
+                    let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
+                    pipe.incr_ref(normalfile_filedesc_obj.flags)
+                },
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
@@ -1180,18 +1185,21 @@ impl Cage {
                     //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
-                    let mut pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
                
+                    pipe.decr_ref(pipe_filedesc_obj.flags);
+
                     //Code below needs to reflect addition of pipes
-                    if pipe.refcount_write == 1 && pipe_filedesc_obj.flags == O_WRONLY {
+                    if pipe.get_write_ref() == 0 && pipe_filedesc_obj.flags == O_WRONLY {
                         // we're closing the last write end, lets set eof
                         pipe.set_eof();
                     }
 
-                    if pipe.refcount_write + pipe.refcount_read == 1 {
+                    if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
                         // last reference, lets remove it
-                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap()
+                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap();
                     }
+
                 },
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;

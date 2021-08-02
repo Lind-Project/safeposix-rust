@@ -3,6 +3,8 @@
 
 use crate::interface;
 use super::syscalls::fs_constants::*;
+use super::syscalls::sys_constants::*;
+
 use super::cage::Cage;
 
 pub const METADATAFILENAME: &str = "lind.metadata";
@@ -16,13 +18,6 @@ pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
 pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
     interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
-
-pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>>> = 
-    interface::RustLazyGlobal::new(|| 
-        interface::RustLock::new(interface::new_hashmap())
-    );
-
-
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub enum Inode {
@@ -285,15 +280,4 @@ pub fn decref_dir(mutmetadata: &mut FilesystemMetadata, cwd_container: &interfac
             }
         } else {panic!("Cage had a cwd that was not a directory!");}
     } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
-}
-
-pub fn get_next_pipe() -> i32 {
-    let table = PIPE_TABLE.read().unwrap();
-    for fd in STARTINGPIPE..MAXPIPE {
-        if !table.contains_key(&fd) {
-            return fd;
-        }
-    }
-
-    return -1;
 }

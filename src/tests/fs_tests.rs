@@ -5,7 +5,6 @@ mod fs_tests {
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
-    
 
     #[test]
     pub fn test_fs() {
