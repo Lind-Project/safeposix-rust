@@ -299,7 +299,7 @@ pub struct SockPair {
 }
 
 //for internal use
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ConnState {
     NOTCONNECTED, CONNECTED, LISTEN
 }

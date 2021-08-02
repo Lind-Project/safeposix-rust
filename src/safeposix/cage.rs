@@ -46,6 +46,8 @@ pub struct SocketDesc {
     pub flags: i32,
     pub errno: usize,
     pub localaddr: Option<interface::RustSockAddr>,
+    pub remoteaddr: Option<interface::RustSockAddr>,
+    pub last_peek: Option<Vec<u8>>,
     pub socketobjectid: Option<i32>,
     pub advlock: interface::AdvisoryLock
 }
