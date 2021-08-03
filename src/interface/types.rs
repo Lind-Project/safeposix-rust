@@ -111,3 +111,11 @@ pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> 
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
+
+pub fn get_pipearray<'a>(union_argument: Arg) -> Result<&'a mut PipeArray, i32> {
+    let pointer = unsafe{union_argument.dispatch_pipearray};
+    if !pointer.is_null() {    
+        return Ok(unsafe{&mut *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}

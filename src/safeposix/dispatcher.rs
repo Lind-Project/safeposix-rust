@@ -204,7 +204,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         PIPE_SYSCALL => {
-            cage.pipe_syscall(unsafe{&mut *arg2.dispatch_pipearray})
+            check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))
         }
         _ => {//unknown syscall
             -1

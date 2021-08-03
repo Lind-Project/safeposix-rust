@@ -804,4 +804,35 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
+
+
+    pub fn ut_lind_fs_pipe() {
+        lindrustinit();
+        let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let pipefds = PipeArray {};
+        assert_eq!(cage1.pipe_syscall(pipefds), 0);
+        assert_eq!(cage1.fork_syscall(2), 0);
+
+        let sender = std::thread::spawn(move || {
+
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            
+            loop        
+            cage2.read_syscall();
+
+            
+            assert_eq!(cage2.exit_syscall(), 0);
+
+        });
+
+        
+        cage1.open_syscall();
+        loop
+        cage2.read_syscall();
+        cage2.write_syscall();
+
+        assert_eq!(cage1.exit_syscall(), 0);
+        lindrustfinalize();
+    }
 }
