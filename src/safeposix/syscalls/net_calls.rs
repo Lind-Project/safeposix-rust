@@ -152,16 +152,8 @@ impl Cage {
                             return syscall_error(Errno::EOPNOTSUPP, "bind", "We can't close the previous listener when re-binding");
                         }
 
-                        let udpsockobj = if localaddr.ip().is_unspecified() {
-                            //loopback stuff
-                            if localaddr.is_ipv4() {
-                                interface::RustUdpSocket::bind(interface::RustSockAddr::new("127.0.0.1".parse().unwrap(), newlocalport)).unwrap()
-                            } else {
-                                interface::RustUdpSocket::bind(interface::RustSockAddr::new("::1".parse().unwrap(), newlocalport)).unwrap()
-                            }
-                        } else {
-                            interface::RustUdpSocket::bind(newsockaddr).unwrap()
-                        };
+                        let udpsockobj = interface::RustUdpSocket::bind(newsockaddr).unwrap();
+
                         sockfdobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(GeneralizedSocket::Udp(udpsockobj)) {
                             Ok(id) => Some(id),
                             Err(errnum) => {
@@ -198,8 +190,8 @@ impl Cage {
                         sockfdobj.remoteaddr = Some(*remoteaddr);
                         return match sockfdobj.localaddr {
                             Some(_) => 0,
-                            //None => self.bind_syscall(fd, getmyip(), self.get_available_udp_port()),
                             None => unreachable!(), //provisional
+                            //None => self.bind_syscall(fd, getmyip(), self.get_available_udp_port()),
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         unreachable!();
