@@ -15,22 +15,20 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface:
     ); //we want to check if fs exists before doing a blank init, but not for now
 
 pub struct NetMetadata {
-    pub porttable: interface::RustHashMap<interface::RustSockAddr, Vec<interface::RustRfc<interface::RustLock<FileDescriptor>>>>,
+    pub porttable: interface::RustHashMap<interface::GenSockaddr, Vec<interface::RustRfc<interface::RustLock<FileDescriptor>>>>,
     pub used_udp_port_set: interface::RustHashSet<u16>,
     pub used_tcp_port_set: interface::RustHashSet<u16>,
-    pub socket_object_table: interface::RustHashMap<i32, GeneralizedSocket>
+    pub socket_object_table: interface::RustHashMap<i32, interface::Socket>
 }
 
-pub enum GeneralizedSocket {
-    Udp(interface::RustUdpSocket)
-}
-
-const EPHEMERAL_PORT_RANGE_START: u16 = 32768; //sane defaullt on linux
+//Because other processes on the OS may allocate ephemeral ports, we allocate them from high to
+//low whereas the OS allocates them from low to high
+const EPHEMERAL_PORT_RANGE_START: u16 = 32768; //sane default on linux
 const EPHEMERAL_PORT_RANGE_END: u16 = 60999;
 
 impl NetMetadata {
-    fn _get_available_udp_port(&mut self) -> Result<u16, i32> {
-        for port in EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END {
+    pub fn _get_available_udp_port(&mut self) -> Result<u16, i32> {
+        for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev() {
             if !self.used_udp_port_set.contains(&port) {
                 self.used_udp_port_set.insert(port);
                 return Ok(port);
@@ -38,8 +36,8 @@ impl NetMetadata {
         }
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
-    fn _get_available_tcp_port(&mut self) -> Result<u16, i32> {
-        for port in EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END {
+    pub fn _get_available_tcp_port(&mut self) -> Result<u16, i32> {
+        for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev() {
             if !self.used_tcp_port_set.contains(&port) {
                 self.used_tcp_port_set.insert(port);
                 return Ok(port);
@@ -81,7 +79,7 @@ impl NetMetadata {
         }
     }
 
-    pub fn insert_into_socketobjecttable(&mut self, sock: GeneralizedSocket) -> Result<i32, i32> {
+    pub fn insert_into_socketobjecttable(&mut self, sock: interface::Socket) -> Result<i32, i32> {
         if let Some(id) = self.get_next_socketobjectid() {
             self.socket_object_table.insert(id, sock);
             Ok(id)
