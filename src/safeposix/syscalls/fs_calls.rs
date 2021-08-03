@@ -1545,15 +1545,15 @@ impl Cage {
         // make sure bufsize is at least greater than size of a ClippedDirent struct
         let dirent_size = std::mem::size_of::<ClippedDirent>();
         if bufsize <= dirent_size {
-            return syscall_error(Errno::EINVAL, "getdents", "Buffer size too small");
+            return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
         
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) { // check if fd is valid
-            let filedesc_enum = wrappedfd.read().unwrap();
+            let mut filedesc_enum = wrappedfd.write().unwrap();
             
-            match filedesc_enum {
+            match &mut *filedesc_enum {
                 // only proceed when fd represents a file
                 File(ref mut normalfile_filedesc_obj) => {
                     let metadata = FS_METADATA.read().unwrap();
@@ -1566,43 +1566,36 @@ impl Cage {
                             let mut bufcount = 0;
                             let mut curr_size = 0;
                             let mut curr_pos = 0;
-                            let mut vec_idx = 0;
                             let mut count = 0;
+                            let mut temp_len = 0;
 
                             for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
                                 if curr_pos >= position {
-                                    vec[vec_idx].1 = filename.as_bytes().to_vec();
-                                    for n in 0..(vec.len() + 7) / 8 * 8 - vec.len() {
-                                        vec[vec_idx].1.push(00);
+                                    let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
+                                    vec_filename.push(DT_UNKNOWN);
+                                    temp_len = vec_filename.len();
+                                    for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
+                                        vec_filename.push(00);
                                     }
-                                    vec[vec_idx].1.push(libc::DT_UNKNOWN);
-                                    curr_size = dirent_size + vec.len();
+                                    curr_size = dirent_size + temp_len;
                                     bufcount += curr_size;
                                     if bufcount > bufsize {break;}
-                                    vec[vec_idx].0.d_ino = inode as u64;
-                                    vec[vec_idx].0.d_off = bufcount as u64;
-                                    vec[vec_idx].0.d_reclen = curr_size as u16;
+                                    vec.push((ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
                                     count += 1;
                                 }
                                 curr_pos += 1;
                             }
-                            normalfile_filedesc_obj.position = std::cmp::min(position + count, dir_inode_obj.filename_to_inode_dict.len());
+                            normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
                             0
                         }
                         _ => {
-                            return syscall_error(Errno::EINVAL, "getdents", "File descriptor does not refer to a directory");
+                            syscall_error(Errno::ENOTDIR, "getdents", "File descriptor does not refer to a directory.")
                         }
                     }
                 }
                 // raise error when fd represents a socket, pipe, or stream
-                Socket(_) => {
-                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents on a socket")
-                }
-                Stream(_) => {
-                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents on a stream")
-                }
-                Pipe(_) => {
-                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents on a pipe")
+                _ => {
+                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents since fd does not refer to a file.")
                 }
             }
         } else {

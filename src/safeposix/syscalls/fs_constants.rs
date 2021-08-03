@@ -6,6 +6,7 @@ use crate::interface;
 
 // Define constants using static or const
 // Imported into fs_calls file
+pub const DT_UNKNOWN: u8 = 0;
 
 pub const STARTINGFD: i32 = 0;
 pub const MAXFD: i32 = 1024;
