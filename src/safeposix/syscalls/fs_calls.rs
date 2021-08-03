@@ -774,7 +774,7 @@ impl Cage {
                 Stream(stream_filedesc_obj) => {
                     //if it's stdout or stderr, print out and we're done
                     if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
-                        interface::log_from_ptr(buf);
+                        interface::log_from_ptr(buf, count);
                         count as i32
                     } else {
                         return syscall_error(Errno::EBADF, "write", "specified stream not open for writing");
