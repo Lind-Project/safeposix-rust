@@ -154,7 +154,10 @@ impl Cage {
                         }
 
                         let udpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                        udpsockobj.bind(&newsockaddr);
+                        let bindret = udpsockobj.bind(&newsockaddr);
+                        if bindret < 0 {
+                            panic!("Unexpected failure in binding socket");
+                        }
 
                         sockfdobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(udpsockobj) {
                             Ok(id) => Some(id),
@@ -179,6 +182,23 @@ impl Cage {
         }
     }
 
+    fn assign_new_addr(sockfdobj: &SocketDesc, remoteaddr: &interface::GenSockaddr) -> Result<interface::GenSockaddr, i32> {
+        if let Some(addr) = &sockfdobj.localaddr {
+            Ok(addr.clone())
+        } else {
+            let mut mutmetadata = NET_METADATA.write().unwrap();
+            let mut newremote = remoteaddr.clone();
+            let port = mutmetadata._get_available_tcp_port();
+            if let Err(e) = port {return Err(e);}
+            newremote.set_port(port.unwrap());
+            match remoteaddr {
+                interface::GenSockaddr::V4(_) => newremote.set_addr(interface::GenIpaddr::V4(interface::V4Addr{s_addr: 0})),
+                interface::GenSockaddr::V6(_) => newremote.set_addr(interface::GenIpaddr::V6(interface::V6Addr{s6_addr: [0; 16]})),
+            }; //in lieu of getmyip
+            Ok(newremote)
+        }
+    }
+
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -200,25 +220,15 @@ impl Cage {
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
-                        let localaddr = if let Some(addr) = &sockfdobj.localaddr {
-                            addr.clone()
-                        } else {
-                            let mut mutmetadata = NET_METADATA.write().unwrap();
-                            let mut newremote = remoteaddr.clone();
-                            let port = mutmetadata._get_available_tcp_port();
-                            if let Err(e) = port {return e;}
-                            newremote.set_port(port.unwrap());
-                            match remoteaddr {
-                                interface::GenSockaddr::V4(_) => newremote.set_addr(interface::GenIpaddr::V4(interface::V4Addr{s_addr: 0})),
-                                interface::GenSockaddr::V6(_) => newremote.set_addr(interface::GenIpaddr::V6(interface::V6Addr{s6_addr: [0; 16]})),
-                            }; //in lieu of getmyip
-                            newremote
+                        let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
+                            Ok(a) => a,
+                            Err(e) => return e,
                         };
 
-                        let newsockobj = 
+                        let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
 
                         //openconnection to get newsockobj
-                        sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(interface::Socket { raw_sys_fd: -1 } ).unwrap());//dummy value in here for now TODO TODO TODO
+                        sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(tcpsockobj).unwrap());
                         sockfdobj.localaddr = Some(localaddr);
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
                         sockfdobj.state = ConnState::CONNECTED;
@@ -237,25 +247,59 @@ impl Cage {
         }
     }
 
-    //pub fn sendto_syscall(&self, fd: i32, buf: *const u8, buflen: i32, flags: i32, addr: &interface::RustSockAddr) -> i32 {
-    //    let fdtable = self.filedescriptortable.read().unwrap();
-    //    if let Some(wrappedfd) = fdtable.get(&fd) {
-    //        let mut filedesc_enum = wrappedfd.write().unwrap();
-    //        match &mut *filedesc_enum {
-    //            Socket(sockfdobj) => {
-    //                if (flags & !MSG_NOSIGNAL) != 0 {
-    //                    return syscall_error(Errno::EOPNOTSUPP, "sendto", "The flags are not understood!");
-    //                }
-    //                return 0;
-    //            }
-    //            _ => {
-    //                return syscall_error(Errno::ENOTSOCK, "sendto", "file descriptor refers to something other than a socket");
-    //            }
-    //        }
-    //    } else {
-    //        return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
-    //    }
-    //}
+    pub fn sendto_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, dest_addr: &interface::GenSockaddr) -> i32 {
+        if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
+            return self.send_syscall(fd, buf, buflen, flags);
+        }
+
+        let fdtable = self.filedescriptortable.read().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            match &mut *filedesc_enum {
+                Socket(sockfdobj) => {
+                    if (flags & !MSG_NOSIGNAL) != 0 {
+                        return syscall_error(Errno::EOPNOTSUPP, "sendto", "The flags are not understood!");
+                    }
+                    if sockfdobj.state == ConnState::CONNECTED || sockfdobj.state == ConnState::LISTEN {
+                        return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connected");
+                    }
+                    match sockfdobj.protocol {
+                        IPPROTO_TCP => {
+                            return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
+                        }
+                        IPPROTO_UDP => {
+                            let metadata = NET_METADATA.read().unwrap();
+                            if let None = sockfdobj.socketobjectid {
+                                let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                                sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(sock).unwrap());
+                            };
+                            let sockobj = metadata.socket_object_table.get(&sockfdobj.socketobjectid.unwrap()).unwrap();
+                            let sockret = sockobj.sendto(buf, buflen, flags, dest_addr);
+                            if sockret >= 0 {return sockret;}
+                            if sockret == Errno::ENETUNREACH as i32 {
+                                return syscall_error(Errno::ENETUNREACH, "sendto", "Network was unreachable due to inability to access local port / IP");
+                            } else if sockret == Errno::ENETUNREACH as i32 {
+                                return syscall_error(Errno::EADDRINUSE, "sendto", "Network address in use");
+                            } else {
+                                panic!("Unexpected error recieved from sendto syscall");
+                            }
+                        }
+                        _ => {
+                            return syscall_error(Errno::EOPNOTSUPP, "sendto", "Unkown protocol in sendto");
+                        }
+                    }
+                }
+                _ => {
+                    return syscall_error(Errno::ENOTSOCK, "sendto", "file descriptor refers to something other than a socket");
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
+        }
+    }
+    pub fn send_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
+        return 0;
+    }
     //pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: i32, flags: i32, addr: &interface::RustSockAddr) -> i32 {
     //    let fdtable = self.filedescriptortable.read().unwrap();
     //    if let Some(wrappedfd) = fdtable.get(&fd) {

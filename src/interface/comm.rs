@@ -44,6 +44,15 @@ pub enum GenIpaddr {
     V6(V6Addr)
 }
 
+impl GenIpaddr {
+    pub fn is_unspecified(&self) -> bool {
+        match self {
+            GenIpaddr::V4(v4ip) => v4ip.s_addr == 0,
+            GenIpaddr::V6(v6ip) => v6ip.s6_addr == [0; 16],
+        }
+    }
+}
+
 #[repr(C)]
 pub union SockaddrAll {
     pub sockaddr_in: *mut SockaddrV4,
@@ -79,12 +88,14 @@ pub struct SockaddrV6 {
 }
 
 pub struct Socket {
-    pub raw_sys_fd: i32//make private right after
+    raw_sys_fd: i32//make private right after
 }
 
 impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
-        Socket {raw_sys_fd: unsafe {libc::socket(domain, socktype, protocol)}}
+        let fd = unsafe {libc::socket(domain, socktype, protocol)};
+        if fd < 0 {panic!("Socket creation failed when it should never fail");}
+        Socket {raw_sys_fd: fd}
     }
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
@@ -99,6 +110,13 @@ impl Socket {
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
         };
         unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
+    }
+    pub fn sendto(&self, buf: *mut u8, len: usize, flags: i32, addr: &GenSockaddr) -> i32 {
+        let (finalsockaddr, addrlen) = match addr {
+            GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
+            GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+        };
+        unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, flags, finalsockaddr, addrlen as u32) as i32}
     }
 }
 

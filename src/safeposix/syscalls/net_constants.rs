@@ -215,6 +215,15 @@ pub const PF_PPP: i32 = AF_PPP;
 pub const PF_RESERVED_36: i32 = AF_RESERVED_36;
 pub const PF_MAX: i32 = AF_MAX;
 
+pub const MSG_OOB: i32        = 0x01; /* Process out-of-band data.  */
+pub const MSG_PEEK: i32       = 0x02; /* Peek at incoming messages.  */
+pub const MSG_DONTROUTE: i32  = 0x04; /* Don't use local routing.  */
+pub const MSG_EOR: i32        = 0x08; /* Data completes record.  */
+pub const MSG_TRUNC: i32      = 0x10; /* Data discarded before delivery.  */
+pub const MSG_CTRUNC: i32     = 0x20; /* Control data lost before delivery.  */
+pub const MSG_WAITALL: i32    = 0x40; /* Wait for full request or error.  */
+pub const MSG_DONTWAIT: i32   = 0x80; /* This message should be nonblocking.  */
+pub const MSG_NOSIGNAL: i32   = 0x0400;       /* Do not generate SIGPIPE on EPIPE.  */
 
 //shutdown
 pub const SHUT_RD: i32 = 0;
