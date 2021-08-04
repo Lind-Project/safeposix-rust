@@ -22,8 +22,8 @@ pub fn readtimer(now: RustInstant) -> RustDuration {
     now.elapsed()
 }
 
-// Sleep function to sleep for x milliseconds
-pub fn sleep_ms(dur: RustDuration) {
+// Sleep function to sleep for specified duration
+pub fn sleep(dur: RustDuration) {
     thread::sleep(dur);
 }
 

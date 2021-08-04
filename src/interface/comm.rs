@@ -118,6 +118,9 @@ impl Socket {
         };
         unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, flags, finalsockaddr, addrlen as u32) as i32}
     }
+    pub fn send(&self, buf: *mut u8, len: usize) -> i32 {
+        unsafe {libc::send(self.raw_sys_fd, buf as *const libc::c_void, len, libc::MSG_DONTWAIT) as i32}
+    }
 }
 
 impl Drop for Socket {

@@ -100,14 +100,8 @@ impl Cage {
     }
 
     //we assume we've converted into a RustSockAddr in the dispatcher
-    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: i32, fdtable_accessor: Option<&FdTable>) -> i32 {
-        let fdtablestore;
-        let fdtable = if let Some(accessor) = fdtable_accessor {
-            accessor
-        } else {
-            fdtablestore = self.filedescriptortable.read().unwrap();
-            &*fdtablestore
-        };
+    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: i32) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
@@ -210,13 +204,19 @@ impl Cage {
                     }
 
                     if sockfdobj.protocol == IPPROTO_UDP {
-                        sockfdobj.remoteaddr = Some(remoteaddr.clone());
-                        return match sockfdobj.localaddr {
-                            Some(_) => 0,
+                        match sockfdobj.localaddr {
+                            Some(_) => return 0,
                             None => {
-                                let mut mutmetadata = NET_METADATA.write().unwrap();
-                                //redo relevant parts of bind with 0.0.0.0
-                                0
+                                let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
+                                    Ok(a) => a,
+                                    Err(e) => return e,
+                                };
+
+                                //unlock fdtable so that we're fine to call bind_syscall
+                                drop(filedesc_enum);
+                                drop(fdtable);
+
+                                return self.bind_syscall(fd, &localaddr, 4096); //len assigned arbitrarily large value
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
@@ -298,7 +298,59 @@ impl Cage {
         }
     }
     pub fn send_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
-        return 0;
+        let fdtable = self.filedescriptortable.read().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            match &mut *filedesc_enum {
+                Socket(sockfdobj) => {
+                    if (flags & !MSG_NOSIGNAL) != 0 {
+                        return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
+                    }
+                    match sockfdobj.protocol {
+                        IPPROTO_TCP => {
+                            if sockfdobj.state != ConnState::CONNECTED {
+                                return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
+                            }
+
+                            let metadata = NET_METADATA.read().unwrap();
+                            if let None = sockfdobj.socketobjectid {
+                                let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                                sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(sock).unwrap());
+                            };
+                            let sockobj = metadata.socket_object_table.get(&sockfdobj.socketobjectid.unwrap()).unwrap();
+
+                            loop {
+                                let retval = sockobj.send(buf, buflen); //nonblocking, so we manually block
+                                if retval < 0 && retval == Errno::EAGAIN as i32 {
+                                    interface::sleep(interface::RustDuration::MILLISECOND);
+                                    continue;
+                                }
+                                return retval;
+                            }
+                        }
+                        IPPROTO_UDP => {
+                            let remoteaddr = match &sockfdobj.remoteaddr {
+                                Some(x) => x.clone(),
+                                None => return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected"),
+                            };
+
+                            //drop fdtable lock so as not to deadlock
+                            drop(filedesc_enum);
+                            drop(fdtable);
+                            return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
+                        }
+                        _ => {
+                            return syscall_error(Errno::EOPNOTSUPP, "send", "Unkown protocol in send");
+                        }
+                    }
+                }
+                _ => {
+                    return syscall_error(Errno::ENOTSOCK, "send", "file descriptor refers to something other than a socket");
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
+        }
     }
     //pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: i32, flags: i32, addr: &interface::RustSockAddr) -> i32 {
     //    let fdtable = self.filedescriptortable.read().unwrap();
