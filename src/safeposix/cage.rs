@@ -2,6 +2,7 @@
 use crate::interface;
 
 pub use super::syscalls::fs_constants::*;
+pub use super::syscalls::net_constants::*;
 pub use super::syscalls::errnos::Errno;
 use super::filesystem::normpath;
 
@@ -13,7 +14,8 @@ pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
-    Pipe(PipeDesc)
+    Pipe(PipeDesc),
+    Epoll(EpollDesc)
 }
 
 #[derive(Debug)]
@@ -52,6 +54,15 @@ pub struct PipeDesc {
     pub pipe: usize,
     pub flags: i32,
     pub advlock: interface::AdvisoryLock
+}
+
+#[derive(Debug)]
+pub struct EpollDesc {
+    pub mode: i32,
+    pub registered_fds: interface::RustHashMap<i32, EpollEvent>,
+    pub advlock: interface::AdvisoryLock,
+    pub errno: i32,
+    pub flags: i32
 }
 
 pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
