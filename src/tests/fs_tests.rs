@@ -8,35 +8,34 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        // ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        ut_lind_fs_chmod();
-        ut_lind_fs_dir_chdir();
-        ut_lind_fs_dir_mode();
-        ut_lind_fs_dir_multiple();
-        ut_lind_fs_dup();
-        ut_lind_fs_dup2();
-        ut_lind_fs_fdflags();
-        ut_lind_fs_file_link_unlink();
-        ut_lind_fs_file_lseek_past_end();
-        ut_lind_fs_fstat_complex();
-        ut_lind_fs_getuid();
-        ut_lind_fs_load_fs();
-        ut_lind_fs_mknod();
-        ut_lind_fs_multiple_open();
-        ut_lind_fs_persistence_setup();
-        ut_lind_fs_persistence_test();
-        ut_lind_fs_rename();
-        ut_lind_fs_rmdir();
-        ut_lind_fs_stat_file_complex();
-        ut_lind_fs_stat_file_mode();
-        ut_lind_fs_statfs();
-
-        persistencetest();
-        rdwrtest();
-        prdwrtest();
-        chardevtest();
-        dispatch_tests::cagetest();
+        // ut_lind_fs_chmod();
+        // ut_lind_fs_dir_chdir();
+        // ut_lind_fs_dir_mode();
+        // ut_lind_fs_dir_multiple();
+        // ut_lind_fs_dup();
+        // ut_lind_fs_dup2();
+        // ut_lind_fs_fdflags();
+        // ut_lind_fs_file_link_unlink();
+        // ut_lind_fs_file_lseek_past_end();
+        // ut_lind_fs_fstat_complex();
+        // ut_lind_fs_getuid();
+        // ut_lind_fs_load_fs();
+        // ut_lind_fs_mknod();
+        // ut_lind_fs_multiple_open();
+        // ut_lind_fs_persistence_setup();
+        // ut_lind_fs_persistence_test();
+        // ut_lind_fs_rename();
+        // ut_lind_fs_rmdir();
+        // ut_lind_fs_stat_file_complex();
+        // ut_lind_fs_stat_file_mode();
+        // ut_lind_fs_statfs();
+        // persistencetest();
+        // rdwrtest();
+        // prdwrtest();
+        // chardevtest();
+        // dispatch_tests::cagetest();
     }
 
 
@@ -802,37 +801,6 @@ mod fs_tests {
         assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
-        lindrustfinalize();
-    }
-
-
-    pub fn ut_lind_fs_pipe() {
-        lindrustinit();
-        let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        let pipefds = PipeArray {};
-        assert_eq!(cage1.pipe_syscall(pipefds), 0);
-        assert_eq!(cage1.fork_syscall(2), 0);
-
-        let sender = std::thread::spawn(move || {
-
-            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-            
-            loop        
-            cage2.read_syscall();
-
-            
-            assert_eq!(cage2.exit_syscall(), 0);
-
-        });
-
-        
-        cage1.open_syscall();
-        loop
-        cage2.read_syscall();
-        cage2.write_syscall();
-
-        assert_eq!(cage1.exit_syscall(), 0);
         lindrustfinalize();
     }
 }

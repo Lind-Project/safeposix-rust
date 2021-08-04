@@ -122,7 +122,7 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
-#[derive(Eq, PartialEq, Default)]
+#[derive(Eq, PartialEq, Default, Copy, Clone)]
 #[repr(C)]
 pub struct PipeArray {
   pub readfd: i32,
