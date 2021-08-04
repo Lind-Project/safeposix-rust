@@ -133,8 +133,11 @@ impl EmulatedFile {
         Ok(())
     }
 
-    pub fn truncfile(&mut self, length: usize) -> std::io::Result<()> {
+    pub fn shrink(&mut self, length: usize) -> std::io::Result<()> {
 
+        if length > self.filesize { 
+            panic!("Something is wrong. {} is already smaller than length.", self.filename);
+        }
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
