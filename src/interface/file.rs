@@ -133,6 +133,19 @@ impl EmulatedFile {
         Ok(())
     }
 
+    pub fn truncfile(&mut self, length: usize) -> std::io::Result<()> {
+
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let fobj = f.lock().unwrap();
+                fobj.set_len(length as u64)?;
+                self.filesize = length;         
+                Ok(())
+            }
+        }
+    }
+
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         let buf = unsafe {
