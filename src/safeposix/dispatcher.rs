@@ -197,6 +197,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         RENAME_SYSCALL => {
             cage.rename_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{interface::charstar_to_ruststr(arg2.dispatch_cstr)})
         }
+        FTRUNCATE_SYSCALL => {
+            cage.ftruncate_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_usize})
+        }
+        TRUNCATE_SYSCALL => {
+            cage.truncate_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_usize})
+        }
         _ => {//unknown syscall
             -1
         }
