@@ -2,4 +2,4 @@
 
 use crate::interface;
 
-use net_constants::*;
+use super::net_constants::*;

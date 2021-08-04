@@ -7,6 +7,8 @@
 use std::fs::File;
 use std::io::Read;
 pub use std::collections::HashMap as RustHashMap;
+pub use std::cmp::{max as rust_max, min as rust_min};
+use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
 use std::sync::{Mutex, Condvar};
@@ -18,11 +20,12 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
 pub use serde_json::{to_string as serde_serialize_to_string, from_str as serde_deserialize_from_string};
 
-pub fn log_from_ptr(buf: *const u8) {
-    if let Ok(s) = unsafe{std::ffi::CStr::from_ptr(buf as *const i8).to_str()} {
+pub fn log_from_ptr(buf: *const u8, length: usize) {
+    if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
       log_to_stdout(s);
     }
 }
+
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
     print!("{}", s);
@@ -49,8 +52,8 @@ pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
 }
 
-pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> &'a str {
-    std::ffi::CStr::from_ptr(cstr).to_str().unwrap()
+pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
+    return std::ffi::CStr::from_ptr(cstr).to_str();         //returns a result to be unwrapped later
 }
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
