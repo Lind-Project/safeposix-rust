@@ -15,36 +15,34 @@ mod pipe_tests {
 
 
     pub fn ut_lind_write_pipefile() {
-        let byte_chunk: usize = 131072;
-        let num_writes: usize = 8192;
+        let byte_chunk: usize = 1024;
+        let num_writes: usize = 4;
 
         lindrustinit();
 
         println!("Starting");
-        let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
 
-        let filefd = cage1.open_syscall("test1gb.txt", O_CREAT | O_WRONLY, S_IRWXA);
+        let filefd = cage.open_syscall("testmin.txt", O_CREAT | O_WRONLY, S_IRWXA);
         
-        let mut buf: Vec<u8> = Vec::with_capacity(byte_chunk);
+        let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
         let mut bufptr = buf.as_mut_ptr();
 
-        interface::fillrandom(bufptr, byte_chunk);
-        unsafe { buf.set_len(byte_chunk); }
-
         for i in 0..num_writes {
-            cage1.write_syscall(filefd, bufptr, byte_chunk);
+            cage.write_syscall(filefd, bufptr, byte_chunk);
         }
 
-        assert_eq!(cage1.close_syscall(filefd), 0);
-
+        assert_eq!(cage.close_syscall(filefd), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
 
 
     pub fn ut_lind_fs_pipe() {
 
-        let byte_chunk: usize = 131072;
-        let num_writes: usize = 8192;
+        let byte_chunk: usize = 1024;
+        let num_writes: usize = 4;
         
         lindrustinit();
 
@@ -69,14 +67,16 @@ mod pipe_tests {
             let mut buflen: usize = 0;
 
             while bytes_read != 0 {
-                bytes_read = cage2.read_syscall(pipefds.readfd, bufptr, byte_chunk) as usize;
+                // println!("reading pipe");
+                bytes_read = cage2.read_syscall(0, bufptr, byte_chunk) as usize;
+                // interface::log_from_ptr(bufptr, byte_chunk);
                 unsafe {
                     bufptr = bufptr.add(bytes_read);
                     buf.set_len(buflen + bytes_read);
                     buflen += bytes_read;
                 }
             }
-            assert_eq!(cage2.close_syscall(pipefds.readfd), 0);
+            assert_eq!(cage2.close_syscall(0), 0);
 
             assert_eq!(cage2.exit_syscall(), 0);
 
@@ -87,7 +87,7 @@ mod pipe_tests {
 
         println!("Opening File");
 
-        let filefd = cage1.open_syscall("test1gb.txt", O_RDONLY, S_IRWXA);
+        let filefd = cage1.open_syscall("testmin.txt", O_RDONLY, S_IRWXA);
         
         for i in 0..num_writes {
 
@@ -95,16 +95,15 @@ mod pipe_tests {
             let mut bufptr = buf.as_mut_ptr();
             unsafe { buf.set_len(byte_chunk); }
 
-            interface::log_to_stdout("reading file");
             cage1.read_syscall(filefd, bufptr, byte_chunk);
-            interface::log_from_ptr(bufptr);
-            cage1.write_syscall(pipefds.writefd, bufptr, byte_chunk);
+            cage1.write_syscall(1, bufptr, byte_chunk);
         }
         assert_eq!(cage1.close_syscall(filefd), 0);
 
-        assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
+        assert_eq!(cage1.close_syscall(1), 0);
 
-   
+        sender.join().unwrap();
+
         assert_eq!(cage1.exit_syscall(), 0);
         lindrustfinalize();
     }

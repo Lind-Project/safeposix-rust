@@ -58,8 +58,8 @@ impl EmulatedPipe {
     pub fn decr_ref(&self, flags: i32) {
 
         match flags {
-            O_RDONLY => {self.refcount_read.fetch_add(1, Ordering::SeqCst);}
-            O_WRONLY => {self.refcount_write.fetch_add(1, Ordering::SeqCst);}
+            O_RDONLY => {self.refcount_read.fetch_sub(1, Ordering::SeqCst);}
+            O_WRONLY => {self.refcount_write.fetch_sub(1, Ordering::SeqCst);}
             _ => panic!("Invalid pipe flags.")
         }
     }
@@ -99,7 +99,10 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock().unwrap();
 
         while bytes_read < length {
-            if (read_end.len() == 0) & self.eof.load(Ordering::SeqCst) { break; }
+            // if (read_end.len() == 0) & self.eof.load(Ordering::SeqCst) { break; }
+            let len = read_end.len();
+            let eof = self.eof.load(Ordering::SeqCst);
+            if (len == 0) & eof {break;}
             let bytes_to_read = min(length, bytes_read + read_end.len());
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
