@@ -1565,28 +1565,36 @@ impl Cage {
                             let position = normalfile_filedesc_obj.position;
                             let mut bufcount = 0;
                             let mut curr_size = 0;
-                            let mut curr_pos = 0;
                             let mut count = 0;
                             let mut temp_len = 0;
 
+                            // iterate over filename-inode pairs in dict
                             for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
-                                if curr_pos >= position {
-                                    let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
-                                    vec_filename.push(DT_UNKNOWN);
-                                    temp_len = vec_filename.len();
-                                    for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
-                                        vec_filename.push(00);
-                                    }
-                                    curr_size = dirent_size + temp_len;
-                                    bufcount += curr_size;
-                                    if bufcount > bufsize {break;}
-                                    vec.push((ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
-                                    count += 1;
+                                // convert filename to a filename vector of u8
+                                let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
+                                
+                                vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
+                                temp_len = vec_filename.len(); // get length of current filename vector for padding calculation
+                                
+                                // pad filename vector to the next highest 8 byte boundary
+                                for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
+                                    vec_filename.push(00);
                                 }
-                                curr_pos += 1;
+                                
+                                // the fixed dirent size and length of filename vector add up to total size
+                                curr_size = dirent_size + vec_filename.len(); 
+                                
+                                bufcount += curr_size; // increment bufcount
+                                if bufcount > bufsize {break;} // stop iteration if current bufcount exceeds argument bufsize
+                                
+                                // push properly constructed tuple to vector storing result
+                                vec.push((ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
+                                count += 1;
                             }
+                            // update file position
                             normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
-                            0
+                            
+                            0 // getdents succeeded
                         }
                         _ => {
                             syscall_error(Errno::ENOTDIR, "getdents", "File descriptor does not refer to a directory.")

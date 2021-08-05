@@ -32,6 +32,7 @@ mod fs_tests {
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
+        ut_lind_fs_getdents();
 
         persistencetest();
         rdwrtest();
@@ -808,18 +809,20 @@ mod fs_tests {
 
     pub fn ut_lind_fs_getdents() {
         lindrustinit();
-
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
-        let bufsize = 128;
+        let bufsize = 64;
         let mut dents_vec: Vec<(ClippedDirent, Vec<u8>)> = Vec::new();
-        let mut temp: u8 = 0;
-        let baseptr: *mut u8 = &mut temp;
+        let mut vec = vec![0u8; bufsize];
+        let baseptr: *mut u8 = &mut vec[0];
         
-        let fd = cage.open_syscall("/getdents", O_CREAT, S_IRWXA);
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
+        let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
         assert_eq!(cage.getdents_syscall(fd, bufsize, &mut dents_vec), 0);
         pack_dirents(dents_vec, baseptr);
 
         assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
     }
 }
