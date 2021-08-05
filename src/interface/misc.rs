@@ -46,6 +46,14 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     count as i32
 }
 
+pub fn copy_fromvec_sized(bufptr: *mut u8, count: usize, vec: &Vec<u8>) {
+    unsafe {std::ptr::copy(vec.as_ptr(), bufptr, count);}
+}
+pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vec: &mut Vec<u8>) {
+    let byteslice = unsafe {std::slice::from_raw_parts(bufptr, count)};
+    vec.extend_from_slice(byteslice);
+}
+
 // Wrapper to return a dictionary (hashmap)
 pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
     RustHashMap::new()

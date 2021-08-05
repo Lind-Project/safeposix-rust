@@ -97,6 +97,7 @@ impl Socket {
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
         Socket {raw_sys_fd: fd}
     }
+
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
@@ -104,6 +105,7 @@ impl Socket {
         };
         unsafe {libc::bind(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
+
     pub fn connect(&self, addr: &GenSockaddr) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
@@ -111,15 +113,23 @@ impl Socket {
         };
         unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
-    pub fn sendto(&self, buf: *mut u8, len: usize, flags: i32, addr: &GenSockaddr) -> i32 {
+
+    pub fn sendto(&self, buf: *mut u8, len: usize, addr: Option<&GenSockaddr>) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
-            GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
-            GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+            Some(GenSockaddr::V6(addrref6)) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
+            Some(GenSockaddr::V4(addrref)) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+            None => {(std::ptr::null::<libc::sockaddr>() as *const libc::sockaddr, 0)}
         };
-        unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, flags, finalsockaddr, addrlen as u32) as i32}
+        unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, addrlen as u32) as i32}
     }
-    pub fn send(&self, buf: *mut u8, len: usize) -> i32 {
-        unsafe {libc::send(self.raw_sys_fd, buf as *const libc::c_void, len, libc::MSG_DONTWAIT) as i32}
+
+    pub fn recvfrom(&self, buf: *mut u8, len: usize, addr: &mut Option<&mut GenSockaddr>) -> i32 {
+        let (finalsockaddr, mut addrlen) = match addr {
+            Some(GenSockaddr::V6(ref mut addrref6)) => {((addrref6 as *mut SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>() as u32)}
+            Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as u32)}
+            None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
+        };
+        unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, &mut addrlen as *mut u32) as i32}
     }
 }
 

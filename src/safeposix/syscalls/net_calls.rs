@@ -247,6 +247,14 @@ impl Cage {
         }
     }
 
+    pub fn getsockobjid(sockfdobj: &mut SocketDesc) -> i32 {
+        if let None = sockfdobj.socketobjectid {
+            let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+            sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(sock).unwrap());
+        } 
+        sockfdobj.socketobjectid.unwrap()
+    }
+
     pub fn sendto_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, dest_addr: &interface::GenSockaddr) -> i32 {
         if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
             return self.send_syscall(fd, buf, buflen, flags);
@@ -268,13 +276,10 @@ impl Cage {
                             return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
                         }
                         IPPROTO_UDP => {
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
-                            if let None = sockfdobj.socketobjectid {
-                                let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                                sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(sock).unwrap());
-                            };
-                            let sockobj = metadata.socket_object_table.get(&sockfdobj.socketobjectid.unwrap()).unwrap();
-                            let sockret = sockobj.sendto(buf, buflen, flags, dest_addr);
+                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+                            let sockret = sockobj.sendto(buf, buflen, Some(dest_addr));
                             if sockret >= 0 {return sockret;}
                             if sockret == Errno::ENETUNREACH as i32 {
                                 return syscall_error(Errno::ENETUNREACH, "sendto", "Network was unreachable due to inability to access local port / IP");
@@ -312,16 +317,13 @@ impl Cage {
                                 return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
                             }
 
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
-                            if let None = sockfdobj.socketobjectid {
-                                let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                                sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(sock).unwrap());
-                            };
-                            let sockobj = metadata.socket_object_table.get(&sockfdobj.socketobjectid.unwrap()).unwrap();
+                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
                             loop {
-                                let retval = sockobj.send(buf, buflen); //nonblocking, so we manually block
-                                if retval < 0 && retval == Errno::EAGAIN as i32 {
+                                let retval = sockobj.sendto(buf, buflen, None); //nonblocking, so we manually block
+                                if -retval == Errno::EAGAIN as i32 {
                                     interface::sleep(interface::RustDuration::MILLISECOND);
                                     continue;
                                 }
@@ -352,27 +354,112 @@ impl Cage {
             return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
         }
     }
-    //pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: i32, flags: i32, addr: &interface::RustSockAddr) -> i32 {
-    //    let fdtable = self.filedescriptortable.read().unwrap();
-    //    if let Some(wrappedfd) = fdtable.get(&fd) {
-    //        let mut filedesc_enum = wrappedfd.write().unwrap();
-    //        match &mut *filedesc_enum {
-    //            Socket(sockfdobj) => {
-    //                if sockfdobj.protocol == IPPROTO_TCP {
-    //                    if self.state != ConnState::CONNECTED {
 
-    //                    }
-    //                } else if sockfdobj.protocol == IPPROTO_UDP {
-    //                } else {
-    //                    return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
-    //                }
-    //            }
-    //            _ => {
-    //                return syscall_error(Errno::ENOTSOCK, "sendto", "file descriptor refers to something other than a socket");
-    //            }
-    //        }
-    //    } else {
-    //        return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
-    //    }
-    //}
+    pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            match &mut *filedesc_enum {
+                Socket(sockfdobj) => {
+                    match sockfdobj.protocol {
+                        IPPROTO_TCP => {
+                            if sockfdobj.state != ConnState::CONNECTED {
+                                return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
+                            }
+
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let metadata = NET_METADATA.read().unwrap();
+                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+
+                            let peek = &mut sockfdobj.last_peek;
+                            let remoteaddr = &sockfdobj.remoteaddr;
+
+                            let mut newbuflen = buflen;
+                            let mut newbufptr = buf;
+
+                            if let Some(ref mut peekvec) = peek {
+                                let bytecount = interface::rust_max(peekvec.len(), newbuflen);
+                                interface::copy_fromvec_sized(buf, bytecount, peekvec);
+                                newbuflen -= bytecount;
+                                newbufptr = newbufptr.wrapping_add(bytecount);
+                                if newbuflen == 0 {
+                                    if flags & MSG_PEEK == 0 {
+                                        sockfdobj.last_peek = None;
+                                    } else {
+                                        peekvec.truncate(bytecount); //vec.truncate is a no-op if vec is already shorter
+                                    }
+                                    return bytecount as i32;
+                                }
+                            }
+
+                            let mut retval;
+                            loop {
+                                retval = sockobj.recvfrom(newbufptr, newbuflen, addr);
+
+                                if -retval == Errno::EAGAIN as i32 {
+                                    interface::sleep(interface::RustDuration::MILLISECOND);
+                                    continue;
+                                }
+
+                                if retval < 0 {
+                                    let bytes = buflen - newbuflen;
+                                    if bytes == 0 {return retval;}
+                                    else {return bytes as i32;}
+                                }
+
+                                break;
+                            }
+
+                            let totalbyteswritten = buflen - newbuflen + retval as usize;
+
+                            if flags & MSG_PEEK != 0 {
+                                if sockfdobj.last_peek.is_none() {
+                                    sockfdobj.last_peek = Some(vec!());
+                                }
+                                //extend from the point after we read our previously peeked bytes
+                                interface::extend_fromptr_sized(newbufptr, retval as usize, sockfdobj.last_peek.as_mut().unwrap());
+                            } else {
+                                sockfdobj.last_peek = None;
+                            }
+
+                            return totalbyteswritten as i32;
+
+                        }
+                        IPPROTO_UDP => {
+                            if sockfdobj.localaddr.is_none() {
+                                return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
+                            }
+                            if sockfdobj.remoteaddr.is_none() && addr.is_none() {
+                            }
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let metadata = NET_METADATA.read().unwrap();
+                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+
+                            loop {
+                                let retval = sockobj.recvfrom(buf, buflen, addr);
+
+                                if -retval == Errno::EAGAIN as i32 {
+                                    interface::sleep(interface::RustDuration::MILLISECOND);
+                                    continue;
+                                }
+                                return retval;
+                            }
+                        }
+                        _ => {
+                            return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
+                        }
+                    }
+                }
+                _ => {
+                    return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "recvfrom", "invalid file descriptor");
+        }
+    }
+
+    pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
+        self.recvfrom_syscall(fd, buf, buflen, flags, &mut None)
+    }
 }
