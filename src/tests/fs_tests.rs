@@ -105,16 +105,16 @@ mod fs_tests {
         assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut readbuf1 = sizecbuf(5);
-        assert_eq!(cage.read_syscall(fd, readbuf1.as_mut_ptr(), 5), 5);
-        assert_eq!(cbuf2str(&readbuf1), "hello");
+        let mut read_buf1 = sizecbuf(5);
+        assert_eq!(cage.read_syscall(fd, read_buf1.as_mut_ptr(), 5), 5);
+        assert_eq!(cbuf2str(&read_buf1), "hello");
 
         assert_eq!(cage.write_syscall(fd, str2cbuf(" world"), 6), 6);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        let mut readbuf2 = sizecbuf(12);
-        assert_eq!(cage.read_syscall(fd, readbuf2.as_mut_ptr(), 12), 12);
-        assert_eq!(cbuf2str(&readbuf2), "hello world!");
+        let mut read_buf2 = sizecbuf(12);
+        assert_eq!(cage.read_syscall(fd, read_buf2.as_mut_ptr(), 12), 12);
+        assert_eq!(cbuf2str(&read_buf2), "hello world!");
 
         //let's test exit's ability to close everything
         assert_ne!(cage.filedescriptortable.read().unwrap().len(), 0);
@@ -135,15 +135,15 @@ mod fs_tests {
 
         assert_eq!(cage.pwrite_syscall(fd, str2cbuf("hello there!"), 12, 0), 12);
 
-        let mut readbuf1 = sizecbuf(5);
-        assert_eq!(cage.pread_syscall(fd, readbuf1.as_mut_ptr(), 5, 0), 5);
-        assert_eq!(cbuf2str(&readbuf1), "hello");
+        let mut read_buf1 = sizecbuf(5);
+        assert_eq!(cage.pread_syscall(fd, read_buf1.as_mut_ptr(), 5, 0), 5);
+        assert_eq!(cbuf2str(&read_buf1), "hello");
 
         assert_eq!(cage.pwrite_syscall(fd, str2cbuf(" world"), 6, 5), 6);
 
-        let mut readbuf2 = sizecbuf(12);
-        assert_eq!(cage.pread_syscall(fd, readbuf2.as_mut_ptr(), 12, 0), 12);
-        assert_eq!(cbuf2str(&readbuf2), "hello world!");
+        let mut read_buf2 = sizecbuf(12);
+        assert_eq!(cage.pread_syscall(fd, read_buf2.as_mut_ptr(), 12, 0), 12);
+        assert_eq!(cbuf2str(&read_buf2), "hello world!");
 
         //let's test lindrustfinalize's ability to call exit to close everything
         assert_ne!(cage.filedescriptortable.read().unwrap().len(), 0);
@@ -162,17 +162,17 @@ mod fs_tests {
 
         assert_eq!(cage.pwrite_syscall(fd, str2cbuf("Lorem ipsum dolor sit amet, consectetur adipiscing elit"), 55, 0), 55);
 
-        let mut readbufzero = sizecbuf(1000);
-        assert_eq!(cage.pread_syscall(fd, readbufzero.as_mut_ptr(), 1000, 0), 1000);
-        assert_eq!(cbuf2str(&readbufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
+        let mut read_bufzero = sizecbuf(1000);
+        assert_eq!(cage.pread_syscall(fd, read_bufzero.as_mut_ptr(), 1000, 0), 1000);
+        assert_eq!(cbuf2str(&read_bufzero), std::iter::repeat("\0").take(1000).collect::<String>().as_str());
 
         assert_eq!(cage.chdir_syscall("dev"), 0);
         assert_eq!(cage.close_syscall(fd), 0);
 
         let fd2 = cage.open_syscall("./urandom", O_RDWR, S_IRWXA);
         assert!(fd2 >= 0);
-        let mut readbufrand = sizecbuf(1000);
-        assert_eq!(cage.read_syscall(fd2, readbufrand.as_mut_ptr(), 1000), 1000);
+        let mut read_bufrand = sizecbuf(1000);
+        assert_eq!(cage.read_syscall(fd2, read_bufrand.as_mut_ptr(), 1000), 1000);
         assert_eq!(cage.close_syscall(fd2), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -392,23 +392,23 @@ mod fs_tests {
         let fd = cage.creat_syscall(path, S_IRWXA);
         assert_eq!(cage.close_syscall(fd), 0);
 
-        let readFd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
-        assert_eq!(cage.lseek_syscall(readFd, 0, SEEK_SET), 0);
-        assert_eq!(cage.write_syscall(readFd, str2cbuf("Hello! This should not write."), 28), -(Errno::EBADF as i32));
+        let read_fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
+        assert_eq!(cage.lseek_syscall(read_fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.write_syscall(read_fd, str2cbuf("Hello! This should not write."), 28), -(Errno::EBADF as i32));
 
         let mut buf = sizecbuf(100);
-        assert_eq!(cage.lseek_syscall(readFd, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(readFd, buf.as_mut_ptr(), 100), 0);
-        assert_eq!(cage.close_syscall(readFd), 0);
+        assert_eq!(cage.lseek_syscall(read_fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(read_fd, buf.as_mut_ptr(), 100), 0);
+        assert_eq!(cage.close_syscall(read_fd), 0);
 
-        let writeFd = cage.open_syscall(path, O_WRONLY, S_IRWXA);
+        let write_fd = cage.open_syscall(path, O_WRONLY, S_IRWXA);
         let mut buf2 = sizecbuf(100);
-        assert_eq!(cage.lseek_syscall(writeFd, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(writeFd, buf2.as_mut_ptr(), 100), -(Errno::EBADF as i32));
+        assert_eq!(cage.lseek_syscall(write_fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(write_fd, buf2.as_mut_ptr(), 100), -(Errno::EBADF as i32));
 
-        assert_eq!(cage.lseek_syscall(writeFd, 0, SEEK_SET), 0);
-        assert_eq!(cage.write_syscall(writeFd, str2cbuf("Hello! This should write."), 24), 24);
-        assert_eq!(cage.close_syscall(writeFd), 0);
+        assert_eq!(cage.lseek_syscall(write_fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.write_syscall(write_fd, str2cbuf("Hello! This should write."), 24), 24);
+        assert_eq!(cage.close_syscall(write_fd), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -555,17 +555,17 @@ mod fs_tests {
         //testing that the read and write work as expected
 
         //just read the first 5 bytes of the file
-        let mut readBuf = sizecbuf(5);
+        let mut read_buf = sizecbuf(5);
         assert_eq!(cage.write_syscall(fd, str2cbuf("Hello there!"), 12), 12);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(fd, readBuf.as_mut_ptr(), 5), 5);
-        assert_eq!(cbuf2str(&readBuf), "Hello");
+        assert_eq!(cage.read_syscall(fd, read_buf.as_mut_ptr(), 5), 5);
+        assert_eq!(cbuf2str(&read_buf), "Hello");
 
-        let mut readBuf2 = sizecbuf(12);
+        let mut read_buf2 = sizecbuf(12);
         assert_eq!(cage.write_syscall(fd, str2cbuf(" World"), 6), 6);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(fd, readBuf2.as_mut_ptr(), 12), 12);
-        assert_eq!(cbuf2str(&readBuf2), "Hello World!");
+        assert_eq!(cage.read_syscall(fd, read_buf2.as_mut_ptr(), 12), 12);
+        assert_eq!(cbuf2str(&read_buf2), "Hello World!");
 
         //close the file descriptor
         assert_eq!(cage.close_syscall(fd), 0);
@@ -688,12 +688,12 @@ mod fs_tests {
         let mode: u32 = 438;   // 0666
         let name = "double_open_file";
 
-        let mut readbuf = sizecbuf(2);
+        let mut read_buf = sizecbuf(2);
         let fd3 = cage.open_syscall(name, flags, mode);
         assert_eq!(cage.write_syscall(fd3, str2cbuf("hi"), 2), 2);
         assert_eq!(cage.lseek_syscall(fd3, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(fd3, readbuf.as_mut_ptr(), 2), 2);
-        assert_eq!(cbuf2str(&readbuf), "hi");
+        assert_eq!(cage.read_syscall(fd3, read_buf.as_mut_ptr(), 2), 2);
+        assert_eq!(cbuf2str(&read_buf), "hi");
         
 
         let fd4 = cage.open_syscall(name, flags, mode);
