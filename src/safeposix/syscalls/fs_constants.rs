@@ -142,14 +142,6 @@ pub struct StatData {
   pub st_ctim: (u64, u64)
 }
 
-// Represents a Dirent struct without the string, as rust has no flexible array member support
-#[repr(C, packed(1))]
-pub struct ClippedDirent {
-    pub d_ino: u64,
-    pub d_off: u64,
-    pub d_reclen: u16
-}
-
 //derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
 #[derive(Eq, PartialEq, Default)]
 #[repr(C)]

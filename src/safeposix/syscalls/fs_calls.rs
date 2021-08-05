@@ -1540,11 +1540,12 @@ impl Cage {
     
     //------------------GETDENTS SYSCALL------------------
 
-    pub fn getdents_syscall(&self, fd: i32, bufsize: usize, vec: &mut Vec<(ClippedDirent, Vec<u8>)>) -> i32 {
+    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: usize)-> i32 {
         
+        let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
+
         // make sure bufsize is at least greater than size of a ClippedDirent struct
-        let dirent_size = std::mem::size_of::<ClippedDirent>();
-        if bufsize <= dirent_size {
+        if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
         
@@ -1582,18 +1583,20 @@ impl Cage {
                                 }
                                 
                                 // the fixed dirent size and length of filename vector add up to total size
-                                curr_size = dirent_size + vec_filename.len(); 
+                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); 
                                 
                                 bufcount += curr_size; // increment bufcount
                                 if bufcount > bufsize {break;} // stop iteration if current bufcount exceeds argument bufsize
                                 
                                 // push properly constructed tuple to vector storing result
-                                vec.push((ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
+                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
                                 count += 1;
                             }
                             // update file position
                             normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
                             
+                            interface::pack_dirents(vec, dirp);
+
                             0 // getdents succeeded
                         }
                         _ => {

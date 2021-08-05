@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 // retreive cage table
+
 const ACCESS_SYSCALL: i32 = 2;
 const UNLINK_SYSCALL: i32 = 4;
 const LINK_SYSCALL: i32 = 5;
@@ -203,56 +204,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         GETDENTS_SYSCALL => {
-            let mut dents_vec: Vec<(ClippedDirent, Vec<u8>)> = Vec::new();
-            let res = cage.getdents_syscall(unsafe{arg1.dispatch_int}, unsafe{arg3.dispatch_usize}, &mut dents_vec);
-            pack_dirents(dents_vec, unsafe{arg2.dispatch_mutcbuf});
-            res
+            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3))
         }
         _ => {//unknown syscall
             -1
         }
     }
-}
-
-/// Given the vector of tuples produced from getdents_syscall, each of which consists of 
-/// a ClippedDirent struct and a u8 vector representing the name, and also given the 
-/// pointer to the base of the buffer to which the getdents structs should be copied, 
-/// populate said buffer with these getdents structs and the names at the requisite locations
-///
-/// We assume a number of things about the tuples that are input: 
-///
-/// 1. The name in the u8 vec is null terminated
-/// 2. After being null terminated it is then padded to the next highest 8 byte boundary
-/// 3. After being padded, the last byte of padding is populated with DT_UNKNOWN (0) for now, 
-/// as the d_type field does not have to be fully implemented for getdents to be POSIX compliant
-/// 4. All fields in the clipped dirent,  are correctly filled--i.e. d_off has the correct offset
-/// of the next struct in the buffer and d_reclen has the length of the struct with the padded name
-/// 5. The number of tuples in the vector is such that they all fit in the buffer
-///
-/// There is enough information to produce a tuple vector that can satisfy these assumptions well
-/// in getdents syscall, and thus all the work to satisfy these assumptions should be done there
-pub fn pack_dirents(dirtuplevec: Vec<(ClippedDirent, Vec<u8>)>, baseptr: *mut u8) {
-  let mut curptr = baseptr;
-
-  //for each tuple we write in the ClippedDirent struct, and then the padded name vec
-  for dirtuple in dirtuplevec {
-    //get pointer to start of next dirent in the buffer as a ClippedDirent pointer
-    let curclippedptr = curptr as *mut ClippedDirent;
-    //turn that pointer into a rust reference
-    let curwrappedptr = unsafe{&mut *curclippedptr};
-    //assign to the data that reference points to with the value of the ClippedDirent from the tuple
-    *curwrappedptr = dirtuple.0;
-
-    //advance pointer by the size of one ClippedDirent, std::mem::size_of should be added into the interface
-    curptr = curptr.wrapping_offset(std::mem::size_of::<ClippedDirent>() as isize);
-
-    //write, starting from this advanced location, the u8 vec representation of the name
-    unsafe{curptr.copy_from(dirtuple.1.as_slice().as_ptr(), dirtuple.1.len())};
-
-    //advance pointer by the size of name, which we assume to be null terminated and padded correctly
-    //and thus we are finished with this struct
-    curptr = curptr.wrapping_offset(dirtuple.1.len() as isize);
-  }
 }
 
 pub extern "C" fn lindrustinit() {
