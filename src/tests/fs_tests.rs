@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod fs_tests {
     use crate::interface;
-    use crate::interface::{errnos::Errno, FSData, StatData, Arg};
     use crate::safeposix::{cage::*, filesystem, dispatcher::*};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;

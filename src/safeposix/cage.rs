@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 use crate::interface;
+//going to get the datatypes and errnos from the cage file from now on
+pub use crate::interface::errnos::{Errno, syscall_error};
+pub use crate::interface::types::{FSData, StatData, Arg, Rlimit};
 
 pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::net_constants::*;
