@@ -1,8 +1,5 @@
-use std::os::unix::fs::PermissionsExt;
-use std::fs::OpenOptions;
 use crate::interface;
 use crate::interface::*;
-
 
 //redefining the FSData struct in this file so that we maintain flow of program
 //derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
