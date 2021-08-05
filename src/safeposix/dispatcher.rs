@@ -65,7 +65,7 @@ const PWRITE_SYSCALL: i32 = 127;
 
 
 use crate::interface;
-use crate::interface::types::*;
+use crate::interface::types::{FSData, StatData, Arg};
 use super::cage::{CAGE_TABLE, Cage};
 use super::filesystem::{FS_METADATA, load_fs, incref_root};
 

@@ -1,5 +1,5 @@
 use crate::interface;
-use crate::interface::*;
+use crate::interface::errnos::{Errno, syscall_error};
 
 //redefining the FSData struct in this file so that we maintain flow of program
 //derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat

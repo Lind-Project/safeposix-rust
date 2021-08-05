@@ -1,7 +1,7 @@
 // File system related system calls
 use crate::interface;
-use crate::interface::errnos::*;
-use crate::interface::types::*;
+use crate::interface::errnos::{Errno, syscall_error};
+use crate::interface::types::{FSData, StatData, Arg};
 use super::fs_constants::*;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
 use crate::safeposix::filesystem::*;

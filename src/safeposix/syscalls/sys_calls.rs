@@ -1,7 +1,7 @@
 // System related system calls
 use crate::interface;
-use crate::interface::errnos::*;
-use crate::interface::types::*;
+use crate::interface::errnos::Errno;
+use crate::interface::types::{StatData, FSData, Rlimit, Arg};
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 
