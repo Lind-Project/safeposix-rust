@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod fs_tests {
     use crate::interface;
-    use crate::safeposix::{cage::*, filesystem, dispatcher::*, syscalls::errnos::*};
+    use crate::interface::errnos::*;
+    use crate::interface::types::*;
+    use crate::safeposix::{cage::*, filesystem, dispatcher::*};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
-    
 
     #[test]
     pub fn test_fs() {
@@ -285,7 +286,6 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let mode: i32 = 438;   // 0666
         let filepath = "/dupfile";
 
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
@@ -342,7 +342,6 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let mode: i32 = 438;   // 0666
         let filepath = "/dup2file";
 
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
@@ -350,7 +349,7 @@ mod fs_tests {
         assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
 
         //trying to dup fd into fd + 1
-        let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
+        let _fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
 
         //should be a no-op since the last line did the same thing
         let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
@@ -695,7 +694,7 @@ mod fs_tests {
         assert_eq!(cbuf2str(&read_buf), "hi");
         
 
-        let fd4 = cage.open_syscall(name, flags, mode);
+        let _fd4 = cage.open_syscall(name, flags, mode);
         let mut buf = sizecbuf(5);
         assert_eq!(cage.lseek_syscall(fd3, 2, SEEK_SET), 2);
         assert_eq!(cage.write_syscall(fd3, str2cbuf("boo"), 3), 3);
@@ -757,7 +756,7 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let path = "/fooFileMode";
-        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
         let mut statdata = StatData::default();
         assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
@@ -765,7 +764,7 @@ mod fs_tests {
 
         //make a file without permissions and check that it is a reg file without permissions
         let path2 = "/fooFileMode2";
-        let fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
+        let _fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
         assert_eq!(cage.stat_syscall(path2, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFREG as u32);
 
