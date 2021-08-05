@@ -133,9 +133,24 @@ impl EmulatedFile {
         Ok(())
     }
 
+    pub fn shrink(&mut self, length: usize) -> std::io::Result<()> {
+
+        if length > self.filesize { 
+            panic!("Something is wrong. {} is already smaller than length.", self.filename);
+        }
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => { 
+                let fobj = f.lock().unwrap();
+                fobj.set_len(length as u64)?;
+                self.filesize = length;         
+                Ok(())
+            }
+        }
+    }
+
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
-
         let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts_mut(ptr, length)
@@ -231,7 +246,7 @@ impl EmulatedFile {
         Ok(())
     }
 
-    pub fn zerofill_at(&mut self, count: usize, offset: usize) -> std::io::Result<usize> {
+    pub fn zerofill_at(&mut self, offset: usize, count: usize) -> std::io::Result<usize> {
         let bytes_written;
         let buf = vec![0; count];
 

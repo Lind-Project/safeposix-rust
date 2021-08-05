@@ -72,18 +72,29 @@ use super::filesystem::{FS_METADATA, load_fs, incref_root};
 
 #[repr(C)]
 pub union Arg {
-  dispatch_int: i32,
-  dispatch_uint: u32,
-  dispatch_ulong: u64,
-  dispatch_long: i64,
-  dispatch_usize: usize, //For types not specified to be a given length, but often set to word size (i.e. size_t)
-  dispatch_isize: isize, //For types not specified to be a given length, but often set to word size (i.e. off_t)
-  dispatch_cbuf: *const u8, //Typically corresponds to an immutable void* pointer as in write
-  dispatch_mutcbuf: *mut u8, //Typically corresponds to a mutable void* pointer as in read
-  dispatch_cstr: *const i8, //Typically corresponds to a passed in string of type char*, as in open
-  dispatch_cstrarr: *const *const i8, //Typically corresponds to a passed in string array of type char* const[] as in execve
-  dispatch_rlimitstruct: *mut Rlimit,
-  dispatch_statdatastruct: *mut StatData
+  pub dispatch_int: i32,
+  pub dispatch_uint: u32,
+  pub dispatch_ulong: u64,
+  pub dispatch_long: i64,
+  pub dispatch_usize: usize, //For types not specified to be a given length, but often set to word size (i.e. size_t)
+  pub dispatch_isize: isize, //For types not specified to be a given length, but often set to word size (i.e. off_t)
+  pub dispatch_cbuf: *const u8, //Typically corresponds to an immutable void* pointer as in write
+  pub dispatch_mutcbuf: *mut u8, //Typically corresponds to a mutable void* pointer as in read
+  pub dispatch_cstr: *const i8, //Typically corresponds to a passed in string of type char*, as in open
+  pub dispatch_cstrarr: *const *const i8, //Typically corresponds to a passed in string array of type char* const[] as in execve
+  pub dispatch_rlimitstruct: *mut Rlimit,
+  pub dispatch_statdatastruct: *mut StatData,
+  pub dispatch_fsdatastruct: *mut FSData
+}
+
+//this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
+//to the syscall. Then it unwraps the arguments, returning the error if any one of them is an error
+//value, and returning the value of the function if not. It does this by using the ? operator in
+//the body of a closure within the variadic macro
+macro_rules! check_and_dispatch {
+    ( $cage:ident . $func:ident, $($arg:expr),* ) => {
+        (move || Ok($cage.$func( $($arg?),* )))().into_ok_or_err()
+    };
 }
 
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
@@ -91,78 +102,105 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     // need to match based on if cage exists
     let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
 
-    //implement syscall method calling using matching
-
     match callnum {
         ACCESS_SYSCALL => {
-            cage.access_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_uint})
+            check_and_dispatch!(cage.access_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
         }
         UNLINK_SYSCALL => {
-            cage.unlink_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
+            check_and_dispatch!(cage.unlink_syscall, interface::get_cstr(arg1))
         }
         LINK_SYSCALL => {
-            cage.link_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
+            check_and_dispatch!(cage.link_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         CHDIR_SYSCALL => {
-            cage.chdir_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)})
+            check_and_dispatch!(cage.chdir_syscall, interface::get_cstr(arg1))
         }
         XSTAT_SYSCALL => {
-            cage.stat_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{&mut *arg2.dispatch_statdatastruct})
+            check_and_dispatch!(cage.stat_syscall, interface::get_cstr(arg1), interface::get_statdatastruct(arg2))
         }
         OPEN_SYSCALL => {
-            cage.open_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_int}, unsafe{arg3.dispatch_uint})
+            check_and_dispatch!(cage.open_syscall, interface::get_cstr(arg1), interface::get_int(arg2), interface::get_uint(arg3))
         }
         READ_SYSCALL => {
-            cage.read_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_mutcbuf}, unsafe{arg3.dispatch_usize})
+            check_and_dispatch!(cage.read_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3))
         }
         WRITE_SYSCALL => {
-            cage.write_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_cbuf}, unsafe{arg3.dispatch_usize})
+            check_and_dispatch!(cage.write_syscall, interface::get_int(arg1), interface::get_cbuf(arg2), interface::get_usize(arg3))
+        }
+        CLOSE_SYSCALL => {
+            check_and_dispatch!(cage.close_syscall, interface::get_int(arg1))
         }
         LSEEK_SYSCALL => {
-            cage.lseek_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_isize}, unsafe{arg3.dispatch_int})
+            check_and_dispatch!(cage.lseek_syscall, interface::get_int(arg1), interface::get_isize(arg2), interface::get_int(arg3))
         }
         FXSTAT_SYSCALL => {
-            cage.fstat_syscall(unsafe{arg1.dispatch_int}, unsafe{&mut *arg2.dispatch_statdatastruct})
+            check_and_dispatch!(cage.fstat_syscall, interface::get_int(arg1), interface::get_statdatastruct(arg2))
+        }
+        FSTATFS_SYSCALL => {
+            check_and_dispatch!(cage.fstatfs_syscall, interface::get_int(arg1), interface::get_fsdatastruct(arg2))
         }
         MMAP_SYSCALL => {
-            cage.mmap_syscall(unsafe{arg1.dispatch_mutcbuf}, unsafe{arg2.dispatch_usize}, unsafe{arg3.dispatch_int}, 
-                              unsafe{arg4.dispatch_int}, unsafe{arg5.dispatch_int}, unsafe{arg6.dispatch_long})
+            check_and_dispatch!(cage.mmap_syscall, interface::get_mutcbuf(arg1), interface::get_usize(arg2), interface::get_int(arg3), interface::get_int(arg4), interface::get_int(arg5), interface::get_long(arg6))
         }
         MUNMAP_SYSCALL => {
-            cage.munmap_syscall(unsafe{arg1.dispatch_mutcbuf}, unsafe{arg2.dispatch_usize})
+            check_and_dispatch!(cage.munmap_syscall, interface::get_mutcbuf(arg1), interface::get_usize(arg2))
+        }
+        DUP_SYSCALL => {
+            check_and_dispatch!(cage.dup_syscall, interface::get_int(arg1), Ok::<Option<i32>, i32>(None))
+        }
+        DUP2_SYSCALL => {
+            check_and_dispatch!(cage.dup2_syscall, interface::get_int(arg1), interface::get_int(arg2))
+        }
+        STATFS_SYSCALL => {
+            check_and_dispatch!(cage.statfs_syscall, interface::get_cstr(arg1), interface::get_fsdatastruct(arg2))
+        }
+        FCNTL_SYSCALL => {
+            check_and_dispatch!(cage.fcntl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
         }
         GETPPID_SYSCALL => {
-            cage.getppid_syscall()
+            check_and_dispatch!(cage.getppid_syscall,)
         }
         GETPID_SYSCALL => {
-            cage.getpid_syscall()
+            check_and_dispatch!(cage.getpid_syscall,)
         }
         EXIT_SYSCALL => {
-            cage.exit_syscall()
+            check_and_dispatch!(cage.exit_syscall,)
         }
-        EXEC_SYSCALL => {
-            cage.exec_syscall(unsafe{arg1.dispatch_ulong})
+        FLOCK_SYSCALL => {
+            check_and_dispatch!(cage.flock_syscall, interface::get_int(arg1), interface::get_int(arg2))
         }
         FORK_SYSCALL => {
-            cage.fork_syscall(unsafe{arg1.dispatch_ulong})
+            check_and_dispatch!(cage.fork_syscall, interface::get_ulong(arg1))
+        }
+        EXEC_SYSCALL => {
+            check_and_dispatch!(cage.exec_syscall, interface::get_ulong(arg1))
         }
         GETUID_SYSCALL => {
-            cage.getuid_syscall()
+            check_and_dispatch!(cage.getuid_syscall,)
         }
         GETEUID_SYSCALL => {
-            cage.geteuid_syscall()
+            check_and_dispatch!(cage.geteuid_syscall,)
         }
         GETGID_SYSCALL => {
-            cage.getgid_syscall()
+            check_and_dispatch!(cage.getgid_syscall,)
         }
         GETEGID_SYSCALL => {
-            cage.getegid_syscall()
+            check_and_dispatch!(cage.getegid_syscall,)
         }
         PREAD_SYSCALL => {
-            cage.pread_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_mutcbuf}, unsafe{arg3.dispatch_usize}, unsafe{arg4.dispatch_isize})
+            check_and_dispatch!(cage.pread_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_isize(arg4))
         }
         PWRITE_SYSCALL => {
-            cage.pwrite_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_cbuf}, unsafe{arg3.dispatch_usize}, unsafe{arg4.dispatch_isize})
+            check_and_dispatch!(cage.pwrite_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_isize(arg4))
+        }
+        // CHMOD_SYSCALL => {
+        //     check_and_dispatch!(cage.chmod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
+        // }
+        RMDIR_SYSCALL => {
+            check_and_dispatch!(cage.rmdir_syscall, interface::get_cstr(arg1))
+        }
+        RENAME_SYSCALL => {
+            check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         _ => {//unknown syscall
             -1
@@ -178,7 +216,7 @@ pub extern "C" fn lindrustinit() {
 
     //init cage is its own parent
     let mut initcage = Cage{
-        cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))), 
+        cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
     initcage.load_lower_handle_stubs();
     mutcagetable.insert(1, interface::RustRfc::new(initcage));
