@@ -122,54 +122,6 @@ pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
-#[derive(Eq, PartialEq, Default, Copy, Clone)]
-#[repr(C)]
-pub struct PipeArray {
-  pub readfd: i32,
-  pub writefd: i32,
-}
-
-//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
-#[derive(Eq, PartialEq, Default)]
-#[repr(C)]
-pub struct StatData {
-  pub st_dev: u64,
-  pub st_ino: usize,
-  pub st_mode: u32,
-  pub st_nlink: u32,
-  pub st_uid: u32,
-  pub st_gid: u32,
-  pub st_rdev: u64,
-  pub st_size: usize,
-  pub st_blksize: isize,
-  pub st_blocks: usize,
-  //currently we don't populate or care about the time bits here
-  pub st_atim: (u64, u64),
-  pub st_mtim: (u64, u64),
-  pub st_ctim: (u64, u64)
-}
-
-//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
-#[derive(Eq, PartialEq, Default)]
-#[repr(C)]
-pub struct FSData {
-  pub f_type: u64,
-  pub f_bsize: u64,
-  pub f_blocks: u64,
-  pub f_bfree: u64,
-  pub f_bavail: u64,
-  //total files in the file system -- should be infinite
-  pub f_files: u64,
-  //free files in the file system -- should be infinite
-  pub f_ffiles: u64,
-  pub f_fsid: u64,
-  //not really a limit for naming, but 254 works
-  pub f_namelen: u64,
-  //arbitrary val for blocksize as well
-  pub f_frsize: u64,
-  pub f_spare: [u8; 32]
-}
-
 pub fn is_reg(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
 }
