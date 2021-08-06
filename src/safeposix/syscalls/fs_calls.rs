@@ -1125,7 +1125,7 @@ impl Cage {
                 },
                 Pipe(normalfile_filedesc_obj) => {
                     let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
-                    pipe.incr_ref(normalfile_filedesc_obj.flags)
+                    pipe.incr_ref(normalfile_filedesc_obj.flags);
                 },
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }

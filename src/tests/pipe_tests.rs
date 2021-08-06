@@ -56,9 +56,11 @@ mod pipe_tests {
         let sender = std::thread::spawn(move || {
 
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-           
-            assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
+
             assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
+            assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
+            assert_eq!(cage2.close_syscall(pipefds.readfd), 0);
+
 
             let mut bytes_read: usize = 1;
 
@@ -81,9 +83,10 @@ mod pipe_tests {
             assert_eq!(cage2.exit_syscall(), 0);
 
         });
-
-        assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
+        
         assert_eq!(cage1.close_syscall(pipefds.readfd), 0);
+        assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
+        assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
 
         println!("Opening File");
 
