@@ -1,10 +1,8 @@
 // File system related system calls
 use crate::interface;
-
-use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
+use crate::safeposix::cage::{Arg, Cage, CAGE_TABLE, FileDescriptor::*, FileDesc, FdTable, FSData, Errno, StatData, syscall_error};
 use crate::safeposix::filesystem::*;
-use super::errnos::*;
+use super::fs_constants::*;
 
 impl Cage {
 

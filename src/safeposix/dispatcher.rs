@@ -65,27 +65,9 @@ const PWRITE_SYSCALL: i32 = 127;
 
 
 use crate::interface;
-use super::cage::{CAGE_TABLE, Cage};
-use super::syscalls::{sys_constants::*, fs_constants::*};
+use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
 use super::filesystem::{FS_METADATA, load_fs, incref_root};
 
-
-#[repr(C)]
-pub union Arg {
-  pub dispatch_int: i32,
-  pub dispatch_uint: u32,
-  pub dispatch_ulong: u64,
-  pub dispatch_long: i64,
-  pub dispatch_usize: usize, //For types not specified to be a given length, but often set to word size (i.e. size_t)
-  pub dispatch_isize: isize, //For types not specified to be a given length, but often set to word size (i.e. off_t)
-  pub dispatch_cbuf: *const u8, //Typically corresponds to an immutable void* pointer as in write
-  pub dispatch_mutcbuf: *mut u8, //Typically corresponds to a mutable void* pointer as in read
-  pub dispatch_cstr: *const i8, //Typically corresponds to a passed in string of type char*, as in open
-  pub dispatch_cstrarr: *const *const i8, //Typically corresponds to a passed in string array of type char* const[] as in execve
-  pub dispatch_rlimitstruct: *mut Rlimit,
-  pub dispatch_statdatastruct: *mut StatData,
-  pub dispatch_fsdatastruct: *mut FSData
-}
 
 //this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
 //to the syscall. Then it unwraps the arguments, returning the error if any one of them is an error
