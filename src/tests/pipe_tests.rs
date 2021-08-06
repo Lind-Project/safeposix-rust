@@ -5,6 +5,7 @@ mod pipe_tests {
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
+    use std::time::Instant;
 
     #[test]
     pub fn test_pipe() {
@@ -15,16 +16,17 @@ mod pipe_tests {
 
 
     pub fn ut_lind_write_pipefile() {
-        let byte_chunk: usize = 1024;
-        let num_writes: usize = 4;
+        let byte_chunk: usize = 131072;
+        let num_writes: usize = 8192;
 
         lindrustinit();
 
         println!("Starting");
+
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
 
-        let filefd = cage.open_syscall("testmin.txt", O_CREAT | O_WRONLY, S_IRWXA);
+        let filefd = cage.open_syscall("test1gb.txt", O_CREAT | O_WRONLY, S_IRWXA);
         
         let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
         let mut bufptr = buf.as_mut_ptr();
@@ -41,12 +43,15 @@ mod pipe_tests {
 
     pub fn ut_lind_fs_pipe() {
 
-        let byte_chunk: usize = 1024;
-        let num_writes: usize = 4;
+        let byte_chunk: usize = 131072;
+        let num_writes: usize = 8192;
         
         lindrustinit();
 
         println!("Starting");
+        
+        let now = Instant::now();
+
         let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let mut pipefds = PipeArray {readfd: -1, writefd: -1};
@@ -69,9 +74,7 @@ mod pipe_tests {
             let mut buflen: usize = 0;
 
             while bytes_read != 0 {
-                // println!("reading pipe");
                 bytes_read = cage2.read_syscall(0, bufptr, byte_chunk) as usize;
-                // interface::log_from_ptr(bufptr, byte_chunk);
                 unsafe {
                     bufptr = bufptr.add(bytes_read);
                     buf.set_len(buflen + bytes_read);
@@ -88,9 +91,7 @@ mod pipe_tests {
         assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
         assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
 
-        println!("Opening File");
-
-        let filefd = cage1.open_syscall("testmin.txt", O_RDONLY, S_IRWXA);
+        let filefd = cage1.open_syscall("test1gb.txt", O_RDONLY, S_IRWXA);
         
         for i in 0..num_writes {
 
@@ -108,6 +109,9 @@ mod pipe_tests {
         sender.join().unwrap();
 
         assert_eq!(cage1.exit_syscall(), 0);
+
+        println!("{}", now.elapsed().as_micros());
+
         lindrustfinalize();
     }
 }

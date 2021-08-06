@@ -35,7 +35,7 @@ impl EmulatedPipe {
     }
 
     pub fn set_eof(&self) {
-        self.eof.store(false, Ordering::SeqCst);
+        self.eof.store(true, Ordering::SeqCst);
     }
 
     pub fn get_write_ref(&self) -> u32 {
