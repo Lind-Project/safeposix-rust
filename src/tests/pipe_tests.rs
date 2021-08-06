@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod pipe_tests {
     use crate::interface;
-    use crate::safeposix::{cage::*, filesystem, dispatcher::*, syscalls::errnos::*};
+    use crate::safeposix::{cage::*, filesystem, dispatcher::*};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
