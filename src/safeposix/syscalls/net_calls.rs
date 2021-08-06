@@ -131,7 +131,7 @@ impl Cage {
                     }
 
                     let newlocalport = if !intent_to_rebind {
-                        let localout = mutmetadata._reserve_localport(localaddr.port(), sockfdobj.protocol);
+                        let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                         if let Err(errnum) = localout {return errnum;}
                         localout.unwrap()
                     } else {
@@ -143,7 +143,7 @@ impl Cage {
 
                     if sockfdobj.protocol == IPPROTO_UDP {
                         if sockfdobj.socketobjectid.is_some() {
-                            mutmetadata.used_udp_port_set.remove(&newlocalport);
+                            mutmetadata.used_port_set.remove(&mux_port(localaddr.addr(), newlocalport, sockfdobj.domain, UDPPORT));
                             return syscall_error(Errno::EOPNOTSUPP, "bind", "We can't close the previous listener when re-binding");
                         }
 
@@ -156,7 +156,7 @@ impl Cage {
                         sockfdobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(udpsockobj) {
                             Ok(id) => Some(id),
                             Err(errnum) => {
-                                mutmetadata.used_udp_port_set.remove(&newlocalport);
+                                mutmetadata.used_port_set.remove(&mux_port(localaddr.addr(), newlocalport, sockfdobj.domain, UDPPORT));
                                 return errnum;
                             }
                         }
@@ -182,12 +182,21 @@ impl Cage {
         } else {
             let mut mutmetadata = NET_METADATA.write().unwrap();
             let mut newremote = remoteaddr.clone();
-            let port = mutmetadata._get_available_tcp_port();
-            if let Err(e) = port {return Err(e);}
-            newremote.set_port(port.unwrap());
             match remoteaddr {
-                interface::GenSockaddr::V4(_) => newremote.set_addr(interface::GenIpaddr::V4(interface::V4Addr{s_addr: 0})),
-                interface::GenSockaddr::V6(_) => newremote.set_addr(interface::GenIpaddr::V6(interface::V6Addr{s6_addr: [0; 16]})),
+                interface::GenSockaddr::V4(_) => {
+                    let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
+                    let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
+                    if let Err(e) = port {return Err(e);}
+                    newremote.set_port(port.unwrap());
+                    newremote.set_addr(addr);
+                }
+                interface::GenSockaddr::V6(_) => {
+                    let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
+                    let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
+                    if let Err(e) = port {return Err(e);}
+                    newremote.set_port(port.unwrap());
+                    newremote.set_addr(addr);
+                }
             }; //in lieu of getmyip
             Ok(newremote)
         }
@@ -461,5 +470,65 @@ impl Cage {
 
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
         self.recvfrom_syscall(fd, buf, buflen, flags, &mut None)
+    }
+
+    //we currently ignore backlog
+    pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            match &mut *filedesc_enum {
+                Socket(sockfdobj) => {
+                    match sockfdobj.state {
+                        ConnState::LISTEN => {
+                            return 0; //Already done!
+                        }
+                        ConnState::NOTCONNECTED => {
+                            return 0; //this should actually error
+                        }
+                        ConnState::CONNECTED => {
+                            //we should probably assert that it's TCP, but connected state does
+                            //most of that work?
+                            //Additionally we maybe should check that localaddr exists?
+                            let ladr = sockfdobj.localaddr.as_ref().unwrap().clone();
+                            let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
+
+                            if mutmetadata.listening_port_set.contains(&porttuple) {
+                                return syscall_error(Errno::EADDRINUSE, "listen", "A socket is already listening on this port");
+                            }
+                            mutmetadata.listening_port_set.insert(porttuple);
+
+                            sockfdobj.state = ConnState::LISTEN;
+
+                            let sockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                            let bindret = sockobj.bind(&ladr);
+                            if bindret < 0 {
+                                panic!("Unexpected failure in binding socket");
+                            }
+                            let listenret = sockobj.listen(5); //default backlog in repy for whatever reason
+                            if listenret < 0 {
+                                panic!("Unexpected failure in binding socket");
+                            }
+
+                            sockfdobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(sockobj) {
+                                Ok(id) => Some(id),
+                                Err(errnum) => {
+                                    mutmetadata.listening_port_set.remove(&mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT));
+                                    sockfdobj.state = ConnState::CONNECTED;
+                                    return errnum;
+                                }
+                            };
+                            return 0;
+                        }
+                    }
+                }
+                _ => {
+                    return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
+        }
     }
 }

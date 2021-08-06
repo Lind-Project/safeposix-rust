@@ -38,7 +38,7 @@ impl GenSockaddr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum GenIpaddr {
     V4(V4Addr),
     V6(V6Addr)
@@ -60,7 +60,7 @@ pub union SockaddrAll {
 }
 
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct V4Addr {
     pub s_addr: u32
 }
@@ -73,7 +73,7 @@ pub struct SockaddrV4 {
 }
 
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct V6Addr {
     pub s6_addr: [u8; 16]
 }
@@ -130,6 +130,9 @@ impl Socket {
             None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
         };
         unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, &mut addrlen as *mut u32) as i32}
+    }
+    pub fn listen(&self, backlog: i32) -> i32 {
+        unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
 }
 
