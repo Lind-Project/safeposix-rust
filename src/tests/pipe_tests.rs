@@ -21,8 +21,6 @@ mod pipe_tests {
 
         lindrustinit();
 
-        println!("Starting");
-
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
 
@@ -48,8 +46,6 @@ mod pipe_tests {
         
         lindrustinit();
 
-        println!("Starting");
-        
         let now = Instant::now();
 
         let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -110,7 +106,7 @@ mod pipe_tests {
 
         assert_eq!(cage1.exit_syscall(), 0);
 
-        println!("{}", now.elapsed().as_micros());
+        println!("Transfered in {} us", now.elapsed().as_micros());
 
         lindrustfinalize();
     }
