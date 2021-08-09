@@ -65,7 +65,7 @@ pub struct V4Addr {
     pub s_addr: u32
 }
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
 pub struct SockaddrV4 {
     sin_family: u16,
     sin_port: u16,
@@ -78,7 +78,7 @@ pub struct V6Addr {
     pub s6_addr: [u8; 16]
 }
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
 pub struct SockaddrV6 {
     sin6_family: u16,
     sin6_port: u16,
@@ -133,6 +133,27 @@ impl Socket {
     }
     pub fn listen(&self, backlog: i32) -> i32 {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
+    }
+    pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
+        return if isv4 {
+            let mut inneraddrbuf = SockaddrV4::default();
+            let mut sadlen = size_of::<SockaddrV4>() as u32;
+            let newfd = unsafe{libc::accept4(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV4).cast::<libc::sockaddr>(), &mut sadlen as *mut u32, libc::SOCK_NONBLOCK)};
+            if newfd < 0 {
+                (Err(newfd), GenSockaddr::V4(inneraddrbuf))
+            } else {
+                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
+            }
+        } else {
+            let mut inneraddrbuf = SockaddrV6::default();
+            let mut sadlen = size_of::<SockaddrV6>() as u32;
+            let newfd = unsafe{libc::accept4(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV6).cast::<libc::sockaddr>(), &mut sadlen as *mut u32, libc::SOCK_NONBLOCK)};
+            if newfd < 0 {
+                (Err(newfd), GenSockaddr::V6(inneraddrbuf))
+            } else {
+                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
+            }
+        };
     }
 }
 
