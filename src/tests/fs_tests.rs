@@ -817,7 +817,7 @@ mod fs_tests {
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
-        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 0);
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 52);
 
         assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(), 0);

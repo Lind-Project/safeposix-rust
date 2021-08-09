@@ -1572,7 +1572,7 @@ impl Cage {
                             // iterate over filename-inode pairs in dict
                             for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
                                 // convert filename to a filename vector of u8
-                                let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
+                                let mut vec_filename: Vec<u8> = String::from(filename).as_bytes().to_vec();
                                 
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
                                 temp_len = vec_filename.len(); // get length of current filename vector for padding calculation
@@ -1586,7 +1586,12 @@ impl Cage {
                                 curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); 
                                 
                                 bufcount += curr_size; // increment bufcount
-                                if bufcount > bufsize {break;} // stop iteration if current bufcount exceeds argument bufsize
+                                
+                                // stop iteration if current bufcount exceeds argument bufsize
+                                if bufcount > bufsize {
+                                    bufcount = bufcount - curr_size; // decrement bufcount since current element is not actually written
+                                    break;
+                                }
                                 
                                 // push properly constructed tuple to vector storing result
                                 vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
@@ -1595,9 +1600,11 @@ impl Cage {
                             // update file position
                             normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
                             
-                            interface::pack_dirents(vec, dirp);
+                            let last = vec.last_mut().unwrap();
+                            last.0.d_off = 0;
 
-                            0 // getdents succeeded
+                            interface::pack_dirents(vec, dirp);
+                            bufcount as i32 // return the number of bytes written
                         }
                         _ => {
                             syscall_error(Errno::ENOTDIR, "getdents", "File descriptor does not refer to a directory.")
