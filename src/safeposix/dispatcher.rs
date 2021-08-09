@@ -203,10 +203,10 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         FTRUNCATE_SYSCALL => {
-            cage.ftruncate_syscall(unsafe{arg1.dispatch_int}, unsafe{arg2.dispatch_usize})
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
         }
         TRUNCATE_SYSCALL => {
-            cage.truncate_syscall(unsafe{interface::charstar_to_ruststr(arg1.dispatch_cstr)}, unsafe{arg2.dispatch_usize})
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
         }
         _ => {//unknown syscall
             -1
