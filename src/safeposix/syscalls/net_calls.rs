@@ -532,8 +532,50 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
+    pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        if let wrappedfd = fdtable.get(&fd).unwrap() {
+            let filedesc_enum = wrappedfd.read().unwrap();
+            match &*filedesc_enum {
+                Socket(socketfd) => {
+                    //do nothing besides check that the fd is a socket
+                },
+                _ => {
+                    return syscall_error(Errno::ENOTSOCK, "netshutdown", "file descriptor is not a socket");
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "netshutdown", "invalid file descriptor");
+        }
+
+        match how {
+            SHUT_RD => {
+                return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
+            }
+            SHUT_WR => {
+                return Self::_cleanup_socket(self, fd, true, Some(&mut fdtable));
+            }
+            SHUT_RDWR => {
+                //BUG:: need to check for duplicate entries
+                return Self::_cleanup_socket(self, fd, false, Some(&mut fdtable));
+            }
+            _ => {
+                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+            }
+        }
+    }
+
+    pub fn _cleanup_socket(&self, fd: i32, partial: bool, fdtable_lock: Option<&mut FdTable>) -> i32 {
+
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
+        let mut writer;
+        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
+            writer = self.filedescriptortable.write().unwrap(); 
+            &mut writer
+        };
+
         let mut mutmetadata = NET_METADATA.write().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc = wrappedfd.write().unwrap();
