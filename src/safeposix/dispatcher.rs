@@ -184,6 +184,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         RENAME_SYSCALL => {
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
+        FTRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
+        }
+        TRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
+        }
         _ => {//unknown syscall
             -1
         }
