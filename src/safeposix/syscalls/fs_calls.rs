@@ -1600,6 +1600,7 @@ impl Cage {
                             // update file position
                             normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
                             
+                            // set d_off of last element to 0
                             let last = vec.last_mut().unwrap();
                             last.0.d_off = 0;
 
