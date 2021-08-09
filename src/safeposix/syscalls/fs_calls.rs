@@ -1523,7 +1523,6 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 
-                let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
                 if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
@@ -1534,5 +1533,76 @@ impl Cage {
                 0 // success
             }
         }
+    }
+
+    //------------------FTRUNCATE SYSCALL------------------
+    
+    pub fn ftruncate_syscall(&self, fd: i32, length: usize) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            // check if arg length is valid
+            if length < 0 { 
+                return syscall_error(Errno::EINVAL, "ftruncate", "The argument length is negative");
+            }
+            
+            let filedesc_enum = wrappedfd.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            match &*filedesc_enum {
+                // only proceed when fd references a regular file
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                    match inodeobj {
+                        // only proceed when inode matches with a file
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            // get file object table with write lock
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            
+                            let mut fileobject = fobjtable.get_mut(&inodenum).unwrap();
+                            let filesize = normalfile_inode_obj.size;
+                            
+                            // if length is greater than original filesize,
+                            // file is extented with null bytes
+                            if filesize < length {
+                                let blankbytecount = length - filesize;
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("zerofill_at() has failed");
+                                    }
+                                } else {
+                                    panic!("zerofill_at() has failed");
+                                }
+                            } else { // if length is smaller than original filesize,
+                                     // extra data are cut off
+                                fileobject.shrink(length);
+                            } 
+                        }
+                        Inode::CharDev(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
+                        }
+                        Inode::Dir(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
+                        }
+                        _ => {
+                            panic!("A file fd points to a socket or pipe");
+                        }
+                    };
+                }
+                _ => {
+                    return syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file");
+                }
+            };
+            0 // ftruncate() has succeeded!
+        } else { 
+            syscall_error(Errno::EBADF, "ftruncate", "fd is not a valid file descriptor")
+        }
+    }
+
+    //------------------TRUNCATE SYSCALL------------------
+    pub fn truncate_syscall(&self, path: &str, length: usize) -> i32 {
+        self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
     }
 }
