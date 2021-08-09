@@ -6,7 +6,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 
 use super::net_constants::*;
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, Errno, FileDescriptor::*, SocketDesc, FdTable, syscall_error};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, FdTable};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 

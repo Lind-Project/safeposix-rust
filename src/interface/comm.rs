@@ -95,6 +95,7 @@ impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
+        unsafe {libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);}
         Socket {raw_sys_fd: fd}
     }
 
@@ -138,19 +139,21 @@ impl Socket {
         return if isv4 {
             let mut inneraddrbuf = SockaddrV4::default();
             let mut sadlen = size_of::<SockaddrV4>() as u32;
-            let newfd = unsafe{libc::accept4(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV4).cast::<libc::sockaddr>(), &mut sadlen as *mut u32, libc::SOCK_NONBLOCK)};
+            let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV4).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
+                unsafe {libc::fcntl(newfd, libc::F_SETFL, libc::O_NONBLOCK);}
                 (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
             let mut sadlen = size_of::<SockaddrV6>() as u32;
-            let newfd = unsafe{libc::accept4(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV6).cast::<libc::sockaddr>(), &mut sadlen as *mut u32, libc::SOCK_NONBLOCK)};
+            let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV6).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
+                unsafe {libc::fcntl(newfd, libc::F_SETFL, libc::O_NONBLOCK);}
                 (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
