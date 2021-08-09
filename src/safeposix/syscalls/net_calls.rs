@@ -540,6 +540,8 @@ impl Cage {
             match &*filedesc_enum {
                 Socket(socketfd) => {
                     //do nothing besides check that the fd is a socket
+                    //can't do anything with the fd in here because it is being borrowed in the "if let wrapped fd ="" line
+                    //so we just go to the match statement below -- "match how"
                 },
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "netshutdown", "file descriptor is not a socket");
