@@ -1,13 +1,14 @@
 // Network related system calls
 
 use crate::interface;
+use crate::interface::errnos::{Errno, syscall_error};
+
 
 use super::net_constants::*;
 use super::fs_constants::*;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, FdTable};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
-use super::errnos::*;
 
 impl Cage {
     fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool) -> SocketDesc {

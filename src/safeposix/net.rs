@@ -1,6 +1,6 @@
 use crate::interface;
+use crate::interface::errnos::{Errno, syscall_error};
 use super::syscalls::net_constants::*;
-use super::syscalls::errnos::*;
 use super::cage::{Cage, FileDescriptor};
 
 pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<NetMetadata>>> =
