@@ -4,10 +4,10 @@ use crate::interface;
 
 use super::net_constants::*;
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, FdTable};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, Errno, FileDescriptor::*, SocketDesc, FdTable, syscall_error};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
-use super::errnos::*;
+
 
 impl Cage {
     fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool) -> i32 {
@@ -530,5 +530,38 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
+    }
+
+    pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        let mut mutmetadata = NET_METADATA.write().unwrap();
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc = wrappedfd.write().unwrap();
+            match &mut *filedesc {
+                Socket(sockfdobj) => {
+                    let objectid = &sockfdobj.socketobjectid.unwrap();
+                    //close with partial passed as parameter??
+                    let localport = sockfdobj.localaddr.as_ref().unwrap().port();
+                    // _release_localport(self, localport, sockfdobj.protocol); //should this be asserted to be 0?
+                    if !partial {
+                        mutmetadata.socket_object_table.remove(objectid);
+                        sockfdobj.state = ConnState::NOTCONNECTED;
+                    }
+                }
+                _ => {
+                    return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
+        }
+
+        //have to take this out of the match because the fdtable already has a mutable borrow
+        //which means that I can't change it with a remove until after the fdtable mutable borrow is finished from the match statement
+        if !partial {
+            fdtable.remove(&fd); 
+        }
+
+        return 0;
     }
 }

@@ -34,7 +34,7 @@ mod tests {
   pub fn naptime() {
       let starttime = starttimer();
       let onesec = RustDuration::new(1, 0);
-      sleep_ms(onesec);
+      sleep(onesec);
       println!("{:?}", readtimer(starttime));
   }
 }
