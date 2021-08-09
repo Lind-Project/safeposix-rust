@@ -1582,32 +1582,7 @@ impl Cage {
                                 }
                             } else { // if length is smaller than original filesize,
                                      // extra data are cut off
-                                // create a null-byte buffer of proper size
-                                let mut vec = vec![0u8; length];
-                                let buf: *mut u8 = &mut vec[0];
-                                
-                                // read the part to keep to properly sized buffer
-                                if let Ok(bytesread) = fileobject.readat(buf, length, 0) {
-                                    // remove file from file object table if readat() succeeded
-                                    fobjtable.remove(&inodenum).unwrap().close().unwrap();
-                                    let filename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                    interface::removefile(filename).unwrap();
-
-                                    // insert new file created using old filename to file object table
-                                    let filename1 = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                    fobjtable.insert(inodenum, interface::openfile(filename1, true).unwrap());
-                                    fileobject = fobjtable.get_mut(&inodenum).unwrap();
-
-                                    // write the kept part to new file from buffer
-                                    if let Ok(byteswritten) = fileobject.writeat(buf, length, 0) {
-                                        // update filesize if writeat() succeeded
-                                        normalfile_inode_obj.size = length;
-                                    } else {
-                                        panic!("writeat() failed");
-                                    }
-                                } else {
-                                   panic!("readat() failed");
-                                }
+                                fileobject.shrink(length);
                             } 
                         }
                         Inode::CharDev(_) => {
