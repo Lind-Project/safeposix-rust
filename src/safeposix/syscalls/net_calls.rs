@@ -591,9 +591,9 @@ impl Cage {
             match &mut *filedesc {
                 Socket(sockfdobj) => {
                     let objectid = &sockfdobj.socketobjectid.unwrap();
-                    //close with partial passed as parameter??
-                    let localport = sockfdobj.localaddr.as_ref().unwrap().port();
-                    // _release_localport(self, localport, sockfdobj.protocol); //should this be asserted to be 0?
+                    let localaddr = sockfdobj.localaddr.as_ref().unwrap().clone();
+                    let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                    if let Err(e) = release_ret_val {return e;}
                     if !partial {
                         mutmetadata.socket_object_table.remove(objectid);
                         sockfdobj.state = ConnState::NOTCONNECTED;
