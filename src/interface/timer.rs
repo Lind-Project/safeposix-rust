@@ -26,15 +26,3 @@ pub fn readtimer(now: RustInstant) -> RustDuration {
 pub fn sleep(dur: RustDuration) {
     thread::sleep(dur);
 }
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  #[test]
-  pub fn naptime() {
-      let starttime = starttimer();
-      let onesec = RustDuration::new(1, 0);
-      sleep_ms(onesec);
-      println!("{:?}", readtimer(starttime));
-  }
-}
