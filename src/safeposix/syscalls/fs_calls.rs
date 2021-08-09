@@ -1567,18 +1567,13 @@ impl Cage {
                             // if length is greater than original filesize,
                             // file is extented with null bytes
                             if filesize < length {
-                                let blankbytecount: usize = length - filesize;
-                                
-                                // create a null-byte buffer of proper size
-                                let mut vec = vec![0u8; blankbytecount];
-                                let buf: *mut u8 = &mut vec[0];
-
-                                // extend file with null-byte buffer
-                                if let Ok(byteswritten) = fileobject.writeat(buf, blankbytecount, filesize) {
-                                    // update filesize if writeat() succeeded
-                                    normalfile_inode_obj.size = length;
+                                let blankbytecount = length - filesize;
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("zerofill_at() has failed");
+                                    }
                                 } else {
-                                    panic!("writeat() failed");
+                                    panic!("zerofill_at() has failed");
                                 }
                             } else { // if length is smaller than original filesize,
                                      // extra data are cut off
