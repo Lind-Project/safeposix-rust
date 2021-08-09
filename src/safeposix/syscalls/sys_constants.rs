@@ -24,11 +24,3 @@ pub const STACK_MAX : u64 = 1 << 32;
 
 pub const RLIMIT_STACK: u64 = 0;
 pub const RLIMIT_NOFILE: u64 = 1;
-
-
-//R Limit for getrlimit system call
-#[repr(C)]
-pub struct Rlimit {
-  pub rlim_cur: u64,
-  pub rlim_max: u64,
-}
