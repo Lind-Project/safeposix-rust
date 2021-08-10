@@ -135,13 +135,13 @@ impl Cage {
 
 }
 
-pub fn get_next_pipe() -> i32 {
+pub fn get_next_pipe() -> Option<i32> {
     let table = PIPE_TABLE.read().unwrap();
     for fd in STARTINGPIPE..MAXPIPE {
         if !table.contains_key(&fd) {
-            return fd;
+            return Some(fd);
         }
     }
 
-    return -1;
+    return None;
 }

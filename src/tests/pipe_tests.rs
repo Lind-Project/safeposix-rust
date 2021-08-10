@@ -11,7 +11,7 @@ mod pipe_tests {
     pub fn test_pipe() {
         // These can't really run until we figure out a better testing system/fsutils
         // ut_lind_write_pipefile();
-        // ut_lind_fs_pipe();
+        ut_lind_fs_pipe();
     }
 
 
@@ -45,8 +45,6 @@ mod pipe_tests {
         let num_writes: usize = 8192;
         
         lindrustinit();
-
-        let now = Instant::now();
 
         let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
@@ -105,8 +103,6 @@ mod pipe_tests {
         sender.join().unwrap();
 
         assert_eq!(cage1.exit_syscall(), 0);
-
-        println!("Transfered in {} us", now.elapsed().as_micros());
 
         lindrustfinalize();
     }

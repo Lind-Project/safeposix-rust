@@ -13,6 +13,7 @@ use std::cmp::min;
 
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
+const O_RDWRFLAGS: i32 = 0o3;
 
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
@@ -35,7 +36,7 @@ impl EmulatedPipe {
     }
 
     pub fn set_eof(&self) {
-        self.eof.store(true, Ordering::SeqCst);
+        self.eof.store(true, Ordering::Relaxed);
     }
 
     pub fn get_write_ref(&self) -> u32 {
@@ -47,21 +48,13 @@ impl EmulatedPipe {
     }
 
     pub fn incr_ref(&self, flags: i32) {
-
-        match flags {
-            O_RDONLY => {self.refcount_read.fetch_add(1, Ordering::SeqCst);}
-            O_WRONLY => {self.refcount_write.fetch_add(1, Ordering::SeqCst);}
-            _ => panic!("Invalid pipe flags.")
-        }
+        if (flags & O_RDWRFLAGS) == O_RDONLY {self.refcount_read.fetch_add(1, Ordering::Relaxed);}
+        if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_add(1, Ordering::Relaxed);}
     }
 
     pub fn decr_ref(&self, flags: i32) {
-
-        match flags {
-            O_RDONLY => {self.refcount_read.fetch_sub(1, Ordering::SeqCst);}
-            O_WRONLY => {self.refcount_write.fetch_sub(1, Ordering::SeqCst);}
-            _ => panic!("Invalid pipe flags.")
-        }
+        if (flags & O_RDWRFLAGS) == O_RDONLY {self.refcount_read.fetch_sub(1, Ordering::Relaxed);}
+        if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
 
     // Write length bytes from pointer into pipe
@@ -101,7 +94,7 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock().unwrap();
 
         while bytes_read < length {
-            if (read_end.len() == 0) & self.eof.load(Ordering::SeqCst) { break; }
+            if (read_end.len() == 0) & self.eof.load(Ordering::Relaxed) { break; }
             let bytes_to_read = min(length, bytes_read + read_end.len());
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;

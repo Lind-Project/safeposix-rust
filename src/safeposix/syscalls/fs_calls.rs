@@ -1624,7 +1624,12 @@ impl Cage {
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
         // get next available pipe number, and set up pipe
-        let pipenumber = get_next_pipe();
+        let pipenumber = if let Some(pipeno) = get_next_pipe() {
+            pipeno
+        } else {
+            return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
+        };
+
 
         let mut pipetable = PIPE_TABLE.write().unwrap();
 
@@ -1634,19 +1639,20 @@ impl Cage {
         // append each to pipefds list
 
         let flags = [O_RDONLY, O_WRONLY];
-        for flag in flags.iter() {
+        for flag in flags {
 
             let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
                 fd
             } else {
+                pipetable.remove(&pipenumber).unwrap();
                 return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
             };
 
-            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: *flag, advlock: interface::AdvisoryLock::new()});
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::AdvisoryLock::new()});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
 
-            match *flag {
+            match flag {
                 O_RDONLY => {pipefd.readfd = thisfd;},
                 O_WRONLY => {pipefd.writefd = thisfd;},
                 _ => panic!("How did you get here."),
