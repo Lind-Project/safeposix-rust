@@ -8,37 +8,37 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        // ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        // ut_lind_fs_chmod();
-        // ut_lind_fs_dir_chdir();
-        // ut_lind_fs_dir_mode();
-        // ut_lind_fs_dir_multiple();
-        // ut_lind_fs_dup();
-        // ut_lind_fs_dup2();
-        // ut_lind_fs_fdflags();
-        // ut_lind_fs_file_link_unlink();
-        // ut_lind_fs_file_lseek_past_end();
-        // ut_lind_fs_fstat_complex();
-        // ut_lind_fs_getuid();
-        // ut_lind_fs_load_fs();
-        // ut_lind_fs_mknod();
-        // ut_lind_fs_multiple_open();
-        // ut_lind_fs_persistence_setup();
-        // ut_lind_fs_persistence_test();
-        // ut_lind_fs_rename();
-        // ut_lind_fs_rmdir();
-        // ut_lind_fs_stat_file_complex();
-        // ut_lind_fs_stat_file_mode();
-        // ut_lind_fs_statfs();
-        // ut_lind_fs_ftruncate();
-        // ut_lind_fs_truncate();
+        ut_lind_fs_chmod();
+        ut_lind_fs_dir_chdir();
+        ut_lind_fs_dir_mode();
+        ut_lind_fs_dir_multiple();
+        ut_lind_fs_dup();
+        ut_lind_fs_dup2();
+        ut_lind_fs_fdflags();
+        ut_lind_fs_file_link_unlink();
+        ut_lind_fs_file_lseek_past_end();
+        ut_lind_fs_fstat_complex();
+        ut_lind_fs_getuid();
+        ut_lind_fs_load_fs();
+        ut_lind_fs_mknod();
+        ut_lind_fs_multiple_open();
+        ut_lind_fs_persistence_setup();
+        ut_lind_fs_persistence_test();
+        ut_lind_fs_rename();
+        ut_lind_fs_rmdir();
+        ut_lind_fs_stat_file_complex();
+        ut_lind_fs_stat_file_mode();
+        ut_lind_fs_statfs();
+        ut_lind_fs_ftruncate();
+        ut_lind_fs_truncate();
 
-        // persistencetest();
-        // rdwrtest();
-        // prdwrtest();
-        // chardevtest();
-        // dispatch_tests::cagetest();
+        persistencetest();
+        rdwrtest();
+        prdwrtest();
+        chardevtest();
+        dispatch_tests::cagetest();
     }
 
 
