@@ -542,20 +542,6 @@ impl Cage {
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
-        if let wrappedfd = fdtable.get(&fd).unwrap() {
-            let filedesc_enum = wrappedfd.read().unwrap();
-
-            //in the code below, do nothing besides check that the fd is a socket
-            //We can't do anything with the fd in here because it is being borrowed in the "if let wrapped fd ="" line
-            //so we just go to the match statement below -- "match how"
-
-            if let Socket(_) = &*filedesc_enum {} else {
-                return syscall_error(Errno::ENOTSOCK, "netshutdown", "file descriptor is not a socket");
-            }
-        } else {
-            return syscall_error(Errno::EBADF, "netshutdown", "invalid file descriptor");
-        }
-
         match how {
             SHUT_RD => {
                 return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
@@ -591,9 +577,9 @@ impl Cage {
                     mutmetadata.socket_object_table.remove(objectid);
                     sockfdobj.state = ConnState::NOTCONNECTED;
                 }
-            } else {return 0;}
+            } else {return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");}
         } else {
-            return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
+            return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
         }
 
         //We have to take this out of the match because the fdtable already has a mutable borrow
