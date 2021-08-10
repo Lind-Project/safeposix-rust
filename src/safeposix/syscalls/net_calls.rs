@@ -544,15 +544,13 @@ impl Cage {
 
         if let wrappedfd = fdtable.get(&fd).unwrap() {
             let filedesc_enum = wrappedfd.read().unwrap();
-            match &*filedesc_enum {
-                Socket(socketfd) => {
-                    //do nothing besides check that the fd is a socket
-                    //can't do anything with the fd in here because it is being borrowed in the "if let wrapped fd ="" line
-                    //so we just go to the match statement below -- "match how"
-                },
-                _ => {
-                    return syscall_error(Errno::ENOTSOCK, "netshutdown", "file descriptor is not a socket");
-                }
+
+            //in the code below, do nothing besides check that the fd is a socket
+            //We can't do anything with the fd in here because it is being borrowed in the "if let wrapped fd ="" line
+            //so we just go to the match statement below -- "match how"
+
+            if let Socket(_) = &*filedesc_enum {} else {
+                return syscall_error(Errno::ENOTSOCK, "netshutdown", "file descriptor is not a socket");
             }
         } else {
             return syscall_error(Errno::EBADF, "netshutdown", "invalid file descriptor");
@@ -563,11 +561,11 @@ impl Cage {
                 return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
             }
             SHUT_WR => {
-                return Self::_cleanup_socket(self, fd, true, Some(&mut fdtable));
+                return Self::_cleanup_socket(self, fd, true, &mut fdtable);
             }
             SHUT_RDWR => {
                 //BUG:: need to check for duplicate entries
-                return Self::_cleanup_socket(self, fd, false, Some(&mut fdtable));
+                return Self::_cleanup_socket(self, fd, false, &mut fdtable);
             }
             _ => {
                 //See http://linux.die.net/man/2/shutdown for nuance to this error
@@ -576,43 +574,34 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket(&self, fd: i32, partial: bool, fdtable_lock: Option<&mut FdTable>) -> i32 {
+    pub fn _cleanup_socket(&self, fd: i32, partial: bool, fdtable: &mut FdTable) -> i32 {
 
-        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
-        let mut writer;
-        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
-            writer = self.filedescriptortable.write().unwrap(); 
-            &mut writer
-        };
+        //The FdTable must always be passed.
 
-        let mut mutmetadata = NET_METADATA.write().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc = wrappedfd.write().unwrap();
-            match &mut *filedesc {
-                Socket(sockfdobj) => {
-                    let objectid = &sockfdobj.socketobjectid.unwrap();
-                    let localaddr = sockfdobj.localaddr.as_ref().unwrap().clone();
-                    let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
-                    if let Err(e) = release_ret_val {return e;}
-                    if !partial {
-                        mutmetadata.socket_object_table.remove(objectid);
-                        sockfdobj.state = ConnState::NOTCONNECTED;
-                    }
+            if let Socket(sockfdobj) = &mut *filedesc {
+                let mut mutmetadata = NET_METADATA.write().unwrap();
+
+                let objectid = &sockfdobj.socketobjectid.unwrap();
+                let localaddr = sockfdobj.localaddr.as_ref().unwrap().clone();
+                let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                if let Err(e) = release_ret_val {return e;}
+                if !partial {
+                    mutmetadata.socket_object_table.remove(objectid);
+                    sockfdobj.state = ConnState::NOTCONNECTED;
                 }
-                _ => {
-                    return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
-                }
-            }
+            } else {return 0;}
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
 
-        //have to take this out of the match because the fdtable already has a mutable borrow
+        //We have to take this out of the match because the fdtable already has a mutable borrow
         //which means that I can't change it with a remove until after the fdtable mutable borrow is finished from the match statement
+        //I know it is a bit confusing, but there isn't really another way to do this
         if !partial {
             fdtable.remove(&fd); 
         }
-
         return 0;
     }
 

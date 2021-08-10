@@ -97,17 +97,14 @@ impl NetMetadata {
         }
     }
 
-    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<i32, i32> {
-        if protocol ==  IPPROTO_UDP && self.used_port_set.contains(&mux_port(addr.clone(), port, domain, UDPPORT)) {
-            self.used_port_set.remove(&mux_port(addr.clone(), port, domain, UDPPORT));
+    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
+        if protocol == IPPROTO_TCP && self.used_port_set.remove(&mux_port(addr.clone(), port, domain, TCPPORT)) == true {
+            return Ok(());
         }
-        else if protocol ==  IPPROTO_TCP && self.used_port_set.contains(&mux_port(addr.clone(), port, domain, TCPPORT)) {
-            self.used_port_set.remove(&mux_port(addr.clone(), port, domain, TCPPORT));
+        else if protocol == IPPROTO_UDP && self.used_port_set.remove(&mux_port(addr.clone(), port, domain, UDPPORT)) == true {
+            return Ok(());
         }
-        else {
-            return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
-        }
-        return Ok(0);
+        return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
     }
 
     pub fn insert_into_socketobjecttable(&mut self, sock: interface::Socket) -> Result<i32, i32> {
