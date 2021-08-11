@@ -1164,9 +1164,6 @@ impl Cage {
             &mut writer
         };
 
-        //because of Rust's ownership, we can't have fdtable.get and _cleanup_socket in the same scope
-        let mut is_socket: bool = false;
-
         //unpacking and getting the type to match for
         {
             let locked_filedesc = fdtable.get(&fd).unwrap();
@@ -1182,7 +1179,10 @@ impl Cage {
                 Stream(_) => {},
                 Epoll(_) => {}, //Epoll closing not implemented yet
                 Socket(_) => {
-                    is_socket = true;    
+                    drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
+                    drop(locked_filedesc);  
+                    let retval = Self::_cleanup_socket(self, fd, false, fdtable);
+                    if retval != 0 {return retval;}
                 },
                 Pipe(pipe_filedesc_obj) => {
                     let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
@@ -1251,12 +1251,6 @@ impl Cage {
                     }
                 },
             }
-        }
-
-        //cleaning up the socket if the fd is a socket
-        if is_socket {
-            let retval = Self::_cleanup_socket(self, fd, false, fdtable);
-            if retval != 0 {return retval;}
         }
 
         //removing inode from fd table
