@@ -97,6 +97,16 @@ impl NetMetadata {
         }
     }
 
+    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
+        if protocol == IPPROTO_TCP && self.used_port_set.remove(&mux_port(addr.clone(), port, domain, TCPPORT)) == true {
+            return Ok(());
+        }
+        else if protocol == IPPROTO_UDP && self.used_port_set.remove(&mux_port(addr.clone(), port, domain, UDPPORT)) == true {
+            return Ok(());
+        }
+        return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
+    }
+
     pub fn insert_into_socketobjecttable(&mut self, sock: interface::Socket) -> Result<i32, i32> {
         if let Some(id) = self.get_next_socketobjectid() {
             self.socket_object_table.insert(id, sock);
