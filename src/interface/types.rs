@@ -51,6 +51,13 @@ pub struct Rlimit {
   pub rlim_max: u64,
 }
 
+#[derive(Eq, PartialEq, Default, Copy, Clone)]
+#[repr(C)]
+pub struct PipeArray {
+  pub readfd: i32,
+  pub writefd: i32,
+}
+
 
 //redefining the Arg union to maintain the flow of the program
 #[repr(C)]
@@ -67,7 +74,8 @@ pub union Arg {
   pub dispatch_cstrarr: *const *const i8, //Typically corresponds to a passed in string array of type char* const[] as in execve
   pub dispatch_rlimitstruct: *mut Rlimit,
   pub dispatch_statdatastruct: *mut StatData,
-  pub dispatch_fsdatastruct: *mut FSData
+  pub dispatch_fsdatastruct: *mut FSData,
+  pub dispatch_pipearray: *mut PipeArray
 }
 
 
@@ -176,6 +184,14 @@ pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i
 
 pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> {
     let pointer = unsafe{union_argument.dispatch_fsdatastruct};
+    if !pointer.is_null() {    
+        return Ok(unsafe{&mut *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_pipearray<'a>(union_argument: Arg) -> Result<&'a mut PipeArray, i32> {
+    let pointer = unsafe{union_argument.dispatch_pipearray};
     if !pointer.is_null() {    
         return Ok(unsafe{&mut *pointer});
     }

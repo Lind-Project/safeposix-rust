@@ -1,6 +1,6 @@
 // File system related system calls
 use crate::interface;
-use crate::safeposix::cage::{Arg, Cage, CAGE_TABLE, FileDescriptor::*, FileDesc, FdTable, FSData, Errno, StatData, syscall_error};
+use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use super::fs_constants::*;
 
@@ -621,8 +621,10 @@ impl Cage {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-                    //self._read_from_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "read", "reading from a pipe not implemented yet")
+
+                    // get the pipe, read from it, and return bytes read
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.read_from_pipe(buf, count) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -782,8 +784,10 @@ impl Cage {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
-                    //self._write_to_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "write", "writing to a pipe not implemented yet")
+                    // get the pipe, write to it, and return bytes written
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.write_to_pipe(buf, count) as i32
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
@@ -1116,6 +1120,10 @@ impl Cage {
                         _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
                 },
+                Pipe(normalfile_filedesc_obj) => {
+                    let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
+                    pipe.incr_ref(normalfile_filedesc_obj.flags);
+                },
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
@@ -1174,18 +1182,21 @@ impl Cage {
                     //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
-                    let _pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
-                    let write_references = 0;
+                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+               
+                    pipe.decr_ref(pipe_filedesc_obj.flags);
 
                     //Code below needs to reflect addition of pipes
-                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
-                        // let pipetable.pipenumber.eof = true;
+                    if pipe.get_write_ref() == 0 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // we're closing the last write end, lets set eof
+                        pipe.set_eof();
                     }
 
-                    if read_references + write_references == 1 {
-                        //del pipetable.pipenumber
+                    if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                        // last reference, lets remove it
+                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap();
                     }
+
                 },
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -1605,4 +1616,49 @@ impl Cage {
     pub fn truncate_syscall(&self, path: &str, length: usize) -> i32 {
         self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
     }
+
+    //------------------PIPE SYSCALL------------------
+
+    pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        // get next available pipe number, and set up pipe
+        let pipenumber = if let Some(pipeno) = get_next_pipe() {
+            pipeno
+        } else {
+            return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
+        };
+
+
+        let mut pipetable = PIPE_TABLE.write().unwrap();
+
+        pipetable.insert(pipenumber, interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY)));
+        
+        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
+        // append each to pipefds list
+
+        let flags = [O_RDONLY, O_WRONLY];
+        for flag in flags {
+
+            let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
+                fd
+            } else {
+                pipetable.remove(&pipenumber).unwrap();
+                return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
+            };
+
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::AdvisoryLock::new()});
+            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
+            fdtable.insert(thisfd, wrappedfd);
+
+            match flag {
+                O_RDONLY => {pipefd.readfd = thisfd;},
+                O_WRONLY => {pipefd.writefd = thisfd;},
+                _ => panic!("How did you get here."),
+            }
+        }
+
+      0 // success
+    }   
 }

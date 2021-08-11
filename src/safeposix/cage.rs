@@ -2,14 +2,19 @@
 use crate::interface;
 //going to get the datatypes and errnos from the cage file from now on
 pub use crate::interface::errnos::{Errno, syscall_error};
-pub use crate::interface::types::{Arg, FSData, Rlimit, StatData};
+pub use crate::interface::types::{Arg, FSData, Rlimit, StatData, PipeArray};
 
 pub use super::syscalls::fs_constants::*;
+pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
+pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>>> = 
+    interface::RustLazyGlobal::new(|| 
+        interface::RustLock::new(interface::new_hashmap())
+);
 
 #[derive(Debug)]
 pub enum FileDescriptor {
@@ -58,7 +63,7 @@ pub struct SocketDesc {
 
 #[derive(Debug)]
 pub struct PipeDesc {
-    pub pipe: usize,
+    pub pipe: i32,
     pub flags: i32,
     pub advlock: interface::AdvisoryLock
 }
@@ -133,4 +138,15 @@ impl Cage {
         fdtable.insert(2, stderr);
     }
 
+}
+
+pub fn get_next_pipe() -> Option<i32> {
+    let table = PIPE_TABLE.read().unwrap();
+    for fd in STARTINGPIPE..MAXPIPE {
+        if !table.contains_key(&fd) {
+            return Some(fd);
+        }
+    }
+
+    return None;
 }

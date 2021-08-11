@@ -790,8 +790,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-
-
+    
     
     pub fn ut_lind_fs_rename() {
         lindrustinit();
