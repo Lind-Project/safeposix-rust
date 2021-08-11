@@ -1050,4 +1050,43 @@ impl Cage {
             return syscall_error(Errno::EBADF, "getsockopt", "the provided file descriptor is invalid");
         }
     }
+
+    pub fn getpeername_syscall(self, fd: i32) -> Result<interface::GenSockaddr, i32> {
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc = wrappedfd.read().unwrap();
+            if let Socket(socketobj) = &*filedesc {
+                if socketobj.remoteaddr == None {
+                    return Err(syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected"));
+                }
+                return Ok(socketobj.remoteaddr.unwrap());
+            } else {
+                return Err(syscall_error(Errno::ENOTSOCK, "getpeername", "the provided file is not a socket"));
+            }
+        } else {
+            return Err(syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid"));
+        }
+    }
+
+    pub fn getsockname_syscall(self, fd: i32) -> Result<interface::GenSockaddr, i32> {
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let filedesc = wrappedfd.read().unwrap();
+            if let Socket(socketobj) = &*filedesc {
+                if socketobj.localaddr == None {
+                    let mut newaddr = socketobj.localaddr.unwrap().clone();
+                    newaddr.set_addr(interface::GenIpaddr::V4(interface::V4Addr::default()));
+                    newaddr.set_port(0);
+                    return Ok(newaddr);
+                }
+                return Ok(socketobj.localaddr.unwrap());
+            } else {
+                return Err(syscall_error(Errno::ENOTSOCK, "getpeername", "the provided file is not a socket"));
+            }
+        } else {
+            return Err(syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid"));
+        }
+    }
 }

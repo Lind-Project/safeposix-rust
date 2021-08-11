@@ -5,7 +5,7 @@
 use std::mem::size_of;
 extern crate libc;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GenSockaddr {
     V4(SockaddrV4),
     V6(SockaddrV6)
@@ -38,7 +38,7 @@ impl GenSockaddr {
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub enum GenIpaddr {
     V4(V4Addr),
     V6(V6Addr)
@@ -65,7 +65,7 @@ pub struct V4Addr {
     pub s_addr: u32
 }
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct SockaddrV4 {
     sin_family: u16,
     sin_port: u16,
@@ -78,7 +78,7 @@ pub struct V6Addr {
     pub s6_addr: [u8; 16]
 }
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct SockaddrV6 {
     sin6_family: u16,
     sin6_port: u16,
