@@ -251,6 +251,12 @@ impl Cage {
                         let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
                         let connectret = tcpsockobj.connect(remoteaddr);
                         if connectret < 0 {
+                            let sockerrno = match Errno::from_discriminant(-connectret) {
+                                Ok(i) => i,
+                                Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                            };
+
+                            return syscall_error(sockerrno, "connect", "The libc call to connect failed!");
                         }
 
                         //openconnection to get newsockobj
@@ -282,6 +288,7 @@ impl Cage {
     }
 
     pub fn sendto_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, dest_addr: &interface::GenSockaddr) -> i32 {
+        //if ip and port are not specified, shunt off to send
         if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
             return self.send_syscall(fd, buf, buflen, flags);
         }
@@ -294,32 +301,59 @@ impl Cage {
                     if (flags & !MSG_NOSIGNAL) != 0 {
                         return syscall_error(Errno::EOPNOTSUPP, "sendto", "The flags are not understood!");
                     }
+
                     if sockfdobj.state == ConnState::CONNECTED || sockfdobj.state == ConnState::LISTEN {
                         return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connected");
                     }
+
                     match sockfdobj.protocol {
+                        //Sendto doesn't make sense for the TCP protocol, it's connection oriented
                         IPPROTO_TCP => {
                             return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
                         }
+
                         IPPROTO_UDP => {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
-                            let sockret = sockobj.sendto(buf, buflen, Some(dest_addr));
-                            if sockret >= 0 {return sockret;}
-                            if sockret == Errno::ENETUNREACH as i32 {
-                                return syscall_error(Errno::ENETUNREACH, "sendto", "Network was unreachable due to inability to access local port / IP");
-                            } else if sockret == Errno::ENETUNREACH as i32 {
-                                return syscall_error(Errno::EADDRINUSE, "sendto", "Network address in use");
-                            } else {
-                                panic!("Unexpected error recieved from sendto syscall");
+
+                            //bind the udp port as we do not bind them at bind_syscall, and this is
+                            //the last possible moment to do so
+                            let localaddr = match Self::assign_new_addr(sockfdobj, dest_addr) {
+                                Ok(a) => a,
+                                Err(e) => return e,
+                            };
+                            let _bindret = sockobj.bind(&localaddr);
+                            if let None = sockfdobj.localaddr {
+                                sockfdobj.localaddr = Some(localaddr);
+                            }
+                            //we don't mind if this fails for now and we will just get the error
+                            //from calling sendto
+
+                            loop {
+                                let sockret = sockobj.sendto(buf, buflen, Some(dest_addr)); //all our sockets are nonblocking so we block manually
+
+                                if sockret >= 0 {return sockret;}
+
+                                let sockerrno = match Errno::from_discriminant(-sockret) {
+                                    Ok(i) => i,
+                                    Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                };
+
+                                if sockerrno == Errno::EAGAIN {
+                                    interface::sleep(interface::RustDuration::MILLISECOND);
+                                    continue;
+                                };
+                                return syscall_error(sockerrno, "sendto", "The libc call to sendto failed!");
                             }
                         }
+
                         _ => {
                             return syscall_error(Errno::EOPNOTSUPP, "sendto", "Unkown protocol in sendto");
                         }
                     }
                 }
+
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "sendto", "file descriptor refers to something other than a socket");
                 }
@@ -337,6 +371,7 @@ impl Cage {
                     if (flags & !MSG_NOSIGNAL) != 0 {
                         return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
                     }
+
                     match sockfdobj.protocol {
                         IPPROTO_TCP => {
                             if sockfdobj.state != ConnState::CONNECTED {
@@ -349,29 +384,42 @@ impl Cage {
 
                             loop {
                                 let retval = sockobj.sendto(buf, buflen, None); //nonblocking, so we manually block
-                                if -retval == Errno::EAGAIN as i32 {
-                                    interface::sleep(interface::RustDuration::MILLISECOND);
-                                    continue;
+                                if retval < 0 {
+                                    let sockerrno = match Errno::from_discriminant(-retval) {
+                                        Ok(i) => i,
+                                        Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                    };
+
+                                    if sockerrno == Errno::EAGAIN {
+                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        continue;
+                                    }
+
+                                    return syscall_error(sockerrno, "send", "The libc call to sendto failed!");
                                 }
-                                return retval;
                             }
                         }
+
                         IPPROTO_UDP => {
                             let remoteaddr = match &sockfdobj.remoteaddr {
                                 Some(x) => x.clone(),
                                 None => return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected"),
                             };
 
-                            //drop fdtable lock so as not to deadlock
+                            //drop fdtable lock so as not to deadlock, this should not introduce
+                            //any harmful race conditions
                             drop(filedesc_enum);
                             drop(fdtable);
+                            //send from a udp socket is just shunted off to sendto with the remote address set
                             return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
                         }
+
                         _ => {
                             return syscall_error(Errno::EOPNOTSUPP, "send", "Unkown protocol in send");
                         }
                     }
                 }
+
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "send", "file descriptor refers to something other than a socket");
                 }
@@ -549,7 +597,7 @@ impl Cage {
         }
     }
     
-    fn _accept_helper(sockfdobj: &mut SocketDesc, mutmetadata: &mut NetMetadata) -> (Result<interface::Socket, i32>, interface::GenSockaddr){
+    fn _accept_helper(sockfdobj: &mut SocketDesc, mutmetadata: &mut NetMetadata) -> (Result<interface::Socket, i32>, interface::GenSockaddr) {
         let sid = Self::getsockobjid(&mut *sockfdobj);
         let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
 
