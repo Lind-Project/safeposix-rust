@@ -6,7 +6,7 @@
 
 use std::fs::File;
 use std::io::Read;
-pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet};
+pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
 use std::str::{from_utf8, Utf8Error};
 
@@ -47,12 +47,18 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     count as i32
 }
 
-pub fn copy_fromvec_sized(bufptr: *mut u8, count: usize, vec: &Vec<u8>) {
-    unsafe {std::ptr::copy(vec.as_ptr(), bufptr, count);}
+pub fn copy_fromrustdeque_sized(bufptr: *mut u8, count: usize, vecdeq: &RustDeque<u8>) {
+    let (slice1, slice2) = vecdeq.as_slices();
+    if slice1.len() >= count {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, count);}
+    } else {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, slice1.len());}
+        unsafe {std::ptr::copy(slice2.as_ptr(), bufptr.wrapping_offset(slice1.len() as isize), count - slice1.len());}
+    }
 }
-pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vec: &mut Vec<u8>) {
+pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDeque<u8>) {
     let byteslice = unsafe {std::slice::from_raw_parts(bufptr, count)};
-    vec.extend_from_slice(byteslice);
+    vecdeq.extend(byteslice.iter());
 }
 
 // Wrapper to return a dictionary (hashmap)

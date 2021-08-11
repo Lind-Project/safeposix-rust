@@ -29,7 +29,7 @@ impl Cage {
             errno: 0,
             localaddr: None,
             remoteaddr: None,
-            last_peek: None,
+            last_peek: interface::RustDeque::new(),
             socketobjectid: None
         };
         return sockfd;
@@ -445,40 +445,51 @@ impl Cage {
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
-                            let peek = &mut sockfdobj.last_peek;
-                            //let remoteaddr = &sockfdobj.remoteaddr;
-
                             let mut newbuflen = buflen;
                             let mut newbufptr = buf;
 
-                            if let Some(ref mut peekvec) = peek {
-                                let bytecount = interface::rust_max(peekvec.len(), newbuflen);
-                                interface::copy_fromvec_sized(buf, bytecount, peekvec);
+                            //if we have peeked some data before, fill our buffer with that data before moving on
+                            if !sockfdobj.last_peek.is_empty() {
+                                let bytecount = interface::rust_max(sockfdobj.last_peek.len(), newbuflen);
+                                interface::copy_fromrustdeque_sized(buf, bytecount, &sockfdobj.last_peek);
                                 newbuflen -= bytecount;
                                 newbufptr = newbufptr.wrapping_add(bytecount);
+
+                                //if we're not still peeking data, consume the data we peeked from our peek buffer
+                                if flags & MSG_PEEK == 0 {
+                                    sockfdobj.last_peek.drain(..bytecount);
+                                }
+
                                 if newbuflen == 0 {
-                                    if flags & MSG_PEEK == 0 {
-                                        sockfdobj.last_peek = None;
-                                    } else {
-                                        peekvec.truncate(bytecount); //vec.truncate is a no-op if vec is already shorter
-                                    }
+                                    //if we've filled all of the buffer with peeked data, return
                                     return bytecount as i32;
                                 }
                             }
 
                             let mut retval;
                             loop {
-                                retval = sockobj.recvfrom(newbufptr, newbuflen, addr);
-
-                                if -retval == Errno::EAGAIN as i32 {
-                                    interface::sleep(interface::RustDuration::MILLISECOND);
-                                    continue;
-                                }
+                                retval = sockobj.recvfrom(newbufptr, newbuflen, addr); //nonblocking, block manually
 
                                 if retval < 0 {
+                                    let sockerrno = match Errno::from_discriminant(-retval) {
+                                        Ok(i) => i,
+                                        Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                    };
+
+                                    if sockerrno == Errno::EAGAIN {
+                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        continue;
+                                    }
+
+                                    //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
+                                    //the issue), then return how much data we've read so far if we read any data from 
+                                    //peek, or return the error given
                                     let bytes = buflen - newbuflen;
-                                    if bytes == 0 {return retval;}
-                                    else {return bytes as i32;}
+                                    if bytes == 0 {
+                                        return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
+                                    } else {
+                                        return bytes as i32;
+                                    }
                                 }
 
                                 break;
@@ -487,13 +498,8 @@ impl Cage {
                             let totalbyteswritten = buflen - newbuflen + retval as usize;
 
                             if flags & MSG_PEEK != 0 {
-                                if sockfdobj.last_peek.is_none() {
-                                    sockfdobj.last_peek = Some(vec!());
-                                }
                                 //extend from the point after we read our previously peeked bytes
-                                interface::extend_fromptr_sized(newbufptr, retval as usize, sockfdobj.last_peek.as_mut().unwrap());
-                            } else {
-                                sockfdobj.last_peek = None;
+                                interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockfdobj.last_peek);
                             }
 
                             return totalbyteswritten as i32;
@@ -503,27 +509,42 @@ impl Cage {
                             if sockfdobj.localaddr.is_none() {
                                 return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
                             }
-                            if sockfdobj.remoteaddr.is_none() && addr.is_none() {
-                            }
+
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
                             loop {
-                                let retval = sockobj.recvfrom(buf, buflen, addr);
+                                //if the remoteaddr is set and addr is not, use remoteaddr
+                                let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
+                                    sockobj.recvfrom(buf, buflen, &mut sockfdobj.remoteaddr.as_mut())
+                                } else {
+                                    sockobj.recvfrom(buf, buflen, addr)
+                                };
 
-                                if -retval == Errno::EAGAIN as i32 {
-                                    interface::sleep(interface::RustDuration::MILLISECOND);
-                                    continue;
+                                if retval < 0 {
+                                    let sockerrno = match Errno::from_discriminant(-retval) {
+                                        Ok(i) => i,
+                                        Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                    };
+
+                                    if sockerrno == Errno::EAGAIN {
+                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        continue;
+                                    }
+
+                                    return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
                                 }
                                 return retval;
                             }
                         }
+
                         _ => {
                             return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
                         }
                     }
                 }
+
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
                 }
@@ -542,15 +563,18 @@ impl Cage {
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
+
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     match sockfdobj.state {
                         ConnState::LISTEN => {
                             return 0; //Already done!
                         }
+
                         ConnState::NOTCONNECTED => {
-                            return 0; //this should actually error
+                            return 0; //should this actually error instead?
                         }
+
                         ConnState::CONNECTED => {
                             //we should probably assert that it's TCP, but connected state does
                             //most of that work?
@@ -566,12 +590,13 @@ impl Cage {
 
                             sockfdobj.state = ConnState::LISTEN;
 
+                            //create the socket and bind it before listening
                             let sockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
                             let bindret = sockobj.bind(&ladr);
                             if bindret < 0 {
                                 panic!("Unexpected failure in binding socket");
                             }
-                            let listenret = sockobj.listen(5); //default backlog in repy for whatever reason
+                            let listenret = sockobj.listen(5); //default backlog in repy for whatever reason, we replicate it
                             if listenret < 0 {
                                 panic!("Unexpected failure in binding socket");
                             }
@@ -588,6 +613,7 @@ impl Cage {
                         }
                     }
                 }
+
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
                 }
@@ -651,6 +677,7 @@ impl Cage {
 
 
     
+    //calls accept on the socket object with value depending on ipv4 or ipv6
     fn _accept_helper(sockfdobj: &mut SocketDesc, mutmetadata: &mut NetMetadata) -> (Result<interface::Socket, i32>, interface::GenSockaddr) {
         let sid = Self::getsockobjid(&mut *sockfdobj);
         let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
@@ -667,25 +694,34 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
+
                 Socket(ref mut sockfdobj) => {
                     match sockfdobj.protocol {
                         IPPROTO_UDP => {
                             return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
                         }
+
                         IPPROTO_TCP => {
                             if sockfdobj.state != ConnState::LISTEN {
                                 return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                             }
-                            loop {
+
+                            loop { //we must block manually
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
                                 let (acceptedresult, remote_addr) = if let Some(tup) = sockfdobj.pendingconnections.pop() {
+                                    //if we got a pending connection in select/poll/whatever, return that here instead
                                     tup
                                 } else {
                                     Self::_accept_helper(sockfdobj, &mut *mutmetadata)
                                 };
 
                                 if let Err(errval) = acceptedresult {
-                                    if -errval == Errno::EAGAIN as i32 {
+                                    let accerrno = match Errno::from_discriminant(-errval) {
+                                        Ok(i) => i,
+                                        Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                    };
+
+                                    if accerrno == Errno::EAGAIN {
                                         interface::sleep(interface::RustDuration::MILLISECOND);
                                         continue;
                                     }
@@ -694,17 +730,22 @@ impl Cage {
 
                                 let acceptedsock = acceptedresult.unwrap();
 
+                                //create new connected socket
                                 let mut newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, false, false);
                                 newsockobj.state = ConnState::CONNECTED;
+
                                 let mut newaddr = sockfdobj.localaddr.clone().unwrap();
                                 let newport = match mutmetadata._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain) {
                                     Ok(portnum) => portnum,
                                     Err(errnum) => return errnum,
                                 };
                                 newaddr.set_port(newport);
+
                                 let newipaddr = newaddr.addr().clone();
                                 newsockobj.localaddr = Some(newaddr);
                                 newsockobj.remoteaddr = Some(remote_addr.clone());
+
+                                //create socket object for new connected socket
                                 newsockobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(acceptedsock) {
                                     Ok(id) => Some(id),
                                     Err(errnum) => {
@@ -712,7 +753,9 @@ impl Cage {
                                         return errnum;
                                     }
                                 };
-                                *addr = remote_addr;
+
+                                *addr = remote_addr; //populate addr with what address it connected to
+
                                 let id = newsockobj.socketobjectid.clone();
                                 match self._socket_inserter(newsockobj) {
                                     x if x < 0 => {
@@ -724,11 +767,13 @@ impl Cage {
                                 }
                             }
                         }
+
                         _ => {
                             return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
                         }
                     }
                 }
+
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
                 }
@@ -738,11 +783,14 @@ impl Cage {
         }
     }
 
+    fn _nonblock_peek_read(&self, fd: i32) {
+    }
+
     //TODO: handle pipes
-    fn select_syscall(&self, nfds: i32, readfds: interface::RustHashSet<i32>, writefds: interface::RustHashSet<i32>, exceptfds: interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn select_syscall(&self, nfds: i32, readfds: interface::RustHashSet<i32>, writefds: interface::RustHashSet<i32>, exceptfds: interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
         let mut new_readfds = interface::RustHashSet::<i32>::new();
         let mut new_writefds = interface::RustHashSet::<i32>::new();
-        //let mut new_exceptfds = interface::RustHashSet::<i32>::new();
+        //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't support exceptfds for now
     
         if nfds < STARTINGFD || nfds >= MAXFD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
@@ -760,11 +808,12 @@ impl Cage {
             return syscall_error(Errno::EOPNOTSUPP, "select", "We don't support exceptfds in select currently");
         }
     
-        loop {
+        loop { //we must block manually
             let fdtable = self.filedescriptortable.write().unwrap();
             for fd in readfds.iter() {
                 if let Some(wrappedfd) = fdtable.get(&fd) {
                     let mut filedesc_enum = wrappedfd.write().unwrap();
+
                     match &mut *filedesc_enum {
                         Socket(ref mut sockfdobj) => {
                             if sockfdobj.state == ConnState::LISTEN {
@@ -773,8 +822,10 @@ impl Cage {
                                 if sockfdobj.pendingconnections.is_empty() {
                                     let listeningsocket = Self::_accept_helper(sockfdobj, &mut *mutmetadata);
                                     if let Ok(_) = listeningsocket.0 {
+                                        //save the pending connection for accept to do something with it
                                         sockfdobj.pendingconnections.push(listeningsocket);
                                     } else {
+                                        //if it returned an error, then don't insert it into new_readfds
                                         continue;
                                     }
                                 }
@@ -782,12 +833,21 @@ impl Cage {
                                 //if we reach here there is a pending connection
                                 new_readfds.insert(*fd);
                                 retval += 1;
-
                             } else {
                                 //nonblock peek read
                             }
                         }
+
+                        //we don't support selecting streams
                         Stream(_) => {continue;}
+
+                        //not supported yet
+                        Pipe(_) => {
+                            new_readfds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        //these file reads never block
                         _ => {
                             new_readfds.insert(*fd);
                             retval += 1;
@@ -802,14 +862,25 @@ impl Cage {
                 if let Some(wrappedfd) = fdtable.get(&fd) {
                     let mut filedesc_enum = wrappedfd.write().unwrap();
                     match &mut *filedesc_enum {
+                        //we always say sockets are writable?
                         Socket(_) => {
                             new_writefds.insert(*fd);
                             retval += 1;
                         }
+
+                        //we always say streams are writable?
                         Stream(_) => {
                             new_writefds.insert(*fd);
                             retval += 1;
                         }
+
+                        //not supported yet
+                        Pipe(_) => {
+                            new_readfds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        //these file writes never block
                         _ => {
                             new_writefds.insert(*fd);
                             retval += 1;
