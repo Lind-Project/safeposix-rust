@@ -1179,8 +1179,11 @@ impl Cage {
                 Stream(_) => {},
                 Epoll(_) => {}, //Epoll closing not implemented yet
                 Socket(_) => {
-                    //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
-                    },
+                    drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
+                    drop(locked_filedesc);  
+                    let retval = Self::_cleanup_socket(self, fd, false, fdtable);
+                    if retval != 0 {return retval;}
+                },
                 Pipe(pipe_filedesc_obj) => {
                     let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
                
@@ -1249,6 +1252,7 @@ impl Cage {
                 },
             }
         }
+
         //removing inode from fd table
         fdtable.remove(&fd);
         return 0; //_close_helper has succeeded!
