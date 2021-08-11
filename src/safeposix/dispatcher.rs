@@ -190,6 +190,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         TRUNCATE_SYSCALL => {
             check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
         }
+        PIPE_SYSCALL => {
+            check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))
+        }
         _ => {//unknown syscall
             -1
         }

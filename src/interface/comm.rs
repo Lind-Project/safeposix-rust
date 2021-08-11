@@ -87,6 +87,7 @@ pub struct SockaddrV6 {
     sin6_scope_id: u32
 }
 
+#[derive(Debug)]
 pub struct Socket {
     raw_sys_fd: i32//make private right after
 }

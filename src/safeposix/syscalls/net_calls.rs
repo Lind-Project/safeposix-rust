@@ -24,6 +24,7 @@ impl Cage {
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             state: ConnState::NOTCONNECTED, //we start without a connection
             advlock: interface::AdvisoryLock::new(),
+            pendingconnections: Vec::new(),
             flags: flags,
             errno: 0,
             localaddr: None,
@@ -47,7 +48,7 @@ impl Cage {
     }
 
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
-        let real_socktype = socktype & 0x7; //get the type without the extra flags
+        let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
@@ -58,8 +59,11 @@ impl Cage {
         match domain {
             PF_INET => {
                 match real_socktype {
+
                     SOCK_STREAM => {
+                        //SOCK_STREAM defaults to TCP for protocol, otherwise protocol is unsupported
                         let newprotocol = if protocol == 0 {IPPROTO_TCP} else {protocol};
+
                         if newprotocol != IPPROTO_TCP {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                         }
@@ -67,19 +71,25 @@ impl Cage {
                         return self._socket_inserter(sockfdobj);
 
                     }
+
                     SOCK_DGRAM => {
+                        //SOCK_DGRAM defaults to UDP for protocol, otherwise protocol is unsuported
                         let newprotocol = if protocol == 0 {IPPROTO_UDP} else {protocol};
+
                         if newprotocol != IPPROTO_UDP {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.");
                         }
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
                         return self._socket_inserter(sockfdobj);
                     }
+
                     _ => {
                         return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented socket type");
                     }
+
                 }
             }
+
             _ => {
                 return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented domain");
             }
@@ -109,19 +119,25 @@ impl Cage {
     //we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
+
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
+
                 Socket(sockfdobj) => {
                     if sockfdobj.localaddr.is_some() {
                         return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
                     }
+
                     let mut mutmetadata = NET_METADATA.write().unwrap();
                     let mut intent_to_rebind = false;
+
+                    //check that nobody else is bound to this address, but if they are, attempt to rebind
                     if let Some(fds_on_port) = mutmetadata.porttable.get(&localaddr) {
                         for otherfd_wrapped in fds_on_port {
                             let otherfd_enum = otherfd_wrapped.read().unwrap();
                             if let Socket(othersockfdobj) = &*otherfd_enum {
+
                                 if othersockfdobj.domain == sockfdobj.domain && 
                                    othersockfdobj.socktype == sockfdobj.socktype &&
                                    othersockfdobj.protocol == sockfdobj.protocol {
@@ -131,12 +147,14 @@ impl Cage {
                                         return syscall_error(Errno::EADDRINUSE, "bind", "Another socket is already bound to this addr");
                                     }
                                 }
+
                             } else {
                                 panic!("For some reason a non-socket fd was in the port table!");
                             }
                         }
                     }
 
+                    //if we're trying to rebind, we should probably figure out just how multiple interfaces work
                     let newlocalport = if !intent_to_rebind {
                         let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                         if let Err(errnum) = localout {return errnum;}
@@ -148,32 +166,13 @@ impl Cage {
                     let mut newsockaddr = localaddr.clone();
                     newsockaddr.set_port(newlocalport);
 
-                    if sockfdobj.protocol == IPPROTO_UDP {
-                        if sockfdobj.socketobjectid.is_some() {
-                            mutmetadata.used_port_set.remove(&mux_port(localaddr.addr(), newlocalport, sockfdobj.domain, UDPPORT));
-                            return syscall_error(Errno::EOPNOTSUPP, "bind", "We can't close the previous listener when re-binding");
-                        }
-
-                        let udpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                        let bindret = udpsockobj.bind(&newsockaddr);
-                        if bindret < 0 {
-                            panic!("Unexpected failure in binding socket");
-                        }
-
-                        sockfdobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(udpsockobj) {
-                            Ok(id) => Some(id),
-                            Err(errnum) => {
-                                mutmetadata.used_port_set.remove(&mux_port(localaddr.addr(), newlocalport, sockfdobj.domain, UDPPORT));
-                                return errnum;
-                            }
-                        }
-                    }
-
+                    //we don't actually want/need to create the socket object now, that is done in listen or in connect or whatever
                     mutmetadata.porttable.entry(newsockaddr.clone()).or_insert(vec!()).push(wrappedfd.clone());
 
                     sockfdobj.localaddr = Some(newsockaddr);
                     0
                 }
+
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket");
                 }
@@ -189,6 +188,10 @@ impl Cage {
         } else {
             let mut mutmetadata = NET_METADATA.write().unwrap();
             let mut newremote = remoteaddr.clone();
+
+            //in lieu of getmyip we just always use 0.0.0.0 or the ipv6 equivalent because we have
+            //no kernel-respecting way of accessing the actual interface addresses for ipv6 for now
+            //(netlink for now is a big no go)
             match remoteaddr {
                 interface::GenSockaddr::V4(_) => {
                     let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
@@ -197,6 +200,7 @@ impl Cage {
                     newremote.set_port(port.unwrap());
                     newremote.set_addr(addr);
                 }
+
                 interface::GenSockaddr::V6(_) => {
                     let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
                     let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
@@ -204,7 +208,8 @@ impl Cage {
                     newremote.set_port(port.unwrap());
                     newremote.set_addr(addr);
                 }
-            }; //in lieu of getmyip
+            };
+
             Ok(newremote)
         }
     }
@@ -219,6 +224,7 @@ impl Cage {
                         return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
                     }
 
+                    //for UDP, just set the addresses and return
                     if sockfdobj.protocol == IPPROTO_UDP {
                         match sockfdobj.localaddr {
                             Some(_) => return 0,
@@ -236,12 +242,16 @@ impl Cage {
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
+                        //for TCP, actually create the internal socket object and connect it
                         let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
                             Ok(a) => a,
                             Err(e) => return e,
                         };
 
                         let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                        let connectret = tcpsockobj.connect(remoteaddr);
+                        if connectret < 0 {
+                        }
 
                         //openconnection to get newsockobj
                         sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(tcpsockobj).unwrap());
@@ -592,6 +602,18 @@ impl Cage {
     }
 
 
+    
+    fn _accept_helper(sockfdobj: &mut SocketDesc, mutmetadata: &mut NetMetadata) -> (Result<interface::Socket, i32>, interface::GenSockaddr){
+        let sid = Self::getsockobjid(&mut *sockfdobj);
+        let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
+
+        match sockfdobj.domain {
+            PF_INET => sockobj.accept(true),
+            PF_INET6 => sockobj.accept(false),
+            _ => panic!("Unknown domain in accepting socket"),
+        }
+    }
+    
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -608,13 +630,12 @@ impl Cage {
                             }
                             loop {
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
-                                let sid = Self::getsockobjid(&mut *sockfdobj);
-                                let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
-                                let (acceptedresult, remote_addr) = match sockfdobj.domain {
-                                    PF_INET => sockobj.accept(true),
-                                    PF_INET6 => sockobj.accept(false),
-                                    _ => panic!("Unknown domain in accepting socket"),
+                                let (acceptedresult, remote_addr) = if let Some(tup) = sockfdobj.pendingconnections.pop() {
+                                    tup
+                                } else {
+                                    Self::_accept_helper(sockfdobj, &mut *mutmetadata)
                                 };
+
                                 if let Err(errval) = acceptedresult {
                                     if -errval == Errno::EAGAIN as i32 {
                                         interface::sleep(interface::RustDuration::MILLISECOND);
@@ -622,6 +643,7 @@ impl Cage {
                                     }
                                     return errval;
                                 }
+
                                 let acceptedsock = acceptedresult.unwrap();
 
                                 let mut newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, false, false);
@@ -666,5 +688,99 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
+    }
+
+    //TODO: handle pipes
+    fn select_syscall(&self, nfds: i32, readfds: interface::RustHashSet<i32>, writefds: interface::RustHashSet<i32>, exceptfds: interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+        let mut new_readfds = interface::RustHashSet::<i32>::new();
+        let mut new_writefds = interface::RustHashSet::<i32>::new();
+        //let mut new_exceptfds = interface::RustHashSet::<i32>::new();
+    
+        if nfds < STARTINGFD || nfds >= MAXFD {
+            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
+        }
+    
+        let start_time = interface::starttimer();
+    
+        let end_time = match timeout {
+            Some(time) => time,
+            None => interface::RustDuration::MAX
+        };
+    
+        let mut retval = 0;
+        if !exceptfds.is_empty() {
+            return syscall_error(Errno::EOPNOTSUPP, "select", "We don't support exceptfds in select currently");
+        }
+    
+        loop {
+            let fdtable = self.filedescriptortable.write().unwrap();
+            for fd in readfds.iter() {
+                if let Some(wrappedfd) = fdtable.get(&fd) {
+                    let mut filedesc_enum = wrappedfd.write().unwrap();
+                    match &mut *filedesc_enum {
+                        Socket(ref mut sockfdobj) => {
+                            if sockfdobj.state == ConnState::LISTEN {
+                                let mut mutmetadata = NET_METADATA.write().unwrap();
+
+                                if sockfdobj.pendingconnections.is_empty() {
+                                    let listeningsocket = Self::_accept_helper(sockfdobj, &mut *mutmetadata);
+                                    if let Ok(_) = listeningsocket.0 {
+                                        sockfdobj.pendingconnections.push(listeningsocket);
+                                    } else {
+                                        continue;
+                                    }
+                                }
+
+                                //if we reach here there is a pending connection
+                                new_readfds.insert(*fd);
+                                retval += 1;
+
+                            } else {
+                                //nonblock peek read
+                            }
+                        }
+                        Stream(_) => {continue;}
+                        _ => {
+                            new_readfds.insert(*fd);
+                            retval += 1;
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+            }
+
+            for fd in writefds.iter() {
+                if let Some(wrappedfd) = fdtable.get(&fd) {
+                    let mut filedesc_enum = wrappedfd.write().unwrap();
+                    match &mut *filedesc_enum {
+                        Socket(_) => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                        Stream(_) => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                        _ => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+
+            }
+
+            //we'd do exceptfds here if we supported them
+
+            if retval != 0 || interface::readtimer(start_time) > end_time {
+                break;
+            } else {
+                interface::sleep(interface::RustDuration::MILLISECOND);
+            }
+        }
+        return retval; //package out fd_set?
     }
 }
