@@ -919,24 +919,17 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
-                        let STOREDSOCKETOPTIONS: Vec<i32> = vec![SO_LINGER, // ignored
-                                                                SO_KEEPALIVE, // ignored
-                                                                SO_SNDLOWAT, // ignored
-                                                                SO_RCVLOWAT, // ignored
-                                                                SO_REUSEPORT, // used to allow duplicate binds...
-                                                                SO_REUSEADDR];
-                        //if the option is a stored binary option, just return it...
-                        if STOREDSOCKETOPTIONS.contains(&optname) {
-                            if socketobj.options & optname == optname {
-                                return 1;
-                            }
-                            return 0;
-                        }
-
                         match optname {
                             //indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
                                 if socketobj.state == ConnState::LISTEN {
+                                    return 1;
+                                }
+                                return 0;
+                            }
+                            //if the option is a stored binary option, just return it...
+                            SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
+                                if socketobj.options & optname == optname {
                                     return 1;
                                 }
                                 return 0;
@@ -1006,36 +999,27 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
-                        
-                        let STOREDSOCKETOPTIONS: Vec<i32> = vec![SO_LINGER, // ignored
-                                                                SO_KEEPALIVE, // ignored
-                                                                SO_SNDLOWAT, // ignored
-                                                                SO_RCVLOWAT, // ignored
-                                                                SO_REUSEPORT, // used to allow duplicate binds...
-                                                                SO_REUSEADDR];
-                        
-                                                                //if the option is a stored binary option, just return it...
-                        if STOREDSOCKETOPTIONS.contains(&optname) {
-                            let mut newoptions = socketobj.options;
-                            if newoptions & optname == optname {
-                                newoptions = newoptions - optname;
-                                socketobj.options = newoptions;
-                                return 1;
-                            }
-                            
-                            //now let's set this if we were told to
-                            if optval != 0 {
-                                //optval should always be 1 or 0.
-                                newoptions = newoptions | optname;
-                            }
-                            socketobj.options = newoptions;
-                            return 0;
-                        }
-
                         match optname {
                             SO_ACCEPTCONN | SO_TYPE | SO_SNDLOWAT | SO_RCVLOWAT => {
                                 let error_string = format!("Cannot set option using setsockopt. {}", optname);
                                 return syscall_error(Errno::ENOPROTOOPT, "setsockopt", &error_string);
+                            }
+                            //if the option is a stored binary option, just return it...
+                            SO_LINGER | SO_KEEPALIVE | SO_REUSEPORT | SO_REUSEADDR => {
+                                let mut newoptions = socketobj.options;
+                                if newoptions & optname == optname {
+                                    newoptions = newoptions - optname;
+                                    socketobj.options = newoptions;
+                                    return 1;
+                                }
+                                
+                                //now let's set this if we were told to
+                                if optval != 0 {
+                                    //optval should always be 1 or 0.
+                                    newoptions = newoptions | optname;
+                                }
+                                socketobj.options = newoptions;
+                                return 0;
                             }
                             SO_SNDBUF => {
                                 socketobj.sndbuf = optval;
