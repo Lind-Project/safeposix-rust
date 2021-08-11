@@ -1255,7 +1255,8 @@ impl Cage {
 
         //cleaning up the socket if the fd is a socket
         if is_socket {
-            Self::_cleanup_socket(self, fd, false, fdtable);
+            let retval = Self::_cleanup_socket(self, fd, false, fdtable);
+            if retval != 0 {return retval;}
         }
 
         //removing inode from fd table
