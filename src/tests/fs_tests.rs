@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod fs_tests {
     use crate::interface;
-    use crate::safeposix::{cage::*, filesystem, dispatcher::*, syscalls::errnos::*};
+    use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
-    
 
     #[test]
     pub fn test_fs() {
@@ -32,6 +31,8 @@ mod fs_tests {
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
+        ut_lind_fs_ftruncate();
+        ut_lind_fs_truncate();
 
         persistencetest();
         rdwrtest();
@@ -285,7 +286,6 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let mode: i32 = 438;   // 0666
         let filepath = "/dupfile";
 
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
@@ -342,7 +342,6 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let mode: i32 = 438;   // 0666
         let filepath = "/dup2file";
 
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
@@ -350,7 +349,7 @@ mod fs_tests {
         assert_eq!(cage.write_syscall(fd, str2cbuf("12"), 2), 2);
 
         //trying to dup fd into fd + 1
-        let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
+        let _fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
 
         //should be a no-op since the last line did the same thing
         let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
@@ -695,7 +694,7 @@ mod fs_tests {
         assert_eq!(cbuf2str(&read_buf), "hi");
         
 
-        let fd4 = cage.open_syscall(name, flags, mode);
+        let _fd4 = cage.open_syscall(name, flags, mode);
         let mut buf = sizecbuf(5);
         assert_eq!(cage.lseek_syscall(fd3, 2, SEEK_SET), 2);
         assert_eq!(cage.write_syscall(fd3, str2cbuf("boo"), 3), 3);
@@ -757,7 +756,7 @@ mod fs_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let path = "/fooFileMode";
-        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
         let mut statdata = StatData::default();
         assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
@@ -765,7 +764,7 @@ mod fs_tests {
 
         //make a file without permissions and check that it is a reg file without permissions
         let path2 = "/fooFileMode2";
-        let fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
+        let _fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
         assert_eq!(cage.stat_syscall(path2, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFREG as u32);
 
@@ -791,8 +790,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-
-
+    
     
     pub fn ut_lind_fs_rename() {
         lindrustinit();
@@ -801,6 +799,59 @@ mod fs_tests {
         let old_path = "/test_dir";
         assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
         assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_ftruncate() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let fd = cage.open_syscall("/ftruncate", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // check if ftruncate() works for extending file with null bytes
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Hello there!"), 12), 12);
+        assert_eq!(cage.ftruncate_syscall(fd, 15), 0);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        let mut buf = sizecbuf(15);
+        assert_eq!(cage.read_syscall(fd, buf.as_mut_ptr(), 15), 15);
+        assert_eq!(cbuf2str(&buf), "Hello there!\0\0\0");
+
+        // check if ftruncate() works for cutting off extra bytes
+        assert_eq!(cage.ftruncate_syscall(fd, 5), 0);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        let mut buf1 = sizecbuf(7);
+        assert_eq!(cage.read_syscall(fd, buf1.as_mut_ptr(), 7), 5);
+        assert_eq!(cbuf2str(&buf1), "Hello\0\0");
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_truncate() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let path = String::from("/truncate");
+        let fd = cage.open_syscall(&path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // check if truncate() works for extending file with null bytes
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Hello there!"), 12), 12);
+        assert_eq!(cage.truncate_syscall(&path, 15), 0);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        let mut buf = sizecbuf(15);
+        assert_eq!(cage.read_syscall(fd, buf.as_mut_ptr(), 15), 15);
+        assert_eq!(cbuf2str(&buf), "Hello there!\0\0\0");
+
+        // check if truncate() works for cutting off extra bytes
+        assert_eq!(cage.truncate_syscall(&path, 5), 0);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        let mut buf1 = sizecbuf(7);
+        assert_eq!(cage.read_syscall(fd, buf1.as_mut_ptr(), 7), 5);
+        assert_eq!(cbuf2str(&buf1), "Hello\0\0");
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();

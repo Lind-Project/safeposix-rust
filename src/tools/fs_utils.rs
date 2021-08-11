@@ -1,6 +1,7 @@
 #![feature(once_cell)]
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
+#![feature(result_into_ok_or_err)]
 #![allow(unused)]
 
 /// Author: Jonathan Singer
@@ -19,6 +20,8 @@ use std::iter::repeat;
 mod interface;
 mod safeposix;
 use safeposix::{cage::*, filesystem::*, dispatcher::{lindrustfinalize, lindrustinit}};
+use crate::interface::errnos::{Errno, syscall_error};
+
 //assume deserialization
 
 fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {

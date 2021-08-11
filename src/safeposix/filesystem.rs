@@ -3,6 +3,8 @@
 
 use crate::interface;
 use super::syscalls::fs_constants::*;
+use super::syscalls::sys_constants::*;
+
 use super::cage::Cage;
 
 pub const METADATAFILENAME: &str = "lind.metadata";

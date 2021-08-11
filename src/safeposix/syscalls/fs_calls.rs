@@ -1,10 +1,8 @@
 // File system related system calls
 use crate::interface;
-
-use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
+use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
-use super::errnos::*;
+use super::fs_constants::*;
 
 impl Cage {
 
@@ -626,8 +624,10 @@ impl Cage {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-                    //self._read_from_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "read", "reading from a pipe not implemented yet")
+
+                    // get the pipe, read from it, and return bytes read
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.read_from_pipe(buf, count) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -787,8 +787,10 @@ impl Cage {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
-                    //self._write_to_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "write", "writing to a pipe not implemented yet")
+                    // get the pipe, write to it, and return bytes written
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.write_to_pipe(buf, count) as i32
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
@@ -1121,6 +1123,10 @@ impl Cage {
                         _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
                 },
+                Pipe(normalfile_filedesc_obj) => {
+                    let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
+                    pipe.incr_ref(normalfile_filedesc_obj.flags);
+                },
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
@@ -1179,18 +1185,21 @@ impl Cage {
                     //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
                     },
                 Pipe(pipe_filedesc_obj) => {
-                    let _pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
-                    let write_references = 0;
+                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+               
+                    pipe.decr_ref(pipe_filedesc_obj.flags);
 
                     //Code below needs to reflect addition of pipes
-                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
-                        // let pipetable.pipenumber.eof = true;
+                    if pipe.get_write_ref() == 0 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // we're closing the last write end, lets set eof
+                        pipe.set_eof();
                     }
 
-                    if read_references + write_references == 1 {
-                        //del pipetable.pipenumber
+                    if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                        // last reference, lets remove it
+                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap();
                     }
+
                 },
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -1528,7 +1537,6 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 
-                let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
                 if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
@@ -1540,4 +1548,120 @@ impl Cage {
             }
         }
     }
+
+    //------------------FTRUNCATE SYSCALL------------------
+    
+    pub fn ftruncate_syscall(&self, fd: i32, length: usize) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            // check if arg length is valid
+            if length < 0 { 
+                return syscall_error(Errno::EINVAL, "ftruncate", "The argument length is negative");
+            }
+            
+            let filedesc_enum = wrappedfd.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            match &*filedesc_enum {
+                // only proceed when fd references a regular file
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                    match inodeobj {
+                        // only proceed when inode matches with a file
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            // get file object table with write lock
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            
+                            let mut fileobject = fobjtable.get_mut(&inodenum).unwrap();
+                            let filesize = normalfile_inode_obj.size;
+                            
+                            // if length is greater than original filesize,
+                            // file is extented with null bytes
+                            if filesize < length {
+                                let blankbytecount = length - filesize;
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("zerofill_at() has failed");
+                                    }
+                                } else {
+                                    panic!("zerofill_at() has failed");
+                                }
+                            } else { // if length is smaller than original filesize,
+                                     // extra data are cut off
+                                fileobject.shrink(length);
+                            } 
+                        }
+                        Inode::CharDev(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
+                        }
+                        Inode::Dir(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
+                        }
+                        _ => {
+                            panic!("A file fd points to a socket or pipe");
+                        }
+                    };
+                }
+                _ => {
+                    return syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file");
+                }
+            };
+            0 // ftruncate() has succeeded!
+        } else { 
+            syscall_error(Errno::EBADF, "ftruncate", "fd is not a valid file descriptor")
+        }
+    }
+
+    //------------------TRUNCATE SYSCALL------------------
+    pub fn truncate_syscall(&self, path: &str, length: usize) -> i32 {
+        self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
+    }
+
+    //------------------PIPE SYSCALL------------------
+
+    pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        // get next available pipe number, and set up pipe
+        let pipenumber = if let Some(pipeno) = get_next_pipe() {
+            pipeno
+        } else {
+            return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
+        };
+
+
+        let mut pipetable = PIPE_TABLE.write().unwrap();
+
+        pipetable.insert(pipenumber, interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY)));
+        
+        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
+        // append each to pipefds list
+
+        let flags = [O_RDONLY, O_WRONLY];
+        for flag in flags {
+
+            let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
+                fd
+            } else {
+                pipetable.remove(&pipenumber).unwrap();
+                return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
+            };
+
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::AdvisoryLock::new()});
+            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
+            fdtable.insert(thisfd, wrappedfd);
+
+            match flag {
+                O_RDONLY => {pipefd.readfd = thisfd;},
+                O_WRONLY => {pipefd.writefd = thisfd;},
+                _ => panic!("How did you get here."),
+            }
+        }
+
+      0 // success
+    }   
 }
