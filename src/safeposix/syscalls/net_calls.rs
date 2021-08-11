@@ -24,6 +24,7 @@ impl Cage {
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             state: ConnState::NOTCONNECTED, //we start without a connection
             advlock: interface::AdvisoryLock::new(),
+            pendingconnections: Vec::new(),
             flags: flags,
             errno: 0,
             localaddr: None,
@@ -539,6 +540,17 @@ impl Cage {
         }
     }
     
+    fn _accept_helper(sockfdobj: &mut SocketDesc, mutmetadata: &mut NetMetadata) -> (Result<interface::Socket, i32>, interface::GenSockaddr){
+        let sid = Self::getsockobjid(&mut *sockfdobj);
+        let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
+
+        match sockfdobj.domain {
+            PF_INET => sockobj.accept(true),
+            PF_INET6 => sockobj.accept(false),
+            _ => panic!("Unknown domain in accepting socket"),
+        }
+    }
+    
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -555,13 +567,12 @@ impl Cage {
                             }
                             loop {
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
-                                let sid = Self::getsockobjid(&mut *sockfdobj);
-                                let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
-                                let (acceptedresult, remote_addr) = match sockfdobj.domain {
-                                    PF_INET => sockobj.accept(true),
-                                    PF_INET6 => sockobj.accept(false),
-                                    _ => panic!("Unknown domain in accepting socket"),
+                                let (acceptedresult, remote_addr) = if let Some(tup) = sockfdobj.pendingconnections.pop() {
+                                    tup
+                                } else {
+                                    Self::_accept_helper(sockfdobj, &mut *mutmetadata)
                                 };
+
                                 if let Err(errval) = acceptedresult {
                                     if -errval == Errno::EAGAIN as i32 {
                                         interface::sleep(interface::RustDuration::MILLISECOND);
@@ -569,6 +580,7 @@ impl Cage {
                                     }
                                     return errval;
                                 }
+
                                 let acceptedsock = acceptedresult.unwrap();
 
                                 let mut newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, false, false);
@@ -614,5 +626,99 @@ impl Cage {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
 
+    }
+
+    //TODO: handle pipes
+    fn select_syscall(&self, nfds: i32, readfds: interface::RustHashSet<i32>, writefds: interface::RustHashSet<i32>, exceptfds: interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+        let mut new_readfds = interface::RustHashSet::<i32>::new();
+        let mut new_writefds = interface::RustHashSet::<i32>::new();
+        //let mut new_exceptfds = interface::RustHashSet::<i32>::new();
+    
+        if nfds < STARTINGFD || nfds >= MAXFD {
+            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
+        }
+    
+        let start_time = interface::starttimer();
+    
+        let end_time = match timeout {
+            Some(time) => time,
+            None => interface::RustDuration::MAX
+        };
+    
+        let mut retval = 0;
+        if exceptfds.len() != 0 {
+            return syscall_error(Errno::EOPNOTSUPP, "select", "We don't support exceptfds in select currently");
+        }
+    
+        loop {
+            let fdtable = self.filedescriptortable.write().unwrap();
+            for fd in readfds.iter() {
+                if let Some(wrappedfd) = fdtable.get(&fd) {
+                    let mut filedesc_enum = wrappedfd.write().unwrap();
+                    match &mut *filedesc_enum {
+                        Socket(ref mut sockfdobj) => {
+                            if sockfdobj.state == ConnState::LISTEN {
+                                let mut mutmetadata = NET_METADATA.write().unwrap();
+
+                                if sockfdobj.pendingconnections.len() == 0 {
+                                    let listeningsocket = Self::_accept_helper(sockfdobj, &mut *mutmetadata);
+                                    if let Ok(_) = listeningsocket.0 {
+                                        sockfdobj.pendingconnections.push(listeningsocket);
+                                    } else {
+                                        continue;
+                                    }
+                                }
+
+                                //if we reach here there is a pending connection
+                                new_readfds.insert(*fd);
+                                retval += 1;
+
+                            } else {
+                                //nonblock peek read
+                            }
+                        }
+                        Stream(_) => {continue;}
+                        _ => {
+                            new_readfds.insert(*fd);
+                            retval += 1;
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+            }
+
+            for fd in writefds.iter() {
+                if let Some(wrappedfd) = fdtable.get(&fd) {
+                    let mut filedesc_enum = wrappedfd.write().unwrap();
+                    match &mut *filedesc_enum {
+                        Socket(_) => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                        Stream(_) => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                        _ => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+
+            }
+
+            //we'd do exceptfds here if we supported them
+
+            if retval != 0 || interface::readtimer(start_time) > end_time {
+                break;
+            } else {
+                interface::sleep(interface::RustDuration::MILLISECOND);
+            }
+        }
+        return retval; //package out fd_set?
     }
 }

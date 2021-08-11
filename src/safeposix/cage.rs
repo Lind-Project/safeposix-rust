@@ -48,6 +48,7 @@ pub struct SocketDesc {
     pub state: ConnState,
     pub flags: i32,
     pub errno: usize,
+    pub pendingconnections: Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>,
     pub localaddr: Option<interface::GenSockaddr>,
     pub remoteaddr: Option<interface::GenSockaddr>,
     pub last_peek: Option<Vec<u8>>,
