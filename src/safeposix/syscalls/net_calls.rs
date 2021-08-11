@@ -1089,4 +1089,15 @@ impl Cage {
             return Err(syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid"));
         }
     }
+
+    //we only return the default host name because we do not allow for the user to change the host name right now
+    pub fn gethostname<'a> (self, length: usize) -> Result<&'a str, i32> {
+        if length < 0 {
+            return Err(syscall_error(Errno::EINVAL, "gethostname", "invalid argument"));
+        }
+        if DEFAULT_HOSTNAME.chars().count() > length {
+            return Ok(&DEFAULT_HOSTNAME[..length]);
+        }
+        return Ok(&DEFAULT_HOSTNAME);
+    }
 }

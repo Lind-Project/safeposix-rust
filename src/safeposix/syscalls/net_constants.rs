@@ -4,6 +4,9 @@
 
 use crate::interface;
 
+//used for gethostname syscall
+pub const DEFAULT_HOSTNAME: &str = "Lind";
+
 // Define constants using static or const
 // Imported into net_calls file
 
