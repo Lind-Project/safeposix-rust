@@ -58,6 +58,12 @@ pub struct PipeArray {
   pub writefd: i32,
 }
 
+#[derive(Eq, PartialEq, Default, Copy, Clone)]
+#[repr(C)]
+pub struct SockPair {
+    pub sock1: i32,
+    pub sock2: i32
+}
 
 //redefining the Arg union to maintain the flow of the program
 #[repr(C)]
