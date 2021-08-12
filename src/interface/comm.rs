@@ -67,9 +67,9 @@ pub struct V4Addr {
 #[repr(C)]
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct SockaddrV4 {
-    sin_family: u16,
-    sin_port: u16,
-    sin_addr: V4Addr
+    pub sin_family: u16,
+    pub sin_port: u16,
+    pub sin_addr: V4Addr
 }
 
 #[repr(C)]
@@ -80,11 +80,11 @@ pub struct V6Addr {
 #[repr(C)]
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct SockaddrV6 {
-    sin6_family: u16,
-    sin6_port: u16,
-    sin6_flowinfo: u32,
-    sin6_addr: V6Addr,
-    sin6_scope_id: u32
+    pub sin6_family: u16,
+    pub sin6_port: u16,
+    pub sin6_flowinfo: u32,
+    pub sin6_addr: V6Addr,
+    pub sin6_scope_id: u32
 }
 
 #[derive(Debug)]

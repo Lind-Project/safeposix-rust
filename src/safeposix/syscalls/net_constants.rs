@@ -322,12 +322,6 @@ pub struct EpollEvent {
     //however, we only support EPOLL_CTL subcommands which take the fd
 }
 
-#[repr(C)]
-pub struct SockPair {
-    pub sock1: i32,
-    pub sock2: i32
-}
-
 //for internal use
 #[derive(Debug, PartialEq, Eq)]
 pub enum ConnState {
