@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::Read;
 pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering};
 use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{RwLock as RustLock, Arc as RustRfc};

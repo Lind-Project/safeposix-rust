@@ -330,21 +330,45 @@ impl Cage {
                             //we don't mind if this fails for now and we will just get the error
                             //from calling sendto
 
+                            let mut bufleft = buf;
+                            let mut buflenleft = buflen;
                             loop {
                                 let sockret = sockobj.sendto(buf, buflen, Some(dest_addr)); //all our sockets are nonblocking so we block manually
 
-                                if sockret >= 0 {return sockret;}
+                                if sockret >= 0 {
+                                    //if our socket succeeds in a partial send that means we
+                                    //assume it's blocking until it completes the whole send
+                                    buflenleft -= sockret as usize;
+                                    if buflenleft == 0 {
+                                        metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                        return sockret;
+                                    }
 
-                                let sockerrno = match Errno::from_discriminant(-sockret) {
-                                    Ok(i) => i,
-                                    Err(()) => panic!("Unknown errno value from socket send returned!"),
-                                };
+                                    bufleft = bufleft.wrapping_offset(sockret as isize);
+                                    metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
 
-                                if sockerrno == Errno::EAGAIN {
-                                    interface::sleep(interface::RustDuration::MILLISECOND);
+                                    //we've only done a partial send, retry
                                     continue;
-                                };
-                                return syscall_error(sockerrno, "sendto", "The libc call to sendto failed!");
+                                } else {
+                                    let sockerrno = match Errno::from_discriminant(-sockret) {
+                                        Ok(i) => i,
+                                        Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                    };
+
+                                    if sockerrno == Errno::EAGAIN {
+                                        metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        continue;
+                                    };
+
+                                    metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                    //if we fail but have already sent stuff to the socket, return that
+                                    if buflenleft != buflen {
+                                        return (buflen - buflenleft) as i32; //partial write amount
+                                    }
+
+                                    return syscall_error(sockerrno, "sendto", "The libc call to sendto failed!");
+                                }
                             }
                         }
 
@@ -382,8 +406,11 @@ impl Cage {
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
+                            let mut bufleft = buf;
+                            let mut buflenleft = buflen;
                             loop {
                                 let retval = sockobj.sendto(buf, buflen, None); //nonblocking, so we manually block
+
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(-retval) {
                                         Ok(i) => i,
@@ -391,11 +418,29 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
+                                        metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(interface::RustDuration::MILLISECOND);
                                         continue;
                                     }
 
+                                    metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                    //if we fail but have already sent stuff to the socket, return that
+                                    if buflenleft != buflen {
+                                        return (buflen - buflenleft) as i32; //partial write amount
+                                    }
+
                                     return syscall_error(sockerrno, "send", "The libc call to sendto failed!");
+                                } else {
+                                    buflenleft -= retval as usize;
+                                    if buflenleft == 0 {
+                                        metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                        return retval;
+                                    }
+
+                                    //we've only done a partial send, retry
+                                    bufleft = bufleft.wrapping_offset(retval as isize);
+                                    metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                    continue;
                                 }
                             }
                         }
@@ -466,9 +511,10 @@ impl Cage {
                                 }
                             }
 
-                            let mut retval;
+                            let mut bufleft = newbufptr;
+                            let mut buflenleft = newbuflen;
                             loop {
-                                retval = sockobj.recvfrom(newbufptr, newbuflen, addr); //nonblocking, block manually
+                                let retval = sockobj.recvfrom(bufleft, buflenleft, addr); //nonblocking, block manually
 
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(-retval) {
@@ -480,26 +526,28 @@ impl Cage {
                                         interface::sleep(interface::RustDuration::MILLISECOND);
                                         continue;
                                     }
-
+                                    
                                     //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
-                                    //the issue), then return how much data we've read so far if we read any data from 
-                                    //peek, or return the error given
-                                    let bytes = buflen - newbuflen;
-                                    if bytes == 0 {
+                                    //the issue), then continue with the data we've read so far if we read any data from
+                                    //peek or a previous iteration, or return the error given
+                                    if buflen == buflenleft {
                                         return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
                                     } else {
-                                        return bytes as i32;
+                                        break;
                                     }
                                 }
 
-                                break;
+                                buflenleft -= retval as usize;
+                                bufleft = bufleft.wrapping_offset(retval as isize);
+
+                                if buflenleft == 0 {break;}
                             }
 
-                            let totalbyteswritten = buflen - newbuflen + retval as usize;
+                            let totalbyteswritten = buflen - buflenleft;
 
                             if flags & MSG_PEEK != 0 {
                                 //extend from the point after we read our previously peeked bytes
-                                interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockfdobj.last_peek);
+                                interface::extend_fromptr_sized(newbufptr, (newbuflen - buflenleft) as usize, &mut sockfdobj.last_peek);
                             }
 
                             return totalbyteswritten as i32;
@@ -514,12 +562,14 @@ impl Cage {
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
+                            let mut bufleft = buf;
+                            let mut buflenleft = buflen;
                             loop {
                                 //if the remoteaddr is set and addr is not, use remoteaddr
                                 let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
-                                    sockobj.recvfrom(buf, buflen, &mut sockfdobj.remoteaddr.as_mut())
+                                    sockobj.recvfrom(bufleft, buflenleft, &mut sockfdobj.remoteaddr.as_mut())
                                 } else {
-                                    sockobj.recvfrom(buf, buflen, addr)
+                                    sockobj.recvfrom(bufleft, buflenleft, addr)
                                 };
 
                                 if retval < 0 {
@@ -533,10 +583,22 @@ impl Cage {
                                         continue;
                                     }
 
-                                    return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
+                                    //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
+                                    //the issue), then continue with the data we've read so far if we read any data from 
+                                    //a previous iteration, or return the error given
+                                    if buflen == buflenleft {
+                                        return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
+                                    } else {
+                                        break;
+                                    }
                                 }
-                                return retval;
+
+                                buflenleft -= retval as usize;
+                                bufleft = bufleft.wrapping_offset(retval as isize);
+
+                                break;
                             }
+                            return (buflen - buflenleft) as i32;
                         }
 
                         _ => {
@@ -864,8 +926,11 @@ impl Cage {
                     match &mut *filedesc_enum {
                         //we always say sockets are writable?
                         Socket(_) => {
-                            new_writefds.insert(*fd);
-                            retval += 1;
+                            let metadata = NET_METADATA.read().unwrap();
+                            if !metadata.writersblock_state.load(interface::RustAtomicOrdering::Relaxed) {
+                                new_writefds.insert(*fd);
+                                retval += 1;
+                            }
                         }
 
                         //we always say streams are writable?
