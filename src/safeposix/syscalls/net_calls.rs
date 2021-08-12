@@ -577,8 +577,7 @@ impl Cage {
         }
     }
 
-    pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
-        let fdtable = self.filedescriptortable.read().unwrap();
+    fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: &FdTable) -> i32 {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
@@ -625,7 +624,7 @@ impl Cage {
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
-                                    if sockerrno == Errno::EAGAIN {
+                                    if sockerrno == Errno::EAGAIN  && (flags & O_NONBLOCK == 0) {
                                         interface::sleep(interface::RustDuration::MILLISECOND);
                                         continue;
                                     }
@@ -639,11 +638,12 @@ impl Cage {
                                         break;
                                     }
                                 }
+                                if retval == 0 {break;}
 
                                 buflenleft -= retval as usize;
                                 bufleft = bufleft.wrapping_offset(retval as isize);
 
-                                if buflenleft == 0 {break;}
+                                if buflenleft == 0 || (flags & O_NONBLOCK == 0) {break;}
                             }
 
                             let totalbyteswritten = buflen - buflenleft;
@@ -674,6 +674,7 @@ impl Cage {
                                 } else {
                                     sockobj.recvfrom(bufleft, buflenleft, addr)
                                 };
+                                if retval == 0 {break;}
 
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(-retval) {
@@ -719,8 +720,14 @@ impl Cage {
         }
     }
 
+    pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+        return self.recv_common(fd, buf, buflen, flags, addr, &*fdtable);
+    }
+
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
-        self.recvfrom_syscall(fd, buf, buflen, flags, &mut None)
+        let fdtable = self.filedescriptortable.read().unwrap();
+        return self.recv_common(fd, buf, buflen, flags, &mut None, &*fdtable);
     }
 
     //we currently ignore backlog
@@ -948,7 +955,12 @@ impl Cage {
         }
     }
 
-    fn _nonblock_peek_read(&self, fd: i32) {
+    fn _nonblock_peek_read(&self, fd: i32, fdtable: &FdTable) -> bool{
+        let flags = O_NONBLOCK | MSG_PEEK;
+        let mut buf = [0u8; 1];
+        let bufptr = buf.as_mut_ptr();
+        let retval = self.recv_common(fd, bufptr, 1, flags, &mut None, fdtable);
+        return retval >= 0; //it it's less than 0, it failed, it it's 0 peer is dead, 1 it succeeded, in the latter 2 it's true
     }
 
     //TODO: handle pipes
@@ -999,7 +1011,17 @@ impl Cage {
                                 new_readfds.insert(*fd);
                                 retval += 1;
                             } else {
-                                //nonblock peek read
+                                if sockfdobj.protocol == IPPROTO_UDP {
+                                    new_readfds.insert(*fd);
+                                    retval += 1;
+                                } else {
+                                    drop(sockfdobj);
+                                    drop(filedesc_enum);
+                                    if self._nonblock_peek_read(*fd, &*fdtable) {
+                                        new_readfds.insert(*fd);
+                                        retval += 1;
+                                    }
+                                }
                             }
                         }
 
