@@ -967,4 +967,152 @@ impl Cage {
         }
         return retval; //package out fd_set?
     }
+
+    pub fn getsockopt_syscall(self, fd: i32, level: i32, optname: i32) -> i32 {
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc = wrappedfd.write().unwrap();
+            if let Socket(socketobj) = &mut *filedesc {
+                //checking that we recieved SOL_SOCKET\
+                match level {
+                    SOL_UDP => {
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
+                    }
+                    SOL_TCP => {
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
+                    }
+                    SOL_SOCKET => {
+                        match optname {
+                            //indicate whether we are accepting connections or not in the moment
+                            SO_ACCEPTCONN => {
+                                if socketobj.state == ConnState::LISTEN {
+                                    return 1;
+                                }
+                                return 0;
+                            }
+                            //if the option is a stored binary option, just return it...
+                            SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
+                                if socketobj.options & optname == optname {
+                                    return 1;
+                                }
+                                return 0;
+                            }
+                            //handling the ignored buffer settings:
+                            SO_SNDBUF => {
+                                return socketobj.sndbuf;
+                            }
+                            SO_RCVBUF => {
+                                return socketobj.rcvbuf;
+                            }
+                            //handling SNDLOWAT and RCVLOWAT
+                            //BUG?: On Mac, this seems to be stored much like the buffer settings
+                            SO_SNDLOWAT | SO_RCVLOWAT => {
+                                return 1;
+                            }
+                            //returning the type if asked
+                            SO_TYPE => {
+                                return socketobj.socktype;
+                            }
+                            //should always be true
+                            SO_OOBINLINE => {
+                                return 1;
+                            }
+                            SO_ERROR => {
+                                let tmp = socketobj.errno;
+                                socketobj.errno = 0;
+                                return tmp;
+                            }
+                            SO_REUSEADDR => {
+                                return 0;
+                            }
+                            _ => {
+                                return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "unknown optname passed into syscall");
+                            }
+                        }
+                    }
+                    _ => {
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "unknown level passed into syscall");
+                    }
+                }
+            } else {
+                return syscall_error(Errno::ENOTSOCK, "getsockopt", "the provided file descriptor is not a socket");
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "getsockopt", "the provided file descriptor is invalid");
+        }
+    }
+
+    //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
+    pub fn setsockopt_syscall(self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc = wrappedfd.write().unwrap();
+            if let Socket(socketobj) = &mut *filedesc {
+                //checking that we recieved SOL_SOCKET\
+                match level {
+                    SOL_UDP => {
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
+                    }
+                    SOL_TCP => {
+                        if optname == TCP_NODELAY {
+                            return 0;
+                        }
+                        return 0; //temp for Apache
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
+                    }
+                    SOL_SOCKET => {
+                        match optname {
+                            SO_ACCEPTCONN | SO_TYPE | SO_SNDLOWAT | SO_RCVLOWAT => {
+                                let error_string = format!("Cannot set option using setsockopt. {}", optname);
+                                return syscall_error(Errno::ENOPROTOOPT, "setsockopt", &error_string);
+                            }
+                            //if the option is a stored binary option, just return it...
+                            SO_LINGER | SO_KEEPALIVE | SO_REUSEPORT | SO_REUSEADDR => {
+                                let mut newoptions = socketobj.options;
+                                if newoptions & optname == optname {
+                                    newoptions = newoptions - optname;
+                                    socketobj.options = newoptions;
+                                    return 1;
+                                }
+                                
+                                //now let's set this if we were told to
+                                if optval != 0 {
+                                    //optval should always be 1 or 0.
+                                    newoptions = newoptions | optname;
+                                }
+                                socketobj.options = newoptions;
+                                return 0;
+                            }
+                            SO_SNDBUF => {
+                                socketobj.sndbuf = optval;
+                                return 0;
+                            }
+                            SO_RCVBUF => {
+                                socketobj.rcvbuf = optval;
+                                return 0;
+                            }
+                            //should always be one -- can only handle it being 1
+                            SO_OOBINLINE => {
+                                assert_eq!(optval, 1);
+                                return 0;
+                            }
+                            _ => {
+                                return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "unknown optname passed into syscall");
+                            }
+                        }
+                    }
+                    _ => {
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "unknown level passed into syscall");
+                    }
+                }
+            } else {
+                return syscall_error(Errno::ENOTSOCK, "getsockopt", "the provided file descriptor is not a socket");
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "getsockopt", "the provided file descriptor is invalid");
+        }
+    }
 }

@@ -288,6 +288,24 @@ pub const SO_DOMAIN: i32 = 39;
 
 pub const SO_RXQ_OVFL: i32 = 40;
 
+// Use this to specify options on a socket. Use the protocol with setsockopt
+// to specify something for all sockets with a protocol
+pub const SOL_TCP: i32 = IPPROTO_TCP;
+pub const SOL_UDP: i32 = IPPROTO_UDP;
+
+
+pub const TCP_NODELAY: i32 = 0x01;           // don't delay send to coalesce packets
+pub const TCP_MAXSEG: i32 = 0x02;            // set maximum segment size
+pub const TCP_NOPUSH: i32 = 0x04;            // don't push last block of write
+pub const TCP_NOOPT: i32 = 0x08;             // don't use TCP options
+pub const TCP_KEEPALIVE: i32 = 0x10;         // idle time used when SO_KEEPALIVE is enabled
+pub const TCP_CONNECTIONTIMEOUT: i32 = 0x20; // connection timeout
+pub const PERSIST_TIMEOUT: i32 = 0x40;       // time after which a connection in persist timeout
+                                        // will terminate.
+                                        // see draft-ananth-tcpm-persist-02.txt
+pub const TCP_RXT_CONNDROPTIME: i32 = 0x80;  // time after which tcp retransmissions will be
+                                        // stopped and the connection will be dropped
+pub const TCP_RXT_FINDROP: i32 = 0x100;      // When set, a connection is dropped after 3 FINs
 
 pub const MINSOCKOBJID: i32 = 0;
 pub const MAXSOCKOBJID: i32 = 1024;

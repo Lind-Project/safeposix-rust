@@ -1255,7 +1255,7 @@ impl Cage {
 
         //removing inode from fd table
         fdtable.remove(&fd);
-        return 0; //_close_helper has succeeded!
+        0 //_close_helper has succeeded!
     }
     
     //------------------------------------FCNTL SYSCALL------------------------------------
@@ -1347,7 +1347,7 @@ impl Cage {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
         persist_metadata(&metadata);
-        return 0; //success!
+        0 //success!
     }
 
     //------------------------------------MMAP SYSCALL------------------------------------
