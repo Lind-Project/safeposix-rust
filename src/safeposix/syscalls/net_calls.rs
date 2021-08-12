@@ -1051,53 +1051,76 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(self, fd: i32) -> Result<interface::GenSockaddr, i32> {
+    pub fn getpeername_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let filedesc = wrappedfd.read().unwrap();
             if let Socket(socketobj) = &*filedesc {
+                //if the socket is not connected, then we should return an error
                 if socketobj.remoteaddr == None {
-                    return Err(syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected"));
+                    return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
-                return Ok(socketobj.remoteaddr.unwrap());
+                
+                //all of the checks that we had passed if we are here
+                *ret_addr = socketobj.remoteaddr.unwrap();
+                return 0;
+
             } else {
-                return Err(syscall_error(Errno::ENOTSOCK, "getpeername", "the provided file is not a socket"));
+                return syscall_error(Errno::ENOTSOCK, "getpeername", "the provided file is not a socket");
             }
         } else {
-            return Err(syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid"));
+            return syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid");
         }
     }
 
-    pub fn getsockname_syscall(self, fd: i32) -> Result<interface::GenSockaddr, i32> {
+    pub fn getsockname_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let filedesc = wrappedfd.read().unwrap();
             if let Socket(socketobj) = &*filedesc {
                 if socketobj.localaddr == None {
-                    let mut newaddr = socketobj.localaddr.unwrap().clone();
-                    newaddr.set_addr(interface::GenIpaddr::V4(interface::V4Addr::default()));
-                    newaddr.set_port(0);
-                    return Ok(newaddr);
+                    
+                    //sets the address to 0.0.0.0 if the address is not initialized yet
+                    match ret_addr {
+                        interface::GenSockaddr::V4(_) => {
+                            let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
+                            ret_addr.set_port(0);
+                            ret_addr.set_addr(addr);
+                        }
+        
+                        interface::GenSockaddr::V6(_) => {
+                            let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
+                            ret_addr.set_port(0);
+                            ret_addr.set_addr(addr);
+                        }
+                    }
+                    return 0;
                 }
-                return Ok(socketobj.localaddr.unwrap());
+                
+                //if the socket is not none, then return the socket
+                *ret_addr = socketobj.localaddr.unwrap();
+                return 0;
+
             } else {
-                return Err(syscall_error(Errno::ENOTSOCK, "getpeername", "the provided file is not a socket"));
+                return syscall_error(Errno::ENOTSOCK, "getsockname", "the provided file is not a socket");
             }
         } else {
-            return Err(syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid"));
+            return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
         }
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname<'a> (self, length: usize) -> Result<&'a str, i32> {
+    pub fn gethostname(self, length: usize, mut address_ptr: &[u8]) -> i32 {
         if length < 0 {
-            return Err(syscall_error(Errno::EINVAL, "gethostname", "invalid argument"));
+            return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
         }
         if DEFAULT_HOSTNAME.chars().count() > length {
-            return Ok(&DEFAULT_HOSTNAME[..length]);
+            address_ptr = &DEFAULT_HOSTNAME[..length].as_bytes();
+        } else {
+            address_ptr = &*DEFAULT_HOSTNAME.as_bytes();
         }
-        return Ok(&DEFAULT_HOSTNAME);
+        return 0;
     }
 }
