@@ -146,7 +146,7 @@ impl Cage {
             }
 
             let mut garbage_remote = addr.clone();
-            let acceptor = std::thread::spawn(move || {
+            let acceptor = interface::helper_thread(move || {
                 let accret = self.accept_syscall(sock1fd, &mut garbage_remote);
                 if accret < 0 {
                     panic!("Accept syscall failed unexpectedly in socketpair");
