@@ -964,7 +964,7 @@ impl Cage {
     }
 
     //TODO: handle pipes
-    pub fn select_syscall(&self, nfds: i32, readfds: interface::RustHashSet<i32>, writefds: interface::RustHashSet<i32>, exceptfds: interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
         let mut new_readfds = interface::RustHashSet::<i32>::new();
         let mut new_writefds = interface::RustHashSet::<i32>::new();
         //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't support exceptfds for now
@@ -1090,6 +1090,8 @@ impl Cage {
                 interface::sleep(interface::RustDuration::MILLISECOND);
             }
         }
+        *readfds = new_readfds;
+        *writefds = new_writefds;
         return retval; //package out fd_set?
     }
 
