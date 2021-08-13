@@ -1572,10 +1572,11 @@ impl Cage {
                             // iterate over filename-inode pairs in dict
                             for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
                                 // convert filename to a filename vector of u8
-                                let mut vec_filename: Vec<u8> = String::from(filename).as_bytes().to_vec();
+                                let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
+                                vec_filename.push(b'\0'); // make filename null-terminated
                                 
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
-                                temp_len = vec_filename.len(); // get length of current filename vector for padding calculation
+                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); // get length of current filename vector for padding calculation
                                 
                                 // pad filename vector to the next highest 8 byte boundary
                                 for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
@@ -1594,7 +1595,7 @@ impl Cage {
                                 }
                                 
                                 // push properly constructed tuple to vector storing result
-                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
+                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: temp_len as u16}, vec_filename));
                                 count += 1;
                             }
                             // update file position
