@@ -1100,7 +1100,7 @@ impl Cage {
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc = wrappedfd.write().unwrap();
-            if let Socket(socketobj) = &mut *filedesc {
+            if let Socket(sockfdobj) = &mut *filedesc {
                 //checking that we recieved SOL_SOCKET\
                 match level {
                     SOL_UDP => {
@@ -1113,36 +1113,36 @@ impl Cage {
                         match optname {
                             //indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
-                                if socketobj.state == ConnState::LISTEN {
+                                if sockfdobj.state == ConnState::LISTEN {
                                     return 1;
                                 }
                                 return 0;
                             }
                             //if the option is a stored binary option, just return it...
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
-                                if socketobj.options & optname == optname {
+                                if sockfdobj.options & optname == optname {
                                     return 1;
                                 }
                                 return 0;
                             }
                             //handling the ignored buffer settings:
                             SO_SNDBUF => {
-                                return socketobj.sndbuf;
+                                return sockfdobj.sndbuf;
                             }
                             SO_RCVBUF => {
-                                return socketobj.rcvbuf;
+                                return sockfdobj.rcvbuf;
                             }
                             //returning the type if asked
                             SO_TYPE => {
-                                return socketobj.socktype;
+                                return sockfdobj.socktype;
                             }
                             //should always be true
                             SO_OOBINLINE => {
                                 return 1;
                             }
                             SO_ERROR => {
-                                let tmp = socketobj.errno;
-                                socketobj.errno = 0;
+                                let tmp = sockfdobj.errno;
+                                sockfdobj.errno = 0;
                                 return tmp;
                             }
                             _ => {
@@ -1168,7 +1168,7 @@ impl Cage {
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc = wrappedfd.write().unwrap();
-            if let Socket(socketobj) = &mut *filedesc {
+            if let Socket(sockfdobj) = &mut *filedesc {
                 //checking that we recieved SOL_SOCKET\
                 match level {
                     SOL_UDP => {
@@ -1189,10 +1189,10 @@ impl Cage {
                             }
                             //if the option is a stored binary option, just return it...
                             SO_LINGER | SO_KEEPALIVE | SO_REUSEPORT | SO_REUSEADDR => {
-                                let mut newoptions = socketobj.options;
+                                let mut newoptions = sockfdobj.options;
                                 if newoptions & optname == optname {
                                     newoptions = newoptions - optname;
-                                    socketobj.options = newoptions;
+                                    sockfdobj.options = newoptions;
                                     return 1;
                                 }
                                 
@@ -1201,15 +1201,15 @@ impl Cage {
                                     //optval should always be 1 or 0.
                                     newoptions = newoptions | optname;
                                 }
-                                socketobj.options = newoptions;
+                                sockfdobj.options = newoptions;
                                 return 0;
                             }
                             SO_SNDBUF => {
-                                socketobj.sndbuf = optval;
+                                sockfdobj.sndbuf = optval;
                                 return 0;
                             }
                             SO_RCVBUF => {
-                                socketobj.rcvbuf = optval;
+                                sockfdobj.rcvbuf = optval;
                                 return 0;
                             }
                             //should always be one -- can only handle it being 1
@@ -1239,14 +1239,14 @@ impl Cage {
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let filedesc = wrappedfd.read().unwrap();
-            if let Socket(socketobj) = &*filedesc {
+            if let Socket(sockfdobj) = &*filedesc {
                 //if the socket is not connected, then we should return an error
-                if socketobj.remoteaddr == None {
+                if sockfdobj.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
                 
                 //all of the checks that we had passed if we are here
-                *ret_addr = socketobj.remoteaddr.unwrap();
+                *ret_addr = sockfdobj.remoteaddr.unwrap();
                 return 0;
 
             } else {
@@ -1262,8 +1262,8 @@ impl Cage {
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let filedesc = wrappedfd.read().unwrap();
-            if let Socket(socketobj) = &*filedesc {
-                if socketobj.localaddr == None {
+            if let Socket(sockfdobj) = &*filedesc {
+                if sockfdobj.localaddr == None {
                     
                     //sets the address to 0.0.0.0 if the address is not initialized yet
                     match ret_addr {
@@ -1283,7 +1283,7 @@ impl Cage {
                 }
                 
                 //if the socket is not none, then return the socket
-                *ret_addr = socketobj.localaddr.unwrap();
+                *ret_addr = sockfdobj.localaddr.unwrap();
                 return 0;
 
             } else {
@@ -1295,14 +1295,14 @@ impl Cage {
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname(self, length: usize, mut address_ptr: &[u8]) -> i32 {
+    pub fn gethostname(self, length: usize, address_ptr: &mut [u8]) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
         }
         if DEFAULT_HOSTNAME.chars().count() > length {
-            address_ptr = &DEFAULT_HOSTNAME[..length].as_bytes();
+            address_ptr.copy_from_slice(&DEFAULT_HOSTNAME[..length].as_bytes());
         } else {
-            address_ptr = &*DEFAULT_HOSTNAME.as_bytes();
+            address_ptr.copy_from_slice(&DEFAULT_HOSTNAME.as_bytes());
         }
         return 0;
     }
