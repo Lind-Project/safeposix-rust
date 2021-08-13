@@ -1266,19 +1266,15 @@ impl Cage {
                 if sockfdobj.localaddr == None {
                     
                     //sets the address to 0.0.0.0 if the address is not initialized yet
-                    match ret_addr {
-                        interface::GenSockaddr::V4(_) => {
-                            let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
-                            ret_addr.set_port(0);
-                            ret_addr.set_addr(addr);
-                        }
-        
-                        interface::GenSockaddr::V6(_) => {
-                            let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
-                            ret_addr.set_port(0);
-                            ret_addr.set_addr(addr);
-                        }
-                    }
+                    //setting the family as well based on the domain
+                    let addr = match sockfdobj.domain {
+                        AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
+                        AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
+                        _ => { panic!("Unknown domain set"); }
+                    };
+                    ret_addr.set_addr(addr);
+                    ret_addr.set_port(0);
+                    ret_addr.set_family(sockfdobj.domain as u16);
                     return 0;
                 }
                 

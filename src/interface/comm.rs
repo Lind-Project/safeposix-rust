@@ -27,13 +27,20 @@ impl GenSockaddr {
     pub fn addr(&self) -> GenIpaddr {
         match self {
             GenSockaddr::V4(v4addr) => GenIpaddr::V4(v4addr.sin_addr),
-            GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr),
+            GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr)
         }
     }
     pub fn set_addr(&mut self, ip: GenIpaddr){
         match self {
             GenSockaddr::V4(v4addr) => v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {v4ip} else {unreachable!()},
-            GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()},
+            GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()}
+        };
+    }
+    
+    pub fn set_family(&mut self, family: u16){
+        match self {
+            GenSockaddr::V4(v4addr) => v4addr.sin_family = family,
+            GenSockaddr::V6(v6addr) => v6addr.sin6_family = family
         };
     }
 }
