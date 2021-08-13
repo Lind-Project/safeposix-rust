@@ -1306,4 +1306,50 @@ impl Cage {
         }
         return 0;
     }
+
+    pub fn poll_syscall(self, fds: &mut Vec<&mut EpollEvent>, timeout: Option<interface::RustDuration>) -> i32 { //timeout is supposed to be in milliseconds
+
+        let mut return_code: i32 = 0;
+        
+        let start_time = interface::starttimer();
+
+        let end_time = match timeout {
+            Some(time) => time,
+            None => interface::RustDuration::MAX
+        };
+
+        loop {
+            for structpoll in &mut *fds {
+                let fd = structpoll.fd;
+                let events = structpoll.events;
+
+                let read = if events & POLLIN > 0 {true} else {false};
+                let write = if events & POLLOUT > 0 {true} else {false};
+                let err = if events & POLLERR > 0 {true} else {false};
+
+                let mut reads = interface::RustHashSet::<i32>::new();
+                let mut writes = interface::RustHashSet::<i32>::new();
+                let mut errors = interface::RustHashSet::<i32>::new();
+
+                let mut mask: u32 = 0;
+
+                //passing None does the same thing as passing 0 in native Linux
+                //which essentially sets the timeout to the max value allowed (which is almost always more than enough time)
+                if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, None) > 0 {
+                    mask += if !reads.is_empty() {POLLIN} else {0};
+                    mask += if !writes.is_empty() {POLLOUT} else {0};
+                    mask += if !errors.is_empty() {POLLERR} else {0};
+                    return_code += 1;
+                }
+                structpoll.revents = mask;
+            }
+
+            if return_code != 0 || interface::readtimer(start_time) > end_time {
+                break;
+            } else {
+                interface::sleep(interface::RustDuration::MILLISECOND);
+            }
+        }
+        return return_code;
+    }
 }

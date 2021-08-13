@@ -313,10 +313,20 @@ pub const TCP_RXT_FINDROP: i32 = 0x100;      // When set, a connection is droppe
 pub const MINSOCKOBJID: i32 = 0;
 pub const MAXSOCKOBJID: i32 = 1024;
 
+//POLL CONSTANTS
+pub const POLLIN: u32 = 01;  // There is data to read.
+pub const POLLPRI: u32 = 02; //There is urgent data to read.
+pub const POLLOUT: u32 = 04; // Writing now will not block.
+pub const POLLERR: u32 = 010; // Error condition.
+pub const POLLHUP: u32 = 020; // Hung up.
+pub const POLLNVAL: u32 = 040; // Invalid polling request.
+
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct EpollEvent {
     pub events: u32,
+    pub revents: u32,
     pub fd: i32 
     //in native this is a union which could be one of a number of things
     //however, we only support EPOLL_CTL subcommands which take the fd
