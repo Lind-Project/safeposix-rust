@@ -1663,5 +1663,90 @@ impl Cage {
         }
 
       0 // success
-    }   
+    }  
+        
+    //------------------GETDENTS SYSCALL------------------
+
+    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: usize)-> i32 {
+        
+        let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
+
+        // make sure bufsize is at least greater than size of a ClippedDirent struct
+        if bufsize <= interface::CLIPPED_DIRENT_SIZE {
+            return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
+        }
+        
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) { // check if fd is valid
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            
+            match &mut *filedesc_enum {
+                // only proceed when fd represents a file
+                File(ref mut normalfile_filedesc_obj) => {
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    match inodeobj {
+                        // only proceed when inode is a dir
+                        Inode::Dir(dir_inode_obj) => {
+                            let position = normalfile_filedesc_obj.position;
+                            let mut bufcount = 0;
+                            let mut curr_size = 0;
+                            let mut count = 0;
+                            let mut temp_len = 0;
+
+                            // iterate over filename-inode pairs in dict
+                            for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
+                                // convert filename to a filename vector of u8
+                                let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
+                                vec_filename.push(b'\0'); // make filename null-terminated
+                                
+                                vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
+                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); // get length of current filename vector for padding calculation
+                                
+                                // pad filename vector to the next highest 8 byte boundary
+                                for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
+                                    vec_filename.push(00);
+                                }
+                                
+                                // the fixed dirent size and length of filename vector add up to total size
+                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); 
+                                
+                                bufcount += curr_size; // increment bufcount
+                                
+                                // stop iteration if current bufcount exceeds argument bufsize
+                                if bufcount > bufsize {
+                                    bufcount = bufcount - curr_size; // decrement bufcount since current element is not actually written
+                                    break;
+                                }
+                                
+                                // push properly constructed tuple to vector storing result
+                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: temp_len as u16}, vec_filename));
+                                count += 1;
+                            }
+                            // update file position
+                            normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
+                            
+                            // set d_off of last element to 0
+                            let last = vec.last_mut().unwrap();
+                            last.0.d_off = 0;
+
+                            interface::pack_dirents(vec, dirp);
+                            bufcount as i32 // return the number of bytes written
+                        }
+                        _ => {
+                            syscall_error(Errno::ENOTDIR, "getdents", "File descriptor does not refer to a directory.")
+                        }
+                    }
+                }
+                // raise error when fd represents a socket, pipe, or stream
+                _ => {
+                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents since fd does not refer to a file.")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor")
+        }
+    }
 }

@@ -33,6 +33,7 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
+        ut_lind_fs_getdents();
 
         persistencetest();
         rdwrtest();
@@ -853,6 +854,38 @@ mod fs_tests {
         assert_eq!(cage.read_syscall(fd, buf1.as_mut_ptr(), 7), 5);
         assert_eq!(cbuf2str(&buf1), "Hello\0\0");
 
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_getdents() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let bufsize = 50;
+        let mut vec = vec![0u8; bufsize];
+        let baseptr: *mut u8 = &mut vec[0];
+        
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
+        let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 48);
+
+        unsafe{
+            let first_dirent = baseptr as *mut interface::ClippedDirent;
+            assert_eq!((*first_dirent).d_off, 24);
+            let reclen_matched: bool = ((*first_dirent).d_reclen == 21) | ((*first_dirent).d_reclen == 22);
+            assert_eq!(reclen_matched, true);
+            
+            let nameoffset = baseptr.wrapping_offset(interface::CLIPPED_DIRENT_SIZE as isize);
+            let returnedname = interface::RustCStr::from_ptr(nameoffset as *const i8);
+            let name_matched: bool = (returnedname == interface::RustCStr::from_bytes_with_nul(b".\0").unwrap()) | (returnedname == interface::RustCStr::from_bytes_with_nul(b"..\0").unwrap());
+            assert_eq!(name_matched, true);
+            
+            let second_dirent = baseptr.wrapping_offset(24) as *mut interface::ClippedDirent;
+            assert_eq!((*second_dirent).d_off, 0);
+        }
+
+        assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
