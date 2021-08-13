@@ -1307,7 +1307,7 @@ impl Cage {
         return 0;
     }
 
-    pub fn poll_syscall(self, fds: &mut Vec<&mut EpollEvent>, timeout: Option<interface::RustDuration>) -> i32 { //timeout is supposed to be in milliseconds
+    pub fn poll_syscall(self, fds: &mut [PollStruct], timeout: Option<interface::RustDuration>) -> i32 { //timeout is supposed to be in milliseconds
 
         let mut return_code: i32 = 0;
         
