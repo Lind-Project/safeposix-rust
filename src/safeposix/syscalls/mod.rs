@@ -10,4 +10,3 @@ pub use sys_calls::*;
 pub use sys_constants::*;
 pub use net_calls::*;
 pub use net_constants::*;
-pub mod errnos;
