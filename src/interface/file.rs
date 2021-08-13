@@ -9,7 +9,7 @@ use std::fs::{self, File, OpenOptions};
 use std::env;
 use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
-pub use std::ffi::OsString as OsStringKey;
+pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::SyncLazy as RustLazyGlobal;
 
