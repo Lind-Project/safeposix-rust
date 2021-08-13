@@ -6,7 +6,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 
 use super::net_constants::*;
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, FdTable};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, FdTable};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
@@ -1306,7 +1306,6 @@ impl Cage {
     pub fn poll_syscall(self, fds: &mut [PollStruct], timeout: Option<interface::RustDuration>) -> i32 { //timeout is supposed to be in milliseconds
 
         let mut return_code: i32 = 0;
-        
         let start_time = interface::starttimer();
 
         let end_time = match timeout {
@@ -1347,5 +1346,93 @@ impl Cage {
             }
         }
         return return_code;
+    }
+
+    pub fn _epoll_object_allocator(self) -> i32 {
+
+        //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        
+        //get a file descriptor
+        if let Some(newfd) = self.get_next_fd(None, None) {
+            //new epoll fd
+            let epollobjfd = EpollDesc {
+                mode: 0000,
+                registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
+                advlock: interface::AdvisoryLock::new(),
+                errno: 0,
+                flags: 0
+            };
+            
+            //insert into the fdtable and return the fd i32
+            let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Epoll(epollobjfd)));
+            fdtable.insert(newfd, wrappedsock);
+            return newfd;
+        } else {
+            return syscall_error(Errno::ENFILE, "epoll create", "no available file descriptor number could be found");
+        }
+    }
+
+    pub fn _epoll_object_deallocator(self) -> i32 {
+        //seems to only pass in Repy
+        return 0;
+    }
+
+    pub fn epoll_create_syscall(self, size: u32) -> i32 {
+        if size <= 0 {
+            return syscall_error(Errno::EINVAL, "epoll create", "provided size argument is invalid");
+        }
+        return Self::_epoll_object_allocator(self);
+    }
+
+    pub fn epoll_ctl_syscall(self, epfd: i32, op: i32, fd: i32, event: EpollEvent) -> i32 {
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        //making sure that the epfd is really an epoll fd
+        if let Some(wrappedfd) = fdtable.get(&epfd) {
+            let mut filedesc_enum_epoll = wrappedfd.write().unwrap();
+            if let Epoll(epollfdobj) = &mut *filedesc_enum_epoll {
+
+                if let Some(wrappedfd) = fdtable.get(&fd) {
+                    let filedesc_enum_otherfd = wrappedfd.read().unwrap();
+                    if let Epoll(_) = &*filedesc_enum_otherfd {
+                        return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
+                    }
+    
+                    //now that we know that the types are all good...
+                    match op {
+                        EPOLL_CTL_DEL => {
+                            //since remove returns the value at the key and the values will always be EpollEvents, 
+                            //I am using this to optimize the code
+                            if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
+                                return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
+                            }
+                        }
+                        EPOLL_CTL_MOD => {
+                            if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
+                                return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
+                            }
+                            //should check if the fd already exists
+                            epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
+                        }
+                        EPOLL_CTL_ADD => {
+                            if let Some(_) = epollfdobj.registered_fds.get(&fd) {
+                                return syscall_error(Errno::EEXIST, "epoll ctl", "fd is already registered");
+                            }
+                            epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
+                        }
+                        _ => {
+                            return syscall_error(Errno::EINVAL, "epoll ctl", "provided op is invalid");
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
+                }
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "epoll ctl", "provided epoll fd is not a valid epoll file descriptor");
+        }
+        return 0;
     }
 }

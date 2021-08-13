@@ -321,6 +321,25 @@ pub const POLLERR: u32 = 010; // Error condition.
 pub const POLLHUP: u32 = 020; // Hung up.
 pub const POLLNVAL: u32 = 040; // Invalid polling request.
 
+//EPOLL CONSTANTS
+pub const EPOLLIN: i32 = 0x001;
+pub const EPOLLPRI: i32 = 0x002;
+pub const EPOLLOUT: i32 = 0x004;
+pub const EPOLLRDNORM: i32 = 0x040;
+pub const EPOLLRDBAND: i32 = 0x080;
+pub const EPOLLWRNORM: i32 = 0x100;
+pub const EPOLLWRBAND: i32 = 0x200;
+pub const EPOLLMSG: i32 = 0x400;
+pub const EPOLLERR: i32 = 0x008;
+pub const EPOLLHUP: i32 = 0x010;
+pub const EPOLLRDHUP: i32 = 0x2000;
+pub const EPOLLWAKEUP: i32 = 1 << 29;
+pub const EPOLLONESHOT: i32 = 1 << 30;
+pub const EPOLLET: i32 = 1 << 31;
+
+pub const EPOLL_CTL_ADD: i32 = 1;
+pub const EPOLL_CTL_DEL: i32 = 2;
+pub const EPOLL_CTL_MOD: i32 = 3;
 
 #[derive(Debug)]
 #[repr(C)]
