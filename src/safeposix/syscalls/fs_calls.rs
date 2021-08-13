@@ -109,7 +109,6 @@ impl Cage {
                 Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                _ => {panic!("How did you even manage to open another kind of file like that?");}
             }
 
             //If the file is a regular file, open the file object
@@ -291,7 +290,6 @@ impl Cage {
                     }
 
                     Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
-                    _ => {panic!("How did you even manage to refer to a pipe/socket using a path?");}
                 }
             }
         }
@@ -324,7 +322,6 @@ impl Cage {
                     Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
                     Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
-                    _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
                 }; //count current number of links and references
 
                 let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
@@ -384,12 +381,6 @@ impl Cage {
                 },
                 Inode::Dir(f) => {
                     Self::_istat_helper_dir(f, statbuf);
-                },
-                Inode::Pipe(_) => {
-                    panic!("How did you even manage to refer to a pipe using a path?");
-                },
-                Inode::Socket(_) => {
-                    panic!("How did you even manage to refer to a socket using a path?");
                 },
             }
             0 //stat has succeeded!
@@ -477,7 +468,6 @@ impl Cage {
                         Inode::Dir(f) => {
                             Self::_istat_helper_dir(&f, statbuf);
                         }
-                        _ => {panic!("A file fd points to a socket or pipe");}
                     }
                 }
                 Socket(_) => {
@@ -507,17 +497,7 @@ impl Cage {
             databuf.f_fsid = metadata.dev_id;
 
             //delegate the rest of populating statbuf to the relevant helper
-            match inodeobj {
-                Inode::Pipe(_) => {
-                    panic!("How did you even manage to refer to a pipe using a path?");
-                },
-                Inode::Socket(_) => {
-                    panic!("How did you even manage to refer to a socket using a path?");
-                },
-                _ => {
-                    return Self::_istatfs_helper(self, databuf);
-                }
-            }
+            return Self::_istatfs_helper(self, databuf);
         } else {
             syscall_error(Errno::ENOENT, "stat", "path refers to an invalid file")
         }
@@ -539,13 +519,7 @@ impl Cage {
                 File(normalfile_filedesc_obj) => {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                    match inodeobj {
-                        //can't statfs pipe or socket
-                        Inode::Socket(_) | Inode::Pipe(_) => {panic!("How did you get through the first filter?");},
-                        _ => {
-                            return Self::_istatfs_helper(self, databuf);
-                        }
-                    }
+                    return Self::_istatfs_helper(self, databuf);
                 },
                 Socket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
             }
@@ -612,7 +586,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "read", "attempted to read from a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "recv not implemented yet")}
@@ -670,7 +643,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "pread", "attempted to read from a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {
@@ -767,7 +739,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "write", "attempted to write to a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
@@ -864,7 +835,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "pwrite", "attempted to write to a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {
@@ -955,7 +925,6 @@ impl Cage {
                             //return the location that we sought to
                             eventualpos as i32
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {
@@ -993,12 +962,6 @@ impl Cage {
                 Inode::File(f) => {f.mode},
                 Inode::CharDev(f) => {f.mode},
                 Inode::Dir(f) => {f.mode},
-                Inode::Pipe(_) => {
-                    panic!("How did you even manage to refer to a pipe by a path?");
-                },
-                Inode::Socket(_) => {
-                    panic!("How did you even manage to refer to a socket by a path?");
-                },
             };
 
             //We assume that the current user owns the file
@@ -1117,7 +1080,6 @@ impl Cage {
                         Inode::CharDev(chardev_inode_obj) => {
                             chardev_inode_obj.refcount += 1;
                         },
-                        _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
                 },
                 Pipe(normalfile_filedesc_obj) => {
@@ -1220,7 +1182,7 @@ impl Cage {
                                 let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                 interface::removefile(sysfilename).unwrap();
                             } 
-                        },
+                        }
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
 
@@ -1233,7 +1195,7 @@ impl Cage {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
                             } 
-                        },
+                        }
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
 
@@ -1246,8 +1208,7 @@ impl Cage {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
                             } 
-                        },
-                        Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
+                        }
                     }
                 },
             }
@@ -1324,19 +1285,13 @@ impl Cage {
                 match thisinode {
                     Inode::File(ref mut general_inode) => {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
-                    },
+                    }
                     Inode::CharDev(ref mut dev_inode) => {
                         dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
-                    },
+                    }
                     Inode::Dir(ref mut dir_inode) => {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
-                    },
-                    Inode::Pipe(ref mut general_inode) => {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
-                    },
-                    Inode::Socket(ref mut general_inode) => {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
-                    },
+                    }
                 }
             }
             else {
@@ -1399,7 +1354,7 @@ impl Cage {
                             syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
                         }
 
-                        _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+                        Inode::Dir(_) => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
                     }
                 }
                 _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
@@ -1600,9 +1555,6 @@ impl Cage {
                         }
                         Inode::Dir(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
-                        }
-                        _ => {
-                            panic!("A file fd points to a socket or pipe");
                         }
                     };
                 }
