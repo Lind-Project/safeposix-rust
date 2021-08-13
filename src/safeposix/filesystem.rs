@@ -24,9 +24,6 @@ pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
     Dir(DirectoryInode),
-    //Stream(GenericInode), streams don't have a real inode
-    Pipe(GenericInode),
-    Socket(GenericInode)
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]

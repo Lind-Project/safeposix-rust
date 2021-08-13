@@ -27,8 +27,6 @@ impl Cage {
                     match inode {
                         Inode::File(f) => {f.refcount += 1;}
                         Inode::CharDev(f) => {f.refcount += 1;}
-                        Inode::Pipe(f) => {f.refcount += 1;}
-                        Inode::Socket(f) => {f.refcount += 1;}
                         Inode::Dir(f) => {f.refcount += 1;}
                     }
                 }
