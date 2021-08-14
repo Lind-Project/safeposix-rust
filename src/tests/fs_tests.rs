@@ -20,6 +20,7 @@ mod fs_tests {
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();
         ut_lind_fs_fstat_complex();
+        ut_lind_fs_getdents();
         ut_lind_fs_getuid();
         ut_lind_fs_load_fs();
         ut_lind_fs_mknod();
@@ -33,7 +34,6 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
 
         persistencetest();
         rdwrtest();
