@@ -1413,7 +1413,7 @@ impl Cage {
                             if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
                                 return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
                             }
-                            //should check if the fd already exists
+                            //TODO: should check if the fd already exists
                             epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
                         }
                         EPOLL_CTL_ADD => {
@@ -1433,6 +1433,11 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "epoll ctl", "provided epoll fd is not a valid epoll file descriptor");
         }
+        return 0;
+    }
+
+    pub fn epoll_wait_syscall(self, epfd: i32, maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
+
         return 0;
     }
 }
