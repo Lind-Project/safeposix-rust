@@ -1295,10 +1295,12 @@ impl Cage {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
         }
-        if DEFAULT_HOSTNAME.chars().count() > length {
-            address_ptr.copy_from_slice(&DEFAULT_HOSTNAME[..length].as_bytes());
+
+        let name_length: usize = DEFAULT_HOSTNAME.chars().count();
+        if name_length > length {
+            address_ptr[..length].copy_from_slice(&DEFAULT_HOSTNAME[..length].as_bytes());
         } else {
-            address_ptr.copy_from_slice(&DEFAULT_HOSTNAME.as_bytes());
+            address_ptr[..name_length].copy_from_slice(&DEFAULT_HOSTNAME.as_bytes());
         }
         return 0;
     }
