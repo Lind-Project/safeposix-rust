@@ -1,5 +1,6 @@
 mod fs_tests;
 mod pipe_tests;
+mod networking_tests;
 
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
