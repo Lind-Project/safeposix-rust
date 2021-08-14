@@ -1392,44 +1392,43 @@ impl Cage {
 
         //making sure that the epfd is really an epoll fd
         if let Some(wrappedfd) = fdtable.get(&epfd) {
-            let mut filedesc_enum_epoll = wrappedfd.write().unwrap();
-            if let Epoll(epollfdobj) = &mut *filedesc_enum_epoll {
+            let mut filedesc_enum_epollfd = wrappedfd.write().unwrap();
+            if let Epoll(epollfdobj) = &mut *filedesc_enum_epollfd {
 
-                if let Some(wrappedfd) = fdtable.get(&fd) {
-                    let filedesc_enum_otherfd = wrappedfd.read().unwrap();
-                    if let Epoll(_) = &*filedesc_enum_otherfd {
-                        return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
-                    }
-    
-                    //now that we know that the types are all good...
-                    match op {
-                        EPOLL_CTL_DEL => {
-                            //since remove returns the value at the key and the values will always be EpollEvents, 
-                            //I am using this to optimize the code
-                            if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
-                                return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
-                            }
-                        }
-                        EPOLL_CTL_MOD => {
-                            if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
-                                return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
-                            }
-                            //if the fd already exists, insert overwrites the prev entry
-                            epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
-                        }
-                        EPOLL_CTL_ADD => {
-                            if let Some(_) = epollfdobj.registered_fds.get(&fd) {
-                                return syscall_error(Errno::EEXIST, "epoll ctl", "fd is already registered");
-                            }
-                            epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
-                        }
-                        _ => {
-                            return syscall_error(Errno::EINVAL, "epoll ctl", "provided op is invalid");
-                        }
-                    }
-                } else {
+                //check if the other fd is an epoll or not...
+                if let Epoll(_) = &*fdtable.get(&fd).unwrap().read().unwrap() {
                     return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
                 }
+
+                //now that we know that the types are all good...
+                match op {
+                    EPOLL_CTL_DEL => {
+                        //since remove returns the value at the key and the values will always be EpollEvents, 
+                        //I am using this to optimize the code
+                        if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
+                            return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
+                        }
+                    }
+                    EPOLL_CTL_MOD => {
+                        ///check if the fd that we are modifying exists or not
+                        if let Some(_) = epollfdobj.registered_fds.get(&fd) {} else {
+                            return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
+                        }
+                        //if the fd already exists, insert overwrites the prev entry
+                        epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
+                    }
+                    EPOLL_CTL_ADD => {
+                        if let Some(_) = epollfdobj.registered_fds.get(&fd) {
+                            return syscall_error(Errno::EEXIST, "epoll ctl", "fd is already registered");
+                        }
+                        epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
+                    }
+                    _ => {
+                        return syscall_error(Errno::EINVAL, "epoll ctl", "provided op is invalid");
+                    }
+                }
+            } else {
+                return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
             }
         } else {
             return syscall_error(Errno::EBADF, "epoll ctl", "provided epoll fd is not a valid epoll file descriptor");
