@@ -6,7 +6,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 
 use super::net_constants::*;
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, FdTable};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
@@ -1320,19 +1320,27 @@ impl Cage {
                 let fd = structpoll.fd;
                 let events = structpoll.events;
 
-                let read = if events & POLLIN > 0 {true} else {false};
-                let write = if events & POLLOUT > 0 {true} else {false};
-                let err = if events & POLLERR > 0 {true} else {false};
-
                 let mut reads = interface::RustHashSet::<i32>::new();
                 let mut writes = interface::RustHashSet::<i32>::new();
                 let mut errors = interface::RustHashSet::<i32>::new();
 
+                //read
+                if events & POLLIN > 0 {
+                    reads.insert(fd);
+                }
+                //write
+                if events & POLLOUT > 0 {
+                    reads.insert(fd);
+                }
+                //err
+                if events & POLLERR > 0 {
+                    reads.insert(fd);
+                }
+
                 let mut mask: u32 = 0;
 
-                //passing None does the same thing as passing 0 in native Linux
-                //which essentially sets the timeout to the max value allowed (which is almost always more than enough time)
-                if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, None) > 0 {
+                //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
+                if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO)) > 0 {
                     mask += if !reads.is_empty() {POLLIN} else {0};
                     mask += if !writes.is_empty() {POLLOUT} else {0};
                     mask += if !errors.is_empty() {POLLERR} else {0};
@@ -1373,11 +1381,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::ENFILE, "epoll create", "no available file descriptor number could be found");
         }
-    }
-
-    pub fn _epoll_object_deallocator(&self) -> i32 {
-        //seems to only pass in Repy
-        return 0;
     }
 
     pub fn epoll_create_syscall(&self, size: u32) -> i32 {
@@ -1479,7 +1482,7 @@ impl Cage {
                 }
 
                 let mut poll_fds_slice = &mut poll_fds_vec[..];
-                Self::poll_syscall(&self, &mut *poll_fds_slice, timeout);
+                Self::poll_syscall(&self, poll_fds_slice, timeout);
 
                 let mut epoll_return: Vec<EpollEvent> = vec![];
                 for result in poll_fds_slice[..maxevents].iter() {
