@@ -825,12 +825,15 @@ impl Cage {
             if let Socket(sockfdobj) = &mut *filedesc {
                 let mut mutmetadata = NET_METADATA.write().unwrap();
 
-                let objectid = &sockfdobj.socketobjectid.unwrap();
-                let localaddr = sockfdobj.localaddr.as_ref().unwrap().clone();
-                let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
-                if let Err(e) = release_ret_val {return e;}
+                let objectid = &sockfdobj.socketobjectid;
+                if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
+                    let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                    if let Err(e) = release_ret_val {return e;}
+                }
                 if !partial {
-                    mutmetadata.socket_object_table.remove(objectid);
+                    if let None = objectid {} else {
+                        mutmetadata.socket_object_table.remove(&objectid.unwrap());
+                    }
                     sockfdobj.state = ConnState::NOTCONNECTED;
                 }
             } else {return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");}
@@ -1245,7 +1248,7 @@ impl Cage {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
                 
-                //all of the checks that we had passed if we are here
+                //all of the checks that we had have passed if we are here
                 *ret_addr = sockfdobj.remoteaddr.unwrap();
                 return 0;
 
@@ -1412,7 +1415,7 @@ impl Cage {
                         }
                     }
                     EPOLL_CTL_MOD => {
-                        ///check if the fd that we are modifying exists or not
+                        //check if the fd that we are modifying exists or not
                         if let Some(_) = epollfdobj.registered_fds.get(&fd) {} else {
                             return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
                         }
@@ -1453,18 +1456,15 @@ impl Cage {
                 let mut reads = interface::RustHashSet::<i32>::new();
                 let mut writes = interface::RustHashSet::<i32>::new();
                 let mut errors = interface::RustHashSet::<i32>::new();
-
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
 
                 for (&key, &value) in &epollfdobj.registered_fds {
-
                     let events = value.events;
                     let mut structpoll = PollStruct {
                         fd: key,
                         events: 0,
                         revents: 0
                     };
-
                     if events & EPOLLIN as u32 > 0 {
                         structpoll.events |= POLLIN;
                     }
@@ -1475,13 +1475,12 @@ impl Cage {
                         structpoll.events |= POLLERR;
                     }
                     poll_fds_vec.push(structpoll);
-
                 }
 
                 let mut poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, &mut *poll_fds_slice, timeout);
-
                 let mut epoll_return: Vec<EpollEvent> = vec![];
+
                 for result in poll_fds_slice[..maxevents].iter() {
                     let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
                     if result.revents & POLLIN > 0 {
@@ -1501,7 +1500,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "epoll wait", "provided fd is not a valid file descriptor");
         }
-
         return 0;
     }
 }
