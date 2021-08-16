@@ -5,7 +5,7 @@
 use std::mem::size_of;
 extern crate libc;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GenSockaddr {
     V4(SockaddrV4),
     V6(SockaddrV6)
@@ -27,18 +27,25 @@ impl GenSockaddr {
     pub fn addr(&self) -> GenIpaddr {
         match self {
             GenSockaddr::V4(v4addr) => GenIpaddr::V4(v4addr.sin_addr),
-            GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr),
+            GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr)
         }
     }
     pub fn set_addr(&mut self, ip: GenIpaddr){
         match self {
             GenSockaddr::V4(v4addr) => v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {v4ip} else {unreachable!()},
-            GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()},
+            GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()}
+        };
+    }
+    
+    pub fn set_family(&mut self, family: u16){
+        match self {
+            GenSockaddr::V4(v4addr) => v4addr.sin_family = family,
+            GenSockaddr::V6(v6addr) => v6addr.sin6_family = family
         };
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub enum GenIpaddr {
     V4(V4Addr),
     V6(V6Addr)
@@ -65,7 +72,7 @@ pub struct V4Addr {
     pub s_addr: u32
 }
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct SockaddrV4 {
     pub sin_family: u16,
     pub sin_port: u16,
@@ -78,7 +85,7 @@ pub struct V6Addr {
     pub s6_addr: [u8; 16]
 }
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct SockaddrV6 {
     pub sin6_family: u16,
     pub sin6_port: u16,
