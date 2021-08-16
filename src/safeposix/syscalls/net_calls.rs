@@ -1095,7 +1095,7 @@ impl Cage {
         return retval; //package out fd_set?
     }
 
-    pub fn getsockopt_syscall(self, fd: i32, level: i32, optname: i32) -> i32 {
+    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1163,7 +1163,7 @@ impl Cage {
     }
 
     //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
-    pub fn setsockopt_syscall(self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+    pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1234,7 +1234,7 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1257,7 +1257,7 @@ impl Cage {
         }
     }
 
-    pub fn getsockname_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1291,7 +1291,7 @@ impl Cage {
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname(self, length: usize, address_ptr: &mut [u8]) -> i32 {
+    pub fn gethostname(&self, length: usize, address_ptr: &mut [u8]) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
         }
@@ -1350,7 +1350,7 @@ impl Cage {
         return return_code;
     }
 
-    pub fn _epoll_object_allocator(self) -> i32 {
+    pub fn _epoll_object_allocator(&self) -> i32 {
 
         //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
         let mut fdtable = self.filedescriptortable.write().unwrap();
@@ -1375,12 +1375,12 @@ impl Cage {
         }
     }
 
-    pub fn _epoll_object_deallocator(self) -> i32 {
+    pub fn _epoll_object_deallocator(&self) -> i32 {
         //seems to only pass in Repy
         return 0;
     }
 
-    pub fn epoll_create_syscall(self, size: u32) -> i32 {
+    pub fn epoll_create_syscall(&self, size: u32) -> i32 {
         if size <= 0 {
             return syscall_error(Errno::EINVAL, "epoll create", "provided size argument is invalid");
         }
@@ -1388,7 +1388,7 @@ impl Cage {
     }
 
     //this one can still be optimized
-    pub fn epoll_ctl_syscall(self, epfd: i32, op: i32, fd: i32, event: EpollEvent) -> i32 {
+    pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: EpollEvent) -> i32 {
 
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
@@ -1438,7 +1438,7 @@ impl Cage {
         return 0;
     }
 
-    pub fn epoll_wait_syscall(self, epfd: i32, maxevents: usize, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn epoll_wait_syscall(&self, epfd: i32, maxevents: usize, timeout: Option<interface::RustDuration>) -> i32 {
 
         let fdtable = self.filedescriptortable.read().unwrap();
 
@@ -1501,7 +1501,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "epoll wait", "provided fd is not a valid file descriptor");
         }
-
         return 0;
     }
 }
