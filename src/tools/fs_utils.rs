@@ -30,11 +30,17 @@ fn lind_tree(cage: &Cage, path: &str, indentlevel: usize) {
             return;
         }
 
+        //visit the children of this directory, and show them all as being children of this directory in the tree
         visit_children(cage, path, Some(indentlevel), |childcage, childpath, isdir, childindentlevelopt| {
             let childindentlevel = childindentlevelopt.unwrap();
+            //lines to connect non-parent ancestors to their remaining children(if any)
             print!("{}", "|   ".repeat(childindentlevel));
+            //line to connect parent to its child
             print!("{}", "|---");
+            //actually print out file name
             println!("{}", childpath);
+
+            //recursive call for child
             if isdir {
                 lind_tree(childcage, childpath, childindentlevel + 1);
             }
@@ -49,15 +55,16 @@ fn lind_ls(cage: &Cage, path: &str) {
     let stat_us = cage.stat_syscall(path, &mut lindstat_res);
 
     if stat_us == 0 {
-      if is_dir(lindstat_res.st_mode) {
-          visit_children(cage, path, None, |_childcage, childpath, isdir, _| {
-              if isdir {print!("{}/ ", childpath);}
-              else {print!("{} ", childpath);}
-          });
-      } else {
-          print!("{} ", path);
-      }
-      println!();
+        if is_dir(lindstat_res.st_mode) {
+            //for each child, if it's a directory, print its name with a slash, otherwise omit the slash
+            visit_children(cage, path, None, |_childcage, childpath, isdir, _| {
+                if isdir {print!("{}/ ", childpath);}
+                else {print!("{} ", childpath);}
+            });
+        } else {
+            print!("{} ", path);
+        }
+        println!();
     } else {
         eprintln!("No such file exists!");
     }

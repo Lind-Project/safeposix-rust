@@ -70,7 +70,7 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
         let mut hostslice = vec![0u8; lind_size];
         let mut lindslice = vec![0u8; lind_size];
         let mut hostfile = File::open(hostfilepath).unwrap();
-        hostfile.read(hostslice.as_mut_slice());
+        hostfile.read(hostslice.as_mut_slice()).unwrap();
         let lindfd = cage.open_syscall(lindfilepath, O_RDONLY | O_CREAT, S_IRWXA);
         cage.read_syscall(lindfd, lindslice.as_mut_ptr(), lind_size);
         cage.close_syscall(lindfd);
@@ -167,7 +167,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
     //copy file contents into lind file system
     let mut host_fileobj = File::open(hostfilepath).unwrap();
     let mut filecontents: Vec<u8> = Vec::new();
-    host_fileobj.read_to_end(&mut filecontents);
+    host_fileobj.read_to_end(&mut filecontents).unwrap();
 
     let lindfd = cage.open_syscall(lindtruepath.to_str().unwrap(), O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
     assert!(lindfd >= 0);
@@ -180,7 +180,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 
     //get diagnostic data to print
     let mut lindstat_res: StatData = StatData::default();
-    let stat_us = cage.fstat_syscall(lindfd, &mut lindstat_res);
+    let _stat_us = cage.fstat_syscall(lindfd, &mut lindstat_res);
     let inode = lindstat_res.st_ino;
 
     assert_eq!(cage.close_syscall(lindfd), 0);
@@ -189,30 +189,48 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 }
 
 pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&Cage, &str, bool, Option<usize>)) {
+    //get buffer in which getdents will write its stuff
     let mut bigbuffer = [0u8; 65536];
     let dentptr = bigbuffer.as_mut_ptr();
+
     let dirfd = cage.open_syscall(path, O_RDONLY, 0);
     assert!(dirfd >= 0);
+
     loop {
         let direntres = cage.getdents_syscall(dirfd, dentptr, 65536);
+        
+        //if we've read every entry in this directory, we're done
         if direntres == 0 {break;}
+
         let mut dentptrindex = 0isize;
+
+        //while there are still more entries to read
         while dentptrindex < direntres as isize {
+            //get information for where the next entry is (if relevant)
             let clipped_dirent_ptr = dentptr.wrapping_offset(dentptrindex) as *mut ClippedDirent;
             let clipped_dirent = unsafe{&*clipped_dirent_ptr};
+
+            //get the file name for the child
             let cstrptr = dentptr.wrapping_offset(dentptrindex + CLIPPED_DIRENT_SIZE as isize);
             let filenamecstr = unsafe{CStr::from_ptr(cstrptr as *const c_char)};
-            dentptrindex += clipped_dirent.d_reclen as isize;
             let filenamestr = filenamecstr.to_str().unwrap();
+
+            dentptrindex += clipped_dirent.d_reclen as isize;
+
+            //ignore these entries
             if filenamestr == "." || filenamestr == ".." {continue;}
+
             let fullstatpath = if path.ends_with("/") {
                 [path, filenamestr].join("")
             } else {
                 [path, "/", filenamestr].join("")
             };
 
+            //stat to tell whether it's a directory
             let mut lindstat_res: StatData = StatData::default();
-            let stat_us = cage.stat_syscall(fullstatpath.as_str(), &mut lindstat_res);
+            let _stat_us = cage.stat_syscall(fullstatpath.as_str(), &mut lindstat_res);
+
+            //call the visitor function on the child path
             visitor(cage, fullstatpath.as_str(), is_dir(lindstat_res.st_mode), arg);
         }
     }
@@ -228,6 +246,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
             cage.unlink_syscall(path);
             return;
         } else {
+            //remove all children recursively
             visit_children(cage, path, None, |childcage, childpath, isdir, _| {
                 if isdir {
                     lind_deltree(childcage, childpath);
@@ -235,6 +254,8 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                     childcage.unlink_syscall(childpath);
                 }
             });
+
+            //remove specified directory now that it is empty
             cage.chmod_syscall(path, S_IRWXA);
             cage.rmdir_syscall(path);
         }
