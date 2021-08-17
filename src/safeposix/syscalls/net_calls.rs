@@ -1095,7 +1095,7 @@ impl Cage {
         return retval; //package out fd_set?
     }
 
-    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32) -> i32 {
+    pub fn getsockopt_syscall(self, fd: i32, level: i32, optname: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1163,7 +1163,7 @@ impl Cage {
     }
 
     //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
-    pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+    pub fn setsockopt_syscall(self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1234,7 +1234,7 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getpeername_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
