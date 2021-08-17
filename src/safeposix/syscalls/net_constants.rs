@@ -341,23 +341,6 @@ pub const EPOLL_CTL_ADD: i32 = 1;
 pub const EPOLL_CTL_DEL: i32 = 2;
 pub const EPOLL_CTL_MOD: i32 = 3;
 
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct EpollEvent {
-    pub events: u32,
-    pub fd: i32 
-    //in native this is a union which could be one of a number of things
-    //however, we only support EPOLL_CTL subcommands which take the fd
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct PollStruct {
-    pub events: u32,
-    pub revents: u32,
-    pub fd: i32 
-}
-
 //for internal use
 #[derive(Debug, PartialEq, Eq)]
 pub enum ConnState {

@@ -65,6 +65,24 @@ pub struct SockPair {
     pub sock2: i32
 }
 
+//EPOLL
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+pub struct EpollEvent {
+    pub events: u32,
+    pub fd: i32 
+    //in native this is a union which could be one of a number of things
+    //however, we only support EPOLL_CTL subcommands which take the fd
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct PollStruct {
+    pub events: u32,
+    pub revents: u32,
+    pub fd: i32 
+}
+
 //redefining the Arg union to maintain the flow of the program
 #[repr(C)]
 pub union Arg {
