@@ -1098,7 +1098,7 @@ impl Cage {
         return retval; //package out fd_set?
     }
 
-    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32) -> i32 {
+    pub fn getsockopt_syscall(self, fd: i32, level: i32, optname: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1260,7 +1260,7 @@ impl Cage {
         }
     }
 
-    pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getsockname_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {

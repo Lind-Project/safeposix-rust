@@ -36,6 +36,7 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
+        ut_lind_fs_getdents();
 
         persistencetest();
         rdwrtest();
