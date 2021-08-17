@@ -1325,17 +1325,11 @@ impl Cage {
                 let mut errors = interface::RustHashSet::<i32>::new();
 
                 //read
-                if events & POLLIN > 0 {
-                    reads.insert(fd);
-                }
+                if events & POLLIN > 0 {reads.insert(fd);}
                 //write
-                if events & POLLOUT > 0 {
-                    reads.insert(fd);
-                }
+                if events & POLLOUT > 0 {reads.insert(fd);}
                 //err
-                if events & POLLERR > 0 {
-                    reads.insert(fd);
-                }
+                if events & POLLERR > 0 {reads.insert(fd);}
 
                 let mut mask: u32 = 0;
 
@@ -1415,7 +1409,7 @@ impl Cage {
                         }
                     }
                     EPOLL_CTL_MOD => {
-                        ///check if the fd that we are modifying exists or not
+                        //check if the fd that we are modifying exists or not
                         if let Some(_) = epollfdobj.registered_fds.get(&fd) {} else {
                             return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
                         }
@@ -1483,7 +1477,7 @@ impl Cage {
 
                 let mut poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, poll_fds_slice, timeout);
-                let count_changed: i32 = 0;
+                let mut count_changed: i32 = 0;
 
                 for (count, result) in poll_fds_slice[..maxevents as usize].iter().enumerate() {
                     let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
@@ -1499,12 +1493,12 @@ impl Cage {
                     events[count] = event;
                     count_changed += 1;
                 }
+                return count_changed;
             } else {
                 return syscall_error(Errno::EINVAL, "epoll wait", "provided fd is not an epoll file descriptor");
             }
         } else {
             return syscall_error(Errno::EBADF, "epoll wait", "provided fd is not a valid file descriptor");
         }
-        return count_changed;
     }
 }
