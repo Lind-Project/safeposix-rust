@@ -1,4 +1,6 @@
 // Network related system calls
+// Authors: Jonathan Singer and Tristan Brigham
+// outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
