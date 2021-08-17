@@ -1483,6 +1483,7 @@ impl Cage {
 
                 let mut poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, poll_fds_slice, timeout);
+                let count_changed: i32 = 0;
 
                 for (count, result) in poll_fds_slice[..maxevents as usize].iter().enumerate() {
                     let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
@@ -1496,6 +1497,7 @@ impl Cage {
                         event.events |= EPOLLERR as u32;
                     }
                     events[count] = event;
+                    count_changed += 1;
                 }
             } else {
                 return syscall_error(Errno::EINVAL, "epoll wait", "provided fd is not an epoll file descriptor");
@@ -1503,6 +1505,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "epoll wait", "provided fd is not a valid file descriptor");
         }
-        return maxevents;
+        return count_changed;
     }
 }
