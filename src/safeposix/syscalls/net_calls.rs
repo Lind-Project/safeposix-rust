@@ -1,4 +1,6 @@
 // Network related system calls
+// Authors: Jonathan Singer and Tristan Brigham
+// outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
@@ -6,7 +8,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 
 use super::net_constants::*;
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, FdTable};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
@@ -1257,7 +1259,7 @@ impl Cage {
         }
     }
 
-    pub fn getsockname_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1291,7 +1293,7 @@ impl Cage {
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname(self, length: usize, address_ptr: &mut [u8]) -> i32 {
+    pub fn gethostname(&self, length: usize, address_ptr: &mut [u8]) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
         }
@@ -1303,5 +1305,202 @@ impl Cage {
             address_ptr[..name_length].copy_from_slice(&DEFAULT_HOSTNAME.as_bytes());
         }
         return 0;
+    }
+
+    pub fn poll_syscall(&self, fds: &mut [PollStruct], timeout: Option<interface::RustDuration>) -> i32 { //timeout is supposed to be in milliseconds
+
+        let mut return_code: i32 = 0;
+        let start_time = interface::starttimer();
+
+        let end_time = match timeout {
+            Some(time) => time,
+            None => interface::RustDuration::MAX
+        };
+
+        loop {
+            for structpoll in &mut *fds {
+                let fd = structpoll.fd;
+                let events = structpoll.events;
+
+                let mut reads = interface::RustHashSet::<i32>::new();
+                let mut writes = interface::RustHashSet::<i32>::new();
+                let mut errors = interface::RustHashSet::<i32>::new();
+
+                //read
+                if events & POLLIN > 0 {reads.insert(fd);}
+                //write
+                if events & POLLOUT > 0 {reads.insert(fd);}
+                //err
+                if events & POLLERR > 0 {reads.insert(fd);}
+
+                let mut mask: u32 = 0;
+
+                //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
+                if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO)) > 0 {
+                    mask += if !reads.is_empty() {POLLIN} else {0};
+                    mask += if !writes.is_empty() {POLLOUT} else {0};
+                    mask += if !errors.is_empty() {POLLERR} else {0};
+                    return_code += 1;
+                }
+                structpoll.revents = mask;
+            }
+
+            if return_code != 0 || interface::readtimer(start_time) > end_time {
+                break;
+            } else {
+                interface::sleep(interface::RustDuration::MILLISECOND);
+            }
+        }
+        return return_code;
+    }
+
+    pub fn _epoll_object_allocator(&self) -> i32 {
+
+        //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+        
+        //get a file descriptor
+        if let Some(newfd) = self.get_next_fd(None, None) {
+            //new epoll fd
+            let epollobjfd = EpollDesc {
+                mode: 0000,
+                registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
+                advlock: interface::AdvisoryLock::new(),
+                errno: 0,
+                flags: 0
+            };
+            
+            //insert into the fdtable and return the fd i32
+            let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Epoll(epollobjfd)));
+            fdtable.insert(newfd, wrappedsock);
+            return newfd;
+        } else {
+            return syscall_error(Errno::ENFILE, "epoll create", "no available file descriptor number could be found");
+        }
+    }
+
+    pub fn epoll_create_syscall(&self, size: u32) -> i32 {
+        if size <= 0 {
+            return syscall_error(Errno::EINVAL, "epoll create", "provided size argument is invalid");
+        }
+        return Self::_epoll_object_allocator(self);
+    }
+
+    //this one can still be optimized
+    pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: EpollEvent) -> i32 {
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        //making sure that the epfd is really an epoll fd
+        if let Some(wrappedfd) = fdtable.get(&epfd) {
+            let mut filedesc_enum_epollfd = wrappedfd.write().unwrap();
+            if let Epoll(epollfdobj) = &mut *filedesc_enum_epollfd {
+
+                //check if the other fd is an epoll or not...
+                if let Epoll(_) = &*fdtable.get(&fd).unwrap().read().unwrap() {
+                    return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
+                }
+
+                //now that we know that the types are all good...
+                match op {
+                    EPOLL_CTL_DEL => {
+                        //since remove returns the value at the key and the values will always be EpollEvents, 
+                        //I am using this to optimize the code
+                        if let Some(EpollEvent{ events, fd }) = epollfdobj.registered_fds.remove(&fd) {} else {
+                            return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
+                        }
+                    }
+                    EPOLL_CTL_MOD => {
+                        //check if the fd that we are modifying exists or not
+                        if let Some(_) = epollfdobj.registered_fds.get(&fd) {} else {
+                            return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
+                        }
+                        //if the fd already exists, insert overwrites the prev entry
+                        epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
+                    }
+                    EPOLL_CTL_ADD => {
+                        if let Some(_) = epollfdobj.registered_fds.get(&fd) {
+                            return syscall_error(Errno::EEXIST, "epoll ctl", "fd is already registered");
+                        }
+                        epollfdobj.registered_fds.insert(fd, EpollEvent { events: event.events, fd: event.fd });
+                    }
+                    _ => {
+                        return syscall_error(Errno::EINVAL, "epoll ctl", "provided op is invalid");
+                    }
+                }
+            } else {
+                return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "epoll ctl", "provided epoll fd is not a valid epoll file descriptor");
+        }
+        return 0;
+    }
+
+    pub fn epoll_wait_syscall(&self, epfd: i32, events: &mut [EpollEvent], maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
+
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&epfd) {
+            let filedesc_enum = wrappedfd.read().unwrap();
+            if let Epoll(epollfdobj) = &*filedesc_enum {
+                if !maxevents > 0 {
+                    return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
+                }
+
+                //now we know that all of the arguments are valid...
+                let mut reads = interface::RustHashSet::<i32>::new();
+                let mut writes = interface::RustHashSet::<i32>::new();
+                let mut errors = interface::RustHashSet::<i32>::new();
+
+                let mut poll_fds_vec: Vec<PollStruct> = vec![];
+
+                for (&key, &value) in &epollfdobj.registered_fds {
+
+                    let events = value.events;
+                    let mut structpoll = PollStruct {
+                        fd: key,
+                        events: 0,
+                        revents: 0
+                    };
+
+                    if events & EPOLLIN as u32 > 0 {
+                        structpoll.events |= POLLIN;
+                    }
+                    if events & EPOLLOUT as u32 > 0 {
+                        structpoll.events |= POLLOUT;
+                    }
+                    if events & EPOLLERR as u32 > 0 {
+                        structpoll.events |= POLLERR;
+                    }
+                    poll_fds_vec.push(structpoll);
+
+                }
+
+                let mut poll_fds_slice = &mut poll_fds_vec[..];
+                Self::poll_syscall(&self, poll_fds_slice, timeout);
+                let mut count_changed: i32 = 0;
+
+                for (count, result) in poll_fds_slice[..maxevents as usize].iter().enumerate() {
+                    let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
+                    if result.revents & POLLIN > 0 {
+                        event.events |= EPOLLIN as u32;
+                    }
+                    if result.revents & POLLOUT > 0 {
+                        event.events |= EPOLLOUT as u32;
+                    }
+                    if result.revents & POLLERR > 0 {
+                        event.events |= EPOLLERR as u32;
+                    }
+                    events[count] = event;
+                    count_changed += 1;
+                }
+                return count_changed;
+            } else {
+                return syscall_error(Errno::EINVAL, "epoll wait", "provided fd is not an epoll file descriptor");
+            }
+        } else {
+            return syscall_error(Errno::EBADF, "epoll wait", "provided fd is not a valid file descriptor");
+        }
     }
 }

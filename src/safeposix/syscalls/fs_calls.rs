@@ -1027,7 +1027,7 @@ impl Cage {
         //checking whether the fd exists in the file table
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
-            else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
+            else {return syscall_error(Errno::ENFILE, "dup", "no available file descriptor number could be found");};
             return Self::_dup2_helper(&self, fd, nextfd, Some(&mut fdtable))
         } else {
             return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
