@@ -197,7 +197,7 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::SECOND);
             assert_eq!(cage2.accept_syscall(serversockfd, &mut socket), 0);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-            // assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(), 0);
         });
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
