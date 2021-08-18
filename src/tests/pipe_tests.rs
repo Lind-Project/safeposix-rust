@@ -1,5 +1,6 @@
+#![allow(dead_code)]
 #[cfg(test)]
-mod pipe_tests {
+pub mod pipe_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, filesystem, dispatcher::*};
     use super::super::*;
@@ -7,7 +8,6 @@ mod pipe_tests {
     use std::fs::OpenOptions;
     use std::time::Instant;
 
-    #[test]
     pub fn test_pipe() {
         // These can't really run until we figure out a better testing system/fsutils
         // ut_lind_write_pipefile();

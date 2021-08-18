@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // File system related system calls
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
@@ -491,7 +493,7 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
-            let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
+            let _inodeobj = metadata.inodetable.get(&inodenum).unwrap();
             
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = metadata.dev_id;
@@ -517,7 +519,7 @@ impl Cage {
 
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let _inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     return Self::_istatfs_helper(self, databuf);
                 },
@@ -1511,11 +1513,7 @@ impl Cage {
         let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
-            // check if arg length is valid
-            if length < 0 { 
-                return syscall_error(Errno::EINVAL, "ftruncate", "The argument length is negative");
-            }
-            
+
             let filedesc_enum = wrappedfd.read().unwrap();
             let mut mutmetadata = FS_METADATA.write().unwrap();
 
@@ -1645,7 +1643,7 @@ impl Cage {
                         Inode::Dir(dir_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
                             let mut bufcount = 0;
-                            let mut curr_size = 0;
+                            let mut curr_size;
                             let mut count = 0;
                             let mut temp_len = 0;
 

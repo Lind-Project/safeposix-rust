@@ -1,12 +1,11 @@
 #[cfg(test)]
-mod fs_tests {
+pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
 
-    // #[test]
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
@@ -36,7 +35,6 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
 
         persistencetest();
         rdwrtest();
@@ -465,7 +463,7 @@ mod fs_tests {
         assert_eq!(cage.lseek_syscall(read_fd, 0, SEEK_SET), 0);
 
         //why is this failing??
-        // assert_eq!(cage.read_syscall(read_fd, buf.as_mut_ptr(), 100), 0);
+        assert_eq!(cage.read_syscall(read_fd, buf.as_mut_ptr(), 100), 0);
         assert_eq!(cage.close_syscall(read_fd), 0);
 
         let write_fd = cage.open_syscall(path, O_WRONLY, S_IRWXA);

@@ -5,6 +5,25 @@ mod networking_tests;
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
+#[cfg(test)]
+mod main_tests {
+    use crate::tests::networking_tests::net_tests::net_tests;
+    use crate::tests::fs_tests::fs_tests::test_fs;
+    use crate::tests::pipe_tests::pipe_tests::test_pipe;
+
+    #[test]
+    pub fn tests() {
+        println!("FS TESTS");
+        test_fs();
+
+        println!("NET TESTS");
+        net_tests();
+        
+        println!("PIPE TESTS");
+        // test_pipe();
+    }
+}
+
 pub fn str2cbuf(ruststr: &str) -> *mut u8 {
     let cbuflenexpected = ruststr.len();
     let (ptr, len, _) = ruststr.to_string().into_raw_parts();

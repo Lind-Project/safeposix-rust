@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // Network related system calls
 // Authors: Jonathan Singer and Tristan Brigham
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
@@ -1298,9 +1299,6 @@ impl Cage {
 
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname(&self, length: usize, address_ptr: &mut [u8]) -> i32 {
-        if length < 0 {
-            return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
-        }
 
         let name_length: usize = DEFAULT_HOSTNAME.chars().count();
         if name_length > length {
