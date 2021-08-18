@@ -1659,7 +1659,7 @@ impl Cage {
                                 temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); // get length of current filename vector for padding calculation
                                 
                                 // pad filename vector to the next highest 8 byte boundary
-                                for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
+                                for _n in 0..(temp_len + 7) / 8 * 8 - temp_len {
                                     vec_filename.push(00);
                                 }
                                 

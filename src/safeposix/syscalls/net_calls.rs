@@ -222,7 +222,7 @@ impl Cage {
     }
 
     //we assume we've converted into a RustSockAddr in the dispatcher
-    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: i32) -> i32 {
+    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, _len: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -331,6 +331,7 @@ impl Cage {
 
                     //for UDP, just set the addresses and return
                     if sockfdobj.protocol == IPPROTO_UDP {
+                        sockfdobj.remoteaddr = Some(remoteaddr.clone());
                         match sockfdobj.localaddr {
                             Some(_) => return 0,
                             None => {

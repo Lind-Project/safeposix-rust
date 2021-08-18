@@ -29,7 +29,7 @@ mod pipe_tests {
         let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
         let mut bufptr = buf.as_mut_ptr();
 
-        for i in 0..num_writes {
+        for _i in 0..num_writes {
             cage.write_syscall(filefd, bufptr, byte_chunk);
         }
 
@@ -87,7 +87,7 @@ mod pipe_tests {
 
         let filefd = cage1.open_syscall("test1gb.txt", O_RDONLY, S_IRWXA);
         
-        for i in 0..num_writes {
+        for _i in 0..num_writes {
 
             let mut buf: Vec<u8> = Vec::with_capacity(byte_chunk);
             let mut bufptr = buf.as_mut_ptr();
