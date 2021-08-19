@@ -166,63 +166,63 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
-
-
-
+    
+    
+    
     pub fn ut_lind_net_listen() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        assert_eq!(cage.exit_syscall(), 0);
-        lindrustfinalize();
-    }
-
-
-
-    pub fn ut_lind_net_recvfrom() {
-        lindrustinit();
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
+        
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-
+        
         assert!(serversockfd > 0);
         assert!(clientsockfd > 0);
-
+        
         //binding to a socket
         let mut socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
-
+        
         assert_eq!(cage.fork_syscall(2), 0);
-
+        
         let builder = std::thread::Builder::new().name("THREAD".into());
-
+        
         let sender = builder.spawn(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-
+            
             interface::sleep(interface::RustDuration::from_millis(50));
-
+            
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
-
+            
             assert_eq!(cage2.accept_syscall(serversockfd, &mut socket2), 0);
-
+            
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         }).unwrap();
-
+        
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); 
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
         assert_ne!(retsocket, socket);
-
+        
         sender.join().unwrap();
-
+        
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
-
+    
+    
+    
+        pub fn ut_lind_net_recvfrom() {
+            lindrustinit();
+            let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+    
+            assert_eq!(cage.exit_syscall(), 0);
+            lindrustfinalize();
+        }
+    
 
 
     pub fn ut_lind_net_select() {

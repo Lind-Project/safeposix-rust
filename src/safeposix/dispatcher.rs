@@ -67,7 +67,7 @@ const PWRITE_SYSCALL: i32 = 127;
 
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
-use super::filesystem::{FS_METADATA, load_fs, incref_root};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
 
 
 //this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
@@ -226,6 +226,7 @@ pub extern "C" fn lindrustfinalize() {
     for (_cageid, cage) in drainedcages {
         cage.exit_syscall();
     }
+    persist_metadata(&*FS_METADATA.read().unwrap());
 }
 
 #[cfg(test)]
