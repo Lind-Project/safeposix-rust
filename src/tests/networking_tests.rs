@@ -201,8 +201,8 @@ pub mod net_tests {
             assert_eq!(cage2.exit_syscall(), 0);
         }).unwrap();
         
-        // assert_eq!(unsafe {libc::connect(clientsockfd, (&sockaddr as *const interface::SockaddrV4).cast::<libc::sockaddr>(), size_of::<interface::SockaddrV4>() as u32)}, 0);
-        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+       assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+        // unsafe{libc::perror(std::ptr::null::<libc::c_char>() as *const std::os::raw::c_char)};
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); 
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);

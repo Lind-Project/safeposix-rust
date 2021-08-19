@@ -430,7 +430,10 @@ impl Cage {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
-                            let _bindret = sockobj.bind(&localaddr);
+                            let bindret = sockobj.bind(&localaddr);
+                            if bindret < 0 {
+                                return syscall_error(Errno::ECONNREFUSED, "sendto", "The libc call to bind failed!");
+                            }
                             if let None = sockfdobj.localaddr {
                                 sockfdobj.localaddr = Some(localaddr);
                             }
