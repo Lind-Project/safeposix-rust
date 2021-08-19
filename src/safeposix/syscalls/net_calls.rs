@@ -6,7 +6,6 @@
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 
-
 use super::net_constants::*;
 use super::fs_constants::*;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct};
@@ -464,7 +463,7 @@ impl Cage {
 
                                     if sockerrno == Errno::EAGAIN {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(interface::RustDuration::from_millis(1));
                                         continue;
                                     };
 
@@ -526,7 +525,7 @@ impl Cage {
 
                                     if sockerrno == Errno::EAGAIN {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(interface::RustDuration::from_millis(1));
                                         continue;
                                     }
 
@@ -629,7 +628,7 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN  && (flags & O_NONBLOCK == 0) {
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(interface::RustDuration::from_millis(1));
                                         continue;
                                     }
                                     
@@ -687,7 +686,7 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(interface::RustDuration::from_millis(1));
                                         continue;
                                     }
 
@@ -901,7 +900,7 @@ impl Cage {
                                     };
 
                                     if accerrno == Errno::EAGAIN {
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(interface::RustDuration::from_millis(1));
                                         continue;
                                     }
                                     return errval;
@@ -1094,7 +1093,7 @@ impl Cage {
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::MILLISECOND);
+                interface::sleep(interface::RustDuration::from_millis(1));
             }
         }
         *readfds = new_readfds;
@@ -1350,7 +1349,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::MILLISECOND);
+                interface::sleep(interface::RustDuration::from_millis(1));
             }
         }
         return return_code;

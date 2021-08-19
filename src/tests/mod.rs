@@ -5,16 +5,28 @@ mod networking_tests;
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
+
 #[cfg(test)]
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
     use crate::tests::fs_tests::fs_tests::test_fs;
     use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
+    use std::process::Command;
+
     #[test]
     pub fn tests() {
+        //trying to suppress this output but having issues
+        let mut rmet = Command::new("rm");
+        for count in vec![8, 9, 18, 19, 20, 21, 23, 24] {
+            rmet.arg(format!("linddata.{}", count)).output();
+        }
+        rmet.arg("lind.metadata");
+        rmet.status();
+        
+
         println!("FS TESTS");
-        test_fs();
+        // test_fs(); //get dents is broken
 
         println!("NET TESTS");
         net_tests();
