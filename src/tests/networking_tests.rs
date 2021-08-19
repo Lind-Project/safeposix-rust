@@ -14,7 +14,7 @@ pub mod net_tests {
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
-        ut_lind_net_recvfrom(); //not done
+        ut_lind_net_recvfrom(); //not done and have no idea why this is not working
         ut_lind_net_select();   //not done
     }
 
@@ -186,23 +186,34 @@ pub mod net_tests {
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+
         //binding to a socket
         let mut socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
 
-        let sender = std::thread::spawn(move || {
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        let builder = std::thread::Builder::new().name("THREAD".into());
+
+        let sender = builder.spawn(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
 
-            interface::sleep(interface::RustDuration::SECOND);
-            assert_eq!(cage2.accept_syscall(serversockfd, &mut socket), 0);
+            interface::sleep(interface::RustDuration::from_millis(50));
+
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
+
+            assert_eq!(cage2.accept_syscall(serversockfd, &mut socket2), 0);
+
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
-        });
+        }).unwrap();
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
         
-        let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //127.0.0.1
+        let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); 
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
         assert_ne!(retsocket, socket);
 
