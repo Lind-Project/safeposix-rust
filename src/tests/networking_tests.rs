@@ -3,8 +3,7 @@ pub mod net_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
-    // use std::os::unix::fs::PermissionsExt;
-    // use std::fs::OpenOptions;
+    use std::mem::size_of;
 
     pub fn net_tests() {
         ut_lind_net_bind();
@@ -180,7 +179,8 @@ pub mod net_tests {
         assert!(clientsockfd > 0);
         
         //binding to a socket
-        let mut socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
+        let mut sockaddr = interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }};
+        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
@@ -191,7 +191,7 @@ pub mod net_tests {
         let sender = builder.spawn(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
-            interface::sleep(interface::RustDuration::from_millis(50));
+            interface::sleep(interface::RustDuration::from_secs(5));
             
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
             
@@ -201,6 +201,7 @@ pub mod net_tests {
             assert_eq!(cage2.exit_syscall(), 0);
         }).unwrap();
         
+        // assert_eq!(unsafe {libc::connect(clientsockfd, (&sockaddr as *const interface::SockaddrV4).cast::<libc::sockaddr>(), size_of::<interface::SockaddrV4>() as u32)}, 0);
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); 
