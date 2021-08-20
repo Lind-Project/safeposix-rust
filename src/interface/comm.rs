@@ -3,7 +3,6 @@
 // //
 
 use std::mem::size_of;
-use std::ffi::CString;
 extern crate libc;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
