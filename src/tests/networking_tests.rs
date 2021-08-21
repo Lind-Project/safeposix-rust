@@ -179,7 +179,7 @@ pub mod net_tests {
         assert!(clientsockfd > 0);
         
         //binding to a socket
-        let mut sockaddr = interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }};
+        let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_le_bytes([127, 0, 0, 1]) }};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
@@ -193,16 +193,17 @@ pub mod net_tests {
             
             interface::sleep(interface::RustDuration::from_secs(5));
             
-            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: 0, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_be_bytes([127, 0, 0, 1]) }}); //127.0.0.1
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50300, sin_addr: interface::V4Addr{ s_addr: u32::from_le_bytes([127, 0, 0, 1]) }}); //127.0.0.1
             
             assert_eq!(cage2.accept_syscall(serversockfd, &mut socket2), 0);
             
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         }).unwrap();
-        
-       assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
-        // unsafe{libc::perror(std::ptr::null::<libc::c_char>() as *const std::os::raw::c_char)};
+
+        let retval = cage.connect_syscall(clientsockfd, &socket); //this is what is failing -- returns error (libc::connect -> -1)
+        unsafe{libc::perror(std::ptr::null::<libc::c_char>() as *const std::os::raw::c_char)};
+        assert_eq!(retval, 0);
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); 
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);

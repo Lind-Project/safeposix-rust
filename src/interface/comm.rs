@@ -120,6 +120,7 @@ impl Socket {
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
         };
+        println!("ADDR: {:?}", addr);
         unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
 
