@@ -110,7 +110,7 @@ impl Cage {
 
         let portlessaddr = if newdomain == AF_INET {
             let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
-            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0};
+            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
             interface::GenSockaddr::V4(innersockaddr)
         } else if domain == AF_INET6 {
             let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
@@ -287,35 +287,36 @@ impl Cage {
         }
     }
 
-    fn assign_new_addr(sockfdobj: &SocketDesc, remoteaddr: &interface::GenSockaddr) -> Result<interface::GenSockaddr, i32> {
+    fn assign_new_addr(sockfdobj: &SocketDesc, isv6: bool) -> Result<interface::GenSockaddr, i32> {
         if let Some(addr) = &sockfdobj.localaddr {
             Ok(addr.clone())
         } else {
             let mut mutmetadata = NET_METADATA.write().unwrap();
-            let mut newremote = remoteaddr.clone();
 
             //in lieu of getmyip we just always use 0.0.0.0 or the ipv6 equivalent because we have
             //no kernel-respecting way of accessing the actual interface addresses for ipv6 for now
             //(netlink for now is a big no go)
-            match remoteaddr {
-                interface::GenSockaddr::V4(_) => {
-                    let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
-                    let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
-                    if let Err(e) = port {return Err(e);}
-                    newremote.set_port(port.unwrap());
-                    newremote.set_addr(addr);
-                }
-
-                interface::GenSockaddr::V6(_) => {
-                    let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
-                    let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
-                    if let Err(e) = port {return Err(e);}
-                    newremote.set_port(port.unwrap());
-                    newremote.set_addr(addr);
-                }
+            let retval = if isv6 {
+                let mut newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
+                let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
+                let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
+                if let Err(e) = port {return Err(e);}
+                newremote.set_port(port.unwrap());
+                newremote.set_addr(addr);
+                newremote.set_family(AF_INET6 as u16);
+                newremote
+            } else {
+                let mut newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
+                let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
+                if let Err(e) = port {return Err(e);}
+                newremote.set_port(port.unwrap());
+                newremote.set_addr(addr);
+                newremote.set_family(AF_INET as u16);
+                newremote
             };
 
-            Ok(newremote)
+            Ok(retval)
         }
     }
 
@@ -335,7 +336,7 @@ impl Cage {
                         match sockfdobj.localaddr {
                             Some(_) => return 0,
                             None => {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
+                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_))) {
                                     Ok(a) => a,
                                     Err(e) => return e,
                                 };
@@ -349,7 +350,7 @@ impl Cage {
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         //for TCP, actually create the internal socket object and connect it
-                        let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
+                        let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_))) {
                             Ok(a) => a,
                             Err(e) => return e,
                         };
@@ -426,7 +427,7 @@ impl Cage {
 
                             //bind the udp port as we do not bind them at bind_syscall, and this is
                             //the last possible moment to do so
-                            let localaddr = match Self::assign_new_addr(sockfdobj, dest_addr) {
+                            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_))) {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
@@ -750,20 +751,37 @@ impl Cage {
                             return 0; //Already done!
                         }
 
-                        ConnState::NOTCONNECTED => {
-                            return 0; //should this actually error instead?
+                        ConnState::CONNECTED => {
+                            return syscall_error(Errno::EOPNOTSUPP, "listen", "We don't support closing a prior socket connection on listen");
                         }
 
-                        ConnState::CONNECTED => {
-                            //we should probably assert that it's TCP, but connected state does
-                            //most of that work?
-                            //Additionally we maybe should check that localaddr exists?
-                            let ladr = sockfdobj.localaddr.as_ref().unwrap().clone();
-                            let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                        ConnState::NOTCONNECTED => {
+                            if sockfdobj.protocol != IPPROTO_TCP {
+                                return syscall_error(Errno::EOPNOTSUPP, "listen", "This protocol doesn't support listening");
+                            }
                             let mut mutmetadata = NET_METADATA.write().unwrap();
+                            let mut ladr;
+                            let mut porttuple;
+                            match sockfdobj.localaddr {
+                                Some(sla) => {
+                                    ladr = sla.clone();
+                                    porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
 
-                            if mutmetadata.listening_port_set.contains(&porttuple) {
-                                return syscall_error(Errno::EADDRINUSE, "listen", "A socket is already listening on this port");
+                                    if mutmetadata.listening_port_set.contains(&porttuple) {
+                                        match mutmetadata._get_available_tcp_port(ladr.addr().clone(), sockfdobj.domain) {
+                                            Ok(port) => ladr.set_port(port),
+                                            Err(i) => return i,
+                                        }
+                                        porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                                    }
+                                }
+                                None => {
+                                    ladr = match Self::assign_new_addr(sockfdobj, sockfdobj.domain == AF_INET6) {
+                                        Ok(a) => a,
+                                        Err(e) => return e,
+                                    };
+                                    porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                                }
                             }
                             mutmetadata.listening_port_set.insert(porttuple);
 

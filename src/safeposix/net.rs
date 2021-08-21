@@ -45,7 +45,7 @@ pub const UDPPORT: bool = false;
 impl NetMetadata {
     pub fn _get_available_udp_port(&mut self, addr: interface::GenIpaddr, domain: i32) -> Result<u16, i32> {
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
-        for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev() {
+        for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev().map(|x| x.to_be()) {
             porttuple.1 = port;
             if !self.used_port_set.contains(&porttuple) {
                 self.used_port_set.insert(porttuple);
@@ -56,7 +56,7 @@ impl NetMetadata {
     }
     pub fn _get_available_tcp_port(&mut self, addr: interface::GenIpaddr, domain: i32) -> Result<u16, i32> {
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
-        for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev() {
+        for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev().map(|x| x.to_be()) {
             porttuple.1 = port;
             if !self.used_port_set.contains(&porttuple) {
                 self.used_port_set.insert(porttuple);
