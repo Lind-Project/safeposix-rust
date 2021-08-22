@@ -193,8 +193,7 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(500)); //why does this make the whole thread block?
 
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53000_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
-            println!("ACCEPT");
-            assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //failing
+            assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
             
             interface::sleep(interface::RustDuration::from_millis(100));
             
