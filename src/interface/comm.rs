@@ -76,7 +76,8 @@ pub struct V4Addr {
 pub struct SockaddrV4 {
     pub sin_family: u16,
     pub sin_port: u16,
-    pub sin_addr: V4Addr
+    pub sin_addr: V4Addr,
+    pub padding: u64
 }
 
 #[repr(C)]
@@ -120,8 +121,10 @@ impl Socket {
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
         };
-        println!("ADDR: {:?}", addr);
-        unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
+        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
+        let f = unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)};
+        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
+        f
     }
 
     pub fn sendto(&self, buf: *mut u8, len: usize, addr: Option<&GenSockaddr>) -> i32 {
@@ -141,14 +144,17 @@ impl Socket {
         };
         unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, &mut addrlen as *mut u32) as i32}
     }
+
     pub fn listen(&self, backlog: i32) -> i32 {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
+
     pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
         return if isv4 {
             let mut inneraddrbuf = SockaddrV4::default();
             let mut sadlen = size_of::<SockaddrV4>() as u32;
             let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV4).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
+
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
@@ -159,6 +165,7 @@ impl Socket {
             let mut inneraddrbuf = SockaddrV6::default();
             let mut sadlen = size_of::<SockaddrV6>() as u32;
             let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV6).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
+
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
