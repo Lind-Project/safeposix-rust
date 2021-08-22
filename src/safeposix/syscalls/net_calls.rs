@@ -575,7 +575,6 @@ impl Cage {
                         }
                     }
                 }
-
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "send", "file descriptor refers to something other than a socket");
                 }
@@ -822,7 +821,6 @@ impl Cage {
 
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
-
         match how {
             SHUT_RD => {
                 return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
@@ -849,8 +847,8 @@ impl Cage {
             let mut filedesc = wrappedfd.write().unwrap();
             if let Socket(sockfdobj) = &mut *filedesc {
                 let mut mutmetadata = NET_METADATA.write().unwrap();
-
                 let objectid = &sockfdobj.socketobjectid;
+
                 if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
                     let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                     if let Err(e) = release_ret_val {return e;}
@@ -892,18 +890,15 @@ impl Cage {
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
 
         loop { //we must block manually
-
             let mut fdtable = self.filedescriptortable.write().unwrap();
             if let Some(wrappedfd) = fdtable.get(&fd) {
                 let mut filedesc_enum = wrappedfd.write().unwrap();
                 match &mut *filedesc_enum {
-
                     Socket(ref mut sockfdobj) => {
                         match sockfdobj.protocol {
                             IPPROTO_UDP => {
                                 return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
                             }
-
                             IPPROTO_TCP => {
                                 if sockfdobj.state != ConnState::LISTEN {
                                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
@@ -970,6 +965,7 @@ impl Cage {
                                 drop(wrappedfd);
                                 drop(filedesc_enum);
 
+                                //socket inserter code
                                 let socket_result = {
                                     let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
 

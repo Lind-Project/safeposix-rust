@@ -13,8 +13,7 @@ pub mod net_tests {
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
-        ut_lind_net_recvfrom(); //not done and have no idea why this is not working
-        ut_lind_net_select();   //not done
+        ut_lind_net_shutdown();
     }
 
 
@@ -190,18 +189,16 @@ pub mod net_tests {
         let sender = builder.spawn(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
-            interface::sleep(interface::RustDuration::from_millis(500)); //why does this make the whole thread block?
+            interface::sleep(interface::RustDuration::from_millis(100)); 
 
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53000_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
             assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
-            
-            interface::sleep(interface::RustDuration::from_millis(100));
             
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         }).unwrap();
 
-        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0); //so connect works but accept doesn't?
+        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0); 
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
@@ -214,20 +211,47 @@ pub mod net_tests {
     }
     
     
-    
-        pub fn ut_lind_net_recvfrom() {
-            lindrustinit();
-            let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-    
-            assert_eq!(cage.exit_syscall(), 0);
-            lindrustfinalize();
-        }
-    
 
-
-    pub fn ut_lind_net_select() {
+    pub fn ut_lind_net_shutdown() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+        
+        //binding to a socket
+        let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50431_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
+        
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        let builder = std::thread::Builder::new().name("THREAD".into());
+        
+        let sender = builder.spawn(move || {
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            
+            interface::sleep(interface::RustDuration::from_millis(100)); //why does this make the whole thread block?
+
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50431_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
+            let fd = cage2.accept_syscall(serversockfd, &mut socket2); 
+            assert!(fd > 0);
+            
+            assert_eq!(cage2.send_syscall(fd, str2cbuf("random string"), 13, 0), 13);
+            assert_eq!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0);
+            assert_ne!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0); //should fail
+
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(), 0);
+        }).unwrap();
+
+        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+
+        sender.join().unwrap();
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
