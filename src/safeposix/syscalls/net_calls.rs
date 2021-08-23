@@ -635,7 +635,7 @@ impl Cage {
                                         interface::sleep(interface::RustDuration::from_millis(1));
                                         continue;
                                     }
-                                    
+
                                     //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
                                     //the issue), then continue with the data we've read so far if we read any data from
                                     //peek or a previous iteration, or return the error given
