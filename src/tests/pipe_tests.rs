@@ -7,7 +7,7 @@ mod pipe_tests {
     use std::fs::OpenOptions;
     use std::time::Instant;
 
-    #[test]
+    //#[test]
     pub fn test_pipe() {
         // These can't really run until we figure out a better testing system/fsutils
         // ut_lind_write_pipefile();
