@@ -68,6 +68,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
         
+        //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
         //creating a thread for the server so that the information can be sent between the two threads
@@ -380,6 +381,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
+        //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
         
         let sender = std::thread::Builder::new().name("THREAD".into()).spawn(move || {
@@ -427,6 +429,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
         
+        //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
         //creating a thread for the server so that the information can be sent between the two threads
@@ -535,6 +538,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
+        //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
         let builder = std::thread::Builder::new().name("THREAD".into());
