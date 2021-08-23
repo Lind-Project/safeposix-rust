@@ -611,8 +611,9 @@ impl Cage {
 
                                 //if we're not still peeking data, consume the data we peeked from our peek buffer
                                 if flags & MSG_PEEK == 0 {
-                                    sockfdobj.last_peek.drain(..bytecount);
+                                    sockfdobj.last_peek.drain(..);
                                 }
+
 
                                 if newbuflen == 0 {
                                     //if we've filled all of the buffer with peeked data, return
@@ -624,7 +625,7 @@ impl Cage {
                             let mut buflenleft = newbuflen;
                             loop {
                                 let retval = sockobj.recvfrom(bufleft, buflenleft, addr); //nonblocking, block manually
-                                
+
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(-retval) {
                                         Ok(i) => i,
