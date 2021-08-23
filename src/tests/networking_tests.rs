@@ -235,7 +235,7 @@ pub mod net_tests {
         let sender = builder.spawn(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
-            interface::sleep(interface::RustDuration::from_millis(100)); //why does this make the whole thread block?
+            interface::sleep(interface::RustDuration::from_millis(100)); 
 
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50431_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
             let fd = cage2.accept_syscall(serversockfd, &mut socket2); 
@@ -250,7 +250,11 @@ pub mod net_tests {
         }).unwrap();
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
-
+        
+        let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
+        assert_ne!(retsocket, socket);
+        
         sender.join().unwrap();
 
         assert_eq!(cage.exit_syscall(), 0);
