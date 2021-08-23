@@ -187,13 +187,13 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         GETDENTS_SYSCALL => {
-            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3))
+            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_uint(arg3))
         }
         FTRUNCATE_SYSCALL => {
-            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
         }
         TRUNCATE_SYSCALL => {
-            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_isize(arg2))
         }
         PIPE_SYSCALL => {
             check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))
