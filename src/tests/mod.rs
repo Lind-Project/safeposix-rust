@@ -6,6 +6,7 @@ use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
 
+
 #[cfg(test)]
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
@@ -16,14 +17,7 @@ mod main_tests {
 
     #[test]
     pub fn tests() {
-        //trying to suppress this output but having issues
-        let mut rmet = Command::new("rm");
-        for count in vec![8, 9, 18, 19, 20, 21, 23, 24] {
-            rmet.arg(format!("linddata.{}", count)).output();
-        }
-        rmet.arg("lind.metadata");
-        rmet.status();
-        
+        remove_metadata();
 
         println!("FS TESTS");
         // test_fs(); //get dents is broken
@@ -33,6 +27,16 @@ mod main_tests {
         
         println!("PIPE TESTS");
         // test_pipe();
+    }
+
+    pub fn remove_metadata() {
+        //trying to suppress this output but having issues
+        let mut rmet = Command::new("rm");
+        for count in vec![8, 9, 18, 19, 20, 21, 23, 24] {
+            rmet.arg(format!("linddata.{}", count)).output();
+        }
+        rmet.arg("lind.metadata");
+        rmet.status();
     }
 }
 
