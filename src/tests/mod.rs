@@ -19,9 +19,9 @@ mod main_tests {
     #[test]
     pub fn tests() {
         // persist_metadata(&FilesystemMetadata::blank_fs_init()); //this is how I clear all of the metadata before testing
-        lindrustinit();
-        crate::lib_fs_utils::lind_deltree({CAGE_TABLE.read().unwrap().get(&1).unwrap()}, "/");
-        lindrustfinalize();
+        // lindrustinit();
+        // crate::lib_fs_utils::lind_deltree({CAGE_TABLE.read().unwrap().get(&1).unwrap()}, "/");
+        // lindrustfinalize();
 
         println!("FS TESTS");
         test_fs(); //get dents is broken

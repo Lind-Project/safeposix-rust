@@ -8,12 +8,13 @@ pub mod net_tests {
     pub fn net_tests() {
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
-        ut_lind_net_bind_on_zero(); //not done
+        ut_lind_net_bind_on_zero(); 
         ut_lind_net_connect_basic_udp();
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
-        ut_lind_net_recvfrom(); //EPERM:: Internal call to recvfrom failed
+        ut_lind_net_recvfrom(); 
+        ut_lind_net_select(); //not done
         ut_lind_net_shutdown();
         ut_lind_net_socket();
     }
@@ -515,6 +516,16 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(100));
         
         sender.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_net_select() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
