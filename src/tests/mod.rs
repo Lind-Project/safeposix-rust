@@ -12,16 +12,19 @@ mod main_tests {
     use crate::tests::fs_tests::fs_tests::test_fs;
     use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
-    use crate::safeposix::{cage::*, filesystem::*};
+    use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
 
     use std::process::Command;
 
     #[test]
     pub fn tests() {
-        persist_metadata(&FilesystemMetadata::blank_fs_init()); //this is how I clear all of the metadata before testing
+        // persist_metadata(&FilesystemMetadata::blank_fs_init()); //this is how I clear all of the metadata before testing
+        lindrustinit();
+        crate::lib_fs_utils::lind_deltree({CAGE_TABLE.read().unwrap().get(&1).unwrap()}, "/");
+        lindrustfinalize();
 
         println!("FS TESTS");
-        // test_fs(); //get dents is broken
+        test_fs(); //get dents is broken
 
         println!("NET TESTS");
         net_tests();

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #[cfg(test)]
 pub mod pipe_tests {
     use crate::interface;

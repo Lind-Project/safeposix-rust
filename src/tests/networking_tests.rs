@@ -237,7 +237,7 @@ pub mod net_tests {
 
         assert_eq!(cage.close_syscall(clientsockfd), 0);
 
-        //connect to the server
+        //connect to the server with the other sockfd
         assert_eq!(cage.connect_syscall(clientsockfd2, &socket), 0);
 
         //send the data with delays so that the server can process the information cleanly
