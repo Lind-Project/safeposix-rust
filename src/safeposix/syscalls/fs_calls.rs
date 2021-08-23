@@ -754,8 +754,8 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
+                                    persist_metadata(&metadata);
                                 } //update file size if necessary
-                                persist_metadata(&metadata);
                                 
                                 byteswritten as i32
                             } else {
@@ -854,8 +854,8 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               persist_metadata(&metadata);
                             } //update file size if necessary
-                            persist_metadata(&metadata);
 
                             retval
                         }
@@ -1221,6 +1221,7 @@ impl Cage {
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                 } 
+                                persist_metadata(&mutmetadata);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
@@ -1234,6 +1235,7 @@ impl Cage {
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
                         },
                         Inode::CharDev(ref mut char_inode_obj) => {
@@ -1247,6 +1249,7 @@ impl Cage {
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
                         },
                         Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
@@ -1504,6 +1507,7 @@ impl Cage {
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
+                        persist_metadata(&metadata);
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1546,6 +1550,7 @@ impl Cage {
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                 }
+                persist_metadata(&metadata);
                 0 // success
             }
         }
@@ -1595,6 +1600,7 @@ impl Cage {
                                      // extra data are cut off
                                 fileobject.shrink(length);
                             } 
+                            persist_metadata(&mutmetadata);
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");

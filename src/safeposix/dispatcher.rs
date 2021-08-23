@@ -80,6 +80,7 @@ macro_rules! check_and_dispatch {
     };
 }
 
+#[no_mangle]
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
@@ -203,6 +204,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
+#[no_mangle]
 pub extern "C" fn lindrustinit() {
     load_fs();
     incref_root();
@@ -218,6 +220,7 @@ pub extern "C" fn lindrustinit() {
 
 }
 
+#[no_mangle]
 pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
     let mut cagetable = CAGE_TABLE.write().unwrap();
