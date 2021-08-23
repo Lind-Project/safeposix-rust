@@ -14,6 +14,7 @@ pub mod net_tests {
         ut_lind_net_getsockname();
         ut_lind_net_listen();
         ut_lind_net_shutdown();
+        ut_lind_net_socket();
     }
 
 
@@ -257,6 +258,36 @@ pub mod net_tests {
         
         sender.join().unwrap();
 
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_net_socket() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+        let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let sockfd4 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+        //checking that the fd's are correct
+        assert!(sockfd > 0);
+        assert!(sockfd2 > 0);
+        assert!(sockfd3 > 0);
+        assert!(sockfd4 > 0);
+
+        //let's check an illegal operation...
+        let sockfdillegal = cage.socket_syscall(AF_UNIX, SOCK_DGRAM, 0);
+        assert_eq!(sockfdillegal, -(Errno::EOPNOTSUPP as i32));
+
+        sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(sockfd > 0);
+
+        assert_eq!(cage.close_syscall(sockfd), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
