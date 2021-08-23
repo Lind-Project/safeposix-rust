@@ -6,18 +6,19 @@ use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
 
-
 #[cfg(test)]
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
     use crate::tests::fs_tests::fs_tests::test_fs;
     use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
+    use crate::safeposix::{cage::*, filesystem::*};
+
     use std::process::Command;
 
     #[test]
     pub fn tests() {
-        remove_metadata();
+        persist_metadata(&FilesystemMetadata::blank_fs_init()); //this is how I clear all of the metadata before testing
 
         println!("FS TESTS");
         // test_fs(); //get dents is broken
@@ -27,17 +28,7 @@ mod main_tests {
         
         println!("PIPE TESTS");
         // test_pipe();
-    }
-
-    pub fn remove_metadata() {
-        //trying to suppress this output but having issues
-        let mut rmet = Command::new("rm");
-        for count in vec![8, 9, 18, 19, 20, 21, 23, 24] {
-            rmet.arg(format!("linddata.{}", count)).output();
-        }
-        rmet.arg("lind.metadata");
-        rmet.status();
-    }
+    }   
 }
 
 pub fn str2cbuf(ruststr: &str) -> *mut u8 {
