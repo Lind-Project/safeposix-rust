@@ -68,7 +68,16 @@ const PWRITE_SYSCALL: i32 = 127;
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
 use super::filesystem::{FS_METADATA, load_fs, incref_root};
+use crate::interface::errnos::*;
 
+macro_rules! get_onearg {
+    ($arg: expr) => {
+        match (move || Ok($arg?))() {
+            Ok(okval) => okval,
+            Err(e) => return e
+        }
+    };
+}
 
 //this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
 //to the syscall. Then it unwraps the arguments, returning the error if any one of them is an error
@@ -76,7 +85,13 @@ use super::filesystem::{FS_METADATA, load_fs, incref_root};
 //the body of a closure within the variadic macro
 macro_rules! check_and_dispatch {
     ( $cage:ident . $func:ident, $($arg:expr),* ) => {
-        (move || Ok($cage.$func( $($arg?),* )))().into_ok_or_err()
+        (|| Ok($cage.$func( $($arg?),* )))().into_ok_or_err()
+    };
+}
+
+macro_rules! check_and_dispatch_socketpair {
+    ( $func:expr, $cage:ident, $($arg:expr),* ) => {
+        (|| Ok($func( $cage, $($arg?),* )))().into_ok_or_err()
     };
 }
 
@@ -146,6 +161,115 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         GETPID_SYSCALL => {
             check_and_dispatch!(cage.getpid_syscall,)
         }
+        SOCKET_SYSCALL => {
+            check_and_dispatch!(cage.socket_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
+        }
+        BIND_SYSCALL => {
+            let addrlen = get_onearg!(interface::get_uint(arg3));
+            let addr = get_onearg!(interface::get_sockaddr(arg2, addrlen));
+            check_and_dispatch!(cage.bind_syscall, interface::get_int(arg1), Ok::<&interface::GenSockaddr, i32>(&addr), Ok::<u32, i32>(addrlen))
+        }
+        SEND_SYSCALL => {
+            check_and_dispatch!(cage.send_syscall, interface::get_int(arg1), interface::get_cbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4))
+        }
+        SENDTO_SYSCALL => {
+            let addrlen = get_onearg!(interface::get_uint(arg6));
+            let addr = get_onearg!(interface::get_sockaddr(arg5, addrlen));
+            check_and_dispatch!(cage.sendto_syscall, interface::get_int(arg1), interface::get_cbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&interface::GenSockaddr, i32>(&addr))
+        }
+        RECV_SYSCALL => {
+            check_and_dispatch!(cage.send_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4))
+        }
+        RECVFROM_SYSCALL => {
+            let nullity1 = interface::arg_nullity(&arg5);
+            let nullity2 = interface::arg_nullity(&arg6);
+            if nullity1 && nullity2 {
+                check_and_dispatch!(cage.recvfrom_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&mut Option<&mut interface::GenSockaddr>, i32>(&mut None))
+            } else if !(nullity1 || nullity2) {
+                let addrlen = get_onearg!(interface::get_socklen_t_ptr(arg6));
+                let mut addr = get_onearg!(interface::get_sockaddr(arg5, addrlen));
+                let rv = check_and_dispatch!(cage.recvfrom_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&mut Option<&mut interface::GenSockaddr>, i32>(&mut Some(&mut addr)));
+                if rv >= 0 {
+                    interface::copy_out_sockaddr(arg5, arg6, addr);
+                }
+                rv
+            } else {
+                syscall_error(Errno::EINVAL, "recvfrom", "exactly one of the last two arguments was zero")
+            }
+        }
+        CONNECT_SYSCALL => {
+            let addrlen = get_onearg!(interface::get_uint(arg3));
+            let addr = get_onearg!(interface::get_sockaddr(arg2, addrlen));
+            check_and_dispatch!(cage.connect_syscall, interface::get_int(arg1), Ok::<&interface::GenSockaddr, i32>(&addr))
+        }
+        LISTEN_SYSCALL => {
+            check_and_dispatch!(cage.listen_syscall, interface::get_int(arg1), interface::get_int(arg2))
+        }
+        ACCEPT_SYSCALL => {
+            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //value doesn't matter
+            let nullity1 = interface::arg_nullity(&arg2);
+            let nullity2 = interface::arg_nullity(&arg3);
+            let rv = check_and_dispatch!(cage.accept_syscall, interface::get_int(arg1), Ok::<&mut interface::GenSockaddr, i32>(&mut addr));
+            if nullity1 && nullity2 {
+                rv
+            } else if !(nullity1 || nullity2) {
+                if rv >= 0 {
+                    interface::copy_out_sockaddr(arg2, arg3, addr);
+                }
+                rv
+            } else {
+                syscall_error(Errno::EINVAL, "accept", "exactly one of the last two arguments was zero")
+            }
+        }
+        GETPEERNAME_SYSCALL => {
+            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //value doesn't matter
+            if interface::arg_nullity(&arg2) || interface::arg_nullity(&arg3) {
+                return syscall_error(Errno::EINVAL, "getpeername", "Either the address or the length were null");
+            }
+            let rv = check_and_dispatch!(cage.getpeername_syscall, interface::get_int(arg1), Ok::<&mut interface::GenSockaddr, i32>(&mut addr));
+            if rv >= 0 {
+                interface::copy_out_sockaddr(arg2, arg3, addr);
+            }
+            rv
+        }
+        GETSOCKNAME_SYSCALL => {
+            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //value doesn't matter
+            if interface::arg_nullity(&arg2) || interface::arg_nullity(&arg3) {
+                return syscall_error(Errno::EINVAL, "getsockname", "Either the address or the length were null");
+            }
+            let rv = check_and_dispatch!(cage.getsockname_syscall, interface::get_int(arg1), Ok::<&mut interface::GenSockaddr, i32>(&mut addr));
+            if rv >= 0 {
+                interface::copy_out_sockaddr(arg2, arg3, addr);
+            }
+            rv
+        }
+        GETSOCKOPT_SYSCALL => {
+            check_and_dispatch!(cage.getsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
+        }
+        SETSOCKOPT_SYSCALL => {
+            check_and_dispatch!(cage.setsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), interface::get_int(arg4))
+        }
+        SHUTDOWN_SYSCALL => {
+            check_and_dispatch!(cage.netshutdown_syscall, interface::get_int(arg1), interface::get_int(arg2))
+        }
+        SELECT_SYSCALL => {
+            let nfds = get_onearg!(interface::get_int(arg1));
+            let mut readfds = get_onearg!(interface::fd_set_to_hashset(arg2, nfds));
+            let mut writefds = get_onearg!(interface::fd_set_to_hashset(arg3, nfds));
+            let mut exceptfds = get_onearg!(interface::fd_set_to_hashset(arg4, nfds));
+            let rv = check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut readfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut writefds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut exceptfds), interface::duration_fromtimeval(arg5));
+            interface::copy_out_to_fd_set(arg2, nfds, readfds);
+            interface::copy_out_to_fd_set(arg3, nfds, writefds);
+            interface::copy_out_to_fd_set(arg4, nfds, exceptfds);
+            rv
+        }
+        POLL_SYSCALL => {
+            let nfds = get_onearg!(interface::get_int(arg2));
+            check_and_dispatch!(cage.poll_syscall, interface::get_pollstruct_slice(arg1, nfds), interface::get_duration_from_millis(arg3))
+        }
+        SOCKETPAIR_SYSCALL => {
+            check_and_dispatch_socketpair!(Cage::socketpair_syscall, cage, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), interface::get_sockpair(arg4))
+        }
         EXIT_SYSCALL => {
             check_and_dispatch!(cage.exit_syscall,)
         }
@@ -185,14 +309,28 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         RENAME_SYSCALL => {
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
+        EPOLL_CREATE_SYSCALL => {
+            check_and_dispatch!(cage.epoll_create_syscall, interface::get_int(arg1))
+        }
+        EPOLL_CTL_SYSCALL => {
+            check_and_dispatch!(cage.epoll_ctl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), interface::get_epollevent(arg4))
+        }
+        EPOLL_WAIT_SYSCALL => {
+            let nfds = get_onearg!(interface::get_int(arg3));
+            check_and_dispatch!(cage.epoll_wait_syscall, interface::get_int(arg1), interface::get_epollevent_slice(arg2, nfds), Ok::<i32, i32>(nfds), interface::get_duration_from_millis(arg4))
+        }
         GETDENTS_SYSCALL => {
             check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3))
         }
-        FTRUNCATE_SYSCALL => {
-            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
-        }
-        TRUNCATE_SYSCALL => {
-            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
+        //FTRUNCATE_SYSCALL => {
+        //    check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
+        //}
+        //TRUNCATE_SYSCALL => {
+        //    check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
+        //}
+        GETHOSTNAME_SYSCALL => {
+            let len = get_onearg!(interface::get_usize(arg2));
+            check_and_dispatch!(cage.gethostname_syscall, interface::get_slice_from_string(arg1, len), Ok::<usize, i32>(len))
         }
         PIPE_SYSCALL => {
             check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))

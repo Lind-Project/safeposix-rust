@@ -61,12 +61,6 @@ impl GenIpaddr {
 }
 
 #[repr(C)]
-pub union SockaddrAll {
-    pub sockaddr_in: *mut SockaddrV4,
-    pub sockaddr_in6: *mut SockaddrV6
-}
-
-#[repr(C)]
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct V4Addr {
     pub s_addr: u32
@@ -123,7 +117,7 @@ impl Socket {
         unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
 
-    pub fn sendto(&self, buf: *mut u8, len: usize, addr: Option<&GenSockaddr>) -> i32 {
+    pub fn sendto(&self, buf: *const u8, len: usize, addr: Option<&GenSockaddr>) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
             Some(GenSockaddr::V6(addrref6)) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             Some(GenSockaddr::V4(addrref)) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}

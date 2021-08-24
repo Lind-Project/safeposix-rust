@@ -98,131 +98,8 @@ impl Cage {
         }
     }
 
-    pub fn socketpair_syscall(&'static self, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
-        let newdomain = if domain == AF_UNIX {AF_INET} else {domain};
-        let sock1fd = self.socket_syscall(newdomain, socktype, protocol);
-        if sock1fd < 0 {return sock1fd;}
-        let sock2fd = self.socket_syscall(newdomain, socktype, protocol);
-        if sock2fd < 0 {
-            self.close_syscall(sock1fd);
-            return sock2fd;
-        }
-
-        let portlessaddr = if newdomain == AF_INET {
-            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
-            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0};
-            interface::GenSockaddr::V4(innersockaddr)
-        } else if domain == AF_INET6 {
-            let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
-            let innersockaddr = interface::SockaddrV6{sin6_family: newdomain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
-            interface::GenSockaddr::V6(innersockaddr)
-        } else {
-            panic!("Unknown domain set");
-        };
-
-        let mut mutmetadata = NET_METADATA.write().unwrap();
-        if socktype == SOCK_STREAM {
-            let port = mutmetadata._get_available_tcp_port(portlessaddr.addr(), newdomain);
-
-            if let Err(e) = port {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return e;
-            }
-
-            let mut addr = portlessaddr;
-            addr.set_port(port.unwrap());
-
-            let bindret = self.bind_syscall(sock1fd, &addr, 4096); //len assigned arbitrarily large value
-            if bindret != 0 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return bindret;
-            }
-
-            let listenret = self.listen_syscall(sock1fd, 1);
-            if listenret != 0 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return listenret;
-            }
-
-            let mut garbage_remote = addr.clone();
-            let acceptor = interface::helper_thread(move || {
-                let accret = self.accept_syscall(sock1fd, &mut garbage_remote);
-                if accret < 0 {
-                    panic!("Accept syscall failed unexpectedly in socketpair");
-                }
-                self.close_syscall(sock1fd);
-                return accret;
-            });
-
-            let connret = self.connect_syscall(sock2fd, &addr);
-            if connret < 0 {
-                panic!("Accept syscall failed unexpectedly in socketpair");
-            }
-
-            let otherfd = acceptor.join().unwrap();
-            sv.sock1 = sock2fd;
-            sv.sock2 = otherfd;
-            return 0;
-        } else if socktype == SOCK_DGRAM {
-            let port1 = mutmetadata._get_available_udp_port(portlessaddr.addr(), newdomain);
-
-            if let Err(e) = port1 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return e;
-            }
-
-            let port2 = mutmetadata._get_available_udp_port(portlessaddr.addr(), newdomain);
-
-            if let Err(e) = port2 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return e;
-            }
-
-            let mut addr1 = portlessaddr.clone();
-            let mut addr2 = portlessaddr;
-            addr1.set_port(port1.unwrap());
-            addr2.set_port(port2.unwrap());
-
-            let bind1ret = self.bind_syscall(sock1fd, &addr1, 4096); //arbitrarily large length given
-            if bind1ret < 0 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return bind1ret;
-            }
-
-            let bind2ret = self.bind_syscall(sock1fd, &addr2, 4096); //arbitrarily large length given
-            if bind2ret < 0 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return bind2ret;
-            }
-
-            let conn1ret = self.connect_syscall(sock1fd, &addr2);
-            if conn1ret < 0 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return conn1ret;
-            }
-
-            let conn2ret = self.connect_syscall(sock1fd, &addr1);
-            if conn2ret < 0 {
-                self.close_syscall(sock1fd);
-                self.close_syscall(sock2fd);
-                return conn2ret;
-            }
-        } else {
-            panic!("Unkown socktype set");
-        }
-        return 0;
-    }
-
     //we assume we've converted into a RustSockAddr in the dispatcher
-    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: i32) -> i32 {
+    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: u32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -392,7 +269,7 @@ impl Cage {
         sockfdobj.socketobjectid.unwrap()
     }
 
-    pub fn sendto_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, dest_addr: &interface::GenSockaddr) -> i32 {
+    pub fn sendto_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32, dest_addr: &interface::GenSockaddr) -> i32 {
         //if ip and port are not specified, shunt off to send
         if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
             return self.send_syscall(fd, buf, buflen, flags);
@@ -491,7 +368,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
         }
     }
-    pub fn send_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
+    pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
@@ -1097,7 +974,7 @@ impl Cage {
         return retval; //package out fd_set?
     }
 
-    pub fn getsockopt_syscall(self, fd: i32, level: i32, optname: i32) -> i32 {
+    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1165,7 +1042,7 @@ impl Cage {
     }
 
     //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
-    pub fn setsockopt_syscall(self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+    pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1236,7 +1113,7 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1279,7 +1156,7 @@ impl Cage {
                     ret_addr.set_family(sockfdobj.domain as u16);
                     return 0;
                 }
-                
+ 
                 //if the socket is not none, then return the socket
                 *ret_addr = sockfdobj.localaddr.unwrap();
                 return 0;
@@ -1293,7 +1170,7 @@ impl Cage {
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname(&self, length: usize, address_ptr: &mut [u8]) -> i32 {
+    pub fn gethostname_syscall(&self, address_ptr: &mut [u8], length: usize) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
         }
@@ -1379,7 +1256,7 @@ impl Cage {
         }
     }
 
-    pub fn epoll_create_syscall(&self, size: u32) -> i32 {
+    pub fn epoll_create_syscall(&self, size: i32) -> i32 {
         if size <= 0 {
             return syscall_error(Errno::EINVAL, "epoll create", "provided size argument is invalid");
         }
@@ -1387,7 +1264,7 @@ impl Cage {
     }
 
     //this one can still be optimized
-    pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: EpollEvent) -> i32 {
+    pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
 
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
@@ -1502,5 +1379,129 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "epoll wait", "provided fd is not a valid file descriptor");
         }
+    }
+
+    pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
+        let newdomain = if domain == AF_UNIX {AF_INET} else {domain};
+        let sock1fd = this.socket_syscall(newdomain, socktype, protocol);
+        if sock1fd < 0 {return sock1fd;}
+        let sock2fd = this.socket_syscall(newdomain, socktype, protocol);
+        if sock2fd < 0 {
+            this.close_syscall(sock1fd);
+            return sock2fd;
+        }
+    
+        let portlessaddr = if newdomain == AF_INET {
+            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
+            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0};
+            interface::GenSockaddr::V4(innersockaddr)
+        } else if domain == AF_INET6 {
+            let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
+            let innersockaddr = interface::SockaddrV6{sin6_family: newdomain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
+            interface::GenSockaddr::V6(innersockaddr)
+        } else {
+            panic!("Unknown domain set");
+        };
+    
+        let mut mutmetadata = NET_METADATA.write().unwrap();
+        if socktype == SOCK_STREAM {
+            let port = mutmetadata._get_available_tcp_port(portlessaddr.addr(), newdomain);
+    
+            if let Err(e) = port {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return e;
+            }
+    
+            let mut addr = portlessaddr;
+            addr.set_port(port.unwrap());
+    
+            let bindret = this.bind_syscall(sock1fd, &addr, 4096); //len assigned arbitrarily large value
+            if bindret != 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return bindret;
+            }
+    
+            let listenret = this.listen_syscall(sock1fd, 1);
+            if listenret != 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return listenret;
+            }
+    
+            let mut garbage_remote = addr.clone();
+            let thishandle2 = this.clone();
+            let acceptor = interface::helper_thread(move || {
+                let accret = thishandle2.accept_syscall(sock1fd, &mut garbage_remote);
+                if accret < 0 {
+                    panic!("Accept syscall failed unexpectedly in socketpair");
+                }
+                thishandle2.close_syscall(sock1fd);
+                return accret;
+            });
+    
+            let connret = this.connect_syscall(sock2fd, &addr);
+            if connret < 0 {
+                panic!("Accept syscall failed unexpectedly in socketpair");
+            }
+    
+            let otherfd = acceptor.join().unwrap();
+            sv.sock1 = sock2fd;
+            sv.sock2 = otherfd;
+            return 0;
+        } else if socktype == SOCK_DGRAM {
+            let port1 = mutmetadata._get_available_udp_port(portlessaddr.addr(), newdomain);
+    
+            if let Err(e) = port1 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return e;
+            }
+    
+            let port2 = mutmetadata._get_available_udp_port(portlessaddr.addr(), newdomain);
+    
+            if let Err(e) = port2 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return e;
+            }
+    
+            let mut addr1 = portlessaddr.clone();
+            let mut addr2 = portlessaddr;
+            addr1.set_port(port1.unwrap());
+            addr2.set_port(port2.unwrap());
+    
+            let bind1ret = this.bind_syscall(sock1fd, &addr1, 4096); //arbitrarily large length given
+            if bind1ret < 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return bind1ret;
+            }
+    
+            let bind2ret = this.bind_syscall(sock1fd, &addr2, 4096); //arbitrarily large length given
+            if bind2ret < 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return bind2ret;
+            }
+    
+            let conn1ret = this.connect_syscall(sock1fd, &addr2);
+            if conn1ret < 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return conn1ret;
+            }
+    
+            let conn2ret = this.connect_syscall(sock1fd, &addr1);
+            if conn2ret < 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return conn2ret;
+            }
+        } else {
+            panic!("Unkown socktype set");
+        }
+        return 0;
     }
 }
