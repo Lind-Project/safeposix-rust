@@ -1171,7 +1171,6 @@ impl Cage {
                 },
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    println!("INODE: {}", inodenum);
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
 
@@ -1202,7 +1201,7 @@ impl Cage {
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
-                                println!("REMOVING DIR");
+                                println!("REMOVING DIR IN CLOSE :: INODE: {}", inodenum);
                                 mutmetadata.inodetable.remove(&inodenum);
                             } 
                         }
