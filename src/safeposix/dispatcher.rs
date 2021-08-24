@@ -80,6 +80,7 @@ macro_rules! check_and_dispatch {
     };
 }
 
+#[no_mangle]
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
@@ -186,14 +187,23 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.rename_syscall, interface::get_cstr(arg1), interface::get_cstr(arg2))
         }
         GETDENTS_SYSCALL => {
-            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3))
+            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_uint(arg3))
         }
+<<<<<<< HEAD
         // FTRUNCATE_SYSCALL => { //doesn't have a number value yet
         //     check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
         // }
         // TRUNCATE_SYSCALL => { //doesn't have a number value yet
         //     check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_usize(arg2))
         // }
+=======
+        FTRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
+        }
+        TRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_isize(arg2))
+        }
+>>>>>>> 20d0d57c7d4d9af89ca62486224574a6d62b3ec5
         PIPE_SYSCALL => {
             check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))
         }
@@ -203,6 +213,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
+#[no_mangle]
 pub extern "C" fn lindrustinit() {
     load_fs();
     incref_root();
@@ -218,6 +229,7 @@ pub extern "C" fn lindrustinit() {
 
 }
 
+#[no_mangle]
 pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
     let mut cagetable = CAGE_TABLE.write().unwrap();

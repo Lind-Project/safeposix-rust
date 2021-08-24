@@ -729,8 +729,8 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
+                                    persist_metadata(&metadata);
                                 } //update file size if necessary
-                                persist_metadata(&metadata);
                                 
                                 byteswritten as i32
                             } else {
@@ -828,8 +828,8 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               persist_metadata(&metadata);
                             } //update file size if necessary
-                            persist_metadata(&metadata);
 
                             retval
                         }
@@ -1189,6 +1189,7 @@ impl Cage {
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                 } 
+                                persist_metadata(&mutmetadata);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
@@ -1203,6 +1204,7 @@ impl Cage {
                                 //removing the file from the metadata 
                                 println!("REMOVING DIR IN CLOSE :: INODE: {}", inodenum);
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
                         }
                         Inode::CharDev(ref mut char_inode_obj) => {
@@ -1216,6 +1218,7 @@ impl Cage {
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
                         }
                     }
@@ -1472,6 +1475,7 @@ impl Cage {
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
+                        persist_metadata(&metadata);
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1514,6 +1518,7 @@ impl Cage {
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                 }
+                persist_metadata(&metadata);
                 0 // success
             }
         }
@@ -1521,7 +1526,7 @@ impl Cage {
 
     //------------------FTRUNCATE SYSCALL------------------
     
-    pub fn ftruncate_syscall(&self, fd: i32, length: usize) -> i32 {
+    pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1542,13 +1547,13 @@ impl Cage {
                             let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
                             
                             let mut fileobject = fobjtable.get_mut(&inodenum).unwrap();
-                            let filesize = normalfile_inode_obj.size;
+                            let filesize = normalfile_inode_obj.size as isize;
                             
                             // if length is greater than original filesize,
                             // file is extented with null bytes
                             if filesize < length {
                                 let blankbytecount = length - filesize;
-                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize as usize, blankbytecount as usize) {
                                     if byteswritten != blankbytecount as usize {
                                         panic!("zerofill_at() has failed");
                                     }
@@ -1557,8 +1562,9 @@ impl Cage {
                                 }
                             } else { // if length is smaller than original filesize,
                                      // extra data are cut off
-                                fileobject.shrink(length);
+                                fileobject.shrink(length as usize);
                             } 
+                            persist_metadata(&mutmetadata);
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
@@ -1579,7 +1585,7 @@ impl Cage {
     }
 
     //------------------TRUNCATE SYSCALL------------------
-    pub fn truncate_syscall(&self, path: &str, length: usize) -> i32 {
+    pub fn truncate_syscall(&self, path: &str, length: isize) -> i32 {
         self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
     }
 
@@ -1630,7 +1636,7 @@ impl Cage {
         
     //------------------GETDENTS SYSCALL------------------
 
-    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: usize)-> i32 {
+    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32)-> i32 {
         
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
 
@@ -1666,7 +1672,7 @@ impl Cage {
                                 vec_filename.push(b'\0'); // make filename null-terminated
                                 
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
-                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); // get length of current filename vector for padding calculation
+                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
                                 
                                 // pad filename vector to the next highest 8 byte boundary
                                 for _ in 0..(temp_len + 7) / 8 * 8 - temp_len {
@@ -1674,7 +1680,7 @@ impl Cage {
                                 }
                                 
                                 // the fixed dirent size and length of filename vector add up to total size
-                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); 
+                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32;
                                 
                                 bufcount += curr_size; // increment bufcount
                                 
