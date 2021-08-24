@@ -243,6 +243,8 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
     let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.stat_syscall(path, &mut lindstat_res);
 
+    println!("PASS PATH: {:?}", path);
+
     if stat_us == 0 {
         if !is_dir(lindstat_res.st_mode) {
             cage.unlink_syscall(path);
@@ -256,7 +258,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                     childcage.unlink_syscall(childpath);
                 }
             });
-
+            
             //remove specified directory now that it is empty
             cage.chmod_syscall(path, S_IRWXA);
             cage.rmdir_syscall(path);

@@ -14,9 +14,9 @@ pub mod net_tests {
         ut_lind_net_getsockname();
         ut_lind_net_listen();
         ut_lind_net_recvfrom(); 
-        ut_lind_net_select(); //not done
         ut_lind_net_shutdown();
         ut_lind_net_socket();
+        ut_lind_net_socketoptions();
     }
 
 
@@ -520,16 +520,6 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
-
-
-
-    pub fn ut_lind_net_select() {
-        lindrustinit();
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        assert_eq!(cage.exit_syscall(), 0);
-        lindrustfinalize();
-    }
     
     
 
@@ -609,6 +599,69 @@ pub mod net_tests {
         assert!(sockfd > 0);
 
         assert_eq!(cage.close_syscall(sockfd), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_net_socketoptions() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(sockfd > 0);
+
+        let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50115_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), 0);
+        assert_eq!(cage.listen_syscall(sockfd, 4), 0);
+
+        //set and get some options:
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+
+        //reuseport...
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
+
+        //check the options
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+
+        //linger...
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, 1), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+
+        //check the options
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+
+        //keep alive...
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, 1), 0);
+        
+        //check the options
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 1);
+        
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_SNDBUF, 1000), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_SNDBUF), 1000);
+        
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_RCVBUF, 2000), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_RCVBUF), 2000);
+        
+        //check the options
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 1);
+        
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
