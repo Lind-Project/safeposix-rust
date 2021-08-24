@@ -1224,7 +1224,6 @@ impl Cage {
         }
 
         //removing inode from fd table
-
         fdtable.remove(&fd);
         0 //_close_helper has succeeded!
     }
