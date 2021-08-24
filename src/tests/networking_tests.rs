@@ -622,20 +622,20 @@ pub mod net_tests {
         assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
         assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
 
-        //reuseport...
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
-        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
-
-        //check the options
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
-
         //linger...
         assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, 1), 0);
         assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+
+        //check the options
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+
+        //reuseport...
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
 
         //check the options
         assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);

@@ -244,6 +244,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
     let stat_us = cage.stat_syscall(path, &mut lindstat_res);
 
     println!("PASS PATH: {:?}", path);
+    println!("\nMETADATA:: {:?}\n", FS_METADATA.read().unwrap());
 
     if stat_us == 0 {
         if !is_dir(lindstat_res.st_mode) {
@@ -255,6 +256,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                 if isdir {
                     lind_deltree(childcage, childpath);
                 } else {
+                    println!("UNLINK PATH:: {:?}", childpath);
                     childcage.unlink_syscall(childpath);
                 }
             });

@@ -349,6 +349,7 @@ impl Cage {
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
                 persist_metadata(&mutmetadata);
+                println!("UNLINK METADATA:: {:?}\n", mutmetadata);
 
                 0 //unlink has succeeded
             }
@@ -1282,11 +1283,14 @@ impl Cage {
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+        println!("METADATA: {:?}", FS_METADATA.read().unwrap());
+
         let mut metadata = FS_METADATA.write().unwrap();
         let truepath = normpath(convpath(path), self);
 
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
+            println!("PATH: {}, TRUEPATH: {:?}, NUM: {}, METADATA: {:?}", path, truepath, inodenum, metadata);
             let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
                 match thisinode {
@@ -1429,6 +1433,7 @@ impl Cage {
     //------------------RMDIR SYSCALL------------------
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
+        println!("\n\nRMDIR: {:?}", path);
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "rmdir", "Given path is null");}
 
         let truepath = normpath(convpath(path), self);

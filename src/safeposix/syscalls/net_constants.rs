@@ -236,29 +236,34 @@ pub const SHUT_RDWR: i32 = 2;
 
 ////////////////////// setsockopt / getsockopt...
 pub const SOL_SOCKET: i32 = 1;
-pub const SO_DEBUG: i32 = 1;
-pub const SO_REUSEADDR: i32 = 2;
-pub const SO_TYPE: i32 = 3;
-pub const SO_ERROR: i32 = 4;
-pub const SO_DONTROUTE: i32 = 5;
-pub const SO_BROADCAST: i32 = 6;
-pub const SO_SNDBUF: i32 = 7;
-pub const SO_RCVBUF: i32 = 8;
+pub const SO_DEBUG: i32 = 0x0001;
+pub const SO_ACCEPTCONN: i32 = 0x0002;
+pub const SO_REUSEADDR: i32 = 0x0004;
+pub const SO_KEEPALIVE: i32 = 0x0008;
+pub const SO_DONTROUTE: i32 = 0x0010;
+pub const SO_BROADCAST: i32 = 0x0020;
+pub const SO_USELOOPBACK: i32 = 0x0040;
+pub const SO_LINGER: i32 = 0x0080;
+pub const SO_OOBINLINE: i32 = 0x0100;
+pub const SO_REUSEPORT: i32 = 0x0200;
+pub const SO_SNDBUF: i32 = 0x1001;
+pub const SO_RCVBUF: i32 = 0x1002;
+pub const SO_SNDLOWAT: i32 = 0x1003;
+pub const SO_RCVLOWAT: i32 = 0x1004;
+pub const SO_SNDTIMEO: i32 = 0x1005;
+pub const SO_RCVTIMEO: i32 = 0x1006;
+pub const SO_ERROR: i32 = 0x1007;
+pub const SO_STYLE: i32 = 0x1008;
+pub const SO_TYPE: i32 = SO_STYLE;
+
+//haven't found libc values for the rest, yet
 pub const SO_SNDBUFFORCE: i32 = 32;
 pub const SO_RCVBUFFORCE: i32 = 33;
-pub const SO_KEEPALIVE: i32 = 9;
-pub const SO_OOBINLINE: i32 = 10;
 pub const SO_NO_CHECK: i32 = 11;
 pub const SO_PRIORITY: i32 = 12;
-pub const SO_LINGER: i32 = 13;
 pub const SO_BSDCOMPAT: i32 = 14;
-pub const SO_REUSEPORT: i32 = 15;
 pub const SO_PASSCRED: i32 = 16;
 pub const SO_PEERCRED: i32 = 17;
-pub const SO_RCVLOWAT: i32 = 18;
-pub const SO_SNDLOWAT: i32 = 19;
-pub const SO_RCVTIMEO: i32 = 20;
-pub const SO_SNDTIMEO: i32 = 21;
 
 pub const SO_SECURITY_AUTHENTICATION: i32 = 22;
 pub const SO_SECURITY_ENCRYPTION_TRANSPORT: i32 = 23;
@@ -274,7 +279,6 @@ pub const SO_PEERNAME: i32 = 28;
 pub const SO_TIMESTAMP: i32 = 29;
 pub const SCM_TIMESTAMP: i32 = SO_TIMESTAMP;
 
-pub const SO_ACCEPTCONN: i32 = 30;
 
 pub const SO_PEERSEC: i32 = 31;
 pub const SO_PASSSEC: i32 = 34;
