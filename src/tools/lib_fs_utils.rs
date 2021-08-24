@@ -195,12 +195,13 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
     let mut bigbuffer = [0u8; 65536];
     let dentptr = bigbuffer.as_mut_ptr();
 
+    println!("OPENING: {:?}", path);
     let dirfd = cage.open_syscall(path, O_RDONLY, 0);
     assert!(dirfd >= 0);
 
     loop {
         let direntres = cage.getdents_syscall(dirfd, dentptr, 65536);
-        
+        println!("DIRENTRES: {:?}", direntres);
         //if we've read every entry in this directory, we're done
         if direntres == 0 {break;}
 
@@ -236,6 +237,7 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
             visitor(cage, fullstatpath.as_str(), is_dir(lindstat_res.st_mode), arg);
         }
     }
+    println!("CLOSE: {}", dirfd);
     cage.close_syscall(dirfd);
 }
 

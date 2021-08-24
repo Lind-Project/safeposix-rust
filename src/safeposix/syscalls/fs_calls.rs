@@ -1171,6 +1171,7 @@ impl Cage {
                 },
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
+                    println!("INODE: {}", inodenum);
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
 
@@ -1201,6 +1202,7 @@ impl Cage {
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
+                                println!("REMOVING DIR");
                                 mutmetadata.inodetable.remove(&inodenum);
                             } 
                         }
@@ -1223,6 +1225,7 @@ impl Cage {
         }
 
         //removing inode from fd table
+
         fdtable.remove(&fd);
         0 //_close_helper has succeeded!
     }
@@ -1461,6 +1464,7 @@ impl Cage {
                         
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
+                        println!("RMDIR REMOVED FROM METADATA");
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
