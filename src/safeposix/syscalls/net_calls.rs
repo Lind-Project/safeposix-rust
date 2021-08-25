@@ -1397,7 +1397,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::MILLISECOND);
+                interface::sleep(BLOCK_TIME);
             }
         }
         return return_code;
