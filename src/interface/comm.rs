@@ -43,6 +43,13 @@ impl GenSockaddr {
             GenSockaddr::V6(v6addr) => v6addr.sin6_family = family
         };
     }
+
+    pub fn get_family(&self) -> u16 {
+        match self {
+            GenSockaddr::V4(v4addr) => v4addr.sin_family,
+            GenSockaddr::V6(v6addr) => v6addr.sin6_family
+        }
+    }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
