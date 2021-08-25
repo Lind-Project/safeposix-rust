@@ -1345,7 +1345,6 @@ impl Cage {
 
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname(&self, length: usize, address_ptr: &mut [u8]) -> i32 {
-
         let name_length: usize = DEFAULT_HOSTNAME.chars().count();
         if name_length > length {
             address_ptr[..length].copy_from_slice(&DEFAULT_HOSTNAME[..length].as_bytes());
@@ -1396,7 +1395,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::from_millis(1));
+                interface::sleep(interface::RustDuration::MILLISECOND);
             }
         }
         return return_code;
@@ -1500,9 +1499,11 @@ impl Cage {
                 let mut reads = interface::RustHashSet::<i32>::new();
                 let mut writes = interface::RustHashSet::<i32>::new();
                 let mut errors = interface::RustHashSet::<i32>::new();
+
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
 
                 for (&key, &value) in &epollfdobj.registered_fds {
+
                     let events = value.events;
                     let mut structpoll = PollStruct {
                         fd: key,

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(duration_constants)]
 
 use std::fs::File;
 use std::io::{Read, prelude};
