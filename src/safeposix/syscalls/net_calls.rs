@@ -470,7 +470,7 @@ impl Cage {
 
                                     if sockerrno == Errno::EAGAIN {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
-                                        interface::sleep(interface::RustDuration::from_millis(1));
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     };
 
@@ -532,7 +532,7 @@ impl Cage {
 
                                     if sockerrno == Errno::EAGAIN {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
-                                        interface::sleep(interface::RustDuration::from_millis(1));
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
 
@@ -635,7 +635,7 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN  && (flags & O_NONBLOCK == 0) {
-                                        interface::sleep(interface::RustDuration::from_millis(1));
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
 
@@ -694,7 +694,7 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
-                                        interface::sleep(interface::RustDuration::from_millis(1));
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
 
@@ -923,7 +923,7 @@ impl Cage {
                                     };
 
                                     if accerrno == Errno::EAGAIN {
-                                        interface::sleep(interface::RustDuration::from_millis(1));
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
                                     return errval;
@@ -1142,7 +1142,7 @@ impl Cage {
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::from_millis(1));
+                interface::sleep(BLOCK_TIME);
             }
         }
         *readfds = new_readfds;
