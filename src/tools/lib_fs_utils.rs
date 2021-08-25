@@ -195,13 +195,11 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
     let mut bigbuffer = [0u8; 65536];
     let dentptr = bigbuffer.as_mut_ptr();
 
-    println!("OPENING: {:?}", path);
     let dirfd = cage.open_syscall(path, O_RDONLY, 0);
     assert!(dirfd >= 0);
 
     loop {
         let direntres = cage.getdents_syscall(dirfd, dentptr, 65536);
-        println!("DIRENTRES: {:?}", direntres);
         //if we've read every entry in this directory, we're done
         if direntres == 0 {break;}
 
@@ -237,7 +235,6 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
             visitor(cage, fullstatpath.as_str(), is_dir(lindstat_res.st_mode), arg);
         }
     }
-    println!("CLOSE: {}", dirfd);
     cage.close_syscall(dirfd);
 }
 
@@ -245,8 +242,6 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
     let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.stat_syscall(path, &mut lindstat_res);
 
-    println!("PASS PATH: {:?}", path);
-    println!("\nMETADATA:: {:?}\n", FS_METADATA.read().unwrap());
 
     if stat_us == 0 {
         if !is_dir(lindstat_res.st_mode) {
@@ -258,7 +253,6 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                 if isdir {
                     lind_deltree(childcage, childpath);
                 } else {
-                    println!("UNLINK PATH:: {:?}", childpath);
                     childcage.unlink_syscall(childpath);
                 }
             });
