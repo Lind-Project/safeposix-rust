@@ -8,6 +8,7 @@
 mod interface;
 mod safeposix;
 mod tests;
+mod lib_fs_utils;
 
 fn main() {
     println!("Hello, world!");

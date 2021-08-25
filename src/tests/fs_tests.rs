@@ -873,7 +873,7 @@ mod fs_tests {
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;
             assert_eq!((*first_dirent).d_off, 24);
-            let reclen_matched: bool = ((*first_dirent).d_reclen == 21) | ((*first_dirent).d_reclen == 22);
+            let reclen_matched: bool = ((*first_dirent).d_reclen == 24);
             assert_eq!(reclen_matched, true);
             
             let nameoffset = baseptr.wrapping_offset(interface::CLIPPED_DIRENT_SIZE as isize);
@@ -882,7 +882,7 @@ mod fs_tests {
             assert_eq!(name_matched, true);
             
             let second_dirent = baseptr.wrapping_offset(24) as *mut interface::ClippedDirent;
-            assert_eq!((*second_dirent).d_off, 0);
+            assert!((*second_dirent).d_off >= 48);
         }
 
         assert_eq!(cage.close_syscall(fd), 0);
