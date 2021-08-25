@@ -80,7 +80,7 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
                     if fobjtable.contains_key(&inodenum) {
                         fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
@@ -94,6 +94,7 @@ impl Cage {
                     }
 
                     //remove the previous file and add a new one of 0 length
+                    fobjtable.remove(&inodenum); //remove bookkeeping so it'll get re-created if it already is opened
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     interface::removefile(sysfilename.clone()).unwrap();
                 }
@@ -164,7 +165,7 @@ impl Cage {
 
                 let newinode = Inode::Dir(DirectoryInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 2, refcount: 0, //2 because . and ..
+                    mode: effective_mode, linkcount: 3, refcount: 0, //2 because ., and .., as well as reference in parent directory
                     atime: time, ctime: time, mtime: time, 
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
@@ -318,7 +319,7 @@ impl Cage {
                 syscall_error(Errno::EISDIR, "unlink", "cannot unlink root directory")
             }
 
-            //If both the file and the root directory exists
+            //If both the file and the parent directory exists
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
@@ -349,7 +350,6 @@ impl Cage {
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
                 persist_metadata(&mutmetadata);
-                println!("UNLINK METADATA:: {:?}\n", mutmetadata);
 
                 0 //unlink has succeeded
             }
@@ -1202,7 +1202,6 @@ impl Cage {
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
-                                println!("REMOVING DIR IN CLOSE :: INODE: {}", inodenum);
                                 mutmetadata.inodetable.remove(&inodenum);
                                 persist_metadata(&mutmetadata);
                             } 
@@ -1287,14 +1286,12 @@ impl Cage {
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
-        println!("METADATA: {:?}", FS_METADATA.read().unwrap());
 
         let mut metadata = FS_METADATA.write().unwrap();
         let truepath = normpath(convpath(path), self);
 
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
-            println!("PATH: {}, TRUEPATH: {:?}, NUM: {}, METADATA: {:?}", path, truepath, inodenum, metadata);
             let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
                 match thisinode {
@@ -1437,7 +1434,6 @@ impl Cage {
     //------------------RMDIR SYSCALL------------------
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
-        println!("\n\nRMDIR: {:?}", path);
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "rmdir", "Given path is null");}
 
         let truepath = normpath(convpath(path), self);
@@ -1457,7 +1453,7 @@ impl Cage {
                 match inodeobj {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
-                        if dir_obj.linkcount > 2 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
+                        if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode set to S_IFDIR");}
 
                         // check if dir has write permission
@@ -1465,7 +1461,6 @@ impl Cage {
                         
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
-                        println!("RMDIR REMOVED FROM METADATA");
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission

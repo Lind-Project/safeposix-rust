@@ -9,6 +9,10 @@ pub mod fs_tests {
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
+        lindrustinit();
+        load_fs_special_files({CAGE_TABLE.read().unwrap().get(&1).unwrap()});
+        lindrustfinalize();
+
         ut_lind_fs_broken_close();
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
@@ -750,7 +754,7 @@ pub mod fs_tests {
         assert_ne!(fd1, fd2);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let mode: u32 = 438;   // 0666
+        let mode: u32 = 0o666;   // 0666
         let name = "double_open_file";
 
         let mut read_buf = sizecbuf(2);
@@ -934,7 +938,7 @@ pub mod fs_tests {
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
-        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 48);
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize as u32), 48);
 
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;
