@@ -12,6 +12,8 @@ use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, Ep
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
+pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
+
 impl Cage {
     fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool) -> SocketDesc {
         let flags = if blocking {O_NONBLOCK} else {0} | if cloexec {O_CLOEXEC} else {0};
