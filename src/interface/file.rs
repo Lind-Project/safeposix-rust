@@ -119,7 +119,6 @@ impl EmulatedFile {
         let absolute_filename = fs::canonicalize(&path)?;
 
         openfiles.insert(filename.clone());
-        f.sync_all()?;
         let filesize = f.metadata()?.len();
 
         Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
@@ -165,7 +164,6 @@ impl EmulatedFile {
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
                 let bytes_read = fobj.read(buf)?;
-                fobj.sync_data()?;
                 Ok(bytes_read)
             }
         }
@@ -190,7 +188,6 @@ impl EmulatedFile {
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
                 bytes_written = fobj.write(buf)?;
-                fobj.sync_data()?;
             }
         }
 
@@ -215,7 +212,6 @@ impl EmulatedFile {
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
                 fobj.read_to_string(&mut stringbuf)?;
-                fobj.sync_data()?;
                 Ok(stringbuf) // return new buf string
             }
         }
@@ -235,7 +231,6 @@ impl EmulatedFile {
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
                 fobj.write(buf.as_bytes())?;
-                fobj.sync_data()?;
             }
         }
 
@@ -259,7 +254,6 @@ impl EmulatedFile {
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
                 bytes_written = fobj.write(buf.as_slice())?;
-                fobj.sync_data()?;
             }
         }
 

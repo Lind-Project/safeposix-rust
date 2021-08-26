@@ -162,7 +162,7 @@ impl Cage {
 
                 let newinode = Inode::Dir(DirectoryInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 2, refcount: 0,
+                    mode: effective_mode, linkcount: 2, refcount: 0, //2 because . and ..
                     atime: time, ctime: time, mtime: time, 
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
@@ -265,6 +265,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
+                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -282,6 +283,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
+                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -344,6 +346,7 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
+                persist_metadata(&mutmetadata);
 
                 0 //unlink has succeeded
             }
@@ -723,8 +726,8 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
+                                    persist_metadata(&metadata);
                                 } //update file size if necessary
-                                persist_metadata(&metadata);
                                 
                                 byteswritten as i32
                             } else {
@@ -822,8 +825,8 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               persist_metadata(&metadata);
                             } //update file size if necessary
-                            persist_metadata(&metadata);
 
                             retval
                         }
@@ -1110,7 +1113,7 @@ impl Cage {
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
-        
+ 
         //check that the fd is valid
         match fdtable.get(&fd) {
             Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable));},
@@ -1174,15 +1177,17 @@ impl Cage {
 
                             //if it's not a reg file, then we have nothing to close
                             //Inode::File is a regular file by default
-                            
-                            if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
-                                //removing the file from the entire filesystem (interface, metadata, and object table)
-                                mutmetadata.inodetable.remove(&inodenum);
-                                fobjtable.remove(&inodenum).unwrap().close().unwrap(); 
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                interface::removefile(sysfilename).unwrap();
-                            } 
-                        }
+                            if normalfile_inode_obj.refcount == 0 {
+                                fobjtable.remove(&inodenum).unwrap().close().unwrap();
+                                if normalfile_inode_obj.linkcount == 0 {
+                                    //removing the file from the entire filesystem (interface, metadata, and object table)
+                                    mutmetadata.inodetable.remove(&inodenum);
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename).unwrap();
+                                } 
+                                persist_metadata(&mutmetadata);
+                            }
+                        },
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
 
@@ -1194,6 +1199,7 @@ impl Cage {
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
                         }
                         Inode::CharDev(ref mut char_inode_obj) => {
@@ -1207,6 +1213,7 @@ impl Cage {
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
                         }
                     }
@@ -1448,16 +1455,17 @@ impl Cage {
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
                         // remove entry of corresponding inodenum from inodetable
-                        metadata.inodetable.remove(&inodenum);
+                        metadata.inodetable.remove(&inodenum).unwrap();
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
                             // remove entry of corresponding filename from filename-inode dict
-                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string());
+                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
+                        persist_metadata(&metadata);
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1500,6 +1508,7 @@ impl Cage {
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                 }
+                persist_metadata(&metadata);
                 0 // success
             }
         }
@@ -1507,7 +1516,7 @@ impl Cage {
 
     //------------------FTRUNCATE SYSCALL------------------
     
-    pub fn ftruncate_syscall(&self, fd: i32, length: usize) -> i32 {
+    pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1532,13 +1541,13 @@ impl Cage {
                             let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
                             
                             let mut fileobject = fobjtable.get_mut(&inodenum).unwrap();
-                            let filesize = normalfile_inode_obj.size;
+                            let filesize = normalfile_inode_obj.size as isize;
                             
                             // if length is greater than original filesize,
                             // file is extented with null bytes
                             if filesize < length {
                                 let blankbytecount = length - filesize;
-                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize as usize, blankbytecount as usize) {
                                     if byteswritten != blankbytecount as usize {
                                         panic!("zerofill_at() has failed");
                                     }
@@ -1547,8 +1556,9 @@ impl Cage {
                                 }
                             } else { // if length is smaller than original filesize,
                                      // extra data are cut off
-                                fileobject.shrink(length);
+                                fileobject.shrink(length as usize);
                             } 
+                            persist_metadata(&mutmetadata);
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
@@ -1569,7 +1579,7 @@ impl Cage {
     }
 
     //------------------TRUNCATE SYSCALL------------------
-    pub fn truncate_syscall(&self, path: &str, length: usize) -> i32 {
+    pub fn truncate_syscall(&self, path: &str, length: isize) -> i32 {
         self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
     }
 
@@ -1620,7 +1630,7 @@ impl Cage {
         
     //------------------GETDENTS SYSCALL------------------
 
-    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: usize)-> i32 {
+    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32)-> i32 {
         
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
 
@@ -1650,21 +1660,21 @@ impl Cage {
                             let mut temp_len = 0;
 
                             // iterate over filename-inode pairs in dict
-                            for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter() {
+                            for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter().skip(position) {
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
                                 
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
-                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); // get length of current filename vector for padding calculation
+                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
                                 
                                 // pad filename vector to the next highest 8 byte boundary
-                                for n in 0..(temp_len + 7) / 8 * 8 - temp_len {
+                                for _ in 0..(temp_len + 7) / 8 * 8 - temp_len {
                                     vec_filename.push(00);
                                 }
                                 
                                 // the fixed dirent size and length of filename vector add up to total size
-                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len(); 
+                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32;
                                 
                                 bufcount += curr_size; // increment bufcount
                                 
@@ -1675,15 +1685,11 @@ impl Cage {
                                 }
                                 
                                 // push properly constructed tuple to vector storing result
-                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: temp_len as u16}, vec_filename));
+                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
                                 count += 1;
                             }
                             // update file position
                             normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
-                            
-                            // set d_off of last element to 0
-                            let last = vec.last_mut().unwrap();
-                            last.0.d_off = 0;
 
                             interface::pack_dirents(vec, dirp);
                             bufcount as i32 // return the number of bytes written

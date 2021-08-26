@@ -67,7 +67,7 @@ const PWRITE_SYSCALL: i32 = 127;
 
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
-use super::filesystem::{FS_METADATA, load_fs, incref_root};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
 use crate::interface::errnos::*;
 
 macro_rules! get_onearg {
@@ -95,6 +95,7 @@ macro_rules! check_and_dispatch_socketpair {
     };
 }
 
+#[no_mangle]
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
@@ -338,7 +339,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.epoll_wait_syscall, interface::get_int(arg1), interface::get_epollevent_slice(arg2, nfds), Ok::<i32, i32>(nfds), interface::get_duration_from_millis(arg4))
         }
         GETDENTS_SYSCALL => {
-            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3))
+            check_and_dispatch!(cage.getdents_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_uint(arg3))
         }
         //FTRUNCATE_SYSCALL => {
         //    check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_usize(arg2))
@@ -359,6 +360,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
+#[no_mangle]
 pub extern "C" fn lindrustinit() {
     load_fs();
     incref_root();
@@ -374,6 +376,7 @@ pub extern "C" fn lindrustinit() {
 
 }
 
+#[no_mangle]
 pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
     let mut cagetable = CAGE_TABLE.write().unwrap();
@@ -382,6 +385,7 @@ pub extern "C" fn lindrustfinalize() {
     for (_cageid, cage) in drainedcages {
         cage.exit_syscall();
     }
+    persist_metadata(&*FS_METADATA.read().unwrap());
 }
 
 #[cfg(test)]

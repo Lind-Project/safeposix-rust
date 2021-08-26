@@ -133,7 +133,7 @@ pub struct ClippedDirent {
     pub d_reclen: u16
 }
 
-pub const CLIPPED_DIRENT_SIZE: usize = size_of::<interface::ClippedDirent>();
+pub const CLIPPED_DIRENT_SIZE: u32 = size_of::<interface::ClippedDirent>() as u32;
 
 pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
     let data = unsafe{union_argument.dispatch_int};
