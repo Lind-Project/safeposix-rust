@@ -863,7 +863,7 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let bufsize = 50;
-        let mut vec = vec![0u8; bufsize];
+        let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);

@@ -390,10 +390,10 @@ pub fn copy_out_sockaddr(union_argument: Arg, len_argument: Arg, gensock: interf
     }
 }
 
-pub fn get_pollstruct_slice<'a>(union_argument: Arg, nfds: i32) -> Result<&'a mut [PollStruct], i32> {
+pub fn get_pollstruct_slice<'a>(union_argument: Arg, nfds: usize) -> Result<&'a mut [PollStruct], i32> {
     let pollstructptr = unsafe{union_argument.dispatch_pollstructarray};
     if !pollstructptr.is_null() {
-      return Ok(unsafe{std::slice::from_raw_parts_mut(pollstructptr, nfds as usize)});
+      return Ok(unsafe{std::slice::from_raw_parts_mut(pollstructptr, nfds)});
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }

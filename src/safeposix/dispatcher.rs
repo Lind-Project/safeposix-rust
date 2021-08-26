@@ -268,6 +268,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 
         SELECT_SYSCALL => {
             let nfds = get_onearg!(interface::get_int(arg1));
+            if nfds < 0 { //RLIMIT_NOFILE check as well?
+                return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
+            }
             let mut readfds = get_onearg!(interface::fd_set_to_hashset(arg2, nfds));
             let mut writefds = get_onearg!(interface::fd_set_to_hashset(arg3, nfds));
             let mut exceptfds = get_onearg!(interface::fd_set_to_hashset(arg4, nfds));
@@ -281,7 +284,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             rv
         }
         POLL_SYSCALL => {
-            let nfds = get_onearg!(interface::get_int(arg2));
+            let nfds = get_onearg!(interface::get_usize(arg2));
             check_and_dispatch!(cage.poll_syscall, interface::get_pollstruct_slice(arg1, nfds), interface::get_duration_from_millis(arg3))
         }
 
@@ -336,6 +339,11 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         EPOLL_WAIT_SYSCALL => {
             let nfds = get_onearg!(interface::get_int(arg3));
+
+            if nfds < 0 { //RLIMIT_NOFILE check as well?
+                return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
+            }
+
             check_and_dispatch!(cage.epoll_wait_syscall, interface::get_int(arg1), interface::get_epollevent_slice(arg2, nfds), Ok::<i32, i32>(nfds), interface::get_duration_from_millis(arg4))
         }
         GETDENTS_SYSCALL => {
