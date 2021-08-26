@@ -175,32 +175,32 @@ pub mod net_tests {
             buf = sizecbuf(100);
             assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 80, 0, &mut Some(&mut socket2)), 80);
             assert_eq!(cbuf2str(&buf), "A".repeat(80) + &"\0".repeat(20));
-            buf = sizecbuf(100);
 
             interface::sleep(interface::RustDuration::from_millis(200)); 
 
             //process the third test...
             //Writing 100, peek several times, read 100
             for _ in 0..4 { 
+                buf = sizecbuf(100);
                 assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 10, MSG_PEEK, &mut Some(&mut socket2)), 10); 
                 assert_eq!(cbuf2str(&buf), "A".repeat(10) + &"\0".repeat(90));
-            buf = sizecbuf(100);
             }
             for _ in 0..4 { 
+                buf = sizecbuf(100);
                 assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 20, MSG_PEEK, &mut Some(&mut socket2)), 20); 
                 assert_eq!(cbuf2str(&buf), "A".repeat(20) + &"\0".repeat(80));
-            buf = sizecbuf(100);
             }
             for _ in 0..4 { 
+                buf = sizecbuf(100);
                 assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 30, MSG_PEEK, &mut Some(&mut socket2)), 30); 
                 assert_eq!(cbuf2str(&buf), "A".repeat(30) + &"\0".repeat(70));
-            buf = sizecbuf(100);
             }
             for _ in 0..4 { 
+                buf = sizecbuf(100);
                 assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 40, MSG_PEEK, &mut Some(&mut socket2)), 40); 
                 assert_eq!(cbuf2str(&buf), "A".repeat(40) + &"\0".repeat(60));
-            buf = sizecbuf(100);
             }
+            buf = sizecbuf(100);
             assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 100, 0, &mut Some(&mut socket2)), 100);
             assert_eq!(cbuf2str(&buf), &"A".repeat(100));
             buf = sizecbuf(100);

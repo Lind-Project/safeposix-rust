@@ -6,6 +6,7 @@ use crate::interface;
 
 //used for gethostname syscall
 pub const DEFAULT_HOSTNAME: &str = "Lind";
+pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
 
 // Define constants using static or const
 // Imported into net_calls file
@@ -257,43 +258,43 @@ pub const SO_STYLE: i32 = 0x1008;
 pub const SO_TYPE: i32 = SO_STYLE;
 
 //haven't found libc values for the rest, yet
-pub const SO_SNDBUFFORCE: i32 = 32;
-pub const SO_RCVBUFFORCE: i32 = 33;
-pub const SO_NO_CHECK: i32 = 11;
-pub const SO_PRIORITY: i32 = 12;
-pub const SO_BSDCOMPAT: i32 = 14;
-pub const SO_PASSCRED: i32 = 16;
-pub const SO_PEERCRED: i32 = 17;
+// pub const SO_SNDBUFFORCE: i32 = 32;
+// pub const SO_RCVBUFFORCE: i32 = 33;
+// pub const SO_NO_CHECK: i32 = 11;
+// pub const SO_PRIORITY: i32 = 12;
+// pub const SO_BSDCOMPAT: i32 = 14;
+// pub const SO_PASSCRED: i32 = 16;
+// pub const SO_PEERCRED: i32 = 17;
 
-pub const SO_SECURITY_AUTHENTICATION: i32 = 22;
-pub const SO_SECURITY_ENCRYPTION_TRANSPORT: i32 = 23;
-pub const SO_SECURITY_ENCRYPTION_NETWORK: i32 = 24;
+// pub const SO_SECURITY_AUTHENTICATION: i32 = 22;
+// pub const SO_SECURITY_ENCRYPTION_TRANSPORT: i32 = 23;
+// pub const SO_SECURITY_ENCRYPTION_NETWORK: i32 = 24;
 
-pub const SO_BINDTODEVICE: i32 = 25;
+// pub const SO_BINDTODEVICE: i32 = 25;
 
-/* Socket filtering */
-pub const SO_ATTACH_FILTER: i32 = 26;
-pub const SO_DETACH_FILTER: i32 = 27;
+// /* Socket filtering */
+// pub const SO_ATTACH_FILTER: i32 = 26;
+// pub const SO_DETACH_FILTER: i32 = 27;
 
-pub const SO_PEERNAME: i32 = 28;
-pub const SO_TIMESTAMP: i32 = 29;
-pub const SCM_TIMESTAMP: i32 = SO_TIMESTAMP;
+// pub const SO_PEERNAME: i32 = 28;
+// pub const SO_TIMESTAMP: i32 = 29;
+// pub const SCM_TIMESTAMP: i32 = SO_TIMESTAMP;
 
 
-pub const SO_PEERSEC: i32 = 31;
-pub const SO_PASSSEC: i32 = 34;
-pub const SO_TIMESTAMPNS: i32 = 35;
-pub const SCM_TIMESTAMPNS: i32 = SO_TIMESTAMPNS;
+// pub const SO_PEERSEC: i32 = 31;
+// pub const SO_PASSSEC: i32 = 34;
+// pub const SO_TIMESTAMPNS: i32 = 35;
+// pub const SCM_TIMESTAMPNS: i32 = SO_TIMESTAMPNS;
 
-pub const SO_MARK: i32 = 36;
+// pub const SO_MARK: i32 = 36;
 
-pub const SO_TIMESTAMPING: i32 = 37;
-pub const SCM_TIMESTAMPING: i32 = SO_TIMESTAMPING;
+// pub const SO_TIMESTAMPING: i32 = 37;
+// pub const SCM_TIMESTAMPING: i32 = SO_TIMESTAMPING;
 
-pub const SO_PROTOCOL: i32 = 38;
-pub const SO_DOMAIN: i32 = 39;
+// pub const SO_PROTOCOL: i32 = 38;
+// pub const SO_DOMAIN: i32 = 39;
 
-pub const SO_RXQ_OVFL: i32 = 40;
+// pub const SO_RXQ_OVFL: i32 = 40;
 
 // Use this to specify options on a socket. Use the protocol with setsockopt
 // to specify something for all sockets with a protocol
