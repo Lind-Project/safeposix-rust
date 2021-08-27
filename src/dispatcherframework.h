@@ -125,6 +125,7 @@ int lind_recv (int sockfd, void *buf, size_t len, int flags, int cageid);
 int lind_sendto (int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen, int cageid);
 int lind_recvfrom (int sockfd, const void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen,  int cageid);
 int lind_connect (int sockfd, const struct sockaddr *src_addr, socklen_t addrlen, int cageid);
+int lind_accept(int sockfd, struct sockaddr* sockaddr, socklen_t addrlen, int cageid);
 int lind_listen (int sockfd, int backlog, int cageid);
 int lind_getpeername (int sockfd, struct sockaddr *addr, socklen_t *addrlen, int cageid);
 int lind_getsockopt (int sockfd, int level, int optname, void *optval, socklen_t *optlen, int cageid);

@@ -197,13 +197,18 @@ int lind_recv (int sockfd, void *buf, size_t len, int flags, int cageid)
 int lind_sendto (int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen, int cageid)
 {
     BLANKARGS;
-    DISPATCH_SYSCALL_6(LIND_safe_net_sendto, int, sockfd, cbuf, buf, size_t, len, int, flags, socklen_t, addrlen, constsockaddrstruct, dest_addr);
+    DISPATCH_SYSCALL_6(LIND_safe_net_sendto, int, sockfd, cbuf, buf, size_t, len, int, flags, constsockaddrstruct, dest_addr, socklen_t, addrlen);
 }
 
-int lind_recvfrom (int sockfd, const void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen,  int cageid)
+int lind_recvfrom (int sockfd, const void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen, int cageid)
 {
     BLANKARGS;
-    DISPATCH_SYSCALL_6(LIND_safe_net_recvfrom, int, sockfd, cbuf, buf, size_t, len, int, flags, socklen_t_ptr, addrlen, sockaddrstruct, src_addr);
+    DISPATCH_SYSCALL_6(LIND_safe_net_recvfrom, int, sockfd, cbuf, buf, size_t, len, int, flags, sockaddrstruct, src_addr, socklen_t_ptr, addrlen);
+}
+
+int lind_accept(int sockfd, struct sockaddr* sockaddr, socklen_t addrlen, int cageid) {
+    BLANKARGS;
+    DISPATCH_SYSCALL_3(LIND_safe_net_recvfrom, int, sockfd, sockaddrstruct, sockaddr, socklen_t_ptr, addrlen);
 }
 
 int lind_connect (int sockfd, const struct sockaddr *src_addr, socklen_t addrlen, int cageid)
@@ -353,4 +358,3 @@ int lind_exit(int status, int cageid)
     BLANKARGS;
     DISPATCH_SYSCALL_1(LIND_safe_sys_exit, int, status);
 }
-
