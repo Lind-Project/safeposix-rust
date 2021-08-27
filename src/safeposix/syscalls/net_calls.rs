@@ -36,14 +36,8 @@ impl Cage {
         };
         return sockfd;
     }
-    fn _socket_inserter(&self, sockfd: SocketDesc, fdtable_lock: Option<&mut FdTable>) -> i32 {
-        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
-        let mut writer;
-        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
-            writer = self.filedescriptortable.write().unwrap(); 
-            &mut writer
-        };
-
+    fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
+        let mut fdtable = self.filedescriptortable.write().unwrap(); 
         let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
 
         let newfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
@@ -76,7 +70,7 @@ impl Cage {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                         }
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
-                        return self._socket_inserter(sockfdobj, None);
+                        return self._socket_inserter(sockfdobj);
 
                     }
 
@@ -88,7 +82,7 @@ impl Cage {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.");
                         }
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
-                        return self._socket_inserter(sockfdobj, None);
+                        return self._socket_inserter(sockfdobj);
                     }
 
                     _ => {
@@ -617,7 +611,10 @@ impl Cage {
 
                                 //if we're not still peeking data, consume the data we peeked from our peek buffer
                                 if flags & MSG_PEEK == 0 {
-                                    sockfdobj.last_peek.drain(..(if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} else {bytecount}));
+                                    sockfdobj.last_peek.drain(..(
+                                        if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} 
+                                        else {bytecount}
+                                    ));
                                 }
 
                                 if newbuflen == 0 {
