@@ -73,7 +73,7 @@ pub mod net_tests {
         assert_eq!(cage.fork_syscall(2), 0);
 
         //creating a thread for the server so that the information can be sent between the two threads
-        let sender = std::thread::Builder::new().name("THREAD".into()).spawn(move || {
+        let sender = interface::helper_thread(move || {
             
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: 0 }, padding: 0}); //0.0.0.0
@@ -218,7 +218,7 @@ pub mod net_tests {
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
             assert_eq!(cage2.exit_syscall(), 0);
-        }).unwrap();
+        });
 
         //connect to the server
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
@@ -385,7 +385,7 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
         
-        let sender = std::thread::Builder::new().name("THREAD".into()).spawn(move || {
+        let sender = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
             interface::sleep(interface::RustDuration::from_millis(100)); 
@@ -395,7 +395,7 @@ pub mod net_tests {
             
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
-        }).unwrap();
+        });
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0); 
         
@@ -434,7 +434,7 @@ pub mod net_tests {
         assert_eq!(cage.fork_syscall(2), 0);
 
         //creating a thread for the server so that the information can be sent between the two threads
-        let sender = std::thread::Builder::new().name("THREAD".into()).spawn(move || {
+        let sender = interface::helper_thread(move || {
             
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             interface::sleep(interface::RustDuration::from_millis(100)); 
@@ -497,7 +497,7 @@ pub mod net_tests {
             assert_eq!(cage2.close_syscall(sockfd), 0);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
-        }).unwrap();
+        });
 
         //connect to the server
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
@@ -542,9 +542,7 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        let builder = std::thread::Builder::new().name("THREAD".into());
-        
-        let sender = builder.spawn(move || {
+        let sender = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
             interface::sleep(interface::RustDuration::from_millis(100)); 
@@ -559,7 +557,7 @@ pub mod net_tests {
 
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
-        }).unwrap();
+        });
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
         

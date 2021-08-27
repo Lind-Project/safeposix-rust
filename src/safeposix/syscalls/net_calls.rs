@@ -36,10 +36,16 @@ impl Cage {
         };
         return sockfd;
     }
-    fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
+    fn _socket_inserter(&self, sockfd: SocketDesc, fdtable_lock: Option<&mut FdTable>) -> i32 {
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
+        let mut writer;
+        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
+            writer = self.filedescriptortable.write().unwrap(); 
+            &mut writer
+        };
+
         let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
 
-        let mut fdtable = self.filedescriptortable.write().unwrap(); 
         let newfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
             fd
         } else {
@@ -70,7 +76,7 @@ impl Cage {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                         }
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
-                        return self._socket_inserter(sockfdobj);
+                        return self._socket_inserter(sockfdobj, None);
 
                     }
 
@@ -82,7 +88,7 @@ impl Cage {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.");
                         }
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
-                        return self._socket_inserter(sockfdobj);
+                        return self._socket_inserter(sockfdobj, None);
                     }
 
                     _ => {
@@ -611,9 +617,8 @@ impl Cage {
 
                                 //if we're not still peeking data, consume the data we peeked from our peek buffer
                                 if flags & MSG_PEEK == 0 {
-                                    sockfdobj.last_peek.drain(..);
+                                    sockfdobj.last_peek.drain(..(if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} else {bytecount}));
                                 }
-
 
                                 if newbuflen == 0 {
                                     //if we've filled all of the buffer with peeked data, return
@@ -955,13 +960,12 @@ impl Cage {
                                 *addr = remote_addr; //populate addr with what address it connected to
                                 let domain = sockfdobj.domain;
 
-                                //THIS DEADLOCKS IF WE DON'T TAKE THE SOCKET INSERTER CODE AND PASTE IT HERE...
+                                //THIS DEADLOCKS IF WE DON'T DROP THE FDTABLE HERE...
                                 //we need to figure out a way to make sure that the loop doesn't break when these are dropped, though
                                 //if we drop everything before getting into the loop, we need to make sure that the fd is a sock everytime
                                 //and probably that it hasn't changed in the time that it took to drop the lock to the table and regain it...
 
                                 let id = newsockobj.socketobjectid.clone();
-
                                 drop(sockfdobj);
                                 drop(wrappedfd);
                                 drop(filedesc_enum);
@@ -979,7 +983,7 @@ impl Cage {
                                     fdtable.insert(newfd, wrappedsock);
                                     newfd
                                 };
-
+                                
                                 match socket_result {
                                     x if x < 0 => {
                                         let mut mutmetadata = NET_METADATA.write().unwrap();
