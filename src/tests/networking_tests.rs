@@ -30,16 +30,16 @@ pub mod net_tests {
         //should work...
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50102u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
 
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), 0);
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), -(Errno::EINVAL as i32)); //already bound so should fail
+        assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
+        assert_eq!(cage.bind_syscall(sockfd, &socket), -(Errno::EINVAL as i32)); //already bound so should fail
 
         //trying to bind another to the same IP/PORT
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        assert_eq!(cage.bind_syscall(sockfd2, &socket, 4096), -(Errno::EADDRINUSE as i32)); //already bound so should fail
+        assert_eq!(cage.bind_syscall(sockfd2, &socket), -(Errno::EADDRINUSE as i32)); //already bound so should fail
 
         //UDP should still work...
         let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        assert_eq!(cage.bind_syscall(sockfd3, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(sockfd3, &socket), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -66,7 +66,7 @@ pub mod net_tests {
         //binding to a socket
         let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
         
         //forking the cage to get another cage with the same information
@@ -270,7 +270,7 @@ pub mod net_tests {
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50103u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
 
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
@@ -278,7 +278,7 @@ pub mod net_tests {
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
         assert_eq!(cage.setsockopt_syscall(sockfd2, SOL_SOCKET, SO_REUSEPORT, 1), 0);
 
-        assert_eq!(cage.bind_syscall(sockfd2, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(sockfd2, &socket), 0);
 
         //double listen should be allowed
         assert_eq!(cage.listen_syscall(sockfd, 1), 0);
@@ -286,7 +286,7 @@ pub mod net_tests {
 
         //UDP bind should be allowed
         sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -351,12 +351,12 @@ pub mod net_tests {
 
         let mut socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50104u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
         
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
         assert_eq!(retsocket, socket);    
 
         //checking that we cannot rebind the socket
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), -(Errno::EINVAL as i32)); //already bound so should fail
+        assert_eq!(cage.bind_syscall(sockfd, &socket), -(Errno::EINVAL as i32)); //already bound so should fail
         assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
         assert_eq!(retsocket, socket);
 
@@ -379,7 +379,7 @@ pub mod net_tests {
         //binding to a socket
         let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53000_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
         //forking the cage to get another cage with the same information
@@ -427,7 +427,7 @@ pub mod net_tests {
         //binding to a socket
         let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
         
         //forking the cage to get another cage with the same information
@@ -536,7 +536,7 @@ pub mod net_tests {
         //binding to a socket
         let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50431_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        assert_eq!(cage.bind_syscall(serversockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
         //forking the cage to get another cage with the same information
@@ -612,7 +612,7 @@ pub mod net_tests {
 
         let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50115_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        assert_eq!(cage.bind_syscall(sockfd, &socket, 4096), 0);
+        assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(sockfd, 4), 0);
 
         //set and get some options:

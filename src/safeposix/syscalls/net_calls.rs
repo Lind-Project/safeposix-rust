@@ -99,7 +99,7 @@ impl Cage {
     }
 
     //we assume we've converted into a RustSockAddr in the dispatcher
-    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, _len: i32) -> i32 {
+    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -228,7 +228,7 @@ impl Cage {
                                 drop(filedesc_enum);
                                 drop(fdtable);
 
-                                return self.bind_syscall(fd, &localaddr, 4096); //len assigned arbitrarily large value
+                                return self.bind_syscall(fd, &localaddr); //len assigned arbitrarily large value
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
@@ -1451,7 +1451,7 @@ impl Cage {
     
         let portlessaddr = if newdomain == AF_INET {
             let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
-            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0};
+            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
             interface::GenSockaddr::V4(innersockaddr)
         } else if domain == AF_INET6 {
             let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
@@ -1474,7 +1474,7 @@ impl Cage {
             let mut addr = portlessaddr;
             addr.set_port(port.unwrap());
     
-            let bindret = this.bind_syscall(sock1fd, &addr, 4096); //len assigned arbitrarily large value
+            let bindret = this.bind_syscall(sock1fd, &addr); //len assigned arbitrarily large value
             if bindret != 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
@@ -1530,14 +1530,14 @@ impl Cage {
             addr1.set_port(port1.unwrap());
             addr2.set_port(port2.unwrap());
     
-            let bind1ret = this.bind_syscall(sock1fd, &addr1, 4096); //arbitrarily large length given
+            let bind1ret = this.bind_syscall(sock1fd, &addr1); //arbitrarily large length given
             if bind1ret < 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return bind1ret;
             }
     
-            let bind2ret = this.bind_syscall(sock1fd, &addr2, 4096); //arbitrarily large length given
+            let bind2ret = this.bind_syscall(sock1fd, &addr2); //arbitrarily large length given
             if bind2ret < 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);

@@ -169,7 +169,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         BIND_SYSCALL => {
             let addrlen = get_onearg!(interface::get_uint(arg3));
             let addr = get_onearg!(interface::get_sockaddr(arg2, addrlen));
-            check_and_dispatch!(cage.bind_syscall, interface::get_int(arg1), Ok::<&interface::GenSockaddr, i32>(&addr), Ok::<u32, i32>(addrlen))
+            check_and_dispatch!(cage.bind_syscall, interface::get_int(arg1), Ok::<&interface::GenSockaddr, i32>(&addr))
         }
 
         SEND_SYSCALL => {
