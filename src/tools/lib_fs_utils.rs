@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![feature(duration_constants)]
+
 use std::fs::File;
 use std::io::{Read, prelude};
 use std::ffi::CStr;
@@ -198,7 +201,6 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
 
     loop {
         let direntres = cage.getdents_syscall(dirfd, dentptr, 65536);
-        
         //if we've read every entry in this directory, we're done
         if direntres == 0 {break;}
 
@@ -241,6 +243,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
     let mut lindstat_res: StatData = StatData::default();
     let stat_us = cage.stat_syscall(path, &mut lindstat_res);
 
+
     if stat_us == 0 {
         if !is_dir(lindstat_res.st_mode) {
             cage.unlink_syscall(path);
@@ -254,7 +257,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                     childcage.unlink_syscall(childpath);
                 }
             });
-
+            
             //remove specified directory now that it is empty
             cage.chmod_syscall(path, S_IRWXA);
             cage.rmdir_syscall(path);
