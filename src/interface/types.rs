@@ -83,7 +83,20 @@ pub struct PollStruct {
     pub fd: i32 
 }
 
+#[repr(C)]
+pub struct SockaddrDummy {
+    pub sa_family: u16,
+    pub _sa_data: [u16; 14]
+}
+
+#[repr(C)]
+pub struct TimeVal {
+    pub tv_sec: i64,
+    pub tv_usec: i64
+}
+
 //redefining the Arg union to maintain the flow of the program
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub union Arg {
   pub dispatch_int: i32,
@@ -99,7 +112,14 @@ pub union Arg {
   pub dispatch_rlimitstruct: *mut Rlimit,
   pub dispatch_statdatastruct: *mut StatData,
   pub dispatch_fsdatastruct: *mut FSData,
-  pub dispatch_pipearray: *mut PipeArray
+  pub dispatch_constsockaddrstruct: *const SockaddrDummy,
+  pub dispatch_sockaddrstruct: *mut SockaddrDummy,
+  pub dispatch_socklen_t_ptr: *mut u32,
+  pub dispatch_pollstructarray: *mut PollStruct,
+  pub dispatch_epollevent: *mut EpollEvent,
+  pub dispatch_structtimeval: *mut TimeVal,
+  pub dispatch_pipearray: *mut PipeArray,
+  pub dispatch_sockpair: *mut SockPair
 }
 
 
@@ -256,7 +276,7 @@ pub fn pack_dirents(dirtuplevec: Vec<(ClippedDirent, Vec<u8>)>, baseptr: *mut u8
       *curwrappedptr = dirtuple.0;
   
       //advance pointer by the size of one ClippedDirent, std::mem::size_of should be added into the interface
-      curptr = curptr.wrapping_offset(std::mem::size_of::<ClippedDirent>() as isize);
+      curptr = curptr.wrapping_offset(size_of::<ClippedDirent>() as isize);
   
       //write, starting from this advanced location, the u8 vec representation of the name
       unsafe{curptr.copy_from(dirtuple.1.as_slice().as_ptr(), dirtuple.1.len())};
@@ -273,4 +293,167 @@ pub fn get_pipearray<'a>(union_argument: Arg) -> Result<&'a mut PipeArray, i32> 
         return Ok(unsafe{&mut *pointer});
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
+    let pointer = unsafe{union_argument.dispatch_sockpair};
+    if !pointer.is_null() {
+        return Ok(unsafe{&mut *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn fd_set_to_hashset(union_argument: Arg, nfds: i32) -> Result<interface::RustHashSet<i32>, i32> {
+    let pointer = unsafe{union_argument.dispatch_mutcbuf};
+    let mut hashset = interface::RustHashSet::new();
+    if !pointer.is_null() {    
+        for i in 0..nfds {
+            let byte_offset = i / 8;
+            let bit_offset = i & 0b111;
+            let byte_ptr = pointer.wrapping_offset(byte_offset as isize);
+
+            //check whether the bit_offsetth bit of the byte_offsetth byte in the fd_set is set
+            if (unsafe{*byte_ptr}) & (1 << bit_offset) != 0 {
+                //if so, add it to our hashset
+                hashset.insert(i);
+            }
+        }
+    }
+    return Ok(hashset);
+}
+pub fn copy_out_to_fd_set(union_argument: Arg, nfds: i32, hashset: interface::RustHashSet<i32>) {
+    let pointer = unsafe{union_argument.dispatch_mutcbuf};
+    if pointer.is_null() {return;} //do nothing if it's null
+    for i in 0..nfds {
+        let byte_offset = i / 8;
+        let bit_offset = i & 0b111;
+        let byte_ptr = pointer.wrapping_offset(byte_offset as isize);
+
+        if hashset.contains(&i) {
+            //if it's in the hash set, set the bit ot 1
+            unsafe{*byte_ptr |= 1 << bit_offset;}
+        } else {
+            //else, set the bit to 0
+            unsafe{*byte_ptr &= !1 << bit_offset;}
+        }
+    }
+}
+
+pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsockaddrstruct};
+    if !pointer.is_null() {    
+        let tmpsock = unsafe{&*pointer};
+        match tmpsock.sa_family {
+            /*AF_INET*/ 2 => {
+                if addrlen < size_of::<interface::SockaddrV4>() as u32 {
+                    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
+                }
+                let v4_ptr = pointer as *mut interface::SockaddrV4;
+                return Ok(interface::GenSockaddr::V4(unsafe{*v4_ptr}));
+            }
+            /*AF_INET6*/ 30 => {
+                if addrlen < size_of::<interface::SockaddrV6>() as u32 {
+                    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
+                }
+                let v6_ptr = pointer as *mut interface::SockaddrV6;
+                return Ok(interface::GenSockaddr::V6(unsafe{*v6_ptr}));
+            }
+            _ => return Err(syscall_error(Errno::EOPNOTSUPP, "dispatcher", "sockaddr family not supported"))
+        }
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn copy_out_sockaddr(union_argument: Arg, len_argument: Arg, gensock: interface::GenSockaddr) {
+    let copyoutaddr = unsafe{union_argument.dispatch_sockaddrstruct} as *mut u8;
+    let addrlen = unsafe{union_argument.dispatch_socklen_t_ptr};
+    assert!(!copyoutaddr.is_null());
+    assert!(!addrlen.is_null());
+    let initaddrlen = unsafe{*addrlen};
+    let mut mutgensock = gensock;
+    match mutgensock {
+        interface::GenSockaddr::V4(ref mut v4a) => {
+            let v4len = size_of::<interface::SockaddrV4>() as u32;
+
+            let fullcopylen = interface::rust_min(initaddrlen, v4len);
+            unsafe{std::ptr::copy((v4a) as *mut interface::SockaddrV4 as *mut u8, copyoutaddr, fullcopylen as usize)};
+            unsafe{*addrlen = interface::rust_max(v4len, fullcopylen);}
+        }
+
+        interface::GenSockaddr::V6(ref mut v6a) => {
+            let v6len = size_of::<interface::SockaddrV6>() as u32;
+
+            let fullcopylen = interface::rust_min(initaddrlen, v6len);
+            unsafe{std::ptr::copy((v6a) as *mut interface::SockaddrV6 as *mut u8, copyoutaddr, fullcopylen as usize)};
+            unsafe{*addrlen = interface::rust_max(v6len, fullcopylen);}
+        }
+    }
+}
+
+pub fn get_pollstruct_slice<'a>(union_argument: Arg, nfds: usize) -> Result<&'a mut [PollStruct], i32> {
+    let pollstructptr = unsafe{union_argument.dispatch_pollstructarray};
+    if !pollstructptr.is_null() {
+      return Ok(unsafe{std::slice::from_raw_parts_mut(pollstructptr, nfds)});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_epollevent_slice<'a>(union_argument: Arg, nfds: i32) -> Result<&'a mut [EpollEvent], i32> {
+    let epolleventptr = unsafe{union_argument.dispatch_epollevent};
+    if !epolleventptr.is_null() {
+      return Ok(unsafe{std::slice::from_raw_parts_mut(epolleventptr, nfds as usize)});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_slice_from_string<'a>(union_argument: Arg, len: usize) -> Result<&'a mut [u8], i32> {
+    let bufptr = unsafe{union_argument.dispatch_mutcbuf};
+    if bufptr.is_null() {
+      return Ok(unsafe{std::slice::from_raw_parts_mut(bufptr, len as usize)});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_epollevent<'a>(union_argument: Arg) -> Result<&'a EpollEvent, i32> {
+    let epolleventptr = unsafe{union_argument.dispatch_epollevent};
+    if !epolleventptr.is_null() {
+      return Ok(unsafe{&*epolleventptr});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_socklen_t_ptr(union_argument: Arg) -> Result<u32, i32> {
+    let socklenptr = unsafe{union_argument.dispatch_socklen_t_ptr};
+    if !socklenptr.is_null() {
+      return Ok(unsafe{*socklenptr});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn duration_fromtimeval(union_argument: Arg) -> Result<Option<interface::RustDuration>, i32> {
+    let pointer = unsafe{union_argument.dispatch_structtimeval};
+    if !pointer.is_null() {    
+        let times = unsafe{&mut *pointer};
+        return Ok(Some(interface::RustDuration::new(times.tv_sec as u64, times.tv_usec as u32 * 1000)));
+    } else {
+        return Ok(None);
+    }
+}
+
+pub fn get_duration_from_millis(union_argument: Arg) ->Result<Option<interface::RustDuration>, i32> {
+    let posstimemillis = get_int(union_argument);
+    match posstimemillis {
+        Ok(timemillis) => {
+            if timemillis >= 0 {
+                Ok(Some(interface::RustDuration::from_millis(timemillis as u64)))
+            } else {
+                Ok(None)
+            }
+        }
+        Err(e) => Err(e)
+    }
+}
+
+pub fn arg_nullity(union_argument: &Arg) -> bool {
+    unsafe{union_argument.dispatch_cbuf}.is_null()
 }
