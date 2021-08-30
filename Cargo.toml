@@ -12,6 +12,9 @@ serde_json = "1.0"
 libc = "0.2"
 ringbuf = "0.2.6"
 
+[profile.release]
+debug = true
+
 [[bin]]
 name = "lind_fs_utils"
 path = "src/tools/fs_utils.rs"
