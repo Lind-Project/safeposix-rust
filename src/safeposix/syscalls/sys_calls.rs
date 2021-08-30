@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // System related system calls
 use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};

@@ -1,25 +1,31 @@
 #[cfg(test)]
-mod fs_tests {
+pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::fs::OpenOptions;
 
-    #[test]
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
+        lindrustinit();
+        load_fs_special_files({CAGE_TABLE.read().unwrap().get(&1).unwrap()});
+        lindrustfinalize();
+
+        ut_lind_fs_broken_close();
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dir_mode();
         ut_lind_fs_dir_multiple();
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
+        ut_lind_fs_fcntl();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();
         ut_lind_fs_fstat_complex();
+        // ut_lind_fs_getdents();
         ut_lind_fs_getuid();
         ut_lind_fs_load_fs();
         ut_lind_fs_mknod();
@@ -33,7 +39,6 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
 
         persistencetest();
         rdwrtest();
@@ -64,9 +69,9 @@ mod fs_tests {
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
-
-
-
+    
+    
+    
     pub fn persistencetest() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -102,7 +107,7 @@ mod fs_tests {
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
- 
+    
         assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
@@ -175,6 +180,41 @@ mod fs_tests {
         let mut read_bufrand = sizecbuf(1000);
         assert_eq!(cage.read_syscall(fd2, read_bufrand.as_mut_ptr(), 1000), 1000);
         assert_eq!(cage.close_syscall(fd2), 0);
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_fs_broken_close() {
+
+        //testing a muck up with the inode table where the regular close does not work as intended
+
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        //write should work
+        let mut fd = cage.open_syscall("/broken_close_file", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Hello There!"), 12), 12);
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        //close the file and then open it again... and then close it again
+        fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        //let's try some things with connect
+        //we are going to open a socket with a UDP specification...
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        //bind should not be intersting
+        assert_eq!(cage.bind_syscall(sockfd, &interface::GenSockaddr::V4(interface::SockaddrV4::default()), 4096), 0);
+
+        fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
+        assert_eq!(cage.close_syscall(fd), 0);
+
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
@@ -382,6 +422,34 @@ mod fs_tests {
 
 
 
+    pub fn ut_lind_fs_fcntl() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let filefd = cage.open_syscall("/fcntl_file", O_CREAT | O_EXCL, S_IRWXA);
+
+        //set the setfd flag
+        assert_eq!(cage.fcntl_syscall(sockfd, F_SETFD, O_CLOEXEC), 0);
+
+        //checking to see if the wrong flag was set or not
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0), 1);
+
+        //let's get some more flags on the filefd
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY|O_NONBLOCK), 0);
+
+        //checking if the flags are updated...
+        assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, 0), 2048);
+
+        assert_eq!(cage.close_syscall(filefd), 0);
+        assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
     pub fn ut_lind_fs_fdflags() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -397,6 +465,8 @@ mod fs_tests {
 
         let mut buf = sizecbuf(100);
         assert_eq!(cage.lseek_syscall(read_fd, 0, SEEK_SET), 0);
+
+        //why is this failing??
         assert_eq!(cage.read_syscall(read_fd, buf.as_mut_ptr(), 100), 0);
         assert_eq!(cage.close_syscall(read_fd), 0);
 
@@ -480,7 +550,7 @@ mod fs_tests {
         lindrustfinalize();
     }
 
-
+ 
 
     pub fn ut_lind_fs_fstat_complex() {
         lindrustinit();
@@ -684,7 +754,7 @@ mod fs_tests {
         assert_ne!(fd1, fd2);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let mode: u32 = 438;   // 0666
+        let mode: u32 = 0o666;   // 0666
         let name = "double_open_file";
 
         let mut read_buf = sizecbuf(2);
@@ -868,7 +938,7 @@ mod fs_tests {
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
-        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 48);
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize as u32), 48);
 
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;

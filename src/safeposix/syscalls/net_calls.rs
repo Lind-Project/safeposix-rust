@@ -1,10 +1,10 @@
+#![allow(dead_code)]
 // Network related system calls
 // Authors: Jonathan Singer and Tristan Brigham
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
-
 
 use super::net_constants::*;
 use super::fs_constants::*;
@@ -37,9 +37,9 @@ impl Cage {
         return sockfd;
     }
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
+        let mut fdtable = self.filedescriptortable.write().unwrap(); 
         let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
 
-        let mut fdtable = self.filedescriptortable.write().unwrap();
         let newfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
             fd
         } else {
@@ -110,7 +110,7 @@ impl Cage {
 
         let portlessaddr = if newdomain == AF_INET {
             let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
-            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0};
+            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
             interface::GenSockaddr::V4(innersockaddr)
         } else if domain == AF_INET6 {
             let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
@@ -222,7 +222,7 @@ impl Cage {
     }
 
     //we assume we've converted into a RustSockAddr in the dispatcher
-    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, len: i32) -> i32 {
+    pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr, _len: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -287,35 +287,36 @@ impl Cage {
         }
     }
 
-    fn assign_new_addr(sockfdobj: &SocketDesc, remoteaddr: &interface::GenSockaddr) -> Result<interface::GenSockaddr, i32> {
+    fn assign_new_addr(sockfdobj: &SocketDesc, isv6: bool) -> Result<interface::GenSockaddr, i32> {
         if let Some(addr) = &sockfdobj.localaddr {
             Ok(addr.clone())
         } else {
             let mut mutmetadata = NET_METADATA.write().unwrap();
-            let mut newremote = remoteaddr.clone();
 
             //in lieu of getmyip we just always use 0.0.0.0 or the ipv6 equivalent because we have
             //no kernel-respecting way of accessing the actual interface addresses for ipv6 for now
             //(netlink for now is a big no go)
-            match remoteaddr {
-                interface::GenSockaddr::V4(_) => {
-                    let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
-                    let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
-                    if let Err(e) = port {return Err(e);}
-                    newremote.set_port(port.unwrap());
-                    newremote.set_addr(addr);
-                }
-
-                interface::GenSockaddr::V6(_) => {
-                    let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
-                    let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
-                    if let Err(e) = port {return Err(e);}
-                    newremote.set_port(port.unwrap());
-                    newremote.set_addr(addr);
-                }
+            let retval = if isv6 {
+                let mut newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
+                let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
+                let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
+                if let Err(e) = port {return Err(e);}
+                newremote.set_port(port.unwrap());
+                newremote.set_addr(addr);
+                newremote.set_family(AF_INET6 as u16);
+                newremote
+            } else {
+                let mut newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
+                let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
+                if let Err(e) = port {return Err(e);}
+                newremote.set_port(port.unwrap());
+                newremote.set_addr(addr);
+                newremote.set_family(AF_INET as u16);
+                newremote
             };
 
-            Ok(newremote)
+            Ok(retval)
         }
     }
 
@@ -331,10 +332,11 @@ impl Cage {
 
                     //for UDP, just set the addresses and return
                     if sockfdobj.protocol == IPPROTO_UDP {
+                        sockfdobj.remoteaddr = Some(remoteaddr.clone());
                         match sockfdobj.localaddr {
                             Some(_) => return 0,
                             None => {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
+                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_))) {
                                     Ok(a) => a,
                                     Err(e) => return e,
                                 };
@@ -348,7 +350,7 @@ impl Cage {
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         //for TCP, actually create the internal socket object and connect it
-                        let localaddr = match Self::assign_new_addr(sockfdobj, remoteaddr) {
+                        let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_))) {
                             Ok(a) => a,
                             Err(e) => return e,
                         };
@@ -361,7 +363,8 @@ impl Cage {
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
 
-                            return syscall_error(sockerrno, "connect", "The libc call to connect failed!");
+                            //error is always -1
+                            return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");
                         }
 
                         //openconnection to get newsockobj
@@ -424,11 +427,14 @@ impl Cage {
 
                             //bind the udp port as we do not bind them at bind_syscall, and this is
                             //the last possible moment to do so
-                            let localaddr = match Self::assign_new_addr(sockfdobj, dest_addr) {
+                            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_))) {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
-                            let _bindret = sockobj.bind(&localaddr);
+                            let bindret = sockobj.bind(&localaddr);
+                            if bindret < 0 {
+                                return syscall_error(Errno::ECONNREFUSED, "sendto", "The libc call to bind failed!");
+                            }
                             if let None = sockfdobj.localaddr {
                                 sockfdobj.localaddr = Some(localaddr);
                             }
@@ -462,7 +468,7 @@ impl Cage {
 
                                     if sockerrno == Errno::EAGAIN {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     };
 
@@ -524,7 +530,7 @@ impl Cage {
 
                                     if sockerrno == Errno::EAGAIN {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
 
@@ -569,7 +575,6 @@ impl Cage {
                         }
                     }
                 }
-
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "send", "file descriptor refers to something other than a socket");
                 }
@@ -606,7 +611,10 @@ impl Cage {
 
                                 //if we're not still peeking data, consume the data we peeked from our peek buffer
                                 if flags & MSG_PEEK == 0 {
-                                    sockfdobj.last_peek.drain(..bytecount);
+                                    sockfdobj.last_peek.drain(..(
+                                        if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} 
+                                        else {bytecount}
+                                    ));
                                 }
 
                                 if newbuflen == 0 {
@@ -627,10 +635,10 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN  && (flags & O_NONBLOCK == 0) {
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
-                                    
+
                                     //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
                                     //the issue), then continue with the data we've read so far if we read any data from
                                     //peek or a previous iteration, or return the error given
@@ -685,7 +693,7 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
 
@@ -745,20 +753,37 @@ impl Cage {
                             return 0; //Already done!
                         }
 
-                        ConnState::NOTCONNECTED => {
-                            return 0; //should this actually error instead?
+                        ConnState::CONNECTED => {
+                            return syscall_error(Errno::EOPNOTSUPP, "listen", "We don't support closing a prior socket connection on listen");
                         }
 
-                        ConnState::CONNECTED => {
-                            //we should probably assert that it's TCP, but connected state does
-                            //most of that work?
-                            //Additionally we maybe should check that localaddr exists?
-                            let ladr = sockfdobj.localaddr.as_ref().unwrap().clone();
-                            let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                        ConnState::NOTCONNECTED => {
+                            if sockfdobj.protocol != IPPROTO_TCP {
+                                return syscall_error(Errno::EOPNOTSUPP, "listen", "This protocol doesn't support listening");
+                            }
                             let mut mutmetadata = NET_METADATA.write().unwrap();
+                            let mut ladr;
+                            let mut porttuple;
+                            match sockfdobj.localaddr {
+                                Some(sla) => {
+                                    ladr = sla.clone();
+                                    porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
 
-                            if mutmetadata.listening_port_set.contains(&porttuple) {
-                                return syscall_error(Errno::EADDRINUSE, "listen", "A socket is already listening on this port");
+                                    if mutmetadata.listening_port_set.contains(&porttuple) {
+                                        match mutmetadata._get_available_tcp_port(ladr.addr().clone(), sockfdobj.domain) {
+                                            Ok(port) => ladr.set_port(port),
+                                            Err(i) => return i,
+                                        }
+                                        porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                                    }
+                                }
+                                None => {
+                                    ladr = match Self::assign_new_addr(sockfdobj, sockfdobj.domain == AF_INET6) {
+                                        Ok(a) => a,
+                                        Err(e) => return e,
+                                    };
+                                    porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
+                                }
                             }
                             mutmetadata.listening_port_set.insert(porttuple);
 
@@ -799,7 +824,6 @@ impl Cage {
 
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
-
         match how {
             SHUT_RD => {
                 return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
@@ -826,13 +850,16 @@ impl Cage {
             let mut filedesc = wrappedfd.write().unwrap();
             if let Socket(sockfdobj) = &mut *filedesc {
                 let mut mutmetadata = NET_METADATA.write().unwrap();
+                let objectid = &sockfdobj.socketobjectid;
 
-                let objectid = &sockfdobj.socketobjectid.unwrap();
-                let localaddr = sockfdobj.localaddr.as_ref().unwrap().clone();
-                let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
-                if let Err(e) = release_ret_val {return e;}
+                if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
+                    let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                    if let Err(e) = release_ret_val {return e;}
+                }
                 if !partial {
-                    mutmetadata.socket_object_table.remove(objectid);
+                    if let None = objectid {} else {
+                        mutmetadata.socket_object_table.remove(&objectid.unwrap());
+                    }
                     sockfdobj.state = ConnState::NOTCONNECTED;
                 }
             } else {return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");}
@@ -864,23 +891,22 @@ impl Cage {
     }
     
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
-        let fdtable = self.filedescriptortable.read().unwrap();
-        if let Some(wrappedfd) = fdtable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write().unwrap();
-            match &mut *filedesc_enum {
 
-                Socket(ref mut sockfdobj) => {
-                    match sockfdobj.protocol {
-                        IPPROTO_UDP => {
-                            return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
-                        }
-
-                        IPPROTO_TCP => {
-                            if sockfdobj.state != ConnState::LISTEN {
-                                return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
+        loop { //we must block manually
+            let mut fdtable = self.filedescriptortable.write().unwrap();
+            if let Some(wrappedfd) = fdtable.get(&fd) {
+                let mut filedesc_enum = wrappedfd.write().unwrap();
+                match &mut *filedesc_enum {
+                    Socket(ref mut sockfdobj) => {
+                        match sockfdobj.protocol {
+                            IPPROTO_UDP => {
+                                return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
                             }
+                            IPPROTO_TCP => {
+                                if sockfdobj.state != ConnState::LISTEN {
+                                    return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
+                                }
 
-                            loop { //we must block manually
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
                                 let (acceptedresult, remote_addr) = if let Some(tup) = sockfdobj.pendingconnections.pop() {
                                     //if we got a pending connection in select/poll/whatever, return that here instead
@@ -896,7 +922,7 @@ impl Cage {
                                     };
 
                                     if accerrno == Errno::EAGAIN {
-                                        interface::sleep(interface::RustDuration::MILLISECOND);
+                                        interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
                                     return errval;
@@ -909,7 +935,7 @@ impl Cage {
                                 newsockobj.state = ConnState::CONNECTED;
 
                                 let mut newaddr = sockfdobj.localaddr.clone().unwrap();
-                                let newport = match mutmetadata._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain) {
+                                let mut newport = match mutmetadata._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain) {
                                     Ok(portnum) => portnum,
                                     Err(errnum) => return errnum,
                                 };
@@ -929,31 +955,56 @@ impl Cage {
                                 };
 
                                 *addr = remote_addr; //populate addr with what address it connected to
+                                let domain = sockfdobj.domain;
+
+                                //THIS DEADLOCKS IF WE DON'T DROP THE FDTABLE HERE...
+                                //we need to figure out a way to make sure that the loop doesn't break when these are dropped, though
+                                //if we drop everything before getting into the loop, we need to make sure that the fd is a sock everytime
+                                //and probably that it hasn't changed in the time that it took to drop the lock to the table and regain it...
 
                                 let id = newsockobj.socketobjectid.clone();
-                                match self._socket_inserter(newsockobj) {
+                                drop(sockfdobj);
+                                drop(wrappedfd);
+                                drop(filedesc_enum);
+
+                                //socket inserter code
+                                let socket_result = {
+                                    let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
+
+                                    let newfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
+                                        fd
+                                    } else {
+                                        return syscall_error(Errno::ENFILE, "accept", "no available file descriptor number could be found");
+                                    };
+
+                                    fdtable.insert(newfd, wrappedsock);
+                                    newfd
+                                };
+                                
+                                match socket_result {
                                     x if x < 0 => {
-                                        mutmetadata.listening_port_set.remove(&mux_port(newipaddr, newport, sockfdobj.domain, TCPPORT));
+                                        let mut mutmetadata = NET_METADATA.write().unwrap();
+                                        mutmetadata.listening_port_set.remove(&mux_port(newipaddr, newport, domain, TCPPORT));
                                         mutmetadata.socket_object_table.remove(&id.unwrap());
                                         return x;
-                                    }
-                                    y => return y
+                                    },
+                                    y => {
+                                        return y;
+                                    },
                                 }
                             }
-                        }
-
-                        _ => {
-                            return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+                            _ => {
+                                return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+                            }
                         }
                     }
+                    _ => {
+                        return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
+                    }
                 }
-
-                _ => {
-                    return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
-                }
+            } else {
+                return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
             }
-        } else {
-            return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
     }
 
@@ -1089,7 +1140,7 @@ impl Cage {
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::MILLISECOND);
+                interface::sleep(BLOCK_TIME);
             }
         }
         *readfds = new_readfds;
@@ -1097,7 +1148,7 @@ impl Cage {
         return retval; //package out fd_set?
     }
 
-    pub fn getsockopt_syscall(self, fd: i32, level: i32, optname: i32) -> i32 {
+    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1165,7 +1216,7 @@ impl Cage {
     }
 
     //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
-    pub fn setsockopt_syscall(self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+    pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1236,7 +1287,7 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1247,7 +1298,7 @@ impl Cage {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
                 
-                //all of the checks that we had passed if we are here
+                //all of the checks that we had have passed if we are here
                 *ret_addr = sockfdobj.remoteaddr.unwrap();
                 return 0;
 
@@ -1294,10 +1345,6 @@ impl Cage {
 
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname(&self, length: usize, address_ptr: &mut [u8]) -> i32 {
-        if length < 0 {
-            return syscall_error(Errno::EINVAL, "gethostname", "invalid argument");
-        }
-
         let name_length: usize = DEFAULT_HOSTNAME.chars().count();
         if name_length > length {
             address_ptr[..length].copy_from_slice(&DEFAULT_HOSTNAME[..length].as_bytes());
@@ -1348,7 +1395,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(interface::RustDuration::MILLISECOND);
+                interface::sleep(BLOCK_TIME);
             }
         }
         return return_code;
@@ -1463,7 +1510,6 @@ impl Cage {
                         events: 0,
                         revents: 0
                     };
-
                     if events & EPOLLIN as u32 > 0 {
                         structpoll.events |= POLLIN;
                     }
@@ -1474,7 +1520,6 @@ impl Cage {
                         structpoll.events |= POLLERR;
                     }
                     poll_fds_vec.push(structpoll);
-
                 }
 
                 let mut poll_fds_slice = &mut poll_fds_vec[..];

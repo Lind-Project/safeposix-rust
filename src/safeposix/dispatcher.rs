@@ -177,7 +177,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         PWRITE_SYSCALL => {
             check_and_dispatch!(cage.pwrite_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_isize(arg4))
         }
-        // CHMOD_SYSCALL => {
+        // CHMOD_SYSCALL => { //doesn't have a number value yet
         //     check_and_dispatch!(cage.chmod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
         // }
         RMDIR_SYSCALL => {

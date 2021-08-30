@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // File system related system calls
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
@@ -78,7 +80,7 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
                     if fobjtable.contains_key(&inodenum) {
                         fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
@@ -92,6 +94,7 @@ impl Cage {
                     }
 
                     //remove the previous file and add a new one of 0 length
+                    fobjtable.remove(&inodenum); //remove bookkeeping so it'll get re-created if it already is opened
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     interface::removefile(sysfilename.clone()).unwrap();
                 }
@@ -162,7 +165,7 @@ impl Cage {
 
                 let newinode = Inode::Dir(DirectoryInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 2, refcount: 0, //2 because . and ..
+                    mode: effective_mode, linkcount: 3, refcount: 0, //2 because ., and .., as well as reference in parent directory
                     atime: time, ctime: time, mtime: time, 
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
@@ -316,7 +319,7 @@ impl Cage {
                 syscall_error(Errno::EISDIR, "unlink", "cannot unlink root directory")
             }
 
-            //If both the file and the root directory exists
+            //If both the file and the parent directory exists
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
@@ -494,7 +497,7 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
-            let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
+            let _inodeobj = metadata.inodetable.get(&inodenum).unwrap();
             
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = metadata.dev_id;
@@ -520,7 +523,7 @@ impl Cage {
 
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let _inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     return Self::_istatfs_helper(self, databuf);
                 },
@@ -1282,6 +1285,7 @@ impl Cage {
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+
         let mut metadata = FS_METADATA.write().unwrap();
         let truepath = normpath(convpath(path), self);
 
@@ -1448,7 +1452,7 @@ impl Cage {
                 match inodeobj {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
-                        if dir_obj.linkcount > 2 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
+                        if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode set to S_IFDIR");}
 
                         // check if dir has write permission
@@ -1520,11 +1524,7 @@ impl Cage {
         let fdtable = self.filedescriptortable.read().unwrap();
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
-            // check if arg length is valid
-            if length < 0 { 
-                return syscall_error(Errno::EINVAL, "ftruncate", "The argument length is negative");
-            }
-            
+
             let filedesc_enum = wrappedfd.read().unwrap();
             let mut mutmetadata = FS_METADATA.write().unwrap();
 
@@ -1655,7 +1655,7 @@ impl Cage {
                         Inode::Dir(dir_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
                             let mut bufcount = 0;
-                            let mut curr_size = 0;
+                            let mut curr_size;
                             let mut count = 0;
                             let mut temp_len = 0;
 
