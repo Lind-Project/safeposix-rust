@@ -207,7 +207,13 @@ pub mod fs_tests {
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         //bind should not be intersting
+<<<<<<< HEAD
         assert_eq!(cage.bind_syscall(sockfd, &interface::GenSockaddr::V4(interface::SockaddrV4::default()), 4096), 0);
+=======
+        let mut sockad = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        sockad.set_family(AF_INET as u16);
+        assert_eq!(cage.bind_syscall(sockfd, &sockad), 0);
+>>>>>>> 069e9e595a5113d42447474003eb841302e3e4fc
 
         fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
         assert_eq!(cage.close_syscall(fd), 0);
@@ -933,7 +939,7 @@ pub mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let bufsize = 50;
-        let mut vec = vec![0u8; bufsize];
+        let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);

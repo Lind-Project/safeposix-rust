@@ -43,6 +43,13 @@ impl GenSockaddr {
             GenSockaddr::V6(v6addr) => v6addr.sin6_family = family
         };
     }
+
+    pub fn get_family(&self) -> u16 {
+        match self {
+            GenSockaddr::V4(v4addr) => v4addr.sin_family,
+            GenSockaddr::V6(v6addr) => v6addr.sin6_family
+        }
+    }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
@@ -58,12 +65,6 @@ impl GenIpaddr {
             GenIpaddr::V6(v6ip) => v6ip.s6_addr == [0; 16],
         }
     }
-}
-
-#[repr(C)]
-pub union SockaddrAll {
-    pub sockaddr_in: *mut SockaddrV4,
-    pub sockaddr_in6: *mut SockaddrV6
 }
 
 #[repr(C)]
@@ -127,7 +128,7 @@ impl Socket {
         f
     }
 
-    pub fn sendto(&self, buf: *mut u8, len: usize, addr: Option<&GenSockaddr>) -> i32 {
+    pub fn sendto(&self, buf: *const u8, len: usize, addr: Option<&GenSockaddr>) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
             Some(GenSockaddr::V6(addrref6)) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             Some(GenSockaddr::V4(addrref)) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
