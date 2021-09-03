@@ -575,7 +575,7 @@ impl Cage {
                                 if retval == 0 {break;}
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(-(unsafe{*libc::__errno_location()} as i32) as i32) {
+                                    let sockerrno = match Errno::from_discriminant(-11) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
