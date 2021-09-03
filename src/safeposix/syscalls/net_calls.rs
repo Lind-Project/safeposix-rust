@@ -580,6 +580,7 @@ impl Cage {
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
+                                    println!("SOCK ERRNO: {:?}, libc: {:?}", sockerrno, unsafe{*libc::__errno_location()} as i32);
                                     if sockerrno == Errno::EAGAIN {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
