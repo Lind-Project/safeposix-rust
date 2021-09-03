@@ -308,8 +308,6 @@ impl Cage {
 
                         IPPROTO_UDP => {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let metadata = NET_METADATA.read().unwrap();
-                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
                             //bind the udp port as we do not bind them at bind_syscall, and this is
                             //the last possible moment to do so
@@ -317,6 +315,9 @@ impl Cage {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
+                            let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
+
                             let bindret = sockobj.bind(&localaddr);
                             if bindret < 0 {
                                 return syscall_error(Errno::ECONNREFUSED, "sendto", "The libc call to bind failed!");
@@ -329,6 +330,7 @@ impl Cage {
 
                             let mut bufleft = buf;
                             let mut buflenleft = buflen;
+
                             loop {
                                 let sockret = sockobj.sendto(buf, buflen, Some(dest_addr)); //all our sockets are nonblocking so we block manually
 
@@ -337,12 +339,12 @@ impl Cage {
                                     //assume it's blocking until it completes the whole send
                                     buflenleft -= sockret as usize;
                                     if buflenleft == 0 {
-                                        metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                        mutmetadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
                                         return sockret;
                                     }
 
                                     bufleft = bufleft.wrapping_offset(sockret as isize);
-                                    metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                    mutmetadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
 
                                     //we've only done a partial send, retry
                                     continue;
@@ -353,12 +355,12 @@ impl Cage {
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
-                                        metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                        mutmetadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     };
 
-                                    metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                    mutmetadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
                                     //if we fail but have already sent stuff to the socket, return that
                                     if buflenleft != buflen {
                                         return (buflen - buflenleft) as i32; //partial write amount
@@ -582,6 +584,7 @@ impl Cage {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
+                                    println!("ERRNO: {:?}", sockerrno);
 
                                     //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
                                     //the issue), then continue with the data we've read so far if we read any data from 
