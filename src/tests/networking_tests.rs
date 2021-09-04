@@ -745,7 +745,7 @@ pub mod net_tests {
 
         buf2 = str2cbuf("test2");
         assert_eq!(cage.bind_syscall(sendsockfd2, &socket2), 0);
-        assert_eq!(cage.sendto_syscall(sendsockfd2, buf2, 10, 0, &socket2), 10);
+        assert_eq!(cage.sendto_syscall(sendsockfd2, buf2, 10, 0, &send_socket), 10);
 
         interface::sleep(interface::RustDuration::from_millis(100)); 
         sender.join().unwrap();
