@@ -575,7 +575,7 @@ impl Cage {
                                 if retval == 0 {break;}
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(1 as i32) {
+                                    let sockerrno = match Errno::from_discriminant((unsafe{*libc::__errno_location()} as i32)) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -584,7 +584,6 @@ impl Cage {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
-                                    println!("ERRNO: {}", -(unsafe{*libc::__errno_location()} as i32));
 
                                     //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
                                     //the issue), then continue with the data we've read so far if we read any data from 
