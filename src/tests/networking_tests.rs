@@ -767,8 +767,8 @@ pub mod net_tests {
         let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
-        assert!(serverfd > 0);
-        assert!(clientfd > 0);
+        assert!(listenfd > 0);
+        assert!(sendfd > 0);
 
         assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
 
