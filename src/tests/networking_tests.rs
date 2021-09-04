@@ -694,7 +694,6 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_udp_simple() {
-        println!("RUST INIT");
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
@@ -717,13 +716,11 @@ pub mod net_tests {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
 
             assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
-            println!("FORKD");
             
             interface::sleep(interface::RustDuration::from_millis(20)); 
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
             unsafe{libc::perror(std::ptr::null::<libc::c_char>())};
-            // panic!();
             assert_eq!(cbuf2str(&buf), "test".to_owned() + &"\0".repeat(6));
 
             interface::sleep(interface::RustDuration::from_millis(20)); 
@@ -737,7 +734,6 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(100)); 
 
         let mut buf2 = str2cbuf("test");
-        println!("FORKD 2");
         assert_eq!(cage.sendto_syscall(clientfd, buf2, 10, 0, &send_socket), 10);
 
         let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);

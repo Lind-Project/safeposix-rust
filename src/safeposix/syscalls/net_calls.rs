@@ -241,7 +241,7 @@ impl Cage {
                         let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
                         let connectret = tcpsockobj.connect(remoteaddr);
                         if connectret < 0 {
-                            let sockerrno = match Errno::from_discriminant(-connectret) {
+                            let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                 Ok(i) => i,
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
@@ -349,7 +349,7 @@ impl Cage {
                                     //we've only done a partial send, retry
                                     continue;
                                 } else {
-                                    let sockerrno = match Errno::from_discriminant(-sockret) {
+                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -411,7 +411,7 @@ impl Cage {
                                 let retval = sockobj.sendto(buf, buflen, None); //nonblocking, so we manually block
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(-retval) {
+                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -517,7 +517,7 @@ impl Cage {
                                 let retval = sockobj.recvfrom(bufleft, buflenleft, addr); //nonblocking, block manually
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(-retval) {
+                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -575,7 +575,7 @@ impl Cage {
                                 if retval == 0 {break;}
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant((unsafe{*libc::__errno_location()} as i32)) {
+                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -804,7 +804,7 @@ impl Cage {
                                 };
 
                                 if let Err(errval) = acceptedresult {
-                                    let accerrno = match Errno::from_discriminant(-errval) {
+                                    let accerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
