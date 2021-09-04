@@ -18,7 +18,7 @@ pub mod net_tests {
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
         ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple(); 
+        ut_lind_net_udp_simple(); //not working right now
         ut_lind_net_udp_connect();
     }
 
@@ -700,11 +700,10 @@ pub mod net_tests {
         //just going to test the basic connect with UDP now...
         let serverfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let clientfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50120_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
         let mut sendsockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let send_socket = interface::GenSockaddr::V4(sendsockaddr);
+        let socket = send_socket.clone();
 
         assert!(serverfd > 0);
         assert!(clientfd > 0);
@@ -762,7 +761,16 @@ pub mod net_tests {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
+        //getting the sockets set up...
+        let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let mut sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
+        assert!(serverfd > 0);
+        assert!(clientfd > 0);
+
+        assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
