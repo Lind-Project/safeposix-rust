@@ -96,7 +96,7 @@ macro_rules! check_and_dispatch_socketpair {
 }
 
 #[no_mangle]
-pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
+pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> Result<i32, i32> {
 
     // need to match based on if cage exists
     let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
