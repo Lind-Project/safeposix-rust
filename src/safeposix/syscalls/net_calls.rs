@@ -246,8 +246,7 @@ impl Cage {
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
 
-                            //error is always -1
-                            return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");
+                            return syscall_error(sockerrno, "connect", "The libc call to connect failed!");
                         }
 
                         //openconnection to get newsockobj
