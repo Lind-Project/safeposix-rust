@@ -18,8 +18,6 @@ pub mod net_tests {
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
         ut_lind_net_udp_bad_bind();
-        panic!();
-
         ut_lind_net_udp_simple(); //not working right now
         ut_lind_net_udp_connect();
     }
@@ -712,6 +710,8 @@ pub mod net_tests {
 
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
+
+        panic!();
 
         let sender = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
