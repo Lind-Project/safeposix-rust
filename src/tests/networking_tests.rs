@@ -758,8 +758,6 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_udp_connect() {
-        panic!();
-
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
