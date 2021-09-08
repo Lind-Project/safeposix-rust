@@ -6,6 +6,7 @@ pub mod net_tests {
     use std::mem::size_of;
 
     pub fn net_tests() {
+        println!("NET TESTS");
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
         ut_lind_net_bind_on_zero(); 
