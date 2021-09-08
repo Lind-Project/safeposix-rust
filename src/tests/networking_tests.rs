@@ -777,7 +777,6 @@ pub mod net_tests {
         let sender = interface::helper_thread(move || {
 
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: 0 }, padding: 0}); //0.0.0.0
-
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             interface::sleep(interface::RustDuration::from_millis(50)); 
 
