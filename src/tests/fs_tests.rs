@@ -1,3 +1,4 @@
+#[allow(unused_parens)]
 #[cfg(test)]
 pub mod fs_tests {
     use crate::interface;
@@ -10,7 +11,7 @@ pub mod fs_tests {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         lindrustinit();
-        load_fs_special_files({CAGE_TABLE.read().unwrap().get(&1).unwrap()});
+        load_fs_special_files(CAGE_TABLE.read().unwrap().get(&1).unwrap());
         lindrustfinalize();
 
         ut_lind_fs_broken_close();

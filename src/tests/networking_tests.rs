@@ -773,6 +773,7 @@ pub mod net_tests {
 
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
+        panic!();
 
         let sender = interface::helper_thread(move || {
 
