@@ -758,6 +758,8 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_udp_connect() {
+        panic!();
+
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
@@ -780,7 +782,6 @@ pub mod net_tests {
 
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             interface::sleep(interface::RustDuration::from_millis(100)); 
-            panic!();
 
             let mut buf = sizecbuf(16);
             assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket_clone)), 16);

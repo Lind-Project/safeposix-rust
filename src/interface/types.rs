@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 
