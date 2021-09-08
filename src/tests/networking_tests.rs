@@ -19,7 +19,7 @@ pub mod net_tests {
         ut_lind_net_socketoptions();
         ut_lind_net_udp_bad_bind();
         // ut_lind_net_udp_simple(); //not working right now
-        ut_lind_net_udp_connect();
+        // ut_lind_net_udp_connect();
     }
 
 
