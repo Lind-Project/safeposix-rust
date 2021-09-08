@@ -770,6 +770,7 @@ pub mod net_tests {
         assert!(sendfd > 0);
 
         assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(listenfd, 1), 0);
 
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
@@ -780,13 +781,14 @@ pub mod net_tests {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             interface::sleep(interface::RustDuration::from_millis(50)); 
 
-            let listenfd = cage2.accept_syscall(listenfd, &mut socket2);
-            assert!(listenfd > 0);
+            let sockfd = cage2.accept_syscall(listenfd, &mut socket2);
+            assert!(sockfd > 0);
 
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket2)), 16);
+            assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket2)), 16);
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
+            assert_eq!(cage2.close_syscall(sockfd), 0);
             assert_eq!(cage2.close_syscall(listenfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         });
