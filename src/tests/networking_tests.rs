@@ -773,7 +773,6 @@ pub mod net_tests {
 
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
-        panic!();
 
         let sender = interface::helper_thread(move || {
 
@@ -788,6 +787,7 @@ pub mod net_tests {
             assert_eq!(cage2.close_syscall(listenfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         });
+        panic!();
 
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
