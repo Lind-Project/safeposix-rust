@@ -792,8 +792,8 @@ pub mod net_tests {
         });
         
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
-        panic!("PANIC OUTSIDE THREAD");
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
+        panic!("PANIC OUTSIDE THREAD");
 
         sender.join().unwrap();
 
