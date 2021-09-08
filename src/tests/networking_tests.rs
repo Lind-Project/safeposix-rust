@@ -719,8 +719,6 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(20)); 
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
-            panic!();
-
             assert_eq!(cbuf2str(&buf), "test".to_owned() + &"\0".repeat(6));
 
             interface::sleep(interface::RustDuration::from_millis(20)); 
@@ -734,6 +732,7 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(100)); 
 
         let mut buf2 = str2cbuf("test");
+        panic!();
         assert_eq!(cage.sendto_syscall(clientfd, buf2, 10, 0, &send_socket), 10);
 
         let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
