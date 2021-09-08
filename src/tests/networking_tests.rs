@@ -732,9 +732,8 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(100)); 
 
         let mut buf2 = str2cbuf("test");
-        panic!();
-        
         assert_eq!(cage.sendto_syscall(clientfd, buf2, 10, 0, &send_socket), 10);
+        panic!();
 
         let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(sendsockfd2 > 0);
