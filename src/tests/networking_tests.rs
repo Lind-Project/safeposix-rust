@@ -780,7 +780,7 @@ pub mod net_tests {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             interface::sleep(interface::RustDuration::from_millis(50)); 
 
-            let listenfd = cage2.accept_syscall(listenfd, &socket2);
+            let listenfd = cage2.accept_syscall(listenfd, &mut socket2);
             assert!(listenfd > 0);
 
             let mut buf = sizecbuf(16);
