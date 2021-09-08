@@ -711,8 +711,6 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        panic!();
-
         let sender = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
 
@@ -720,8 +718,9 @@ pub mod net_tests {
             
             interface::sleep(interface::RustDuration::from_millis(20)); 
             let mut buf = sizecbuf(10);
+        panic!();
+
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
-            unsafe{libc::perror(std::ptr::null::<libc::c_char>())};
             assert_eq!(cbuf2str(&buf), "test".to_owned() + &"\0".repeat(6));
 
             interface::sleep(interface::RustDuration::from_millis(20)); 
