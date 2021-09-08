@@ -18,8 +18,6 @@ mod main_tests {
 
     #[test]
     pub fn tests() {
-        panic!();
-
         lindrustinit();
         crate::lib_fs_utils::lind_deltree({CAGE_TABLE.read().unwrap().get(&1).unwrap()}, "/");
         lindrustfinalize();
