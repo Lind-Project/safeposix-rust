@@ -478,10 +478,10 @@ impl Cage {
                 Socket(sockfdobj) => {
                     match sockfdobj.protocol {
                         IPPROTO_TCP => {
+                            panic!("GOT METADATA");
                             if sockfdobj.state != ConnState::CONNECTED {
                                 return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
-                            panic!("GOT METADATA");
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
