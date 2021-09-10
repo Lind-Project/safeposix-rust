@@ -628,7 +628,6 @@ impl Cage {
 
     pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
-        println!("{:?}", addr);
         return self.recv_common(fd, buf, buflen, flags, addr, &*fdtable);
     }
 
