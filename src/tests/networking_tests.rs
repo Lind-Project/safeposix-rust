@@ -762,7 +762,7 @@ pub mod net_tests {
         //getting the sockets set up...
         let mut listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 51111_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         let mut socket_clone = socket.clone();
 
@@ -780,8 +780,9 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(50)); 
             
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket_clone)), 16);
+            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket)), 16);
             panic!("PANIC INSIDE THREAD");
+            assert_ne!(buf, sizecbuf(16));
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
             assert_eq!(cage2.close_syscall(listenfd), 0);
@@ -790,7 +791,6 @@ pub mod net_tests {
         
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
-panic!();
         sender.join().unwrap();
 
         assert_eq!(cage.close_syscall(sendfd), 0);

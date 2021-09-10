@@ -242,6 +242,7 @@ impl Cage {
                         let connectret = tcpsockobj.connect(remoteaddr);
                         if connectret < 0 {
                             let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                            // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                 Ok(i) => i,
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
@@ -349,11 +350,13 @@ impl Cage {
                                     continue;
                                 } else {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
-                                    if sockerrno == Errno::EAGAIN {
+                                    // if sockerrno == Errno::EAGAIN {
+                                    if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
                                         mutmetadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
@@ -411,11 +414,13 @@ impl Cage {
 
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
-                                    if sockerrno == Errno::EAGAIN {
+                                    // if sockerrno == Errno::EAGAIN {
+                                    if sockerrno == Errno::EAGAIN  || sockerrno == Errno::EPERM {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
@@ -496,6 +501,8 @@ impl Cage {
                                 newbufptr = newbufptr.wrapping_add(bytecount);
 
                                 //if we're not still peeking data, consume the data we peeked from our peek buffer
+                                //and if the bytecount is more than the length of the peeked data, then we remove the entire
+                                //buffer
                                 if flags & MSG_PEEK == 0 {
                                     sockfdobj.last_peek.drain(..(
                                         if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} 
@@ -516,11 +523,12 @@ impl Cage {
 
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
-                                    if sockerrno == Errno::EAGAIN  && (flags & O_NONBLOCK == 0) {
+                                    if (sockerrno == Errno::EAGAIN  && (flags & O_NONBLOCK == 0)) || (sockerrno == Errno::EPERM  && (flags & O_NONBLOCK == 0)) {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
@@ -574,11 +582,13 @@ impl Cage {
 
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
                                     
-                                    if sockerrno == Errno::EAGAIN {
+                                    // if sockerrno == Errno::EAGAIN {
+                                    if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
@@ -618,6 +628,7 @@ impl Cage {
 
     pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
+        println!("{:?}", addr);
         return self.recv_common(fd, buf, buflen, flags, addr, &*fdtable);
     }
 
@@ -803,11 +814,13 @@ impl Cage {
 
                                 if let Err(errval) = acceptedresult {
                                     let accerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    // let accerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
-                                    if accerrno == Errno::EAGAIN {
+                                    // if accerrno == Errno::EAGAIN {
+                                    if accerrno == Errno::EAGAIN || accerrno == Errno::EPERM {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
