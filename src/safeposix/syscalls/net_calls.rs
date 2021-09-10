@@ -486,6 +486,7 @@ impl Cage {
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
+                            panic!("GOT METADATA");
                             let mut newbuflen = buflen;
                             let mut newbufptr = buf;
 

@@ -6,18 +6,18 @@ pub mod net_tests {
     use std::mem::size_of;
 
     pub fn net_tests() {
-        ut_lind_net_bind();
-        ut_lind_net_bind_multiple();
-        ut_lind_net_bind_on_zero(); 
-        ut_lind_net_connect_basic_udp();
-        ut_lind_net_getpeername();
-        ut_lind_net_getsockname();
-        ut_lind_net_listen();
-        ut_lind_net_recvfrom(); 
-        ut_lind_net_shutdown();
-        ut_lind_net_socket();
-        ut_lind_net_socketoptions();
-        ut_lind_net_udp_bad_bind();
+        // ut_lind_net_bind();
+        // ut_lind_net_bind_multiple();
+        // ut_lind_net_bind_on_zero(); 
+        // ut_lind_net_connect_basic_udp();
+        // ut_lind_net_getpeername();
+        // ut_lind_net_getsockname();
+        // ut_lind_net_listen();
+        // ut_lind_net_recvfrom(); 
+        // ut_lind_net_shutdown();
+        // ut_lind_net_socket();
+        // ut_lind_net_socketoptions();
+        // ut_lind_net_udp_bad_bind();
         // ut_lind_net_udp_simple(); //not working right now
         ut_lind_net_udp_connect();
     }
@@ -776,13 +776,11 @@ pub mod net_tests {
 
         let sender = interface::helper_thread(move || {
 
-            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: 0 }, padding: 0}); //0.0.0.0
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             interface::sleep(interface::RustDuration::from_millis(50)); 
-
             
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket2)), 16);
+            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket_clone)), 16);
             panic!("PANIC INSIDE THREAD");
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
