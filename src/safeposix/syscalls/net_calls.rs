@@ -283,7 +283,7 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
-        panic!("{:?}", interface::tests::cbuf2str(buf));
+        panic!(buf as &str)
 
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
