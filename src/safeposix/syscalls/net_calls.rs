@@ -283,6 +283,8 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
+        panic!("{:?}", cbuf2str(buf));
+
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
@@ -577,7 +579,7 @@ impl Cage {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
-                                    panic!("GOT METADATA");
+                                    
                                     if sockerrno == Errno::EAGAIN {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
