@@ -560,7 +560,6 @@ impl Cage {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
-                            panic!("GOT METADATA");
 
                             let mut bufleft = buf;
                             let mut buflenleft = buflen;
@@ -578,7 +577,7 @@ impl Cage {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
-
+                                    panic!("GOT METADATA");
                                     if sockerrno == Errno::EAGAIN {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
