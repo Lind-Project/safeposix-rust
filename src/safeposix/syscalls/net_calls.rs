@@ -473,7 +473,6 @@ impl Cage {
 
     fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: &FdTable) -> i32 {
         if let Some(wrappedfd) = fdtable.get(&fd) {
-            panic!("GOT METADATA");
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
@@ -482,7 +481,7 @@ impl Cage {
                             if sockfdobj.state != ConnState::CONNECTED {
                                 return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
-
+                            panic!("GOT METADATA");
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
