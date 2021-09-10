@@ -790,7 +790,7 @@ pub mod net_tests {
         
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
-
+panic!();
         sender.join().unwrap();
 
         assert_eq!(cage.close_syscall(sendfd), 0);
