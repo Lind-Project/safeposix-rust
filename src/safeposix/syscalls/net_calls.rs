@@ -473,6 +473,7 @@ impl Cage {
 
     fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: &FdTable) -> i32 {
         if let Some(wrappedfd) = fdtable.get(&fd) {
+            panic!("GOT METADATA");
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
@@ -619,7 +620,6 @@ impl Cage {
 
     pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
-        panic!("GOT METADATA");
         return self.recv_common(fd, buf, buflen, flags, addr, &*fdtable);
     }
 
