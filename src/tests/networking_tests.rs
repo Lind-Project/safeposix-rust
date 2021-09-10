@@ -780,8 +780,8 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(50)); 
             
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket_clone)), 16);
             panic!("PANIC INSIDE THREAD");
+            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket_clone)), 16);
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
             assert_eq!(cage2.close_syscall(listenfd), 0);

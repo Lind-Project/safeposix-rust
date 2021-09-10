@@ -482,7 +482,6 @@ impl Cage {
                                 return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
 
-                            panic!("GOT METADATA");
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
