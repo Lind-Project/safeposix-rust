@@ -134,7 +134,6 @@ impl Socket {
             Some(GenSockaddr::V4(addrref)) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
             None => {(std::ptr::null::<libc::sockaddr>() as *const libc::sockaddr, 0)}
         };
-        panic!(buf as *const libc::c_void);
         unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, addrlen as u32) as i32}
     }
 
