@@ -476,9 +476,9 @@ impl Cage {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
+                    panic!("GOT METADATA");
                     match sockfdobj.protocol {
                         IPPROTO_TCP => {
-                            panic!("GOT METADATA");
                             if sockfdobj.state != ConnState::CONNECTED {
                                 return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
