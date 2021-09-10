@@ -556,9 +556,10 @@ impl Cage {
                             if sockfdobj.localaddr.is_none() {
                                 return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
                             }
-                            panic!("GOT METADATA");
+                            
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
+                            panic!("GOT METADATA");
                             let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
                             let mut bufleft = buf;
