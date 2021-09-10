@@ -283,7 +283,7 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
-        panic!("{:?}", cbuf2str(buf));
+        panic!("{:?}", std::str::from_utf8(buf).unwrap());
 
         let fdtable = self.filedescriptortable.read().unwrap();
         if let Some(wrappedfd) = fdtable.get(&fd) {
