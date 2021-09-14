@@ -769,6 +769,8 @@ pub mod net_tests {
         assert!(listenfd > 0);
         assert!(sendfd > 0);
 
+        println!("ADDR: {:?}", Some(socket));
+
         assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
 
         //forking the cage to get another cage with the same information

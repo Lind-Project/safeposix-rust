@@ -241,8 +241,8 @@ impl Cage {
                         let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
                         let connectret = tcpsockobj.connect(remoteaddr);
                         if connectret < 0 {
-                            let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                            // let sockerrno = match Errno::from_discriminant(1 as i32) {
+                            // let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                            let sockerrno = match Errno::from_discriminant(1 as i32) {
                                 Ok(i) => i,
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
@@ -349,8 +349,8 @@ impl Cage {
                                     //we've only done a partial send, retry
                                     continue;
                                 } else {
-                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -413,8 +413,8 @@ impl Cage {
                                 let retval = sockobj.sendto(buf, buflen, None); //nonblocking, so we manually block
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -477,6 +477,8 @@ impl Cage {
     }
 
     fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: &FdTable) -> i32 {
+        println!("ADDR: {:?}", addr);
+        
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
@@ -522,8 +524,8 @@ impl Cage {
                                 let retval = sockobj.recvfrom(bufleft, buflenleft, addr); //nonblocking, block manually
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -581,8 +583,8 @@ impl Cage {
                                 if retval == 0 {break;}
 
                                 if retval < 0 {
-                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
+                                    // let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -628,6 +630,7 @@ impl Cage {
 
     pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
+        println!("ADDR: {:?}", addr);
         return self.recv_common(fd, buf, buflen, flags, addr, &*fdtable);
     }
 
@@ -812,8 +815,8 @@ impl Cage {
                                 };
 
                                 if let Err(errval) = acceptedresult {
-                                    let accerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let accerrno = match Errno::from_discriminant(1 as i32) {
+                                    // let accerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    let accerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
