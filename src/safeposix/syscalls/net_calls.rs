@@ -566,14 +566,18 @@ impl Cage {
                             if sockfdobj.localaddr.is_none() {
                                 return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
                             }
-                            
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let metadata = NET_METADATA.read().unwrap();
-                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
-                            let mut bufleft = buf;
-                            let mut buflenleft = buflen;
+                            let mut bufleft;
+                            let mut buflenleft;
+ 
                             loop {
+                                let sid = Self::getsockobjid(&mut *sockfdobj);
+                                let metadata = NET_METADATA.read().unwrap();
+                                let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+
+                                bufleft = buf;
+                                buflenleft = buflen;
+                            
                                 //if the remoteaddr is set and addr is not, use remoteaddr
                                 let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
                                     sockobj.recvfrom(bufleft, buflenleft, &mut sockfdobj.remoteaddr.as_mut())
@@ -591,6 +595,8 @@ impl Cage {
                                     
                                     // if sockerrno == Errno::EAGAIN {
                                     if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
+                                        drop(sockobj);
+                                        drop(metadata);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
