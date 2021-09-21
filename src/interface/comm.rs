@@ -134,7 +134,8 @@ impl Socket {
             Some(GenSockaddr::V4(addrref)) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
             None => {(std::ptr::null::<libc::sockaddr>() as *const libc::sockaddr, 0)}
         };
-        unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, addrlen as u32) as i32}
+
+        unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, 0, finalsockaddr, addrlen as u32) as i32}
     }
 
     pub fn recvfrom(&self, buf: *mut u8, len: usize, addr: &mut Option<&mut GenSockaddr>) -> i32 {
@@ -143,7 +144,11 @@ impl Socket {
             Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as u32)}
             None => {println!("{:?}", addr); (std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
         };
-        unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, &mut addrlen as *mut u32) as i32}
+
+        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
+        let f = unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, 0, finalsockaddr, &mut addrlen as *mut u32) as i32};
+        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
+        f
     }
 
     pub fn listen(&self, backlog: i32) -> i32 {

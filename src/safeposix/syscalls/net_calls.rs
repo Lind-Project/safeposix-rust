@@ -1458,7 +1458,7 @@ impl Cage {
 
     // Because socketpair needs to spawn off a helper thread to connect the two ends of the socket pair, and because that helper thread,
     // along with the main thread, need to access the cage to call methods (syscalls) of it, and because rust's threading model states that
-    // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
+    // any reference passed into a thread but not moved into it must have a static lifetime, we cannot use a standard member function to perform
     // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
     pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
         let newdomain = if domain == AF_UNIX {AF_INET} else {domain};

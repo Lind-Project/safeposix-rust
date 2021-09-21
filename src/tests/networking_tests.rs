@@ -779,8 +779,8 @@ pub mod net_tests {
         let sender = interface::helper_thread(move || {
 
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-            interface::sleep(interface::RustDuration::from_millis(50)); 
             
+            interface::sleep(interface::RustDuration::from_millis(20));
             let mut buf = sizecbuf(16);
             assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket)), 16);
             assert_ne!(buf, sizecbuf(16));
@@ -792,6 +792,7 @@ pub mod net_tests {
         });
         
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
+        interface::sleep(interface::RustDuration::from_millis(50));
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
         sender.join().unwrap();
 
