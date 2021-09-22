@@ -760,7 +760,7 @@ pub mod net_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //getting the sockets set up...
-        let mut listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 51111_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
@@ -782,7 +782,7 @@ pub mod net_tests {
             
             interface::sleep(interface::RustDuration::from_millis(20));
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket)), 16);
+            assert_eq!(cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0), 16);
             assert_ne!(buf, sizecbuf(16));
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
             println!("RECV CALL WORKED");

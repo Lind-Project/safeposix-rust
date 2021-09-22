@@ -10,9 +10,9 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface:
             used_port_set: interface::RustHashSet::new(),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
-            writersblock_state: interface::RustAtomicBool::new(false)
         }))
     ); //we want to check if fs exists before doing a blank init, but not for now
+pub static WRITERSBLOCK: interface::RustAtomicBool = interface::RustAtomicBool::new(false);
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum PortType {
@@ -31,8 +31,7 @@ pub struct NetMetadata {
     pub porttable: interface::RustHashMap<interface::GenSockaddr, Vec<interface::RustRfc<interface::RustLock<FileDescriptor>>>>,
     pub used_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub socket_object_table: interface::RustHashMap<i32, interface::Socket>,
-    pub writersblock_state: interface::RustAtomicBool
+    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::Socket>>,
 }
 
 //Because other processes on the OS may allocate ephemeral ports, we allocate them from high to
@@ -111,7 +110,7 @@ impl NetMetadata {
 
     pub fn insert_into_socketobjecttable(&mut self, sock: interface::Socket) -> Result<i32, i32> {
         if let Some(id) = self.get_next_socketobjectid() {
-            self.socket_object_table.insert(id, sock);
+            self.socket_object_table.insert(id, interface::RustRfc::new(sock));
             Ok(id)
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))

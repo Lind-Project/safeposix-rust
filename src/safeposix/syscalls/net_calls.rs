@@ -315,8 +315,7 @@ impl Cage {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
-                            let mut mutmetadata = NET_METADATA.write().unwrap();
-                            let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
+                            let sockobj = {NET_METADATA.write().unwrap().socket_object_table.get(&sid).unwrap().clone()};
 
                             let bindret = sockobj.bind(&localaddr);
                             if bindret < 0 {
@@ -339,12 +338,12 @@ impl Cage {
                                     //assume it's blocking until it completes the whole send
                                     buflenleft -= sockret as usize;
                                     if buflenleft == 0 {
-                                        mutmetadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                        WRITERSBLOCK.store(false, interface::RustAtomicOrdering::Relaxed);
                                         return sockret;
                                     }
 
                                     bufleft = bufleft.wrapping_offset(sockret as isize);
-                                    mutmetadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                    WRITERSBLOCK.store(true, interface::RustAtomicOrdering::Relaxed);
 
                                     //we've only done a partial send, retry
                                     continue;
@@ -357,12 +356,12 @@ impl Cage {
 
                                     // if sockerrno == Errno::EAGAIN {
                                     if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
-                                        mutmetadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                        WRITERSBLOCK.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     };
 
-                                    mutmetadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                    WRITERSBLOCK.store(false, interface::RustAtomicOrdering::Relaxed);
                                     //if we fail but have already sent stuff to the socket, return that
                                     if buflenleft != buflen {
                                         return (buflen - buflenleft) as i32; //partial write amount
@@ -404,8 +403,7 @@ impl Cage {
                             }
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let metadata = NET_METADATA.read().unwrap();
-                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+                            let sockobj = {NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone()};
 
                             let mut bufleft = buf;
                             let mut buflenleft = buflen;
@@ -421,12 +419,12 @@ impl Cage {
 
                                     // if sockerrno == Errno::EAGAIN {
                                     if sockerrno == Errno::EAGAIN  || sockerrno == Errno::EPERM {
-                                        metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                        WRITERSBLOCK.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
 
-                                    metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                    WRITERSBLOCK.store(false, interface::RustAtomicOrdering::Relaxed);
                                     //if we fail but have already sent stuff to the socket, return that
                                     if buflenleft != buflen {
                                         return (buflen - buflenleft) as i32; //partial write amount
@@ -436,13 +434,13 @@ impl Cage {
                                 } else {
                                     buflenleft -= retval as usize;
                                     if buflenleft == 0 {
-                                        metadata.writersblock_state.store(false, interface::RustAtomicOrdering::Relaxed);
+                                        WRITERSBLOCK.store(false, interface::RustAtomicOrdering::Relaxed);
                                         return retval;
                                     }
 
                                     //we've only done a partial send, retry
                                     bufleft = bufleft.wrapping_offset(retval as isize);
-                                    metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
+                                    WRITERSBLOCK.store(true, interface::RustAtomicOrdering::Relaxed);
                                     continue;
                                 }
                             }
@@ -489,8 +487,7 @@ impl Cage {
                                 return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
                             let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let metadata = NET_METADATA.read().unwrap();
-                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+                            let sockobj = {NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone()};
 
                             let mut newbuflen = buflen;
                             let mut newbufptr = buf;
@@ -569,11 +566,19 @@ impl Cage {
 
                             let mut bufleft;
                             let mut buflenleft;
+
+                            {
+                                let sid = Self::getsockobjid(&mut *sockfdobj);
+                                let sockobj = {NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone()};
+                                let bindret = sockobj.bind(&sockfdobj.localaddr.unwrap());
+                                if bindret < 0 {
+                                    panic!("Unexpected failure in binding socket");
+                                }
+                            }
  
                             loop {
                                 let sid = Self::getsockobjid(&mut *sockfdobj);
-                                let metadata = NET_METADATA.read().unwrap();
-                                let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+                                let sockobj = {NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone()};
                             
                                 bufleft = buf;
                                 buflenleft = buflen;
@@ -596,7 +601,6 @@ impl Cage {
                                     // if sockerrno == Errno::EAGAIN {
                                     if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
                                         drop(sockobj);
-                                        drop(metadata);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
@@ -1011,8 +1015,7 @@ impl Cage {
                     match &mut *filedesc_enum {
                         //we always say sockets are writable?
                         Socket(_) => {
-                            let metadata = NET_METADATA.read().unwrap();
-                            if !metadata.writersblock_state.load(interface::RustAtomicOrdering::Relaxed) {
+                            if !WRITERSBLOCK.load(interface::RustAtomicOrdering::Relaxed) {
                                 new_writefds.insert(*fd);
                                 retval += 1;
                             }
@@ -1471,7 +1474,7 @@ impl Cage {
         }
     
         let portlessaddr = if newdomain == AF_INET {
-            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
+            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
             let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
             interface::GenSockaddr::V4(innersockaddr)
         } else if domain == AF_INET6 {

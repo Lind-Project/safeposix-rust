@@ -105,7 +105,6 @@ impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
-        unsafe {libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);}
         Socket {raw_sys_fd: fd}
     }
 
@@ -122,9 +121,7 @@ impl Socket {
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
         };
-        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
         let f = unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)};
-        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
         f
     }
 
@@ -145,9 +142,7 @@ impl Socket {
             None => {println!("{:?}", addr); (std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
         };
 
-        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
         let f = unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, 0, finalsockaddr, &mut addrlen as *mut u32) as i32};
-        unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
         f
     }
 
@@ -164,7 +159,6 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
-                unsafe {libc::fcntl(newfd, libc::F_SETFL, libc::O_NONBLOCK);}
                 (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
@@ -175,7 +169,6 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
-                unsafe {libc::fcntl(newfd, libc::F_SETFL, libc::O_NONBLOCK);}
                 (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
