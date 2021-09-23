@@ -2,6 +2,7 @@
 #include <poll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/epoll.h>
 #include "dispatcherframework.h"
 
 #define BLANKARGS \
@@ -131,10 +132,6 @@ int lind_statfs (const char *path, struct statfs *buf, int cageid) {
     DISPATCH_SYSCALL_2(LIND_safe_fs_statfs, cbuf, path, statfsstruct, buf);
 }
 
-int lind_noop (int cageid) {
-    DISPATCH_SYSCALL_0(LIND_debug_noop);
-}
-
 int lind_dup (int oldfd, int cageid) {
     DISPATCH_SYSCALL_1(LIND_safe_fs_dup, int, oldfd);
 }
@@ -167,12 +164,10 @@ int lind_recv (int sockfd, void *buf, size_t len, int flags, int cageid) {
     DISPATCH_SYSCALL_4(LIND_safe_net_recv, int, sockfd, mutcbuf, buf, size_t, len, int, flags);
 }
 
-//fix
 int lind_sendto (int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen, int cageid) {
     DISPATCH_SYSCALL_6(LIND_safe_net_sendto, int, sockfd, cbuf, buf, size_t, len, int, flags, constsockaddrstruct, dest_addr, socklen_t, addrlen);
 }
 
-//fix
 int lind_recvfrom (int sockfd, const void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen, int cageid) {
     DISPATCH_SYSCALL_6(LIND_safe_net_recvfrom, int, sockfd, cbuf, buf, size_t, len, int, flags, sockaddrstruct, src_addr, socklen_t_ptr, addrlen);
 }
@@ -201,14 +196,22 @@ int lind_setsockopt (int sockfd, int level, int optname, const void *optval, soc
     DISPATCH_SYSCALL_5(LIND_safe_net_setsockopt, int, sockfd, int, level, int, optname, cbuf, optval, socklen_t, optlen);
 }
 
-//fix
 int lind_select (int nfds, fd_set * readfds, fd_set * writefds, fd_set * exceptfds, struct timeval *timeout, int cageid) {
     DISPATCH_SYSCALL_5(LIND_safe_net_select, int, nfds, cbuf, readfds, cbuf, writefds, cbuf, exceptfds, timevalstruct, timeout);
 }
 
-//fix
 int lind_poll (struct pollfd *fds, unsigned long int nfds, int timeout, int cageid) {
     DISPATCH_SYSCALL_3(LIND_safe_net_poll, cbuf, fds, ulong, nfds, int, timeout);
+}
+
+int lind_epoll_create(int size, int cageid) {
+    DISPATCH_SYSCALL_1(LIND_safe_net_epoll_create, int, size);
+}
+int lind_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event, int cageid) {
+    DISPATCH_SYSCALL_4(LIND_safe_net_epoll_ctl, int, epfd, int, op, int, fd, epolleventstruct, event);
+}
+int lind_epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout, int cageid) {
+    DISPATCH_SYSCALL_4(LIND_safe_net_epoll_ctl, int, epfd, epolleventstruct, events, int, maxevents, int, timeout);
 }
 
 int lind_socketpair (int domain, int type, int protocol, int* sv, int cageid) {

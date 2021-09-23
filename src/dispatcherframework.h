@@ -3,9 +3,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define LIND_debug_noop                 1
 #define LIND_safe_fs_access             2
-#define LIND_debug_trace                3
 #define LIND_safe_fs_unlink             4
 #define LIND_safe_fs_link               5
 #define LIND_safe_fs_xstat              9
@@ -43,7 +41,6 @@
 #define LIND_safe_net_setsockopt        44
 #define LIND_safe_net_shutdown          45
 #define LIND_safe_net_select            46
-#define LIND_safe_net_getifaddrs        47
 #define LIND_safe_net_poll              48
 #define LIND_safe_net_socketpair        49
 #define LIND_safe_sys_getuid            50
@@ -52,6 +49,9 @@
 #define LIND_safe_sys_getegid           53
 #define LIND_safe_fs_flock              54
 #define LIND_safe_fs_rename             55
+#define LIND_safe_net_epoll_create      56
+#define LIND_safe_net_epoll_ctl         57
+#define LIND_safe_net_epoll_wait        58
 
 #define LIND_safe_fs_pipe               66
 #define LIND_safe_fs_pipe2              67
@@ -59,14 +59,13 @@
 #define LIND_safe_fs_exec               69
 
 #define LIND_safe_net_gethostname       125
-
-#define LIND_safe_net_socket            136
-
 #define LIND_safe_fs_pread              126
 #define LIND_safe_fs_pwrite             127
 #define LIND_safe_fs_chdir              130
 #define LIND_safe_fs_mkdir              131
 #define LIND_safe_fs_rmdir              132
+
+#define LIND_safe_net_socket            136
 
 union RustArg {
   int dispatch_int;
@@ -87,6 +86,7 @@ union RustArg {
   struct statfs *dispatch_statfsstruct;
   struct timeval *dispatch_timevalstruct;
   struct sockaddr *dispatch_sockaddrstruct;
+  struct epoll_event *dispatch_epolleventstruct;
   const struct sockaddr *dispatch_constsockaddrstruct;
   int *dispatch_pipearray;
 };
@@ -113,7 +113,6 @@ int lind_lseek (int fd, off_t offset, int whence, int cageid);
 int lind_fxstat (int fd, struct stat *buf, int cageid);
 int lind_fstatfs (int fd, struct statfs *buf, int cageid);
 int lind_statfs (const char *path, struct statfs *buf, int cageid);
-int lind_noop (int cageid);
 int lind_dup (int oldfd, int cageid);
 int lind_dup2 (int oldfd, int newfd, int cageid);
 int lind_getdents (int fd, char *buf, size_t nbytes, int cageid);
@@ -132,6 +131,9 @@ int lind_getsockopt (int sockfd, int level, int optname, void *optval, socklen_t
 int lind_setsockopt (int sockfd, int level, int optname, const void *optval, socklen_t optlen, int cageid);
 int lind_select (int nfds, fd_set * readfds, fd_set * writefds, fd_set * exceptfds, struct timeval *timeout, int cageid);
 int lind_poll (struct pollfd *fds, unsigned long int nfds, int timeout, int cageid);
+int lind_epoll_create(int size, int cageid);
+int lind_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event, int cageid);
+int lind_epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout, int cageid);
 int lind_socketpair (int domain, int type, int protocol, int* sv, int cageid);
 int lind_gethostname (char *name, size_t len, int cageid);
 int lind_socket (int domain, int type, int protocol, int cageid);
