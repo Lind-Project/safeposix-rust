@@ -18,8 +18,8 @@ pub mod net_tests {
         // ut_lind_net_socket();
         // ut_lind_net_socketoptions();
         // ut_lind_net_udp_bad_bind();
-        // ut_lind_net_udp_simple(); //not working right now
-        ut_lind_net_udp_connect();
+        ut_lind_net_udp_simple(); //not working right now
+        // ut_lind_net_udp_connect();
     }
 
 
@@ -701,50 +701,48 @@ pub mod net_tests {
         let serverfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let clientfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
 
-        let mut sendsockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let send_socket = interface::GenSockaddr::V4(sendsockaddr);
-        let socket = send_socket.clone();
+        let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0});
 
         assert!(serverfd > 0);
         assert!(clientfd > 0);
 
+        assert_eq!(cage.bind_syscall(serverfd, &socket), 0);
+
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
-
+        println!("FORKED");
         let sender = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-
-            assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
-            
             interface::sleep(interface::RustDuration::from_millis(50)); 
+            
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
-            assert_eq!(cbuf2str(&buf), "test".to_owned() + &"\0".repeat(6));
-
-            interface::sleep(interface::RustDuration::from_millis(50)); 
+            println!("RECV");
+            assert_eq!(cbuf2str(&buf), "test");
+            
+            interface::sleep(interface::RustDuration::from_millis(120)); 
             assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 0);
-            assert_eq!(cbuf2str(&buf), "test2".to_owned() + &"\0".repeat(5));
+            assert_eq!(cbuf2str(&buf), "test2");
 
             assert_eq!(cage2.close_syscall(serverfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         });
         
         interface::sleep(interface::RustDuration::from_millis(20)); 
-
         let mut buf2 = str2cbuf("test");
-        assert_eq!(cage.sendto_syscall(clientfd, buf2, 10, 0, &send_socket), 10);
-
+        assert_eq!(cage.sendto_syscall(clientfd, buf2, 4, 0, &socket), 4);
+        println!("SEND");
         let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(sendsockfd2 > 0);
 
         let sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50992_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket2 = interface::GenSockaddr::V4(sockaddr2); //127.0.0.1
 
-        interface::sleep(interface::RustDuration::from_millis(100)); 
+        interface::sleep(interface::RustDuration::from_millis(120)); 
 
         buf2 = str2cbuf("test2");
         assert_eq!(cage.bind_syscall(sendsockfd2, &socket2), 0);
-        assert_eq!(cage.sendto_syscall(sendsockfd2, buf2, 10, 0, &send_socket), 10);
+        assert_eq!(cage.sendto_syscall(sendsockfd2, buf2, 5, 0, &socket), 5);
 
         sender.join().unwrap();
 
@@ -760,7 +758,7 @@ pub mod net_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //getting the sockets set up...
-        let mut listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 51111_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
@@ -768,8 +766,6 @@ pub mod net_tests {
 
         assert!(listenfd > 0);
         assert!(sendfd > 0);
-
-        println!("ADDR: {:?}", Some(socket));
 
         assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
 
@@ -779,23 +775,22 @@ pub mod net_tests {
         let sender = interface::helper_thread(move || {
 
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-            interface::sleep(interface::RustDuration::from_millis(50)); 
             
+            interface::sleep(interface::RustDuration::from_millis(20));
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recvfrom_syscall(listenfd, buf.as_mut_ptr(), 16, 0, &mut Some(&mut socket)), 16);
+            assert_eq!(cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0), 16);
             assert_ne!(buf, sizecbuf(16));
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
-            println!("RECV CALL WORKED");
 
             assert_eq!(cage2.close_syscall(listenfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         });
         
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
+        interface::sleep(interface::RustDuration::from_millis(50));
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
         sender.join().unwrap();
 
-        assert_eq!(cage.close_syscall(sendfd), 0);
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
