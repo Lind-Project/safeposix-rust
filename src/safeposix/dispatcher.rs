@@ -208,14 +208,19 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 pub extern "C" fn lindrustinit() {
     load_fs();
     incref_root();
+    incref_root();
     let mut mutcagetable = CAGE_TABLE.write().unwrap();
 
+    let mut utilcage = Cage{
+        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+    utilcage.load_lower_handle_stubs();
 
     //init cage is its own parent
     let mut initcage = Cage{
         cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
-    initcage.load_lower_handle_stubs();
+    mutcagetable.insert(0, interface::RustRfc::new(utilcage));
     mutcagetable.insert(1, interface::RustRfc::new(initcage));
 
 }

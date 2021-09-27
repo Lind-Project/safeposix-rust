@@ -1,5 +1,5 @@
 [package]
-name = "safeposix-rust"
+name = "rustposix"
 version = "0.1.0"
 authors = ["Nicholas Smith Renner <nrenner@nyu.edu>"]
 edition = "2018"
