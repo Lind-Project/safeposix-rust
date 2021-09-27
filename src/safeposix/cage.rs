@@ -74,6 +74,7 @@ pub struct EpollDesc {
 
 pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
 
+
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
@@ -131,6 +132,7 @@ impl Cage {
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
         fdtable.insert(2, stderr);
+        println!("{:?}", self);
     }
 
 }
