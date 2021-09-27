@@ -708,8 +708,6 @@ impl Cage {
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
-        println!("written writing to {:?}", self);
-        println!("written writing to {:?}", fdtable);
  
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();

@@ -132,7 +132,6 @@ impl Cage {
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
         fdtable.insert(2, stderr);
-        println!("{:?}", self);
     }
 
 }
