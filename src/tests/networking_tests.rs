@@ -705,14 +705,14 @@ pub mod net_tests {
 
         assert!(serverfd > 0);
         assert!(clientfd > 0);
-
-        assert_eq!(cage.bind_syscall(serverfd, &socket), 0);
-
+        
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
         println!("FORKED");
         let sender = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
+
             interface::sleep(interface::RustDuration::from_millis(50)); 
             
             let mut buf = sizecbuf(10);

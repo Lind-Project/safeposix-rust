@@ -354,6 +354,7 @@ impl Cage {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
+                                    println!("ERROR {:?}", unsafe{*libc::__errno_location());
 
                                     // if sockerrno == Errno::EAGAIN {
                                     if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
