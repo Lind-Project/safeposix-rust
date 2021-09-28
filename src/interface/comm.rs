@@ -143,7 +143,6 @@ impl Socket {
             Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as u32)}
             None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
         };
-        println!("ERROR {:?}", unsafe{*libc::__errno_location()});
         unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, &mut addrlen as *mut u32) as i32}
     }
 
