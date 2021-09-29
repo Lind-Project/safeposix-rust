@@ -11,9 +11,8 @@ use crate::interface;
 pub fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
     if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
-            println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
-            return;
-        } //if read_link succeeds it's a symlink
+            println!("following symlink at {:?} on host fs", hostfilepath);
+        } //if read_link succeeds it's a symlink, whose destination must exist because of the nature of the .exists function
     } else {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
         return;

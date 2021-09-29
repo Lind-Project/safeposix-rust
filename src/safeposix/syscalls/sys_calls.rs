@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // System related system calls
 use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
@@ -27,8 +29,6 @@ impl Cage {
                     match inode {
                         Inode::File(f) => {f.refcount += 1;}
                         Inode::CharDev(f) => {f.refcount += 1;}
-                        Inode::Pipe(f) => {f.refcount += 1;}
-                        Inode::Socket(f) => {f.refcount += 1;}
                         Inode::Dir(f) => {f.refcount += 1;}
                     }
                 }

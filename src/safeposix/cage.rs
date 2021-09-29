@@ -2,7 +2,7 @@
 use crate::interface;
 //going to get the datatypes and errnos from the cage file from now on
 pub use crate::interface::errnos::{Errno, syscall_error};
-pub use crate::interface::types::{Arg, FSData, Rlimit, StatData, PipeArray};
+pub use crate::interface::types::{Arg, EpollEvent, FSData, Rlimit, StatData, PipeArray, PollStruct};
 
 pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::sys_constants::*;
@@ -43,16 +43,21 @@ pub struct StreamDesc {
 
 #[derive(Debug)]
 pub struct SocketDesc {
-    pub mode: u32,
-    pub domain: usize,
-    pub socktype: usize,
-    pub protocol: usize,
-    pub options: usize,
-    pub sndbuf: usize,
-    pub rcvbuf: usize,
-    pub state: usize,
+    pub mode: i32,
+    pub domain: i32,
+    pub socktype: i32,
+    pub protocol: i32,
+    pub options: i32,
+    pub sndbuf: i32,
+    pub rcvbuf: i32,
+    //pub state: ConnState,
     pub flags: i32,
-    pub errno: usize,
+    pub errno: i32,
+    //pub pendingconnections: Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>,
+    //pub localaddr: Option<interface::GenSockaddr>,
+    //pub remoteaddr: Option<interface::GenSockaddr>,
+    //pub last_peek: interface::RustDeque<u8>,
+    pub socketobjectid: Option<i32>,
     pub advlock: interface::AdvisoryLock
 }
 
@@ -73,7 +78,6 @@ pub struct EpollDesc {
 }
 
 pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
-
 
 #[derive(Debug)]
 pub struct Cage {
