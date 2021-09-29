@@ -13,7 +13,7 @@ pub mod net_tests {
         // ut_lind_net_getpeername();
         // ut_lind_net_getsockname();
         // ut_lind_net_listen();
-        ut_lind_net_recvfrom(); 
+        // ut_lind_net_recvfrom(); 
         // ut_lind_net_shutdown();
         // ut_lind_net_socket();
         // ut_lind_net_socketoptions();
