@@ -1327,7 +1327,7 @@ impl Cage {
         }
 
         if 0 != flags & MAP_ANONYMOUS {
-            return interface::libc_mmap(addr, len, prot, flags, 0, -1);
+            return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
 
         let fdtable = self.filedescriptortable.read().unwrap();
