@@ -143,7 +143,7 @@ impl Socket {
             Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as *mut u32)}
             None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, std::ptr::null_mut())}
         };
-        unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, addrlen) as i32}
+        unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, libc::MSG_DONTWAIT, finalsockaddr, addrlen as *mut u32) as i32}
     }
 
     pub fn listen(&self, backlog: i32) -> i32 {
