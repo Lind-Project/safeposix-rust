@@ -176,25 +176,23 @@ impl Cage {
             //in lieu of getmyip we just always use 0.0.0.0 or the ipv6 equivalent because we have
             //no kernel-respecting way of accessing the actual interface addresses for ipv6 for now
             //(netlink for now is a big no go)
-            let retval = if isv6 {
+            let mut retval = if isv6 {
                 let mut newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
                 let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
-                let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
-                if let Err(e) = port {return Err(e);}
-                newremote.set_port(port.unwrap());
                 newremote.set_addr(addr);
                 newremote.set_family(AF_INET6 as u16);
                 newremote
             } else {
                 let mut newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
                 let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
-                let port = mutmetadata._get_available_tcp_port(addr.clone(), sockfdobj.domain);
-                if let Err(e) = port {return Err(e);}
-                newremote.set_port(port.unwrap());
                 newremote.set_addr(addr);
                 newremote.set_family(AF_INET as u16);
                 newremote
             };
+            retval.set_port(match mutmetadata._reserve_localport(retval.addr().clone(), 0, sockfdobj.protocol, sockfdobj.domain) {
+                Ok(portnum) => portnum,
+                Err(errnum) => return Err(errnum),
+            });
 
             Ok(retval)
         }
@@ -567,25 +565,21 @@ impl Cage {
                                 return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
                             }
 
-                            let mut bufleft;
-                            let mut buflenleft;
- 
+                            //because UDP is packet oriented rather than byte oriented, don't loop
                             loop {
                                 let sid = Self::getsockobjid(&mut *sockfdobj);
                                 let metadata = NET_METADATA.read().unwrap();
                                 let sockobj = metadata.socket_object_table.get(&sid).unwrap();
-                            
-                                bufleft = buf;
-                                buflenleft = buflen;
+
+                                //ideally we wouldn't have to bind within the loop?
+                                sockobj.bind(&sockfdobj.localaddr.unwrap());
                             
                                 //if the remoteaddr is set and addr is not, use remoteaddr
                                 let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
-                                    sockobj.recvfrom(bufleft, buflenleft, &mut sockfdobj.remoteaddr.as_mut())
+                                    sockobj.recvfrom(buf, buflen, &mut sockfdobj.remoteaddr.as_mut())
                                 } else {
-                                    sockobj.recvfrom(bufleft, buflenleft, addr)
+                                    sockobj.recvfrom(buf, buflen, addr)
                                 };
-                                if retval == 0 {break;}
-
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                     // let sockerrno = match Errno::from_discriminant(1 as i32) {
@@ -598,25 +592,13 @@ impl Cage {
                                         drop(sockobj);
                                         drop(metadata);
                                         interface::sleep(BLOCK_TIME);
-                                        continue;
-                                    }
-
-                                    //if our recvfrom call failed but we're not retrying (it wasn't blocking that was 
-                                    //the issue), then continue with the data we've read so far if we read any data from 
-                                    //a previous iteration, or return the error given
-                                    if buflen == buflenleft {
-                                        return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
                                     } else {
-                                        break;
+                                        return syscall_error(sockerrno, "recvfrom", "syscall error from libc recvfrom");
                                     }
+                                } else {
+                                    return retval;
                                 }
-
-                                buflenleft -= retval as usize;
-                                bufleft = bufleft.wrapping_offset(retval as isize);
-
-                                if buflenleft == 0 {break;}
                             }
-                            return (buflen - buflenleft) as i32;
                         }
 
                         _ => {
