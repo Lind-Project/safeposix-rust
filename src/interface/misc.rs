@@ -29,12 +29,16 @@ pub fn log_from_ptr(buf: *const u8, length: usize) {
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
     print!("{}", s);
-    io::stdout().flush().unwrap();
 }
 
 // Print text to stderr
 pub fn log_to_stderr(s: &str) {
     eprintln!("{}", s);
+}
+
+// Flush contents of stdout
+pub fn flush_stdout() {
+    io::stdout().flush().unwrap();
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
