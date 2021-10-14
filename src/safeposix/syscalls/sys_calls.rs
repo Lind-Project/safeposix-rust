@@ -75,6 +75,10 @@ impl Cage {
     }
 
     pub fn exit_syscall(&self) -> i32 {
+
+        //flush anything left in stdout
+        interface::flush_stdout();
+
         //close all remaining files in the fdtable
         {
             let mut fdtable = self.filedescriptortable.write().unwrap();

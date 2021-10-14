@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read, Write};
 pub use std::collections::HashMap as RustHashMap;
 pub use std::cmp::{max as rust_max, min as rust_min};
 use std::str::{from_utf8, Utf8Error};
@@ -34,6 +34,11 @@ pub fn log_to_stdout(s: &str) {
 // Print text to stderr
 pub fn log_to_stderr(s: &str) {
     eprintln!("{}", s);
+}
+
+// Flush contents of stdout
+pub fn flush_stdout() {
+    io::stdout().flush().unwrap();
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
