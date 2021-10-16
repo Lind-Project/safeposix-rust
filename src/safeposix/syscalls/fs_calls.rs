@@ -1093,6 +1093,9 @@ impl Cage {
                     let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
                     pipe.incr_ref(normalfile_filedesc_obj.flags);
                 },
+                Stream(normalfile_filedesc_obj) => {
+                    // no stream refs
+                }
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
