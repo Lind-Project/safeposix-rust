@@ -34,7 +34,7 @@ mod pipe_tests {
         }
 
         assert_eq!(cage.close_syscall(filefd), 0);
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(0), 0);
         lindrustfinalize();
     }
 
@@ -77,7 +77,7 @@ mod pipe_tests {
             }
             assert_eq!(cage2.close_syscall(0), 0);
 
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(0), 0);
 
         });
         
@@ -102,7 +102,7 @@ mod pipe_tests {
 
         sender.join().unwrap();
 
-        assert_eq!(cage1.exit_syscall(), 0);
+        assert_eq!(cage1.exit_syscall(0), 0);
 
         lindrustfinalize();
     }

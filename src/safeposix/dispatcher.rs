@@ -151,7 +151,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.getpid_syscall,)
         }
         EXIT_SYSCALL => {
-            check_and_dispatch!(cage.exit_syscall,)
+            check_and_dispatch!(cage.exit_syscall, interface::get_int(arg1))
         }
         FLOCK_SYSCALL => {
             check_and_dispatch!(cage.flock_syscall, interface::get_int(arg1), interface::get_int(arg2))
@@ -229,7 +229,7 @@ pub extern "C" fn lindrustfinalize() {
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
-        cage.exit_syscall();
+        cage.exit_syscall(0);
     }
     persist_metadata(&*FS_METADATA.read().unwrap());
 }
