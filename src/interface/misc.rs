@@ -125,9 +125,11 @@ impl AdvisoryLock {
         } else {false}
     }
 
-    impl<T> Clone for AdvisoryLock<T> {
-        fn clone(&self) -> Self {
-            AdvisoryLock::new()
-        }
+
+}
+
+impl<T> Clone for AdvisoryLock<T> {
+    fn clone(&self) -> Self {
+        AdvisoryLock::new()
     }
 }
