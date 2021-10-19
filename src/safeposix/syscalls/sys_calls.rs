@@ -70,7 +70,10 @@ impl Cage {
             Epoll(_p) => true,//p.flags & CLOEXEC
         });
 
-        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
+        let fdtable = self.filedescriptortable.read().unwrap();
+        let fdtable_clone = fdtable.clone();
+
+        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(fdtable_clone)};
         //wasteful clone of fdtable, but mutability constraints exist
 
         {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
