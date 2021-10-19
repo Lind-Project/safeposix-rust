@@ -1114,11 +1114,13 @@ impl Cage {
         }    
 
         // get and clone fd, wrap and insert into table.
+        let filedesc_clone;
         {
             let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
-            let filedesc_clone = (*&oldfiledesc_enum).clone();
+            filedesc_clone = (*&oldfiledesc_enum).clone();
         }
+
         let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
         fdtable.insert(newfd, wrappedfd);
         return newfd;
