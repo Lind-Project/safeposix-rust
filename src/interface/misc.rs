@@ -65,12 +65,13 @@ pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, 
     return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AdvisoryLock {
     //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
     advisory_lock: RustRfc<Mutex<i32>>,
     advisory_condvar: Condvar
 }
+
 impl AdvisoryLock {
     pub fn new() -> Self {
         Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
@@ -122,5 +123,11 @@ impl AdvisoryLock {
             self.advisory_condvar.notify_all(); //in case readers are waiting
             true
         } else {false}
+    }
+
+    impl<T> Clone for AdvisoryLock<T> {
+        fn clone(&self) -> Self {
+            AdvisoryLock::new()
+        }
     }
 }
