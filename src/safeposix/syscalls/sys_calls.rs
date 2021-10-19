@@ -37,8 +37,11 @@ impl Cage {
                     let pipe = PIPE_TABLE.write().unwrap().get(&f.pipe).unwrap().clone();
                     pipe.incr_ref(f.flags)
                 }
+                
+                let newfd = fd.clone();
+                let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
 
-                newfdtable.insert(*key, value.clone()); //clone (increment) the reference counter, and add to hashmap
+                newfdtable.insert(*key, wrappedfd); //add deep copied fd to hashmap
 
             }
             let cwd_container = self.cwd.read().unwrap();
