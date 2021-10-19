@@ -1112,11 +1112,11 @@ impl Cage {
                 return close_result;
             }
         }    
-        
+
         // get and clone fd, wrap and insert into table.
         let newfd = fdtable.get(&oldfd).unwrap().read().unwrap().clone();
         let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
-        fdtable.insert(newfd, wrappefd);
+        fdtable.insert(newfd, wrappedfd);
         return newfd;
     }
 
