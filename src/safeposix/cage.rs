@@ -77,6 +77,7 @@ pub struct EpollDesc {
     pub flags: i32
 }
 
+#[derive(Debug, Clone)]
 pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
 
 #[derive(Debug)]
