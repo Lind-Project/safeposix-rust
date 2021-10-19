@@ -38,7 +38,7 @@ impl Cage {
                     pipe.incr_ref(f.flags)
                 }
                 
-                let descref = *fd
+                let descref = *fd;
                 let newfd = descref.clone();
                 let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
 

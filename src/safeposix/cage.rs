@@ -16,7 +16,7 @@ pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::
         interface::RustLock::new(interface::new_hashmap())
 );
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
