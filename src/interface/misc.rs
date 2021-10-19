@@ -128,7 +128,7 @@ impl AdvisoryLock {
 
 }
 
-impl<T> Clone for AdvisoryLock<T> {
+impl Clone for AdvisoryLock {
     fn clone(&self) -> Self {
         AdvisoryLock::new()
     }
