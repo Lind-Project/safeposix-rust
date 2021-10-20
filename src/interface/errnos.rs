@@ -2,7 +2,7 @@
 // Error handling for SafePOSIX
 use crate::interface;
 
-static VERBOSE : bool = true;
+static VERBOSE : bool = false;
 
 #[derive(Debug)]
 
