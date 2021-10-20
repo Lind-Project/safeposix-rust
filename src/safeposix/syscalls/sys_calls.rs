@@ -63,14 +63,8 @@ impl Cage {
         {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
      
         let fdtable = self.filedescriptortable.read().unwrap();
-        println!("fd table");
 
-        for key in fdtable.keys() {
-
-            println!("{}", key);
-        }
-        
-        self.filedescriptortable.write().unwrap().retain(|&_, v| !match &*v.read().unwrap() {
+        self.filedescriptortable.write().unwrap().retain(|&_, v| match &*v.read().unwrap() {
             File(_f) => true,//f.flags & CLOEXEC,
             Stream(_s) => true,//s.flags & CLOEXEC,
             Socket(_s) => true,//s.flags & CLOEXEC,
