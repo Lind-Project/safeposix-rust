@@ -62,8 +62,6 @@ impl Cage {
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
      
-        let fdtable = self.filedescriptortable.read().unwrap();
-
         self.filedescriptortable.write().unwrap().retain(|&_, v| match &*v.read().unwrap() {
             File(_f) => true,//f.flags & CLOEXEC,
             Stream(_s) => true,//s.flags & CLOEXEC,
