@@ -61,7 +61,7 @@ impl Cage {
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
-     
+
         self.filedescriptortable.write().unwrap().retain(|&_, v| match &*v.read().unwrap() {
             File(_f) => true,//f.flags & CLOEXEC,
             Stream(_s) => true,//s.flags & CLOEXEC,
@@ -70,23 +70,7 @@ impl Cage {
             Epoll(_p) => true,//p.flags & CLOEXEC
         });
 
-        let fdtable = self.filedescriptortable.read().unwrap();
-        println!("fd table");
-
-        for key in fdtable.keys() {
-
-            println!("{}", key);
-        }
-
-        let fdtable_clone = fdtable.clone();
-        println!("fd table clone");
-
-        for key in fdtable_clone.keys() {
-
-            println!("{}", key);
-        }
-
-        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(fdtable_clone)};
+        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
         //wasteful clone of fdtable, but mutability constraints exist
 
         {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
