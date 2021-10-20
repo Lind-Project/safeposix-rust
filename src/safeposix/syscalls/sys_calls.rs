@@ -71,9 +71,18 @@ impl Cage {
         });
 
         let fdtable = self.filedescriptortable.read().unwrap();
+        println!("fd table");
+
+        for key in fdtable.keys() {
+
+            println!("{}", key);
+        }
+
         let fdtable_clone = fdtable.clone();
+        println!("fd table clone");
 
         for key in fdtable_clone.keys() {
+
             println!("{}", key);
         }
 
