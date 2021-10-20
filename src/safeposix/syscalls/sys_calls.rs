@@ -73,6 +73,10 @@ impl Cage {
         let fdtable = self.filedescriptortable.read().unwrap();
         let fdtable_clone = fdtable.clone();
 
+        for key in fdtable_clone.keys() {
+            println!("{}", key);
+        }
+
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(fdtable_clone)};
         //wasteful clone of fdtable, but mutability constraints exist
 
