@@ -176,23 +176,27 @@ impl Cage {
             //in lieu of getmyip we just always use 0.0.0.0 or the ipv6 equivalent because we have
             //no kernel-respecting way of accessing the actual interface addresses for ipv6 for now
             //(netlink for now is a big no go)
-            let mut retval = if isv6 {
+            let retval = if isv6 {
                 let mut newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
                 let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
                 newremote.set_addr(addr);
                 newremote.set_family(AF_INET6 as u16);
+                newremote.set_port(match mutmetadata._reserve_localport(addr.clone(), 0, sockfdobj.protocol, sockfdobj.domain) {
+                    Ok(portnum) => portnum,
+                    Err(errnum) => return Err(errnum),
+                });
                 newremote
             } else {
                 let mut newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
                 let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
                 newremote.set_addr(addr);
                 newremote.set_family(AF_INET as u16);
+                newremote.set_port(match mutmetadata._reserve_localport(addr.clone(), 0, sockfdobj.protocol, sockfdobj.domain) {
+                    Ok(portnum) => portnum,
+                    Err(errnum) => return Err(errnum),
+                });
                 newremote
             };
-            retval.set_port(match mutmetadata._reserve_localport(retval.addr().clone(), 0, sockfdobj.protocol, sockfdobj.domain) {
-                Ok(portnum) => portnum,
-                Err(errnum) => return Err(errnum),
-            });
 
             Ok(retval)
         }

@@ -98,7 +98,8 @@ pub struct SockaddrV6 {
 
 #[derive(Debug)]
 pub struct Socket {
-    raw_sys_fd: i32//make private right after
+    pub refcnt: i32,
+    raw_sys_fd: i32
 }
 
 impl Socket {
@@ -106,7 +107,7 @@ impl Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
         unsafe {libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);}
-        Socket {raw_sys_fd: fd}
+        Self {refcnt: 1, raw_sys_fd: fd}
     }
 
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
@@ -161,7 +162,7 @@ impl Socket {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
                 unsafe {libc::fcntl(newfd, libc::F_SETFL, libc::O_NONBLOCK);}
-                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
+                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
@@ -172,7 +173,7 @@ impl Socket {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
                 unsafe {libc::fcntl(newfd, libc::F_SETFL, libc::O_NONBLOCK);}
-                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
+                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
     }
