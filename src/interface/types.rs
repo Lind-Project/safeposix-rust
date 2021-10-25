@@ -143,7 +143,7 @@ pub fn get_int(union_argument: Arg) -> Result<i32, i32> {
     //does not like just using the hex value so we are forced to use
     //a value of -1
     type_checker.dispatch_int = -1;
-    if (data as i64 & !unsafe{type_checker.dispatch_long}) == 0 {
+    if (unsafe{union_argument.dispatch_long} & !unsafe{type_checker.dispatch_long}) == 0 {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));
@@ -153,7 +153,7 @@ pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
     let data = unsafe{union_argument.dispatch_uint};
     let mut type_checker = Arg{dispatch_ulong: 0};
     type_checker.dispatch_uint = 0xffffffff;
-    if (data as u64 & !unsafe{type_checker.dispatch_ulong}) == 0 {
+    if (unsafe{union_argument.dispatch_ulong} & !unsafe{type_checker.dispatch_ulong}) == 0 {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input data not valid"));

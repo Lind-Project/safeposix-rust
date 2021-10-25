@@ -2,7 +2,7 @@
 // Error handling for SafePOSIX
 use crate::interface;
 
-static VERBOSE : bool = true;
+static VERBOSE : bool = false;
 
 //A macro which takes the enum and adds to it a try_from trait which can convert values back to
 //enum variants

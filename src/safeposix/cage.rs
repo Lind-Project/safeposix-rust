@@ -16,7 +16,7 @@ pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::
         interface::RustLock::new(interface::new_hashmap())
 );
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
@@ -25,7 +25,7 @@ pub enum FileDescriptor {
     Epoll(EpollDesc)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileDesc {
     pub position: usize,
     pub inode: usize,
@@ -33,7 +33,7 @@ pub struct FileDesc {
     pub advlock: interface::AdvisoryLock
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StreamDesc {
     pub position: usize,
     pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
@@ -41,7 +41,7 @@ pub struct StreamDesc {
     pub advlock: interface::AdvisoryLock
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SocketDesc {
     pub mode: i32,
     pub domain: i32,
@@ -53,7 +53,6 @@ pub struct SocketDesc {
     pub state: ConnState,
     pub flags: i32,
     pub errno: i32,
-    pub pendingconnections: Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>,
     pub localaddr: Option<interface::GenSockaddr>,
     pub remoteaddr: Option<interface::GenSockaddr>,
     pub last_peek: interface::RustDeque<u8>,
@@ -61,14 +60,14 @@ pub struct SocketDesc {
     pub advlock: interface::AdvisoryLock
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PipeDesc {
     pub pipe: i32,
     pub flags: i32,
     pub advlock: interface::AdvisoryLock
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EpollDesc {
     pub mode: i32,
     pub registered_fds: interface::RustHashMap<i32, EpollEvent>,

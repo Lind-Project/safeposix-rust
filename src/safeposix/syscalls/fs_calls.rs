@@ -175,6 +175,7 @@ impl Cage {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
+                else {unreachable!();}
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
                 persist_metadata(&mutmetadata);
@@ -1088,15 +1089,18 @@ impl Cage {
                             chardev_inode_obj.refcount += 1;
                         },
                     }
-                },
+                }
                 Pipe(pipe_filedesc_obj) => {
                     let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
                     pipe.incr_ref(pipe_filedesc_obj.flags);
-                },
+                }
                 Socket(socket_filedesc_obj) => {
                     if let Some(socknum) = socket_filedesc_obj.socketobjectid {
                         NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().refcnt += 1;
                     }
+                }
+                Stream(normalfile_filedesc_obj) => {
+                    // no stream refs
                 }
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
@@ -1114,7 +1118,17 @@ impl Cage {
                 return close_result;
             }
         }    
-        fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
+
+        // get and clone fd, wrap and insert into table.
+        let filedesc_clone;
+        {
+            let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
+            let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
+            filedesc_clone = (*&oldfiledesc_enum).clone();
+        }
+
+        let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
+        fdtable.insert(newfd, wrappedfd);
         return newfd;
     }
 
@@ -1346,7 +1360,7 @@ impl Cage {
         }
 
         if 0 != flags & MAP_ANONYMOUS {
-            return interface::libc_mmap(addr, len, prot, flags, 0, -1);
+            return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
 
         let fdtable = self.filedescriptortable.read().unwrap();

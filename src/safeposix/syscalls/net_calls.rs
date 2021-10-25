@@ -26,7 +26,6 @@ impl Cage {
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             state: ConnState::NOTCONNECTED, //we start without a connection
             advlock: interface::AdvisoryLock::new(),
-            pendingconnections: Vec::new(),
             flags: flags,
             errno: 0,
             localaddr: None,
@@ -798,8 +797,12 @@ impl Cage {
                                 }
 
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
-                                let (acceptedresult, remote_addr) = if let Some(tup) = sockfdobj.pendingconnections.pop() {
+                                let (acceptedresult, remote_addr) = if let Some(vec) = mutmetadata.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                     //if we got a pending connection in select/poll/whatever, return that here instead
+                                    let tup = vec.pop().unwrap(); //pending connection tuple recieved
+                                    if vec.is_empty() {
+                                        mutmetadata.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
+                                    }
                                     tup
                                 } else {
                                     Self::_accept_helper(sockfdobj, &mut *mutmetadata)
@@ -941,11 +944,11 @@ impl Cage {
                             if sockfdobj.state == ConnState::LISTEN {
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
 
-                                if sockfdobj.pendingconnections.is_empty() {
+                                if !mutmetadata.pending_conn_table.contains_key(&sockfdobj.localaddr.unwrap().port()) {
                                     let listeningsocket = Self::_accept_helper(sockfdobj, &mut *mutmetadata);
                                     if let Ok(_) = listeningsocket.0 {
                                         //save the pending connection for accept to do something with it
-                                        sockfdobj.pendingconnections.push(listeningsocket);
+                                        mutmetadata.pending_conn_table.insert(sockfdobj.localaddr.unwrap().port(), vec!(listeningsocket));
                                     } else {
                                         //if it returned an error, then don't insert it into new_readfds
                                         continue;

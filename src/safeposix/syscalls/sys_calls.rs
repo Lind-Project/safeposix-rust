@@ -24,12 +24,16 @@ impl Cage {
                 //only file inodes have real inode objects currently
                 match &*fd {
                     File(normalfile_filedesc_obj) => {
-                        //increment the reference count on the inode
-                        let inode = mutmetadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
-                        match inode {
-                            Inode::File(f) => {f.refcount += 1;}
-                            Inode::CharDev(f) => {f.refcount += 1;}
-                            Inode::Dir(f) => {f.refcount += 1;}
+                        let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
+
+                        if let Some(inodenum) = inodenum_option {
+                            //increment the reference count on the inode
+                            let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                            match inode {
+                                Inode::File(f) => {f.refcount += 1;}
+                                Inode::CharDev(f) => {f.refcount += 1;}
+                                Inode::Dir(f) => {f.refcount += 1;}
+                            }
                         }
                     }
                     Pipe(pipe_filedesc_obj) => {
@@ -43,8 +47,11 @@ impl Cage {
                     }
                     _ => {}
                 }
+                
+                let newfd = (&*fd).clone();
+                let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
 
-                newfdtable.insert(*key, value.clone()); //clone (increment) the reference counter, and add to hashmap
+                newfdtable.insert(*key, wrappedfd); //add deep copied fd to hashmap
 
             }
             let cwd_container = self.cwd.read().unwrap();
@@ -64,14 +71,15 @@ impl Cage {
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
-
-        self.filedescriptortable.write().unwrap().retain(|&_, v| !match &*v.read().unwrap() {
-            File(_f) => true,//f.flags & CLOEXEC,
-            Stream(_s) => true,//s.flags & CLOEXEC,
-            Socket(_s) => true,//s.flags & CLOEXEC,
-            Pipe(_p) => true,//p.flags & CLOEXEC
-            Epoll(_p) => true,//p.flags & CLOEXEC
-        });
+        
+        // Uncomment for CLOEXEC implementation
+        // self.filedescriptortable.write().unwrap().retain(|&_, v| !match &*v.read().unwrap() {
+        //     File(_f) => f.flags & CLOEXEC,
+        //     Stream(_s) => s.flags & CLOEXEC,
+        //     Socket(_s) => s.flags & CLOEXEC,
+        //     Pipe(_p) => p.flags & CLOEXEC
+        //     Epoll(_p) => p.flags & CLOEXEC
+        // });
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
         //wasteful clone of fdtable, but mutability constraints exist
@@ -81,6 +89,10 @@ impl Cage {
     }
 
     pub fn exit_syscall(&self) -> i32 {
+
+        //flush anything left in stdout
+        interface::flush_stdout();
+
         //close all remaining files in the fdtable
         {
             let mut fdtable = self.filedescriptortable.write().unwrap();
