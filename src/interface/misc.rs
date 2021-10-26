@@ -140,8 +140,6 @@ impl AdvisoryLock {
             true
         } else {false}
     }
-
-
 }
 
 impl Clone for AdvisoryLock {
