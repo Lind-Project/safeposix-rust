@@ -78,7 +78,7 @@ impl Cage {
         0
     }
 
-    pub fn exit_syscall(&self) -> i32 {
+    pub fn exit_syscall(&self, status: i32) -> i32 {
 
         //flush anything left in stdout
         interface::flush_stdout();
@@ -103,7 +103,7 @@ impl Cage {
         CAGE_TABLE.write().unwrap().remove(&self.cageid);
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
-        0
+        status
     }
 
     pub fn getpid_syscall(&self) -> i32 {

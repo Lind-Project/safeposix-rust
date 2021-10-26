@@ -71,6 +71,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
+use super::syscalls::sys_constants::*;
 
 
 //this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
@@ -151,7 +152,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.getpid_syscall,)
         }
         EXIT_SYSCALL => {
-            check_and_dispatch!(cage.exit_syscall,)
+            check_and_dispatch!(cage.exit_syscall, interface::get_int(arg1))
         }
         FLOCK_SYSCALL => {
             check_and_dispatch!(cage.flock_syscall, interface::get_int(arg1), interface::get_int(arg2))
@@ -229,7 +230,7 @@ pub extern "C" fn lindrustfinalize() {
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
-        cage.exit_syscall();
+        cage.exit_syscall(EXIT_SUCCESS);
     }
     persist_metadata(&*FS_METADATA.read().unwrap());
 }
