@@ -71,6 +71,7 @@ pub struct AdvisoryLock {
     advisory_lock: RustRfc<Mutex<i32>>,
     advisory_condvar: Condvar
 }
+
 impl AdvisoryLock {
     pub fn new() -> Self {
         Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
@@ -122,5 +123,11 @@ impl AdvisoryLock {
             self.advisory_condvar.notify_all(); //in case readers are waiting
             true
         } else {false}
+    }
+}
+
+impl Clone for AdvisoryLock {
+    fn clone(&self) -> Self {
+        AdvisoryLock::new()
     }
 }
