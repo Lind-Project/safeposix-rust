@@ -1,7 +1,7 @@
 [package]
 name = "rustposix"
 version = "0.1.0"
-authors = ["Nicholas Smith Renner <nrenner@nyu.edu>"]
+authors = ["Nicholas Smith Renner <nrenner@nyu.edu>", "Jonathan Eli Singer <jes965@nyu.edu>"]
 edition = "2018"
 
 [lib]
