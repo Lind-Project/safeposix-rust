@@ -292,20 +292,24 @@ impl Cage {
 
                             //bind the udp port as we do not bind them at bind_syscall, and this is
                             //the last possible moment to do so
-                            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_))) {
-                                Ok(a) => a,
-                                Err(e) => return e,
-                            };
+                            if let None = sockfdobj.localaddr {
+                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_))) {
+                                    Ok(a) => a,
+                                    Err(e) => return e,
+                                };
+                                let mut mutmetadata = NET_METADATA.write().unwrap();
+                                let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
+
+                                let bindret = sockobj.bind(&localaddr);
+                                if bindret < 0 {
+                                    return syscall_error(Errno::ECONNREFUSED, "sendto", "The libc call to bind failed!");
+                                }
+                                sockfdobj.localaddr = Some(localaddr);
+                            }
+
                             let mut mutmetadata = NET_METADATA.write().unwrap();
                             let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap();
 
-                            let bindret = sockobj.bind(&localaddr);
-                            if bindret < 0 {
-                                return syscall_error(Errno::ECONNREFUSED, "sendto", "The libc call to bind failed!");
-                            }
-                            if let None = sockfdobj.localaddr {
-                                sockfdobj.localaddr = Some(localaddr);
-                            }
                             //we don't mind if this fails for now and we will just get the error
                             //from calling sendto
 
@@ -658,9 +662,11 @@ impl Cage {
 
                             //create the socket and bind it before listening
                             let sockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                            let bindret = sockobj.bind(&ladr);
-                            if bindret < 0 {
-                                panic!("Unexpected failure in binding socket");
+                            if let None = sockfdobj.localaddr {
+                                let bindret = sockobj.bind(&ladr);
+                                if bindret < 0 {
+                                    panic!("Unexpected failure in binding socket");
+                                }
                             }
                             let listenret = sockobj.listen(5); //default backlog in repy for whatever reason, we replicate it
                             if listenret < 0 {

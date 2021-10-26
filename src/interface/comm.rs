@@ -155,7 +155,9 @@ impl Socket {
         return if isv4 {
             let mut inneraddrbuf = SockaddrV4::default();
             let mut sadlen = size_of::<SockaddrV4>() as u32;
+            unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
             let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV4).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
+            unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
 
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
@@ -166,7 +168,9 @@ impl Socket {
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
             let mut sadlen = size_of::<SockaddrV6>() as u32;
+            unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
             let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV6).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
+            unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
 
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))

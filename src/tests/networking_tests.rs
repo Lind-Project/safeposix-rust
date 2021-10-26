@@ -6,18 +6,18 @@ pub mod net_tests {
     use std::mem::size_of;
 
     pub fn net_tests() {
-        // ut_lind_net_bind();
-        // ut_lind_net_bind_multiple();
-        // ut_lind_net_bind_on_zero(); 
-        // ut_lind_net_connect_basic_udp();
-        // ut_lind_net_getpeername();
-        // ut_lind_net_getsockname();
-        // ut_lind_net_listen();
-        ut_lind_net_recvfrom(); 
-        // ut_lind_net_shutdown();
-        // ut_lind_net_socket();
-        // ut_lind_net_socketoptions();
-        // ut_lind_net_udp_bad_bind();
+        ut_lind_net_bind();
+        //ut_lind_net_bind_multiple();
+        //ut_lind_net_bind_on_zero();
+        ut_lind_net_connect_basic_udp();
+        ut_lind_net_getpeername();
+        ut_lind_net_getsockname();
+        //ut_lind_net_listen();
+        //ut_lind_net_recvfrom(); 
+        //ut_lind_net_shutdown();
+        ut_lind_net_socket();
+        ut_lind_net_socketoptions();
+        ut_lind_net_udp_bad_bind();
         ut_lind_net_udp_simple(); //not working right now
         ut_lind_net_udp_connect();
     }
@@ -79,8 +79,6 @@ pub mod net_tests {
             
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: 0 }, padding: 0}); //0.0.0.0
-
-            interface::sleep(interface::RustDuration::from_millis(200)); 
 
             let mut sockfd = cage2.accept_syscall(serversockfd, &mut socket2); //really can only make sure that the fd is valid
             assert!(sockfd > 0);
@@ -223,6 +221,8 @@ pub mod net_tests {
         });
 
         //connect to the server
+        interface::sleep(interface::RustDuration::from_millis(20));
+
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
 
         //send the data with delays so that the server can process the information cleanly
