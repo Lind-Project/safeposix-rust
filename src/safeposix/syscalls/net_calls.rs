@@ -99,6 +99,10 @@ impl Cage {
 
     //we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
+        self.bind_inner(fd, localaddr, false)
+
+    }
+    pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -116,31 +120,9 @@ impl Cage {
                     let mut mutmetadata = NET_METADATA.write().unwrap();
                     let mut intent_to_rebind = false;
 
-                    //check that nobody else is bound to this address, but if they are, attempt to rebind
-                    if let Some(fds_on_port) = mutmetadata.porttable.get(&localaddr) {
-                        for otherfd_wrapped in fds_on_port {
-                            let otherfd_enum = otherfd_wrapped.read().unwrap();
-                            if let Socket(othersockfdobj) = &*otherfd_enum {
-
-                                if othersockfdobj.domain == sockfdobj.domain && 
-                                   othersockfdobj.socktype == sockfdobj.socktype &&
-                                   othersockfdobj.protocol == sockfdobj.protocol {
-                                    if (sockfdobj.options & othersockfdobj.options & SO_REUSEPORT) == SO_REUSEPORT {
-                                        intent_to_rebind = true;
-                                    } else {
-                                        return syscall_error(Errno::EADDRINUSE, "bind", "Another socket is already bound to this addr");
-                                    }
-                                }
-
-                            } else {
-                                panic!("For some reason a non-socket fd was in the port table!");
-                            }
-                        }
-                    }
-
                     //if we're trying to rebind, we should probably figure out just how multiple interfaces work
                     let newlocalport = if !intent_to_rebind {
-                        let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                        let localout = if prereserved{Ok(localaddr.port())} else {mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain)};
                         if let Err(errnum) = localout {return errnum;}
                         localout.unwrap()
                     } else {
@@ -151,8 +133,6 @@ impl Cage {
                     newsockaddr.set_port(newlocalport);
 
                     //we don't actually want/need to create the socket object now, that is done in listen or in connect or whatever
-                    mutmetadata.porttable.entry(newsockaddr.clone()).or_insert(vec!()).push(wrappedfd.clone());
-
                     sockfdobj.localaddr = Some(newsockaddr);
                     0
                 }
@@ -229,7 +209,7 @@ impl Cage {
                                 drop(filedesc_enum);
                                 drop(fdtable);
 
-                                return self.bind_syscall(fd, &localaddr); //len assigned arbitrarily large value
+                                return self.bind_inner(fd, &localaddr, true); //len assigned arbitrarily large value
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
@@ -478,8 +458,6 @@ impl Cage {
     }
 
     fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: &FdTable) -> i32 {
-        println!("ADDR: {:?}", addr);
-        
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
