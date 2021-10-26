@@ -347,7 +347,7 @@ pub const EPOLL_CTL_DEL: i32 = 2;
 pub const EPOLL_CTL_MOD: i32 = 3;
 
 //for internal use
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ConnState {
     NOTCONNECTED, CONNECTED, LISTEN
 }

@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read, Write};
 pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering};
@@ -36,6 +36,11 @@ pub fn log_to_stdout(s: &str) {
 // Print text to stderr
 pub fn log_to_stderr(s: &str) {
     eprintln!("{}", s);
+}
+
+// Flush contents of stdout
+pub fn flush_stdout() {
+    io::stdout().flush().unwrap();
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
@@ -82,6 +87,7 @@ pub struct AdvisoryLock {
     advisory_lock: RustRfc<Mutex<i32>>,
     advisory_condvar: Condvar
 }
+
 impl AdvisoryLock {
     pub fn new() -> Self {
         Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
@@ -133,5 +139,11 @@ impl AdvisoryLock {
             self.advisory_condvar.notify_all(); //in case readers are waiting
             true
         } else {false}
+    }
+}
+
+impl Clone for AdvisoryLock {
+    fn clone(&self) -> Self {
+        AdvisoryLock::new()
     }
 }

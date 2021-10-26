@@ -26,7 +26,7 @@ impl Cage {
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             state: ConnState::NOTCONNECTED, //we start without a connection
             advlock: interface::AdvisoryLock::new(),
-            pendingconnections: Vec::new(),
+            //pendingconnections: Vec::new(),
             flags: flags,
             errno: 0,
             localaddr: None,
@@ -794,12 +794,13 @@ impl Cage {
                                 }
 
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
-                                let (acceptedresult, remote_addr) = if let Some(tup) = sockfdobj.pendingconnections.pop() {
-                                    //if we got a pending connection in select/poll/whatever, return that here instead
-                                    tup
-                                } else {
+                                let (acceptedresult, remote_addr) = //if let Some(tup) = sockfdobj.pendingconnections.pop() {
+                                //    //if we got a pending connection in select/poll/whatever, return that here instead
+                                //    tup
+                                //} else {
                                     Self::_accept_helper(sockfdobj, &mut *mutmetadata)
-                                };
+                                //}
+                                ;
 
                                 if let Err(errval) = acceptedresult {
                                     let accerrno = match Errno::from_discriminant(-errval) {
@@ -935,16 +936,16 @@ impl Cage {
                             if sockfdobj.state == ConnState::LISTEN {
                                 let mut mutmetadata = NET_METADATA.write().unwrap();
 
-                                if sockfdobj.pendingconnections.is_empty() {
-                                    let listeningsocket = Self::_accept_helper(sockfdobj, &mut *mutmetadata);
-                                    if let Ok(_) = listeningsocket.0 {
-                                        //save the pending connection for accept to do something with it
-                                        sockfdobj.pendingconnections.push(listeningsocket);
-                                    } else {
-                                        //if it returned an error, then don't insert it into new_readfds
-                                        continue;
-                                    }
-                                }
+                                //if sockfdobj.pendingconnections.is_empty() {
+                                //    let listeningsocket = Self::_accept_helper(sockfdobj, &mut *mutmetadata);
+                                //    if let Ok(_) = listeningsocket.0 {
+                                //        //save the pending connection for accept to do something with it
+                                //        sockfdobj.pendingconnections.push(listeningsocket);
+                                //    } else {
+                                //        //if it returned an error, then don't insert it into new_readfds
+                                //        continue;
+                                //    }
+                                //}
 
                                 //if we reach here there is a pending connection
                                 new_readfds.insert(*fd);
