@@ -71,6 +71,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
+use super::syscalls::sys_constants::*;
 
 
 //this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
@@ -229,7 +230,7 @@ pub extern "C" fn lindrustfinalize() {
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
-        cage.exit_syscall(0);
+        cage.exit_syscall(EXIT_SUCCESS);
     }
     persist_metadata(&*FS_METADATA.read().unwrap());
 }
