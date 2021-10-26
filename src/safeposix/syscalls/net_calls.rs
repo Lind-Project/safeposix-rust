@@ -785,13 +785,11 @@ impl Cage {
 
                                 if let Err(errval) = acceptedresult {
                                     let accerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let accerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
                                     if accerrno == Errno::EAGAIN {
-                                    // if accerrno == Errno::EAGAIN || accerrno == Errno::EPERM {
                                         interface::sleep(BLOCK_TIME);
                                         continue;
                                     }
