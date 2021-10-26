@@ -100,7 +100,6 @@ impl Cage {
     //we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
-
     }
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -223,7 +222,6 @@ impl Cage {
                         let connectret = tcpsockobj.connect(remoteaddr);
                         if connectret < 0 {
                             let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                            // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                 Ok(i) => i,
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
@@ -335,13 +333,11 @@ impl Cage {
                                     continue;
                                 } else {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
-                                    // if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
                                         mutmetadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
@@ -399,13 +395,11 @@ impl Cage {
 
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
 
                                     if sockerrno == Errno::EAGAIN {
-                                    // if sockerrno == Errno::EAGAIN  || sockerrno == Errno::EPERM {
                                         metadata.writersblock_state.store(true, interface::RustAtomicOrdering::Relaxed);
                                         interface::sleep(BLOCK_TIME);
                                         continue;
@@ -507,8 +501,7 @@ impl Cage {
                                 let retval = sockobj.recvfrom(bufleft, buflenleft, addr); //nonblocking, block manually
 
                                 if retval < 0 {
-                                    // let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    let sockerrno = match Errno::from_discriminant(1 as i32) {
+                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
@@ -567,13 +560,11 @@ impl Cage {
                                 };
                                 if retval < 0 {
                                     let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    // let sockerrno = match Errno::from_discriminant(1 as i32) {
                                         Ok(i) => i,
                                         Err(()) => panic!("Unknown errno value from socket send returned!"),
                                     };
                                     
                                     if sockerrno == Errno::EAGAIN {
-                                    // if sockerrno == Errno::EAGAIN || sockerrno == Errno::EPERM {
                                         drop(sockobj);
                                         drop(metadata);
                                         interface::sleep(BLOCK_TIME);
