@@ -1184,7 +1184,8 @@ impl Cage {
                         if retval < 0 {
                             return retval;
                         }
-                    }                }
+                    }
+                }
                 Pipe(pipe_filedesc_obj) => {
                     let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
                
