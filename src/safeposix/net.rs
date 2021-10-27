@@ -92,7 +92,7 @@ impl NetMetadata {
         if protocol == IPPROTO_UDP {
             if port == 0 {
                 self._get_available_udp_port(addr, domain)
-            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, UDPPORT)) {
+            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, UDPPORT)) { //for this it's probably ok if we're trying to reserve 127.0.0.1 and 0.0.0.0 is being read on? not sure
                 self.used_port_set.insert(mux_port(addr, port, domain, UDPPORT));
                 Ok(port)
             } else {
@@ -101,7 +101,7 @@ impl NetMetadata {
         } else if protocol == IPPROTO_TCP {
             if port == 0 {
                 self._get_available_tcp_port(addr, domain)
-            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, TCPPORT)) {
+            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, TCPPORT)) { //for this it's probably ok if we're trying to reserve 127.0.0.1 and 0.0.0.0 is being read on? not sure
                 self.used_port_set.insert(mux_port(addr, port, domain, TCPPORT));
                 Ok(port)
             } else {
