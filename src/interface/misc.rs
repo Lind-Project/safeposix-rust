@@ -4,13 +4,6 @@
 // Random, locks, etc.
 #![allow(dead_code)]
 
-extern crate tcmalloc;
-
-use tcmalloc::TCMalloc;
-
-#[global_allocator]
-static GLOBAL: TCMalloc = TCMalloc;
-
 use std::fs::File;
 use std::io::{self, Read, Write};
 pub use std::collections::HashMap as RustHashMap;
