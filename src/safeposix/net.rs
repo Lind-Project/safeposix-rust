@@ -6,15 +6,14 @@ use super::cage::{Cage, FileDescriptor};
 pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<NetMetadata>>> =
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(NetMetadata {
-            porttable: interface::RustHashMap::new(),
             used_port_set: interface::RustHashSet::new(),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
-            writersblock_state: interface::RustAtomicBool::new(false)
+            pending_conn_table: interface::RustHashMap::new(),
         }))
     ); //we want to check if fs exists before doing a blank init, but not for now
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum PortType {
     IPv4UDP, IPv4TCP, IPv6UDP, IPv6TCP
 
@@ -28,11 +27,10 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 }
 
 pub struct NetMetadata {
-    pub porttable: interface::RustHashMap<interface::GenSockaddr, Vec<interface::RustRfc<interface::RustLock<FileDescriptor>>>>,
     pub used_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub socket_object_table: interface::RustHashMap<i32, interface::Socket>,
-    pub writersblock_state: interface::RustAtomicBool
+    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
+    pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 
 //Because other processes on the OS may allocate ephemeral ports, we allocate them from high to
@@ -43,11 +41,24 @@ pub const TCPPORT: bool = true;
 pub const UDPPORT: bool = false;
 
 impl NetMetadata {
+    fn port_in_use(&self, tup: &(interface::GenIpaddr, u16, PortType)) -> bool {
+        if self.used_port_set.contains(tup) {return true;}
+        let mut tupclone = (*tup).clone();
+        match tupclone.2 {
+            PortType::IPv4UDP | PortType::IPv4TCP => {
+                tupclone.0 = interface::GenIpaddr::V4(interface::V4Addr::default());
+            }
+            PortType::IPv6UDP | PortType::IPv6TCP => {
+                tupclone.0 = interface::GenIpaddr::V6(interface::V6Addr::default());
+            }
+        }
+        self.used_port_set.contains(&tupclone)
+    }
     pub fn _get_available_udp_port(&mut self, addr: interface::GenIpaddr, domain: i32) -> Result<u16, i32> {
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
         for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev().map(|x| x.to_be()) {
             porttuple.1 = port;
-            if !self.used_port_set.contains(&porttuple) {
+            if !self.port_in_use(&porttuple) {
                 self.used_port_set.insert(porttuple);
                 return Ok(port);
             }
@@ -58,7 +69,7 @@ impl NetMetadata {
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
         for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev().map(|x| x.to_be()) {
             porttuple.1 = port;
-            if !self.used_port_set.contains(&porttuple) {
+            if !self.port_in_use(&porttuple) {
                 self.used_port_set.insert(porttuple);
                 return Ok(port);
             }
@@ -79,7 +90,7 @@ impl NetMetadata {
         if protocol == IPPROTO_UDP {
             if port == 0 {
                 self._get_available_udp_port(addr, domain)
-            } else if !self.used_port_set.contains(&mux_port(addr.clone(), port, domain, UDPPORT)) {
+            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, UDPPORT)) { //for this it's probably ok if we're trying to reserve 127.0.0.1 and 0.0.0.0 is being read on? not sure
                 self.used_port_set.insert(mux_port(addr, port, domain, UDPPORT));
                 Ok(port)
             } else {
@@ -88,7 +99,7 @@ impl NetMetadata {
         } else if protocol == IPPROTO_TCP {
             if port == 0 {
                 self._get_available_tcp_port(addr, domain)
-            } else if !self.used_port_set.contains(&mux_port(addr.clone(), port, domain, TCPPORT)) {
+            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, TCPPORT)) { //for this it's probably ok if we're trying to reserve 127.0.0.1 and 0.0.0.0 is being read on? not sure
                 self.used_port_set.insert(mux_port(addr, port, domain, TCPPORT));
                 Ok(port)
             } else {
@@ -111,7 +122,7 @@ impl NetMetadata {
 
     pub fn insert_into_socketobjecttable(&mut self, sock: interface::Socket) -> Result<i32, i32> {
         if let Some(id) = self.get_next_socketobjectid() {
-            self.socket_object_table.insert(id, sock);
+            self.socket_object_table.insert(id, interface::RustRfc::new(interface::RustLock::new(sock)));
             Ok(id)
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))

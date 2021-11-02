@@ -71,7 +71,7 @@ reversible_enum! {
         ENOSYS = 38,	// Function not implemented
         ENOTEMPTY = 39,	// Directory not empty
         ELOOP = 40,	// Too many symbolic links encountered
-        //EWOULDBLOCK = 11, // Operation would block, returns EAGAIN
+        // EWOULDBLOCK = 11, // Operation would block, returns EAGAIN
         ENOMSG = 42,	// No message of desired type
         EIDRM = 43,	// Identifier removed
         ECHRNG = 44,	// Channel number out of range

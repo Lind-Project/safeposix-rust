@@ -4,6 +4,7 @@
 use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
+use crate::safeposix::net::{NET_METADATA};
 
 use super::sys_constants::*;
 use super::fs_constants::*;
@@ -21,21 +22,30 @@ impl Cage {
                 let fd = value.read().unwrap();
 
                 //only file inodes have real inode objects currently
-                let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
+                match &*fd {
+                    File(normalfile_filedesc_obj) => {
+                        let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
 
-                if let Some(inodenum) = inodenum_option {
-                    //increment the reference count on the inode
-                    let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                    match inode {
-                        Inode::File(f) => {f.refcount += 1;}
-                        Inode::CharDev(f) => {f.refcount += 1;}
-                        Inode::Dir(f) => {f.refcount += 1;}
+                        if let Some(inodenum) = inodenum_option {
+                            //increment the reference count on the inode
+                            let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                            match inode {
+                                Inode::File(f) => {f.refcount += 1;}
+                                Inode::CharDev(f) => {f.refcount += 1;}
+                                Inode::Dir(f) => {f.refcount += 1;}
+                            }
+                        }
                     }
-                }
-
-                if let Pipe(f) = &*fd {
-                    let pipe = PIPE_TABLE.write().unwrap().get(&f.pipe).unwrap().clone();
-                    pipe.incr_ref(f.flags)
+                    Pipe(pipe_filedesc_obj) => {
+                        let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                        pipe.incr_ref(pipe_filedesc_obj.flags)
+                    }
+                    Socket(socket_filedesc_obj) => {
+                        if let Some(socknum) = socket_filedesc_obj.socketobjectid {
+                            NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
+                        }
+                    }
+                    _ => {}
                 }
                 
                 let newfdobj = (&*fd).clone();
