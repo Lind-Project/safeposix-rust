@@ -1096,7 +1096,7 @@ impl Cage {
                 }
                 Socket(socket_filedesc_obj) => {
                     if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                        NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().refcnt += 1;
+                        NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
                     }
                 }
                 Stream(normalfile_filedesc_obj) => {
@@ -1173,8 +1173,9 @@ impl Cage {
                         let mut sockobjopt = netmeta.socket_object_table.get_mut(&socknum);
                         //in case shutdown?
                         if let Some(ref mut sockobj) = sockobjopt {
-                            sockobj.refcnt -= 1;
-                            cleanflag = (sockobj.refcnt == 0);
+                            let mut so_tmp = sockobj.write().unwrap();
+                            so_tmp.refcnt -= 1;
+                            cleanflag = (so_tmp.refcnt == 0);
                         }
                     }
                     if(cleanflag) {

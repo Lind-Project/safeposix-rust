@@ -713,7 +713,7 @@ pub mod net_tests {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
 
-            interface::sleep(interface::RustDuration::from_millis(20)); 
+            interface::sleep(interface::RustDuration::from_millis(30));
             
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
@@ -738,7 +738,7 @@ pub mod net_tests {
         let sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50992_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket2 = interface::GenSockaddr::V4(sockaddr2); //127.0.0.1
 
-        interface::sleep(interface::RustDuration::from_millis(120)); 
+        interface::sleep(interface::RustDuration::from_millis(50));
 
         buf2 = str2cbuf("test2");
         assert_eq!(cage.bind_syscall(sendsockfd2, &socket2), 0);
