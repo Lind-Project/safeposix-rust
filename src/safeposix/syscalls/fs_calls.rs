@@ -16,7 +16,7 @@ impl Cage {
 
         let truepath = normpath(convpath(path), self);
 
-        //file descriptor table write lock held for the whole function to prevent TOCTTOU
+        //file descriptor table write lock held for the whole function to prevent TOCpTTOU
         let mut fdtable = self.filedescriptortable.write().unwrap();
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
         let mut mutmetadata = FS_METADATA.write().unwrap();
@@ -401,7 +401,7 @@ impl Cage {
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
-        statbuf.pad0 = 0;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -413,7 +413,7 @@ impl Cage {
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
-        statbuf.pad0 = 0;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -427,7 +427,7 @@ impl Cage {
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
         //compose device number into u64
-        statbuf.pad0 = 0;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = makedev(&inodeobj.dev);
         statbuf.st_size = inodeobj.size;
     }
@@ -440,7 +440,7 @@ impl Cage {
         statbuf.st_nlink = 1;
         statbuf.st_uid = DEFAULT_UID;
         statbuf.st_gid = DEFAULT_GID;
-        statbuf.pad0 = 0;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = 0;
         statbuf.st_blksize = 0;
