@@ -16,7 +16,7 @@ impl Cage {
 
         let truepath = normpath(convpath(path), self);
 
-        //file descriptor table write lock held for the whole function to prevent TOCpTTOU
+        //file descriptor table write lock held for the whole function to prevent TOCTTOU
         let mut fdtable = self.filedescriptortable.write().unwrap();
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
         let mut mutmetadata = FS_METADATA.write().unwrap();
