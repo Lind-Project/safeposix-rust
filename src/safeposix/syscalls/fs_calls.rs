@@ -401,6 +401,7 @@ impl Cage {
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -412,6 +413,7 @@ impl Cage {
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -425,6 +427,7 @@ impl Cage {
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
         //compose device number into u64
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = makedev(&inodeobj.dev);
         statbuf.st_size = inodeobj.size;
     }
@@ -437,6 +440,7 @@ impl Cage {
         statbuf.st_nlink = 1;
         statbuf.st_uid = DEFAULT_UID;
         statbuf.st_gid = DEFAULT_GID;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = 0;
         statbuf.st_blksize = 0;
