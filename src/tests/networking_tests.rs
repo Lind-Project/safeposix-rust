@@ -272,12 +272,12 @@ pub mod net_tests {
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50103u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
 
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         //allowing port reuse
-        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
         assert_eq!(cage.setsockopt_syscall(sockfd2, SOL_SOCKET, SO_REUSEPORT, 1), 0);
 
         assert_eq!(cage.bind_syscall(sockfd2, &socket), 0);
@@ -390,15 +390,15 @@ pub mod net_tests {
         let thread = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
-            interface::sleep(interface::RustDuration::from_millis(100)); 
 
-            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53000_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4::default());
             assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
             
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         });
 
+            interface::sleep(interface::RustDuration::from_millis(100));
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0); 
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
@@ -720,7 +720,7 @@ pub mod net_tests {
             println!("RECV");
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
-            interface::sleep(interface::RustDuration::from_millis(120)); 
+            interface::sleep(interface::RustDuration::from_millis(30));
             assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 5);
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 

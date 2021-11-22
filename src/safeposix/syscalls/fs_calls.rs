@@ -1175,10 +1175,10 @@ impl Cage {
                         if let Some(ref mut sockobj) = sockobjopt {
                             let mut so_tmp = sockobj.write().unwrap();
                             so_tmp.refcnt -= 1;
-                            cleanflag = (so_tmp.refcnt == 0);
+                            cleanflag = so_tmp.refcnt == 0;
                         }
                     }
-                    if(cleanflag) {
+                    if cleanflag {
                         drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
                         drop(locked_filedesc);
                         let retval = Self::_cleanup_socket(self, fd, false, fdtable);

@@ -6,7 +6,7 @@ use super::cage::{Cage, FileDescriptor};
 pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<NetMetadata>>> =
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(NetMetadata {
-            used_port_set: interface::RustHashSet::new(),
+            used_port_set: interface::RustHashMap::new(),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
@@ -27,7 +27,7 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 }
 
 pub struct NetMetadata {
-    pub used_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
+    pub used_port_set: interface::RustHashMap<(interface::GenIpaddr, u16, PortType), u32>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, postiive number means that many users, rebinding is allowed
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
@@ -42,7 +42,7 @@ pub const UDPPORT: bool = false;
 
 impl NetMetadata {
     fn port_in_use(&self, tup: &(interface::GenIpaddr, u16, PortType)) -> bool {
-        if self.used_port_set.contains(tup) {return true;}
+        if self.used_port_set.contains_key(tup) {return true;}
         let mut tupclone = (*tup).clone();
         match tupclone.2 {
             PortType::IPv4UDP | PortType::IPv4TCP => {
@@ -52,25 +52,25 @@ impl NetMetadata {
                 tupclone.0 = interface::GenIpaddr::V6(interface::V6Addr::default());
             }
         }
-        self.used_port_set.contains(&tupclone)
+        self.used_port_set.contains_key(&tupclone)
     }
-    pub fn _get_available_udp_port(&mut self, addr: interface::GenIpaddr, domain: i32) -> Result<u16, i32> {
+    pub fn _get_available_udp_port(&mut self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
         for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev().map(|x| x.to_be()) {
             porttuple.1 = port;
             if !self.port_in_use(&porttuple) {
-                self.used_port_set.insert(porttuple);
+                self.used_port_set.insert(porttuple, if rebindability {1} else {0});
                 return Ok(port);
             }
         }
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
-    pub fn _get_available_tcp_port(&mut self, addr: interface::GenIpaddr, domain: i32) -> Result<u16, i32> {
+    pub fn _get_available_tcp_port(&mut self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
         for port in (EPHEMERAL_PORT_RANGE_START ..= EPHEMERAL_PORT_RANGE_END).rev().map(|x| x.to_be()) {
             porttuple.1 = port;
             if !self.port_in_use(&porttuple) {
-                self.used_port_set.insert(porttuple);
+                self.used_port_set.insert(porttuple, if rebindability {1} else {0});
                 return Ok(port);
             }
         }
@@ -86,36 +86,55 @@ impl NetMetadata {
         return None;
     }
 
-    pub fn _reserve_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<u16, i32> {
+    pub fn _reserve_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, rebindability: bool) -> Result<u16, i32> {
+        let muxed;
         if protocol == IPPROTO_UDP {
             if port == 0 {
-                self._get_available_udp_port(addr, domain)
-            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, UDPPORT)) { //for this it's probably ok if we're trying to reserve 127.0.0.1 and 0.0.0.0 is being read on? not sure
-                self.used_port_set.insert(mux_port(addr, port, domain, UDPPORT));
-                Ok(port)
-            } else {
-                Err(syscall_error(Errno::EADDRINUSE, "bind", "The given address is already in use"))
+                return self._get_available_udp_port(addr, domain, rebindability);
+            } else { //we check what is in use outside of this now, in bind_inner
+                muxed = mux_port(addr, port, domain, UDPPORT);
             }
         } else if protocol == IPPROTO_TCP {
             if port == 0 {
-                self._get_available_tcp_port(addr, domain)
-            } else if !self.port_in_use(&mux_port(addr.clone(), port, domain, TCPPORT)) { //for this it's probably ok if we're trying to reserve 127.0.0.1 and 0.0.0.0 is being read on? not sure
-                self.used_port_set.insert(mux_port(addr, port, domain, TCPPORT));
-                Ok(port)
-            } else {
-                Err(syscall_error(Errno::EADDRINUSE, "bind", "The given address is already in use"))
+                return self._get_available_tcp_port(addr, domain, rebindability);
+            } else { //we check what is in use outside of this now, in bind_inner
+                muxed = mux_port(addr, port, domain, TCPPORT);
             }
         } else {
             panic!("Unknown protocol was set on socket somehow");
         }
+        if let Some(portusers) = self.used_port_set.get_mut(&muxed) {
+            if *portusers == 0 {
+                return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
+            } else {
+                *portusers += 1;
+            }
+        } else {
+            self.used_port_set.insert(muxed, if rebindability {1} else {0});
+        }
+        Ok(port)
     }
 
-    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
-        if protocol == IPPROTO_TCP && self.used_port_set.remove(&mux_port(addr.clone(), port, domain, TCPPORT)) == true {
-            return Ok(());
+    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, sockobjid: i32) -> Result<(), i32> {
+        let muxed;
+        if protocol == IPPROTO_TCP { 
+            muxed = mux_port(addr.clone(), port, domain, TCPPORT);
+        } else if protocol == IPPROTO_UDP {
+            muxed = mux_port(addr.clone(), port, domain, UDPPORT);
+        } else {
+            return Err(syscall_error(Errno::EINVAL, "release", "provided port has nonsensical protocol"));
         }
-        else if protocol == IPPROTO_UDP && self.used_port_set.remove(&mux_port(addr.clone(), port, domain, UDPPORT)) == true {
-            return Ok(());
+
+        if let Some(portusers) = self.used_port_set.get_mut(&muxed) {
+            if *portusers <= 1 {
+                if let Some(_) = self.used_port_set.remove(&muxed) {
+                    return Ok(());
+                } else {
+                    unreachable!();
+                }
+            } else {
+                *portusers -= 1;
+            }
         }
         return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
     }
