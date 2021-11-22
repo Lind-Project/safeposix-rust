@@ -130,8 +130,29 @@ impl Cage {
                     let mut newsockaddr = localaddr.clone();
                     newsockaddr.set_port(newlocalport);
 
+                    let sid = if let Some(id) = sockfdobj.socketobjectid {
+                        id
+                    } else {
+                        let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                        let id = mutmetadata.insert_into_socketobjecttable(sock).unwrap();
+                        sockfdobj.socketobjectid = Some(id);
+                        id
+                    } ;
+                    let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+                    let sockobj = locksock.read().unwrap();
+                    let bindret = sockobj.bind(&newsockaddr);
+
+                    if bindret < 0 {
+                        let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                            Ok(i) => return syscall_error(i, "sendto", "The libc call to bind failed!"),
+                            Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                        };
+                    }
+
                     //we don't actually want/need to create the socket object now, that is done in listen or in connect or whatever
                     sockfdobj.localaddr = Some(newsockaddr);
+
+                                    
                     0
                 }
 
@@ -203,7 +224,7 @@ impl Cage {
                                     Err(e) => return e,
                                 };
 
-                                //unlock fdtable so that we're fine to call bind_syscall
+                                //unlock fdtable so that we're fine to call bind_inner
                                 drop(filedesc_enum);
                                 drop(fdtable);
 
@@ -212,20 +233,21 @@ impl Cage {
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         //for TCP, actually create the internal socket object and connect it
-                        let localaddr = if let Some(addr) = sockfdobj.localaddr {
-                            addr
-                        } else {
-                            match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & SO_REUSEPORT != 0) {
+                        let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                        if let None = sockfdobj.localaddr {
+                            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & SO_REUSEPORT != 0) {
                                 Ok(a) => a,
                                 Err(e) => return e,
+                            };
+
+                            let bindret = tcpsockobj.bind(&localaddr);
+                            if bindret < 0 {
+                                panic!("Unexpected failure in binding socket");
                             }
+
+                            sockfdobj.localaddr = Some(localaddr);
                         };
 
-                        let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                        let bindret = tcpsockobj.bind(&localaddr);
-                        if bindret < 0 {
-                            panic!("Unexpected failure in binding socket");
-                        }
                         let connectret = tcpsockobj.connect(remoteaddr);
                         if connectret < 0 {
                             let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
@@ -236,9 +258,7 @@ impl Cage {
                             return syscall_error(sockerrno, "connect", "The libc call to connect failed!");
                         }
 
-                        //openconnection to get newsockobj
                         sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(tcpsockobj).unwrap());
-                        sockfdobj.localaddr = Some(localaddr);
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
                         sockfdobj.state = ConnState::CONNECTED;
                         sockfdobj.errno = 0;
@@ -488,15 +508,6 @@ impl Cage {
                             let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
 
-                            let bindret = sockobj.bind(&sockfdobj.localaddr.unwrap());
-
-                            if bindret < 0 {
-                                let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(i) => return syscall_error(i, "recvfrom", "The libc call to bind failed!"),
-                                    Err(()) => panic!("Unknown errno value from socket bind returned!"),
-                                };
-                            }
-                            
                             //if the remoteaddr is set and addr is not, use remoteaddr
                             let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
                                 sockobj.recvfrom(buf, buflen, &mut sockfdobj.remoteaddr.as_mut())
@@ -593,13 +604,11 @@ impl Cage {
                             //create the socket and bind it before listening
                             let sockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
                             let bindret;
-                            if let Some(ad) = sockfdobj.localaddr {
-                                bindret = sockobj.bind(&ad);
-                            } else {
+                            if let None = sockfdobj.localaddr {
                                 bindret = sockobj.bind(&ladr);
-                            }
-                            if bindret < 0 {
-                                panic!("Unexpected failure in binding socket");
+                                if bindret < 0 {
+                                    panic!("Unexpected failure in binding socket");
+                                }
                             }
                             let listenret = sockobj.listen(5); //default backlog in repy for whatever reason, we replicate it
                             if listenret < 0 {
@@ -726,14 +735,6 @@ impl Cage {
 
                                 drop(fdtable);
                                 drop(mutmetadata);
-
-                                let bindret = sockobj.bind(&sockfdobj.localaddr.unwrap());
-                                if bindret < 0 {
-                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                        Ok(i) => return syscall_error(i, "recvfrom", "The libc call to bind failed!"),
-                                        Err(()) => panic!("Unknown errno value from socket bind returned!"),
-                                    };
-                                }
 
                                 match sockfdobj.domain {
                                     PF_INET => sockobj.accept(true),

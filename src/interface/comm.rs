@@ -100,7 +100,6 @@ pub struct SockaddrV6 {
 #[derive(Debug)]
 pub struct Socket {
     pub refcnt: i32,
-    bound: AtomicBool,
     raw_sys_fd: i32
 }
 
@@ -108,19 +107,15 @@ impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
-        Self {refcnt: 1, bound: AtomicBool::new(false), raw_sys_fd: fd}
+        Self {refcnt: 1, raw_sys_fd: fd}
     }
 
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
-        if let Ok(_) = self.bound.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed) {
-            let (finalsockaddr, addrlen) = match addr {
-                GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
-                GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
-            };
-            unsafe {libc::bind(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
-        } else {
-            0
-        }
+        let (finalsockaddr, addrlen) = match addr {
+            GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
+            GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+        };
+        unsafe {libc::bind(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
 
     pub fn connect(&self, addr: &GenSockaddr) -> i32 {
@@ -162,7 +157,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, bound: AtomicBool::new(false), raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
+                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
@@ -172,7 +167,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, bound: AtomicBool::new(false), raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
+                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
     }
@@ -188,7 +183,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, bound: AtomicBool::new(false), raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
+                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
@@ -200,7 +195,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, bound: AtomicBool::new(false), raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
+                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
     }
