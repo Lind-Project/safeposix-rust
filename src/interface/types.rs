@@ -30,7 +30,7 @@ pub struct FSData {
 pub struct StatData {
   pub st_dev: u64,
   pub st_ino: usize,
-  pub st_nlink: u32,
+  pub st_nlink: u64,
   pub st_mode: u32,
   pub st_uid: u32,
   pub st_gid: u32,
