@@ -117,7 +117,7 @@ impl Cage {
                     }
 
                     let mut mutmetadata = NET_METADATA.write().unwrap();
-                    let mut intent_to_rebind = sockfdobj.options & SO_REUSEPORT != 0;
+                    let mut intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
 
                     let newlocalport = if prereserved {
                         localaddr.port()
@@ -143,7 +143,7 @@ impl Cage {
                     let bindret = sockobj.bind(&newsockaddr);
 
                     if bindret < 0 {
-                        let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                        match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                             Ok(i) => return syscall_error(i, "sendto", "The libc call to bind failed!"),
                             Err(()) => panic!("Unknown errno value from socket connect returned!"),
                         };
@@ -151,8 +151,7 @@ impl Cage {
 
                     //we don't actually want/need to create the socket object now, that is done in listen or in connect or whatever
                     sockfdobj.localaddr = Some(newsockaddr);
-
-                                    
+ 
                     0
                 }
 
@@ -219,7 +218,7 @@ impl Cage {
                         match sockfdobj.localaddr {
                             Some(_) => return 0,
                             None => {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & SO_REUSEPORT != 0) {
+                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
                                     Ok(a) => a,
                                     Err(e) => return e,
                                 };
@@ -233,14 +232,16 @@ impl Cage {
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         //for TCP, actually create the internal socket object and connect it
-                        let tcpsockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                        let sid = Self::getsockobjid(&mut *sockfdobj);
+                        let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                        let sockobj = locksock.read().unwrap();
                         if let None = sockfdobj.localaddr {
-                            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & SO_REUSEPORT != 0) {
+                            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
 
-                            let bindret = tcpsockobj.bind(&localaddr);
+                            let bindret = sockobj.bind(&localaddr);
                             if bindret < 0 {
                                 panic!("Unexpected failure in binding socket");
                             }
@@ -248,7 +249,7 @@ impl Cage {
                             sockfdobj.localaddr = Some(localaddr);
                         };
 
-                        let connectret = tcpsockobj.connect(remoteaddr);
+                        let connectret = sockobj.connect(remoteaddr);
                         if connectret < 0 {
                             let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                 Ok(i) => i,
@@ -258,7 +259,6 @@ impl Cage {
                             return syscall_error(sockerrno, "connect", "The libc call to connect failed!");
                         }
 
-                        sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(tcpsockobj).unwrap());
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
                         sockfdobj.state = ConnState::CONNECTED;
                         sockfdobj.errno = 0;
@@ -318,7 +318,7 @@ impl Cage {
                             //bind the udp port as we do not bind them at bind_syscall, and this is
                             //the last possible moment to do so
                             if let None = sockfdobj.localaddr {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & SO_REUSEPORT != 0) {
+                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
                                     Ok(a) => a,
                                     Err(e) => return e,
                                 };
@@ -327,7 +327,7 @@ impl Cage {
 
                                 let bindret = sockobj.bind(&localaddr);
                                 if bindret < 0 {
-                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
                                         Ok(i) => return syscall_error(i, "sendto", "The libc call to bind failed!"),
                                         Err(()) => panic!("Unknown errno value from socket connect returned!"),
                                     };
@@ -582,7 +582,7 @@ impl Cage {
                                     porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
 
                                     if mutmetadata.listening_port_set.contains(&porttuple) {
-                                        match mutmetadata._get_available_tcp_port(ladr.addr().clone(), sockfdobj.domain, sockfdobj.options & SO_REUSEPORT != 0) {
+                                        match mutmetadata._get_available_tcp_port(ladr.addr().clone(), sockfdobj.domain, sockfdobj.options & (1 << SO_REUSEPORT) != 0) {
                                             Ok(port) => ladr.set_port(port),
                                             Err(i) => return i,
                                         }
@@ -590,7 +590,7 @@ impl Cage {
                                     }
                                 }
                                 None => {
-                                    ladr = match Self::assign_new_addr(sockfdobj, sockfdobj.domain == AF_INET6, sockfdobj.protocol & SO_REUSEPORT != 0) {
+                                    ladr = match Self::assign_new_addr(sockfdobj, sockfdobj.domain == AF_INET6, sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
                                         Ok(a) => a,
                                         Err(e) => return e,
                                     };
@@ -601,27 +601,25 @@ impl Cage {
 
                             sockfdobj.state = ConnState::LISTEN;
 
-                            //create the socket and bind it before listening
-                            let sockobj = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                            let bindret;
+                            //get or create the socket and bind it before listening
+                            let sid = Self::getsockobjid(sockfdobj);
+                            let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+                            let sockobj = locksock.read().unwrap();
                             if let None = sockfdobj.localaddr {
-                                bindret = sockobj.bind(&ladr);
+                                let bindret = sockobj.bind(&ladr);
                                 if bindret < 0 {
                                     panic!("Unexpected failure in binding socket");
                                 }
                             }
                             let listenret = sockobj.listen(5); //default backlog in repy for whatever reason, we replicate it
                             if listenret < 0 {
-                                panic!("Unexpected failure in listening on socket");
-                            }
-
-                            sockfdobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(sockobj) {
-                                Ok(id) => Some(id),
-                                Err(errnum) => {
-                                    mutmetadata.listening_port_set.remove(&mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT));
-                                    sockfdobj.state = ConnState::CONNECTED;
-                                    return errnum;
-                                }
+                                let lr = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(i) => syscall_error(i, "sendto", "The libc call to bind failed!"),
+                                    Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                                };
+                                mutmetadata.listening_port_set.remove(&mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT));
+                                sockfdobj.state = ConnState::CONNECTED;
+                                return lr;
                             };
                             return 0;
                         }
@@ -969,6 +967,7 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
+                        let optbit = 1 << optname;
                         match optname {
                             //indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
@@ -979,7 +978,7 @@ impl Cage {
                             }
                             //if the option is a stored binary option, just return it...
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
-                                if sockfdobj.options & optname == optname {
+                                if sockfdobj.options & optbit == optbit {
                                     return 1;
                                 }
                                 return 0;
@@ -1041,26 +1040,57 @@ impl Cage {
                         //return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
+                        let optbit = 1 << optname;
                         match optname {
                             SO_ACCEPTCONN | SO_TYPE | SO_SNDLOWAT | SO_RCVLOWAT => {
                                 let error_string = format!("Cannot set option using setsockopt. {}", optname);
                                 return syscall_error(Errno::ENOPROTOOPT, "setsockopt", &error_string);
                             }
-                            //if the option is a stored binary option, just return it...
-                            SO_LINGER | SO_KEEPALIVE | SO_REUSEPORT | SO_REUSEADDR => {
+                            SO_LINGER | SO_KEEPALIVE => {
                                 let mut newoptions = sockfdobj.options;
-                                if newoptions & optname == optname {
-                                    newoptions = newoptions - optname;
+                                if newoptions & optbit == optbit {
+                                    newoptions = newoptions - optbit;
                                     sockfdobj.options = newoptions;
-                                    return 1;
+
+                                    return 0;
                                 }
-                                
+
                                 //now let's set this if we were told to
                                 if optval != 0 {
                                     //optval should always be 1 or 0.
-                                    newoptions = newoptions | optname;
+                                    newoptions = newoptions | optbit;
                                 }
+
                                 sockfdobj.options = newoptions;
+                                return 0;
+                            }
+                            //if the option is a stored binary option, just return it...
+                            SO_REUSEPORT | SO_REUSEADDR => {
+                                let mut newoptions = sockfdobj.options;
+                                //now let's set this if we were told to
+                                if optval != 0 {
+                                    //optval should always be 1 or 0.
+                                    newoptions = newoptions | optbit;
+                                } else {
+                                    newoptions = newoptions & !optbit;
+                                }
+
+                                if newoptions != sockfdobj.options {
+                                    let sid = Self::getsockobjid(&mut *sockfdobj);
+                                    let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                                    let sockobj = locksock.read().unwrap();
+
+                                    let sockoptret = sockobj.setsockopt(SOL_SOCKET, optname, optval);
+                                    if sockoptret < 0 {
+                                        match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                            Ok(i) => return syscall_error(i, "setsockopt", "The libc call to setsockopt failed!"),
+                                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                                        };
+                                    }
+                                }
+
+                                sockfdobj.options = newoptions;
+
                                 return 0;
                             }
                             SO_SNDBUF => {

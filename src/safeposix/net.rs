@@ -91,13 +91,13 @@ impl NetMetadata {
         if protocol == IPPROTO_UDP {
             if port == 0 {
                 return self._get_available_udp_port(addr, domain, rebindability);
-            } else { //we check what is in use outside of this now, in bind_inner
+            } else {
                 muxed = mux_port(addr, port, domain, UDPPORT);
             }
         } else if protocol == IPPROTO_TCP {
             if port == 0 {
                 return self._get_available_tcp_port(addr, domain, rebindability);
-            } else { //we check what is in use outside of this now, in bind_inner
+            } else {
                 muxed = mux_port(addr, port, domain, TCPPORT);
             }
         } else {

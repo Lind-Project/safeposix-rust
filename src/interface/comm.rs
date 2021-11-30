@@ -199,6 +199,12 @@ impl Socket {
             }
         };
     }
+
+    pub fn setsockopt(&self, level: i32, optname: i32, optval: i32) -> i32 {
+        let valbuf = optval;
+        let sor =  unsafe{libc::setsockopt(self.raw_sys_fd, level, optname, (&valbuf as *const i32).cast::<libc::c_void>(), size_of::<i32>() as u32)};
+        sor
+    }
 }
 
 impl Drop for Socket {

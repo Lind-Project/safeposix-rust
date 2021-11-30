@@ -398,18 +398,18 @@ pub extern "C" fn lindrustfinalize() {
 pub mod dispatch_tests {
     use super::*;
     pub fn cagetest() {
-        lindrustinit();
+        //lindrustinit();
 
-        {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-        {println!("{:?}", FS_METADATA.read().unwrap().inodetable);};
-        dispatcher(1, FORK_SYSCALL, Arg {dispatch_ulong: 2_u64}, Arg {dispatch_int: 34132}, Arg {dispatch_int: 109384}, Arg {dispatch_int: -12341}, Arg {dispatch_int: -12341}, Arg {dispatch_int: 0});
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-        dispatcher(2, EXEC_SYSCALL, Arg {dispatch_ulong: 7_u64}, Arg {dispatch_int: 34132}, Arg {dispatch_int: 109384}, Arg {dispatch_int: -12341}, Arg {dispatch_int: -12341}, Arg {dispatch_int: 0});
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-        dispatcher(7, EXIT_SYSCALL, Arg {dispatch_ulong: 61_u64}, Arg {dispatch_int: 33987}, Arg {dispatch_int: 123452}, Arg {dispatch_int: -98493}, Arg {dispatch_int: -1}, Arg {dispatch_int: 0});
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
+        //{interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
+        //{println!("{:?}", CAGE_TABLE.read().unwrap());};
+        //{println!("{:?}", FS_METADATA.read().unwrap().inodetable);};
+        //dispatcher(1, FORK_SYSCALL, Arg {dispatch_ulong: 2_u64}, Arg {dispatch_int: 34132}, Arg {dispatch_int: 109384}, Arg {dispatch_int: -12341}, Arg {dispatch_int: -12341}, Arg {dispatch_int: 0});
+        //{println!("{:?}", CAGE_TABLE.read().unwrap());};
+        //dispatcher(2, EXEC_SYSCALL, Arg {dispatch_ulong: 7_u64}, Arg {dispatch_int: 34132}, Arg {dispatch_int: 109384}, Arg {dispatch_int: -12341}, Arg {dispatch_int: -12341}, Arg {dispatch_int: 0});
+        //{println!("{:?}", CAGE_TABLE.read().unwrap());};
+        //dispatcher(7, EXIT_SYSCALL, Arg {dispatch_ulong: 61_u64}, Arg {dispatch_int: 33987}, Arg {dispatch_int: 123452}, Arg {dispatch_int: -98493}, Arg {dispatch_int: -1}, Arg {dispatch_int: 0});
+        //{println!("{:?}", CAGE_TABLE.read().unwrap());};
 
-        lindrustfinalize();
+        //lindrustfinalize();
     }
 }
