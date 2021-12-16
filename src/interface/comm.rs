@@ -4,7 +4,10 @@
 
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::fs::read_to_string;
 extern crate libc;
+
+static NET_DEV_FILENAME: &str = "net_devices";
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GenSockaddr {
@@ -64,6 +67,60 @@ impl GenIpaddr {
         match self {
             GenIpaddr::V4(v4ip) => v4ip.s_addr == 0,
             GenIpaddr::V6(v6ip) => v6ip.s6_addr == [0; 16],
+        }
+    }
+    pub fn from_string(string: &str) -> Option<Self> {
+        let v4candidate: Vec<&str> = string.split('.').collect();
+        let v6candidate: Vec<&str> = string.split(':').collect();
+        let v4l = v4candidate.len();
+        let v6l = v6candidate.len();
+        if v4l == 1 && v6l > 1 {
+            //then we should try parsing it as an ipv6 address
+            let mut shortarr = [0u8; 16];
+            let mut shortindex = 0;
+            let mut encountered_doublecolon = false;
+            for short in v6candidate {
+
+                if short.is_empty() {
+                    //you can only have a double colon once in an ipv6 address
+                    if encountered_doublecolon {
+                        return None;
+                    }
+                    encountered_doublecolon = true;
+
+                    let numzeros = 8 - v6l + 1; //+1 to account for this empty string element
+                    if numzeros == 0 {
+                        return None;
+                    }
+                    shortindex += numzeros;
+                } else {
+                    //ok we can actually parse the element in this case
+                    if let Ok(b) = short.parse::<u16>() {
+                        //manually handle big endianness
+                        shortarr[2*shortindex] = (b >> 8) as u8;
+                        shortarr[2*shortindex + 1] = (b & 0xff) as u8;
+                        shortindex += 1;
+                    } else {
+                        return None;
+                    }
+                }
+            }
+            return Some(Self::V6(V6Addr{s6_addr: shortarr}));
+        } else if v4l == 4 && v6l == 1 {
+            //then we should try parsing it as an ipv4 address
+            let mut bytearr = [0u8; 4];
+            let mut shortindex = 0;
+            for byte in v4candidate {
+                if let Ok(b) = byte.parse::<u8>() {
+                    bytearr[shortindex] = b;
+                    shortindex += 1;
+                } else {
+                    return None;
+                }
+            }
+            return Some(Self::V4(V4Addr{s_addr: u32::from_ne_bytes(bytearr)}));
+        } else {
+            return None;
         }
     }
 }
@@ -211,4 +268,14 @@ impl Drop for Socket {
     fn drop(&mut self) {
         unsafe { libc::close(self.raw_sys_fd); }
     }
+}
+
+pub fn read_netdevs() -> Vec<GenIpaddr> {
+    let mut ips = vec!();
+    for net_device in read_to_string(NET_DEV_FILENAME).expect("No net_devices file present!").split('\n') {
+        if net_device == "" {continue;}
+        let genipopt = GenIpaddr::from_string(net_device);
+        ips.push(genipopt.expect("Could not parse device ip address from net_devices file"));
+    }
+    return ips;
 }

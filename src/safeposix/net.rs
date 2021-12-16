@@ -13,6 +13,11 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface:
         }))
     ); //we want to check if fs exists before doing a blank init, but not for now
 
+//A list of all network devices present on the machine
+//It is populated from a file that should be present prior to running rustposix, see
+//the implementation of read_netdevs for specifics
+pub static NET_DEVICES_LIST: interface::RustLazyGlobal<Vec<interface::GenIpaddr>> = interface::RustLazyGlobal::new(|| interface::read_netdevs());
+
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum PortType {
     IPv4UDP, IPv4TCP, IPv6UDP, IPv6TCP
@@ -42,17 +47,42 @@ pub const UDPPORT: bool = false;
 
 impl NetMetadata {
     fn port_in_use(&self, tup: &(interface::GenIpaddr, u16, PortType)) -> bool {
-        if self.used_port_set.contains_key(tup) {return true;}
-        let mut tupclone = (*tup).clone();
-        match tupclone.2 {
-            PortType::IPv4UDP | PortType::IPv4TCP => {
-                tupclone.0 = interface::GenIpaddr::V4(interface::V4Addr::default());
+        if tup.0.is_unspecified() {
+            let mut tupclone = (*tup).clone();
+            for interface_addr in &*NET_DEVICES_LIST {
+                //ipv4 and ipv6 contain separate port sets so we can rebind on 0 for one protocol if it's bound on the other
+                match tupclone.2 {
+                    PortType::IPv4UDP | PortType::IPv4TCP => {
+                        if let interface::GenIpaddr::V4(_) = interface_addr {
+                          tupclone.0 = *interface_addr;
+                        } else {
+                            continue;
+                        }
+                    }
+                    PortType::IPv6UDP | PortType::IPv6TCP => {
+                        if let interface::GenIpaddr::V6(_) = interface_addr {
+                          tupclone.0 = *interface_addr;
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+                if self.used_port_set.contains_key(&tupclone) {return true;}
             }
-            PortType::IPv6UDP | PortType::IPv6TCP => {
-                tupclone.0 = interface::GenIpaddr::V6(interface::V6Addr::default());
+            return false;
+        } else {
+            if self.used_port_set.contains_key(tup) {return true;}
+            let mut tupclone = (*tup).clone();
+            match tupclone.2 {
+                PortType::IPv4UDP | PortType::IPv4TCP => {
+                    tupclone.0 = interface::GenIpaddr::V4(interface::V4Addr::default());
+                }
+                PortType::IPv6UDP | PortType::IPv6TCP => {
+                    tupclone.0 = interface::GenIpaddr::V6(interface::V6Addr::default());
+                }
             }
+            self.used_port_set.contains_key(&tupclone)
         }
-        self.used_port_set.contains_key(&tupclone)
     }
     pub fn _get_available_udp_port(&mut self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
