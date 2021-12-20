@@ -125,7 +125,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::AdvisoryLock::new()});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -401,6 +401,7 @@ impl Cage {
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -412,6 +413,7 @@ impl Cage {
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -425,6 +427,7 @@ impl Cage {
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
         //compose device number into u64
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = makedev(&inodeobj.dev);
         statbuf.st_size = inodeobj.size;
     }
@@ -437,6 +440,7 @@ impl Cage {
         statbuf.st_nlink = 1;
         statbuf.st_uid = DEFAULT_UID;
         statbuf.st_gid = DEFAULT_GID;
+        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = 0;
         statbuf.st_blksize = 0;
@@ -1628,7 +1632,7 @@ impl Cage {
                 return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
             };
 
-            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::AdvisoryLock::new()});
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
 

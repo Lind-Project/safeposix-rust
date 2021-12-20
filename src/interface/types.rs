@@ -34,6 +34,7 @@ pub struct StatData {
   pub st_nlink: u32,
   pub st_uid: u32,
   pub st_gid: u32,
+  pub __pad0: i32,
   pub st_rdev: u64,
   pub st_size: usize,
   pub st_blksize: isize,
