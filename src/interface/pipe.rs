@@ -94,8 +94,9 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock().unwrap();
 
         while bytes_read < length {
-            if (read_end.len() == 0) & self.eof.load(Ordering::Relaxed) { break; }
-            let bytes_to_read = min(length, bytes_read + read_end.len());
+            let pipe_space = read_end.len();
+            if (pipe_space == 0) & self.eof.load(Ordering::Relaxed) { break; }
+            let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
         }
