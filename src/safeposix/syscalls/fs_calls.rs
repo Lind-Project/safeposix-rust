@@ -397,11 +397,10 @@ impl Cage {
     }
 
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
-        statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
-        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -409,11 +408,10 @@ impl Cage {
     }
 
     fn _istat_helper_dir(inodeobj: &DirectoryInode, statbuf: &mut StatData) {
-        statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
-        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = inodeobj.size;
         statbuf.st_blksize = 0;
@@ -422,12 +420,11 @@ impl Cage {
 
     fn _istat_helper_chr_file(inodeobj: &DeviceInode, statbuf: &mut StatData) {
         statbuf.st_dev = 5;
-        statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
         statbuf.st_gid = inodeobj.gid;
         //compose device number into u64
-        statbuf.__pad0 = 0;
         statbuf.st_rdev = makedev(&inodeobj.dev);
         statbuf.st_size = inodeobj.size;
     }
@@ -436,11 +433,10 @@ impl Cage {
     fn _stat_alt_helper(&self, statbuf: &mut StatData, inodenum: usize, metadata: &FilesystemMetadata) {
         statbuf.st_dev = metadata.dev_id;
         statbuf.st_ino = inodenum;
-        statbuf.st_nlink = 1;
         statbuf.st_mode = 49590; //r and w priveliged 
+        statbuf.st_nlink = 1;
         statbuf.st_uid = DEFAULT_UID;
         statbuf.st_gid = DEFAULT_GID;
-        statbuf.__pad0 = 0;
         statbuf.st_rdev = 0;
         statbuf.st_size = 0;
         statbuf.st_blksize = 0;
