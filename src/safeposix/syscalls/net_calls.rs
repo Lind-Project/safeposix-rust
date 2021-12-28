@@ -170,9 +170,7 @@ impl Cage {
         } else {
             let mut mutmetadata = NET_METADATA.write().unwrap();
 
-            //in lieu of getmyip we just always use 0.0.0.0 or the ipv6 equivalent because we have
-            //no kernel-respecting way of accessing the actual interface addresses for ipv6 for now
-            //(netlink for now is a big no go)
+            //This is the specified behavior for the berkeley sockets API
             let retval = if isv6 {
                 let mut newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
                 let addr = interface::GenIpaddr::V6(interface::V6Addr::default());

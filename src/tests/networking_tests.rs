@@ -8,7 +8,7 @@ pub mod net_tests {
     pub fn net_tests() {
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
-        //ut_lind_net_bind_on_zero();
+        ut_lind_net_bind_on_zero();
         ut_lind_net_connect_basic_udp();
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
@@ -18,7 +18,7 @@ pub mod net_tests {
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
         ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple(); //not working right now
+        ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
     }
 
@@ -404,6 +404,8 @@ pub mod net_tests {
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
         assert_ne!(retsocket, socket);
+
+        assert_eq!(cage.close_syscall(serversockfd), 0);
         
         thread.join().unwrap();
         
