@@ -20,5 +20,3 @@ ringbuf = "0.2.6"
 [[bin]]
 name = "lind_fs_utils"
 path = "src/tools/fs_utils.rs"
-test = false
-harness = false
