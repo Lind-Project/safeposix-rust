@@ -144,8 +144,8 @@ impl Cage {
 
                     if bindret < 0 {
                         match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                            Ok(i) => return syscall_error(i, "sendto", "The libc call to bind failed!"),
-                            Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                            Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind failed!");},
+                            Err(()) => panic!("Unknown errno value from socket bind returned!"),
                         };
                     }
 
@@ -241,7 +241,10 @@ impl Cage {
 
                             let bindret = sockobj.bind(&localaddr);
                             if bindret < 0 {
-                                panic!("Unexpected failure in binding socket");
+                                match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
+                                    Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                                };
                             }
 
                             sockfdobj.localaddr = Some(localaddr);
@@ -249,12 +252,11 @@ impl Cage {
 
                         let connectret = sockobj.connect(remoteaddr);
                         if connectret < 0 {
-                            let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                Ok(i) => i,
+                            match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                Ok(i) => {return syscall_error(i, "connect", "The libc call to connect failed!");},
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
 
-                            return syscall_error(sockerrno, "connect", "The libc call to connect failed!");
                         }
 
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
@@ -326,8 +328,8 @@ impl Cage {
                                 let bindret = sockobj.bind(&localaddr);
                                 if bindret < 0 {
                                     match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                        Ok(i) => return syscall_error(i, "sendto", "The libc call to bind failed!"),
-                                        Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                                        Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind within sendto failed!");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within sendto returned!"),
                                     };
                                 }
                                 sockfdobj.localaddr = Some(localaddr);
@@ -342,11 +344,10 @@ impl Cage {
                             let sockret = sockobj.sendto(buf, buflen, Some(dest_addr));
 
                             if sockret < 0 {
-                                let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(i) => i,
-                                    Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(i) => {return syscall_error(i, "sendto", "The libc call to sendto failed!");},
+                                    Err(()) => panic!("Unknown errno value from socket sendto returned!"),
                                 };
-                                return syscall_error(sockerrno, "sendto", "The libc call to sendto failed!");
                             } else {
                                 return sockret;
                             }
@@ -388,12 +389,10 @@ impl Cage {
 
                             let retval = sockobj.sendto(buf, buflen, None);
                             if retval < 0 {
-                                let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(i) => i,
-                                    Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(i) => {return syscall_error(i, "send", "The libc call to sendto failed!");},
+                                    Err(()) => panic!("Unknown errno value from socket sendto returned!"),
                                 };
-
-                                return syscall_error(sockerrno, "send", "The libc call to sendto failed!");
                             } else {
                                 return retval;
                             }
@@ -402,7 +401,7 @@ impl Cage {
                         IPPROTO_UDP => {
                             let remoteaddr = match &sockfdobj.remoteaddr {
                                 Some(x) => x.clone(),
-                                None => return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected"),
+                                None => {return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");},
                             };
 
                             //drop fdtable lock so as not to deadlock, this should not introduce
@@ -479,12 +478,11 @@ impl Cage {
                                     return (buflen - buflenleft) as i32;
                                 }
 
-                                let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(i) => i,
-                                    Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
+                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                                 };
 
-                                return syscall_error(sockerrno, "recvfrom", "Internal call to recvfrom failed");
                             }
 
                             let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
@@ -514,12 +512,11 @@ impl Cage {
                             };
 
                             if retval < 0 {
-                                let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(i) => i,
-                                    Err(()) => panic!("Unknown errno value from socket send returned!"),
+                                match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from libc recvfrom");},
+                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                                 };
                                 
-                                return syscall_error(sockerrno, "recvfrom", "syscall error from libc recvfrom");
                             } else {
                                 return retval;
                             }
@@ -606,14 +603,17 @@ impl Cage {
                             if let None = sockfdobj.localaddr {
                                 let bindret = sockobj.bind(&ladr);
                                 if bindret < 0 {
-                                    panic!("Unexpected failure in binding socket");
+                                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                        Ok(i) => {return syscall_error(i, "listen", "The libc call to bind within listen failed");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
+                                    };
                                 }
                             }
                             let listenret = sockobj.listen(5); //default backlog in repy for whatever reason, we replicate it
                             if listenret < 0 {
                                 let lr = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(i) => syscall_error(i, "sendto", "The libc call to bind failed!"),
-                                    Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                                    Ok(i) => syscall_error(i, "listen", "The libc call to listen failed!"),
+                                    Err(()) => panic!("Unknown errno value from socket listen returned!"),
                                 };
                                 mutmetadata.listening_port_set.remove(&mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT));
                                 sockfdobj.state = ConnState::CONNECTED;
@@ -740,8 +740,8 @@ impl Cage {
                             };
 
                             if let Err(errval) = acceptedresult {
-                                let accerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                    Ok(e) => return syscall_error(e, "accept", "host system accept call failed"),
+                                match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                                    Ok(e) => {return syscall_error(e, "accept", "host system accept call failed");},
                                     Err(()) => panic!("Unknown errno value from socket send returned!"),
                                 };
                             }
@@ -1081,7 +1081,7 @@ impl Cage {
                                     let sockoptret = sockobj.setsockopt(SOL_SOCKET, optname, optval);
                                     if sockoptret < 0 {
                                         match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
-                                            Ok(i) => return syscall_error(i, "setsockopt", "The libc call to setsockopt failed!"),
+                                            Ok(i) => {return syscall_error(i, "setsockopt", "The libc call to setsockopt failed!");},
                                             Err(()) => panic!("Unknown errno value from setsockopt returned!"),
                                         };
                                     }
@@ -1157,7 +1157,7 @@ impl Cage {
                     let addr = match sockfdobj.domain {
                         AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
                         AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
-                        _ => { panic!("Unknown domain set"); }
+                        _ => { unreachable!() }
                     };
                     ret_addr.set_addr(addr);
                     ret_addr.set_port(0);
@@ -1406,7 +1406,7 @@ impl Cage {
             let innersockaddr = interface::SockaddrV6{sin6_family: newdomain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
             interface::GenSockaddr::V6(innersockaddr)
         } else {
-            panic!("Unknown domain set");
+            unreachable!();
         };
     
         let mut mutmetadata = NET_METADATA.write().unwrap();
@@ -1441,7 +1441,13 @@ impl Cage {
             let acceptor = interface::helper_thread(move || {
                 let accret = thishandle2.accept_syscall(sock1fd, &mut garbage_remote);
                 if accret < 0 {
-                    panic!("Accept syscall failed unexpectedly in socketpair");
+                    let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                        Ok(i) => i,
+                        Err(()) => panic!("Unknown errno value from accept within socketpair returned!"),
+                    };
+                    thishandle2.close_syscall(sock1fd);
+                    thishandle2.close_syscall(sock2fd);
+                    return syscall_error(sockerrno, "socketpair", "The libc call to accept within socketpair failed!");
                 }
                 thishandle2.close_syscall(sock1fd);
                 return accret;
@@ -1449,7 +1455,13 @@ impl Cage {
     
             let connret = this.connect_syscall(sock2fd, &addr);
             if connret < 0 {
-                panic!("Accept syscall failed unexpectedly in socketpair");
+                let sockerrno = match Errno::from_discriminant(unsafe{*libc::__errno_location()} as i32) {
+                    Ok(i) => i,
+                    Err(()) => panic!("Unknown errno value from connect within socketpair returned!"),
+                };
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return syscall_error(sockerrno, "socketpair", "The libc call to connect within socketpair failed!");
             }
     
             let otherfd = acceptor.join().unwrap();
@@ -1506,7 +1518,7 @@ impl Cage {
                 return conn2ret;
             }
         } else {
-            panic!("Unkown socktype set");
+            unreachable!();
         }
         return 0;
     }
