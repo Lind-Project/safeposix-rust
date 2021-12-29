@@ -1737,9 +1737,10 @@ impl Cage {
             return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
         }
         
-        for value in cwd.bytes() {
-            (&(*buf)).push(value);
-        }
+        let slice = unsafe{std::slice::from_raw_parts_mut(buf, bufsize)};
+        let bytes = cwd.bytes()
+        for i in 0..cwd.len() {slice[i] = bytes[i];}
+
         0 //getcwd has succeeded!;
     }
 }
