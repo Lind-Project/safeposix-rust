@@ -894,19 +894,19 @@ mod fs_tests {
     pub fn ut_lind_fs_dir_chdir_getcwd() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-        let needed = "/subdir1\0".as_bytes().to_vec().len();
+        const needed = "/subdir1\0".as_bytes().to_vec().len();
         let mut buf = [u8; needed].as_ptr();
 
-        assert_eq!(cage.getcwd_syscall(buf, needed-1), 0);
+        assert_eq!(cage.getcwd_syscall(buf, (needed-1).try_into().unwrap()), 0);
         assert_eq!(String::from_utf8_lossy(buf), "/\0");
 
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
 
-        assert_eq!(cage.getcwd_syscall(buf, 0), Errno::ERANGE);
-        assert_eq!(cage.getcwd_syscall(buf, needed-1), Errno::ERANGE);
-        assert_eq!(cage.getcwd_syscall(buf, needed), 0);
+        assert_eq!(cage.getcwd_syscall(buf, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(buf, (needed-1).try_into().unwrap()), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(buf, needed.try_into().unwrap()), 0);
         assert_eq!(String::from_utf8_lossy(buf), "/subdir1\0");
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
