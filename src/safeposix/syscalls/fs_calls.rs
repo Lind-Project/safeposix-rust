@@ -1730,16 +1730,17 @@ impl Cage {
     //------------------------------------GETCWD SYSCALL------------------------------------
     
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-        let cwd = format!("{}{}", self.cwd.read().unwrap().into_os_string().into_string().unwrap(), "\0");
-        
+        let cwd: String = format!("{}{}", self.cwd.read().unwrap().into_os_string().into_string().unwrap(), "\0");
+        let bytes: Vec<u8> = cwd.as_bytes().to_vec();
+        let length = bytes.len();
+
         use std::convert::TryInto;
-        if bufsize < cwd.len().try_into().unwrap() {
+        if bufsize < length.try_into().unwrap() {
             return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
         }
         
-        let slice = unsafe{std::slice::from_raw_parts_mut(buf, cwd.len())};
-        let chars: Vec<u8> = cwd.chars().collect();
-        for i in 0..cwd.len() {slice[i] = chars[i];}
+        let slice = unsafe{std::slice::from_raw_parts_mut(buf, length)};
+        for i in 0..length {slice[i] = bytes[i];}
 
         0 //getcwd has succeeded!;
     }
