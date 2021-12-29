@@ -1738,7 +1738,7 @@ impl Cage {
         }
         
         for value in cwd.bytes() {
-            (*buf).push(value);
+            (&(*buf)).push(value);
         }
         0 //getcwd has succeeded!;
     }
