@@ -34,6 +34,7 @@ mod fs_tests {
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
+        ut_lind_fs_dir_chdir_getcwd();
 
         persistencetest();
         rdwrtest();
@@ -886,6 +887,28 @@ mod fs_tests {
         }
 
         assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_dir_chdir_getcwd() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let needed = "/subdir1\0".as_bytes().to_vec().len();
+        let mut buf = [u8; needed].as_ptr();
+
+        assert_eq!(cage.getcwd_syscall(buf, needed-1), 0);
+        assert_eq!(String::from_utf8_lossy(buf), "/\0");
+
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+
+        assert_eq!(cage.getcwd_syscall(buf, 0), Errno::ERANGE);
+        assert_eq!(cage.getcwd_syscall(buf, needed-1), Errno::ERANGE);
+        assert_eq!(cage.getcwd_syscall(buf, needed), 0);
+        assert_eq!(String::from_utf8_lossy(buf), "/subdir1\0");
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
