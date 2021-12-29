@@ -971,15 +971,17 @@ impl Cage {
                             SO_ACCEPTCONN => {
                                 if sockfdobj.state == ConnState::LISTEN {
                                     *optval = 1;
+                                } else {
+                                    *optval = 0;
                                 }
-                                *optval = 0;
                             }
                             //if the option is a stored binary option, just return it...
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
                                 if sockfdobj.options & optbit == optbit {
                                     *optval = 1;
+                                } else {
+                                    *optval = 0;
                                 }
-                                *optval = 0;
                             }
                             //handling the ignored buffer settings:
                             SO_SNDBUF => {
@@ -1046,32 +1048,25 @@ impl Cage {
                                 return syscall_error(Errno::ENOPROTOOPT, "setsockopt", &error_string);
                             }
                             SO_LINGER | SO_KEEPALIVE => {
-                                let mut newoptions = sockfdobj.options;
-                                if newoptions & optbit == optbit {
-                                    newoptions = newoptions - optbit;
-                                    sockfdobj.options = newoptions;
-
-                                    return 0;
-                                }
-
-                                //now let's set this if we were told to
-                                if optval != 0 {
+                                if optval == 0 {
+                                    sockfdobj.options &= !optbit;
+                                } else {
                                     //optval should always be 1 or 0.
-                                    newoptions = newoptions | optbit;
+                                    sockfdobj.options |= optbit;
                                 }
 
-                                sockfdobj.options = newoptions;
+
                                 return 0;
                             }
-                            //if the option is a stored binary option, just return it...
+
                             SO_REUSEPORT | SO_REUSEADDR => {
                                 let mut newoptions = sockfdobj.options;
                                 //now let's set this if we were told to
                                 if optval != 0 {
                                     //optval should always be 1 or 0.
-                                    newoptions = newoptions | optbit;
+                                    newoptions |= optbit;
                                 } else {
-                                    newoptions = newoptions & !optbit;
+                                    newoptions &= !optbit;
                                 }
 
                                 if newoptions != sockfdobj.options {
@@ -1102,7 +1097,7 @@ impl Cage {
                             }
                             //should always be one -- can only handle it being 1
                             SO_OOBINLINE => {
-                                assert_eq!(optval, 1);
+                                assert_eq!(optval, 1); //TODO: change this to return an error rather than crash all of lind
                                 return 0;
                             }
                             _ => {
