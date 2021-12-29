@@ -1730,14 +1730,14 @@ impl Cage {
     //------------------------------------GETCWD SYSCALL------------------------------------
     
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-        let cwd = self.cwd.read().unwrap().into_os_string().into_string();
+        let cwd = self.cwd.read().unwrap().into_os_string().into_string().unwrap();
 
         //+1 foor null terminator
-        if bufsize < cwd.len() + 1 {
+        if bufsize < (cwd.len() + 1).try_into().unwrap() {
             return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
         }
 
-        *buf = cwd;
+        *buf = cwd.chars().collect();
         0 //getcwd has succeeded!;
     }
 }
