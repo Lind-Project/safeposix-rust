@@ -8,7 +8,7 @@ mod fs_tests {
 
     #[test]
     pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        /*ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_chmod();
         ut_lind_fs_dir_chdir();
@@ -33,7 +33,7 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
+        ut_lind_fs_getdents();*/
         ut_lind_fs_dir_chdir_getcwd();
 
         persistencetest();
@@ -869,7 +869,8 @@ mod fs_tests {
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
-        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 48);
+        use std::convert::TryInto;
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize.try_into().unwrap()), 48);
 
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;
@@ -894,20 +895,26 @@ mod fs_tests {
     pub fn ut_lind_fs_dir_chdir_getcwd() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-        const needed = "/subdir1\0".as_bytes().to_vec().len();
-        let mut buf = [u8; needed].as_ptr();
+        let needed = "/subdir1\0".as_bytes().to_vec().len();
 
-        assert_eq!(cage.getcwd_syscall(buf, (needed-1).try_into().unwrap()), 0);
-        assert_eq!(String::from_utf8_lossy(buf), "/\0");
+        use std::convert::TryInto;
+        let needed_u32: u32 = needed.try_into().unwrap();
+
+        let mut buf = vec![0u8; needed];
+        let bufptr: *mut u8 = &mut buf[0];
+
+        assert_eq!(cage.chdir_syscall("/"), 0);
+        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32-1), 0);
+        assert_eq!(String::from_utf8_lossy(&buf), "/\0");
 
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
 
-        assert_eq!(cage.getcwd_syscall(buf, 0), -(Errno::ERANGE as i32));
-        assert_eq!(cage.getcwd_syscall(buf, (needed-1).try_into().unwrap()), -(Errno::ERANGE as i32));
-        assert_eq!(cage.getcwd_syscall(buf, needed.try_into().unwrap()), 0);
-        assert_eq!(String::from_utf8_lossy(buf), "/subdir1\0");
+        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32-1), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32), 0);
+        assert_eq!(String::from_utf8_lossy(&buf), "/subdir1\0");
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
