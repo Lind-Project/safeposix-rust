@@ -671,8 +671,6 @@ impl Cage {
                     if let None = objectid {} else {
                         mutmetadata.socket_object_table.remove(&objectid.unwrap());
                     }
-                    //hmm but what if there are multiple fds referring to the same socket that need
-                    //to be released?????????????????
                     sockfdobj.state = ConnState::NOTCONNECTED;
                 }
             } else {return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");}
@@ -775,11 +773,6 @@ impl Cage {
 
                             *addr = remote_addr; //populate addr with what address it connected to
                             let domain = sockfdobj.domain;
-
-                            //THIS DEADLOCKS IF WE DON'T DROP THE FDTABLE HERE...
-                            //we need to figure out a way to make sure that the loop doesn't break when these are dropped, though
-                            //if we drop everything before getting into the loop, we need to make sure that the fd is a sock everytime
-                            //and probably that it hasn't changed in the time that it took to drop the lock to the table and regain it...
 
                             let id = newsockobj.socketobjectid.clone();
 
