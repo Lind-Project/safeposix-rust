@@ -1733,11 +1733,13 @@ impl Cage {
         let cwd = format!("{}{}", self.cwd.read().unwrap().into_os_string().into_string().unwrap(), "\0");
         
         use std::convert::TryInto;
-        if bufsize < (cwd.len() + 1).try_into().unwrap() {
+        if bufsize < cwd.len().try_into().unwrap() {
             return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
         }
         
-        buf.push(cwd);
+        for value in cwd.bytes() {
+            (*buf).push(value);
+        }
         0 //getcwd has succeeded!;
     }
 }
