@@ -271,6 +271,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             if rv >= 0 {
                 interface::copy_out_intptr(arg4, sockval);
             }
+            //we take it as a given that the length is 4 both in and out
             rv
         }
 
