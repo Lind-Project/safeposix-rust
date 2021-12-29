@@ -1738,7 +1738,7 @@ impl Cage {
         }
         
         let slice = unsafe{std::slice::from_raw_parts_mut(buf, cwd.len())};
-        let chars = cwd.chars().collect();
+        let chars: Vec<u8> = cwd.chars().collect();
         for i in 0..cwd.len() {slice[i] = chars[i];}
 
         0 //getcwd has succeeded!;
