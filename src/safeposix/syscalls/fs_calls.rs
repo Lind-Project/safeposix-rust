@@ -1726,18 +1726,18 @@ impl Cage {
             syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor")
         }
     }
-}
 
-//------------------------------------GETCWD SYSCALL------------------------------------
+    //------------------------------------GETCWD SYSCALL------------------------------------
     
-pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-    let cwd_container = self.cwd.write().unwrap();
+    pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
+        let cwd_container = self.cwd.write().unwrap();
 
-    //+1 foor null terminator
-    if bufsize < cwd_container.len() + 1 {
-        return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+        //+1 foor null terminator
+        if bufsize < cwd_container.len() + 1 {
+            return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+        }
+
+        *buf = self.cwd.write().unwrap();
+        0 //getcwd has succeeded!;
     }
-
-    *buf = self.cwd.write().unwrap();
-    0 //getcwd has succeeded!;
 }
