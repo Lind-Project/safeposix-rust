@@ -904,7 +904,9 @@ mod fs_tests {
         let bufptr: *mut u8 = &mut buf[0];
 
         assert_eq!(cage.chdir_syscall("/"), 0);
-        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32-1), 0);
+        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, 1), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, 2), 0);
         assert_eq!(String::from_utf8_lossy(&buf), "/\0");
 
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
