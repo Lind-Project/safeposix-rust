@@ -278,7 +278,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SETSOCKOPT_SYSCALL => {
             let sockval;
             if !interface::arg_nullity(&arg4) {
-                if get_onearg!(interface::get_int(arg5)) != 4 {
+                if get_onearg!(interface::get_uint(arg5)) != 4 {
                     return syscall_error(Errno::EINVAL, "setsockopt", "Invalid optlen passed");
                 }
                 sockval = interface::get_int_from_intptr(arg4);
