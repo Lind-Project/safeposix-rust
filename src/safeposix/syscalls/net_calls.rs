@@ -950,7 +950,7 @@ impl Cage {
         return retval; //package out fd_set?
     }
 
-    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32) -> i32 {
+    pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -970,36 +970,36 @@ impl Cage {
                             //indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
                                 if sockfdobj.state == ConnState::LISTEN {
-                                    return 1;
+                                    *optval = 1;
                                 }
-                                return 0;
+                                *optval = 0;
                             }
                             //if the option is a stored binary option, just return it...
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
                                 if sockfdobj.options & optbit == optbit {
-                                    return 1;
+                                    *optval = 1;
                                 }
-                                return 0;
+                                *optval = 0;
                             }
                             //handling the ignored buffer settings:
                             SO_SNDBUF => {
-                                return sockfdobj.sndbuf;
+                                *optval = sockfdobj.sndbuf;
                             }
                             SO_RCVBUF => {
-                                return sockfdobj.rcvbuf;
+                                *optval = sockfdobj.rcvbuf;
                             }
                             //returning the type if asked
                             SO_TYPE => {
-                                return sockfdobj.socktype;
+                                *optval = sockfdobj.socktype;
                             }
                             //should always be true
                             SO_OOBINLINE => {
-                                return 1;
+                                *optval = 1;
                             }
                             SO_ERROR => {
                                 let tmp = sockfdobj.errno;
                                 sockfdobj.errno = 0;
-                                return tmp;
+                                *optval = tmp;
                             }
                             _ => {
                                 return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "unknown optname passed into syscall");
@@ -1016,6 +1016,7 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "getsockopt", "the provided file descriptor is invalid");
         }
+        return 0;
     }
 
     //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);

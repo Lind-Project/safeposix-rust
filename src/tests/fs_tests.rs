@@ -45,7 +45,6 @@ pub mod fs_tests {
         rdwrtest();
         prdwrtest();
         chardevtest();
-        dispatch_tests::cagetest();
     }
 
 
