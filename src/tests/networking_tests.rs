@@ -733,7 +733,6 @@ pub mod net_tests {
         
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
-        println!("FORKED");
         let thread = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
@@ -742,7 +741,6 @@ pub mod net_tests {
             
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
-            println!("RECV");
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -756,7 +754,6 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(50));
         let mut buf2 = str2cbuf("test");
         assert_eq!(cage.sendto_syscall(clientfd, buf2, 4, 0, &socket), 4);
-        println!("SEND");
         let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(sendsockfd2 > 0);
 
