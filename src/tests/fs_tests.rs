@@ -869,8 +869,7 @@ mod fs_tests {
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
-        use std::convert::TryInto;
-        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize.try_into().unwrap()), 48);
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize as u32), 48);
 
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;
@@ -897,8 +896,7 @@ mod fs_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let needed = "/subdir1\0".as_bytes().to_vec().len();
 
-        use std::convert::TryInto;
-        let needed_u32: u32 = needed.try_into().unwrap();
+        let needed_u32: u32 = needed as u32;
 
         let mut buf = vec![0u8; needed];
         let bufptr: *mut u8 = &mut buf[0];
