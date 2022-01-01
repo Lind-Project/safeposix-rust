@@ -905,7 +905,7 @@ mod fs_tests {
         assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
         assert_eq!(cage.getcwd_syscall(bufptr, 1), -(Errno::ERANGE as i32));
         assert_eq!(cage.getcwd_syscall(bufptr, 2), 0);
-        assert_eq!(String::from_utf8_lossy(&buf), "/\0\0\0\0\0\0\0\0");
+        assert_eq!(String::from_utf8(buf).unwrap(), "/\0\0\0\0\0\0\0\0");
 
         cage.mkdir_syscall("/subdir1", S_IRWXA);
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
@@ -914,7 +914,7 @@ mod fs_tests {
         assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
         assert_eq!(cage.getcwd_syscall(bufptr, needed_u32-1), -(Errno::ERANGE as i32));
         assert_eq!(cage.getcwd_syscall(bufptr, needed_u32), 0);
-        assert_eq!(String::from_utf8_lossy(&buf), "/subdir1\0");
+        assert_eq!(String::from_utf8(buf).unwrap(), "/subdir1\0");
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
