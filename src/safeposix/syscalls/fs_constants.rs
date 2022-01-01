@@ -6,12 +6,17 @@ use crate::interface;
 
 // Define constants using static or const
 // Imported into fs_calls file
+pub const DT_UNKNOWN: u8 = 0;
 
 pub const STARTINGFD: i32 = 0;
 pub const MAXFD: i32 = 1024;
+pub const STARTINGPIPE: i32 = 0;
+pub const MAXPIPE: i32 = 1024;
 
 pub const ROOTDIRECTORYINODE: usize = 1;
 pub const STREAMINODE: usize = 2;
+
+pub const PIPE_CAPACITY: usize = 65536;
 
 pub const F_OK: u32 = 0;
 pub const X_OK: u32 = 1;
@@ -36,9 +41,6 @@ pub const O_ASYNC: i32 = 0o20000;
 pub const O_CLOEXEC: i32 = 0o2000000;
 
 pub const DEFAULTTIME: u64 = 1323630836;
-
-pub const DEFAULT_UID: u32 = 1000;
-pub const DEFAULT_GID: u32 = 1000;
 
 //Standard flag combinations
 pub const S_IRWXA: u32 = 0o777;
@@ -120,47 +122,6 @@ pub const RANDOMDEVNO: DevNo = DevNo {major: 1, minor: 8};
 pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
 
 pub const FILEDATAPREFIX: &str = "linddata.";
-
-//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
-#[derive(Eq, PartialEq, Default)]
-#[repr(C)]
-pub struct StatData {
-  pub st_dev: u64,
-  pub st_ino: usize,
-  pub st_mode: u32,
-  pub st_nlink: u32,
-  pub st_uid: u32,
-  pub st_gid: u32,
-  pub st_rdev: u64,
-  pub st_size: usize,
-  pub st_blksize: isize,
-  pub st_blocks: usize,
-  //currently we don't populate or care about the time bits here
-  pub st_atim: (u64, u64),
-  pub st_mtim: (u64, u64),
-  pub st_ctim: (u64, u64)
-}
-
-//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
-#[derive(Eq, PartialEq, Default)]
-#[repr(C)]
-pub struct FSData {
-  pub f_type: u64,
-  pub f_bsize: u64,
-  pub f_blocks: u64,
-  pub f_bfree: u64,
-  pub f_bavail: u64,
-  //total files in the file system -- should be infinite
-  pub f_files: u64,
-  //free files in the file system -- should be infinite
-  pub f_ffiles: u64,
-  pub f_fsid: u64,
-  //not really a limit for naming, but 254 works
-  pub f_namelen: u64,
-  //arbitrary val for blocksize as well
-  pub f_frsize: u64,
-  pub f_spare: [u8; 32]
-}
 
 pub fn is_reg(mode: u32) -> bool {
   (mode as i32 & S_FILETYPEFLAGS) == S_IFREG

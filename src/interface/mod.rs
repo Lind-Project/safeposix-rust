@@ -5,11 +5,15 @@
 
 mod comm;
 mod file;
+mod pipe;
 mod misc;
 mod timer;
-mod types;
+pub mod errnos;
+pub mod types;
 pub use comm::*;
 pub use file::*;
+pub use pipe::*;
 pub use misc::*;
 pub use timer::*;
 pub use types::*;
+pub use errnos::*;

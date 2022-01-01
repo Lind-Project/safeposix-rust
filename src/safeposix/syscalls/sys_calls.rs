@@ -1,10 +1,13 @@
-// System related system calls
+#![allow(dead_code)]
 
+// System related system calls
 use crate::interface;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*};
+use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 
 use super::sys_constants::*;
+use super::fs_constants::*;
+
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
@@ -26,10 +29,13 @@ impl Cage {
                     match inode {
                         Inode::File(f) => {f.refcount += 1;}
                         Inode::CharDev(f) => {f.refcount += 1;}
-                        Inode::Pipe(f) => {f.refcount += 1;}
-                        Inode::Socket(f) => {f.refcount += 1;}
                         Inode::Dir(f) => {f.refcount += 1;}
                     }
+                }
+
+                if let Pipe(f) = &*fd {
+                    let pipe = PIPE_TABLE.write().unwrap().get(&f.pipe).unwrap().clone();
+                    pipe.incr_ref(f.flags)
                 }
 
                 newfdtable.insert(*key, value.clone()); //clone (increment) the reference counter, and add to hashmap
@@ -69,6 +75,10 @@ impl Cage {
     }
 
     pub fn exit_syscall(&self) -> i32 {
+
+        //flush anything left in stdout
+        interface::flush_stdout();
+
         //close all remaining files in the fdtable
         {
             let mut fdtable = self.filedescriptortable.write().unwrap();

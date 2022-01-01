@@ -3,6 +3,8 @@
 
 use crate::interface;
 use super::syscalls::fs_constants::*;
+use super::syscalls::sys_constants::*;
+
 use super::cage::Cage;
 
 pub const METADATAFILENAME: &str = "lind.metadata";
@@ -22,9 +24,6 @@ pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
     Dir(DirectoryInode),
-    //Stream(GenericInode), streams don't have a real inode
-    Pipe(GenericInode),
-    Socket(GenericInode)
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
@@ -74,7 +73,7 @@ pub struct DirectoryInode {
 pub struct FilesystemMetadata {
     pub nextinode: usize,
     pub dev_id: u64,
-    pub inodetable: interface::RustHashMap<usize, Inode>,
+    pub inodetable: interface::RustHashMap<usize, Inode>
 }
 
 pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> interface::RustHashMap<String, usize> {
@@ -90,9 +89,10 @@ impl FilesystemMetadata {
         let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially
+        //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially,
+        //plus one to make sure it can never be removed (can be thought of as mount point link)
         //refcount is how many open file descriptors pointing to the directory exist, 0 as no cages exist yet
-            mode: S_IFDIR as u32 | S_IRWXA, linkcount: 2, refcount: 0,
+            mode: S_IFDIR as u32 | S_IRWXA, linkcount: 3, refcount: 0,
             atime: time, ctime: time, mtime: time,
             filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE, ROOTDIRECTORYINODE)};
         retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirinode));

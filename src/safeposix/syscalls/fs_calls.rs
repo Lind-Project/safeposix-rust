@@ -1,10 +1,10 @@
+#![allow(dead_code)]
+
 // File system related system calls
 use crate::interface;
-
-use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, FileDesc, FdTable};
+use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
-use super::errnos::*;
+use super::fs_constants::*;
 
 impl Cage {
 
@@ -80,7 +80,7 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
                     if fobjtable.contains_key(&inodenum) {
                         fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
@@ -94,6 +94,7 @@ impl Cage {
                     }
 
                     //remove the previous file and add a new one of 0 length
+                    fobjtable.remove(&inodenum); //remove bookkeeping so it'll get re-created if it already is opened
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     interface::removefile(sysfilename.clone()).unwrap();
                 }
@@ -111,7 +112,6 @@ impl Cage {
                 Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                _ => {panic!("How did you even manage to open another kind of file like that?");}
             }
 
             //If the file is a regular file, open the file object
@@ -165,7 +165,7 @@ impl Cage {
 
                 let newinode = Inode::Dir(DirectoryInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 2, refcount: 0,
+                    mode: effective_mode, linkcount: 3, refcount: 0, //2 because ., and .., as well as reference in parent directory
                     atime: time, ctime: time, mtime: time, 
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
@@ -174,6 +174,7 @@ impl Cage {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
+                else {unreachable!();}
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
                 persist_metadata(&mutmetadata);
@@ -268,6 +269,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
+                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -285,6 +287,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
+                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -293,7 +296,6 @@ impl Cage {
                     }
 
                     Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
-                    _ => {panic!("How did you even manage to refer to a pipe/socket using a path?");}
                 }
             }
         }
@@ -318,7 +320,7 @@ impl Cage {
                 syscall_error(Errno::EISDIR, "unlink", "cannot unlink root directory")
             }
 
-            //If both the file and the root directory exists
+            //If both the file and the parent directory exists
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
@@ -326,7 +328,6 @@ impl Cage {
                     Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
                     Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
-                    _ => {panic!("How did you even manage to refer to socket or pipe with a path?");},
                 }; //count current number of links and references
 
                 let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
@@ -349,6 +350,7 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
+                persist_metadata(&mutmetadata);
 
                 0 //unlink has succeeded
             }
@@ -386,12 +388,6 @@ impl Cage {
                 },
                 Inode::Dir(f) => {
                     Self::_istat_helper_dir(f, statbuf);
-                },
-                Inode::Pipe(_) => {
-                    panic!("How did you even manage to refer to a pipe using a path?");
-                },
-                Inode::Socket(_) => {
-                    panic!("How did you even manage to refer to a socket using a path?");
                 },
             }
             0 //stat has succeeded!
@@ -479,7 +475,6 @@ impl Cage {
                         Inode::Dir(f) => {
                             Self::_istat_helper_dir(&f, statbuf);
                         }
-                        _ => {panic!("A file fd points to a socket or pipe");}
                     }
                 }
                 Socket(_) => {
@@ -503,23 +498,13 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
-            let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
+            let _inodeobj = metadata.inodetable.get(&inodenum).unwrap();
             
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = metadata.dev_id;
 
             //delegate the rest of populating statbuf to the relevant helper
-            match inodeobj {
-                Inode::Pipe(_) => {
-                    panic!("How did you even manage to refer to a pipe using a path?");
-                },
-                Inode::Socket(_) => {
-                    panic!("How did you even manage to refer to a socket using a path?");
-                },
-                _ => {
-                    return Self::_istatfs_helper(self, databuf);
-                }
-            }
+            return Self::_istatfs_helper(self, databuf);
         } else {
             syscall_error(Errno::ENOENT, "stat", "path refers to an invalid file")
         }
@@ -539,15 +524,9 @@ impl Cage {
 
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let _inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                    match inodeobj {
-                        //can't statfs pipe or socket
-                        Inode::Socket(_) | Inode::Pipe(_) => {panic!("How did you get through the first filter?");},
-                        _ => {
-                            return Self::_istatfs_helper(self, databuf);
-                        }
-                    }
+                    return Self::_istatfs_helper(self, databuf);
                 },
                 Socket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
             }
@@ -614,7 +593,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "read", "attempted to read from a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "recv not implemented yet")}
@@ -623,8 +601,10 @@ impl Cage {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-                    //self._read_from_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "read", "reading from a pipe not implemented yet")
+
+                    // get the pipe, read from it, and return bytes read
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.read_from_pipe(buf, count) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -670,7 +650,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "pread", "attempted to read from a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {
@@ -751,8 +730,8 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
+                                    persist_metadata(&metadata);
                                 } //update file size if necessary
-                                persist_metadata(&metadata);
                                 
                                 byteswritten as i32
                             } else {
@@ -767,7 +746,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "write", "attempted to write to a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
@@ -784,8 +762,10 @@ impl Cage {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
-                    //self._write_to_pipe...
-                    syscall_error(Errno::EOPNOTSUPP, "write", "writing to a pipe not implemented yet")
+                    // get the pipe, write to it, and return bytes written
+                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.write_to_pipe(buf, count) as i32
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
@@ -849,8 +829,8 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               persist_metadata(&metadata);
                             } //update file size if necessary
-                            persist_metadata(&metadata);
 
                             retval
                         }
@@ -862,7 +842,6 @@ impl Cage {
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "pwrite", "attempted to write to a directory")
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {
@@ -953,7 +932,6 @@ impl Cage {
                             //return the location that we sought to
                             eventualpos as i32
                         }
-                        _ => {panic!("Wonky file descriptor shenanigains");}
                     }
                 }
                 Socket(_) => {
@@ -991,12 +969,6 @@ impl Cage {
                 Inode::File(f) => {f.mode},
                 Inode::CharDev(f) => {f.mode},
                 Inode::Dir(f) => {f.mode},
-                Inode::Pipe(_) => {
-                    panic!("How did you even manage to refer to a pipe by a path?");
-                },
-                Inode::Socket(_) => {
-                    panic!("How did you even manage to refer to a socket by a path?");
-                },
             };
 
             //We assume that the current user owns the file
@@ -1062,7 +1034,7 @@ impl Cage {
         //checking whether the fd exists in the file table
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
-            else {return syscall_error(Errno::ENFILE, "dup_syscall", "no available file descriptor number could be found");};
+            else {return syscall_error(Errno::ENFILE, "dup", "no available file descriptor number could be found");};
             return Self::_dup2_helper(&self, fd, nextfd, Some(&mut fdtable))
         } else {
             return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
@@ -1115,8 +1087,11 @@ impl Cage {
                         Inode::CharDev(chardev_inode_obj) => {
                             chardev_inode_obj.refcount += 1;
                         },
-                        _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
                     }
+                },
+                Pipe(normalfile_filedesc_obj) => {
+                    let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
+                    pipe.incr_ref(normalfile_filedesc_obj.flags);
                 },
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
@@ -1142,7 +1117,7 @@ impl Cage {
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap();
-        
+ 
         //check that the fd is valid
         match fdtable.get(&fd) {
             Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable));},
@@ -1173,21 +1148,27 @@ impl Cage {
                 Stream(_) => {},
                 Epoll(_) => {}, //Epoll closing not implemented yet
                 Socket(_) => {
-                    //CLEANUP SOCKET === SOCKETS NOT IMPLEMENTED YET
-                    },
+                    //drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
+                    //drop(locked_filedesc);  
+                    //let retval = Self::_cleanup_socket(self, fd, false, fdtable);
+                    //if retval != 0 {return retval;}
+                },
                 Pipe(pipe_filedesc_obj) => {
-                    let _pipenumber = pipe_filedesc_obj.pipe;
-                    let read_references = 0; //TO DO: FIX === PIPES NOT IMPLEMENTED YET
-                    let write_references = 0;
+                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+               
+                    pipe.decr_ref(pipe_filedesc_obj.flags);
 
                     //Code below needs to reflect addition of pipes
-                    if write_references == 1 && pipe_filedesc_obj.flags == O_WRONLY {
-                        // let pipetable.pipenumber.eof = true;
+                    if pipe.get_write_ref() == 0 && pipe_filedesc_obj.flags == O_WRONLY {
+                        // we're closing the last write end, lets set eof
+                        pipe.set_eof();
                     }
 
-                    if read_references + write_references == 1 {
-                        //del pipetable.pipenumber
+                    if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                        // last reference, lets remove it
+                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap();
                     }
+
                 },
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -1200,14 +1181,16 @@ impl Cage {
 
                             //if it's not a reg file, then we have nothing to close
                             //Inode::File is a regular file by default
-                            
-                            if normalfile_inode_obj.linkcount == 0 && normalfile_inode_obj.refcount == 0 {
-                                //removing the file from the entire filesystem (interface, metadata, and object table)
-                                mutmetadata.inodetable.remove(&inodenum);
-                                fobjtable.remove(&inodenum).unwrap().close().unwrap(); 
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                interface::removefile(sysfilename).unwrap();
-                            } 
+                            if normalfile_inode_obj.refcount == 0 {
+                                fobjtable.remove(&inodenum).unwrap().close().unwrap();
+                                if normalfile_inode_obj.linkcount == 0 {
+                                    //removing the file from the entire filesystem (interface, metadata, and object table)
+                                    mutmetadata.inodetable.remove(&inodenum);
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename).unwrap();
+                                } 
+                                persist_metadata(&mutmetadata);
+                            }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
@@ -1220,8 +1203,9 @@ impl Cage {
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
-                        },
+                        }
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
 
@@ -1233,16 +1217,17 @@ impl Cage {
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
+                                persist_metadata(&mutmetadata);
                             } 
-                        },
-                        Inode::Pipe(_) | Inode::Socket(_) => {panic!("How did you get by the first filter?");},
+                        }
                     }
                 },
             }
         }
+
         //removing inode from fd table
         fdtable.remove(&fd);
-        return 0; //_close_helper has succeeded!
+        0 //_close_helper has succeeded!
     }
     
     //------------------------------------FCNTL SYSCALL------------------------------------
@@ -1301,6 +1286,7 @@ impl Cage {
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+
         let mut metadata = FS_METADATA.write().unwrap();
         let truepath = normpath(convpath(path), self);
 
@@ -1311,19 +1297,13 @@ impl Cage {
                 match thisinode {
                     Inode::File(ref mut general_inode) => {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
-                    },
+                    }
                     Inode::CharDev(ref mut dev_inode) => {
                         dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
-                    },
+                    }
                     Inode::Dir(ref mut dir_inode) => {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
-                    },
-                    Inode::Pipe(ref mut general_inode) => {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
-                    },
-                    Inode::Socket(ref mut general_inode) => {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode;
-                    },
+                    }
                 }
             }
             else {
@@ -1334,7 +1314,7 @@ impl Cage {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
         persist_metadata(&metadata);
-        return 0; //success!
+        0 //success!
     }
 
     //------------------------------------MMAP SYSCALL------------------------------------
@@ -1347,7 +1327,7 @@ impl Cage {
         }
 
         if 0 != flags & MAP_ANONYMOUS {
-            return interface::libc_mmap(addr, len, prot, flags, 0, -1);
+            return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
 
         let fdtable = self.filedescriptortable.read().unwrap();
@@ -1386,7 +1366,7 @@ impl Cage {
                             syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
                         }
 
-                        _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+                        Inode::Dir(_) => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
                     }
                 }
                 _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
@@ -1473,23 +1453,24 @@ impl Cage {
                 match inodeobj {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
-                        if dir_obj.linkcount > 2 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
+                        if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode set to S_IFDIR");}
 
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
                         // remove entry of corresponding inodenum from inodetable
-                        metadata.inodetable.remove(&inodenum);
+                        metadata.inodetable.remove(&inodenum).unwrap();
                         
                         if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
                             // remove entry of corresponding filename from filename-inode dict
-                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string());
+                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
+                        persist_metadata(&metadata);
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1525,7 +1506,6 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 
-                let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
                 if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
@@ -1533,8 +1513,200 @@ impl Cage {
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                 }
+                persist_metadata(&metadata);
                 0 // success
             }
+        }
+    }
+
+    //------------------FTRUNCATE SYSCALL------------------
+    
+    pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
+        let fdtable = self.filedescriptortable.read().unwrap();
+ 
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+
+            let filedesc_enum = wrappedfd.read().unwrap();
+            let mut mutmetadata = FS_METADATA.write().unwrap();
+
+            match &*filedesc_enum {
+                // only proceed when fd references a regular file
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+
+                    match inodeobj {
+                        // only proceed when inode matches with a file
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            // get file object table with write lock
+                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            
+                            let mut fileobject = fobjtable.get_mut(&inodenum).unwrap();
+                            let filesize = normalfile_inode_obj.size as isize;
+                            
+                            // if length is greater than original filesize,
+                            // file is extented with null bytes
+                            if filesize < length {
+                                let blankbytecount = length - filesize;
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize as usize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("zerofill_at() has failed");
+                                    }
+                                } else {
+                                    panic!("zerofill_at() has failed");
+                                }
+                            } else { // if length is smaller than original filesize,
+                                     // extra data are cut off
+                                fileobject.shrink(length as usize);
+                            } 
+                            persist_metadata(&mutmetadata);
+                        }
+                        Inode::CharDev(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
+                        }
+                        Inode::Dir(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
+                        }
+                    };
+                }
+                _ => {
+                    return syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file");
+                }
+            };
+            0 // ftruncate() has succeeded!
+        } else { 
+            syscall_error(Errno::EBADF, "ftruncate", "fd is not a valid file descriptor")
+        }
+    }
+
+    //------------------TRUNCATE SYSCALL------------------
+    pub fn truncate_syscall(&self, path: &str, length: isize) -> i32 {
+        self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
+    }
+
+    //------------------PIPE SYSCALL------------------
+
+    pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
+
+        let mut fdtable = self.filedescriptortable.write().unwrap();
+
+        // get next available pipe number, and set up pipe
+        let pipenumber = if let Some(pipeno) = get_next_pipe() {
+            pipeno
+        } else {
+            return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
+        };
+
+
+        let mut pipetable = PIPE_TABLE.write().unwrap();
+
+        pipetable.insert(pipenumber, interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY)));
+        
+        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
+        // append each to pipefds list
+
+        let flags = [O_RDONLY, O_WRONLY];
+        for flag in flags {
+
+            let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
+                fd
+            } else {
+                pipetable.remove(&pipenumber).unwrap();
+                return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
+            };
+
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::AdvisoryLock::new()});
+            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
+            fdtable.insert(thisfd, wrappedfd);
+
+            match flag {
+                O_RDONLY => {pipefd.readfd = thisfd;},
+                O_WRONLY => {pipefd.writefd = thisfd;},
+                _ => panic!("How did you get here."),
+            }
+        }
+
+      0 // success
+    }  
+        
+    //------------------GETDENTS SYSCALL------------------
+
+    pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32)-> i32 {
+        
+        let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
+
+        // make sure bufsize is at least greater than size of a ClippedDirent struct
+        if bufsize <= interface::CLIPPED_DIRENT_SIZE {
+            return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
+        }
+        
+        let fdtable = self.filedescriptortable.read().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) { // check if fd is valid
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            
+            match &mut *filedesc_enum {
+                // only proceed when fd represents a file
+                File(ref mut normalfile_filedesc_obj) => {
+                    let metadata = FS_METADATA.read().unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    match inodeobj {
+                        // only proceed when inode is a dir
+                        Inode::Dir(dir_inode_obj) => {
+                            let position = normalfile_filedesc_obj.position;
+                            let mut bufcount = 0;
+                            let mut curr_size;
+                            let mut count = 0;
+                            let mut temp_len = 0;
+
+                            // iterate over filename-inode pairs in dict
+                            for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter().skip(position) {
+                                // convert filename to a filename vector of u8
+                                let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
+                                vec_filename.push(b'\0'); // make filename null-terminated
+                                
+                                vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
+                                temp_len = interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
+                                
+                                // pad filename vector to the next highest 8 byte boundary
+                                for _ in 0..(temp_len + 7) / 8 * 8 - temp_len {
+                                    vec_filename.push(00);
+                                }
+                                
+                                // the fixed dirent size and length of filename vector add up to total size
+                                curr_size = interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32;
+                                
+                                bufcount += curr_size; // increment bufcount
+                                
+                                // stop iteration if current bufcount exceeds argument bufsize
+                                if bufcount > bufsize {
+                                    bufcount = bufcount - curr_size; // decrement bufcount since current element is not actually written
+                                    break;
+                                }
+                                
+                                // push properly constructed tuple to vector storing result
+                                vec.push((interface::ClippedDirent{d_ino: inode as u64, d_off: bufcount as u64, d_reclen: curr_size as u16}, vec_filename));
+                                count += 1;
+                            }
+                            // update file position
+                            normalfile_filedesc_obj.position = interface::rust_min(position + count, dir_inode_obj.filename_to_inode_dict.len());
+
+                            interface::pack_dirents(vec, dirp);
+                            bufcount as i32 // return the number of bytes written
+                        }
+                        _ => {
+                            syscall_error(Errno::ENOTDIR, "getdents", "File descriptor does not refer to a directory.")
+                        }
+                    }
+                }
+                // raise error when fd represents a socket, pipe, or stream
+                _ => {
+                    syscall_error(Errno::ESPIPE, "getdents", "Cannot getdents since fd does not refer to a file.")
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor")
         }
     }
 }
