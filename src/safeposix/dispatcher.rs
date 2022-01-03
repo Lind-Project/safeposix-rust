@@ -259,10 +259,33 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
 
         GETSOCKOPT_SYSCALL => {
-            check_and_dispatch!(cage.getsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
+            let mut sockval = 0;
+            if interface::arg_nullity(&arg4) || interface::arg_nullity(&arg5) {
+                return syscall_error(Errno::EFAULT, "getsockopt", "Optval or optlen passed as null");
+            }
+            if get_onearg!(interface::get_socklen_t_ptr(arg5)) != 4 {
+                return syscall_error(Errno::EINVAL, "setsockopt", "Invalid optlen passed");
+            }
+            let rv = check_and_dispatch!(cage.getsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), Ok::<&mut i32, i32>(&mut sockval));
+
+            if rv >= 0 {
+                interface::copy_out_intptr(arg4, sockval);
+            }
+            //we take it as a given that the length is 4 both in and out
+            rv
         }
+
         SETSOCKOPT_SYSCALL => {
-            check_and_dispatch!(cage.setsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), interface::get_int(arg4))
+            let sockval;
+            if !interface::arg_nullity(&arg4) {
+                if get_onearg!(interface::get_uint(arg5)) != 4 {
+                    return syscall_error(Errno::EINVAL, "setsockopt", "Invalid optlen passed");
+                }
+                sockval = interface::get_int_from_intptr(arg4);
+            } else {
+                sockval = 0;
+            }
+            check_and_dispatch!(cage.setsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), Ok::<i32, i32>(sockval))
         }
 
         SHUTDOWN_SYSCALL => {
@@ -392,24 +415,4 @@ pub extern "C" fn lindrustfinalize() {
         cage.exit_syscall();
     }
     persist_metadata(&*FS_METADATA.read().unwrap());
-}
-
-#[cfg(test)]
-pub mod dispatch_tests {
-    use super::*;
-    pub fn cagetest() {
-        lindrustinit();
-
-        {interface::RustRfc::get_mut(CAGE_TABLE.write().unwrap().get_mut(&1).unwrap()).unwrap().load_lower_handle_stubs();}
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-        {println!("{:?}", FS_METADATA.read().unwrap().inodetable);};
-        dispatcher(1, FORK_SYSCALL, Arg {dispatch_ulong: 2_u64}, Arg {dispatch_int: 34132}, Arg {dispatch_int: 109384}, Arg {dispatch_int: -12341}, Arg {dispatch_int: -12341}, Arg {dispatch_int: 0});
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-        dispatcher(2, EXEC_SYSCALL, Arg {dispatch_ulong: 7_u64}, Arg {dispatch_int: 34132}, Arg {dispatch_int: 109384}, Arg {dispatch_int: -12341}, Arg {dispatch_int: -12341}, Arg {dispatch_int: 0});
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-        dispatcher(7, EXIT_SYSCALL, Arg {dispatch_ulong: 61_u64}, Arg {dispatch_int: 33987}, Arg {dispatch_int: 123452}, Arg {dispatch_int: -98493}, Arg {dispatch_int: -1}, Arg {dispatch_int: 0});
-        {println!("{:?}", CAGE_TABLE.read().unwrap());};
-
-        lindrustfinalize();
-    }
 }

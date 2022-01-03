@@ -116,6 +116,7 @@ pub union Arg {
   pub dispatch_constsockaddrstruct: *const SockaddrDummy,
   pub dispatch_sockaddrstruct: *mut SockaddrDummy,
   pub dispatch_socklen_t_ptr: *mut u32,
+  pub dispatch_intptr: *mut i32,
   pub dispatch_pollstructarray: *mut PollStruct,
   pub dispatch_epollevent: *mut EpollEvent,
   pub dispatch_structtimeval: *mut TimeVal,
@@ -429,6 +430,15 @@ pub fn get_socklen_t_ptr(union_argument: Arg) -> Result<u32, i32> {
       return Ok(unsafe{*socklenptr});
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+//arg checked for nullity beforehand
+pub fn get_int_from_intptr(union_argument: Arg) -> i32 {
+    return unsafe{*union_argument.dispatch_intptr};
+}
+
+pub fn copy_out_intptr(union_argument: Arg, intval: i32) {
+    unsafe{*union_argument.dispatch_intptr = intval;}
 }
 
 pub fn duration_fromtimeval(union_argument: Arg) -> Result<Option<interface::RustDuration>, i32> {

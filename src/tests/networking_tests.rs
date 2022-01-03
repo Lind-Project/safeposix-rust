@@ -7,18 +7,18 @@ pub mod net_tests {
 
     pub fn net_tests() {
         ut_lind_net_bind();
-        //ut_lind_net_bind_multiple();
-        //ut_lind_net_bind_on_zero();
+        ut_lind_net_bind_multiple();
+        ut_lind_net_bind_on_zero();
         ut_lind_net_connect_basic_udp();
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
-        //ut_lind_net_listen();
-        //ut_lind_net_recvfrom(); 
-        //ut_lind_net_shutdown();
+        ut_lind_net_listen();
+        ut_lind_net_recvfrom();
+        ut_lind_net_shutdown();
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
         ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple(); //not working right now
+        ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
     }
 
@@ -272,12 +272,12 @@ pub mod net_tests {
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50103u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
 
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         //allowing port reuse
-        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
         assert_eq!(cage.setsockopt_syscall(sockfd2, SOL_SOCKET, SO_REUSEPORT, 1), 0);
 
         assert_eq!(cage.bind_syscall(sockfd2, &socket), 0);
@@ -390,20 +390,22 @@ pub mod net_tests {
         let thread = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             
-            interface::sleep(interface::RustDuration::from_millis(100)); 
 
-            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53000_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4::default());
             assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
             
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             assert_eq!(cage2.exit_syscall(), 0);
         });
 
+        interface::sleep(interface::RustDuration::from_millis(100));
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0); 
         
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
         assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
         assert_ne!(retsocket, socket);
+
+        assert_eq!(cage.close_syscall(serversockfd), 0);
         
         thread.join().unwrap();
         
@@ -618,49 +620,72 @@ pub mod net_tests {
         assert_eq!(cage.listen_syscall(sockfd, 4), 0);
 
         //set and get some options:
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+        let mut optstore = -12;
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
+        assert_eq!(optstore, 0);
 
         //linger...
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 0);
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, 1), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 1);
 
         //check the options
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
+        assert_eq!(optstore, 0);
 
         //reuseport...
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 0);
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, 1), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 1);
 
         //check the options
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
+        assert_eq!(optstore, 0);
 
         //keep alive...
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 0);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
+        assert_eq!(optstore, 0);
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, 1), 0);
         
         //check the options
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
+        assert_eq!(optstore, 1);
         
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_SNDBUF, 1000), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_SNDBUF), 1000);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_SNDBUF, &mut optstore), 0);
+        assert_eq!(optstore, 1000);
         
         assert_eq!(cage.setsockopt_syscall(sockfd, SOL_SOCKET, SO_RCVBUF, 2000), 0);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_RCVBUF), 2000);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_RCVBUF, &mut optstore), 0);
+        assert_eq!(optstore, 2000);
         
         //check the options
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER), 1);
-        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE), 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore), 0);
+        assert_eq!(optstore, 1);
+        assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
+        assert_eq!(optstore, 1);
         
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -708,7 +733,6 @@ pub mod net_tests {
         
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
-        println!("FORKED");
         let thread = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
             assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
@@ -717,10 +741,9 @@ pub mod net_tests {
             
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
-            println!("RECV");
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
-            interface::sleep(interface::RustDuration::from_millis(120)); 
+            interface::sleep(interface::RustDuration::from_millis(30));
             assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 5);
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
@@ -731,7 +754,6 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(50));
         let mut buf2 = str2cbuf("test");
         assert_eq!(cage.sendto_syscall(clientfd, buf2, 4, 0, &socket), 4);
-        println!("SEND");
         let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(sendsockfd2 > 0);
 
