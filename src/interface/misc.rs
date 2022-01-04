@@ -53,7 +53,7 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
 }
 pub fn fill(bufptr: *mut u8, count: usize, values:&Vec<u8>) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
-    for i in 0..count {slice[i] = values[i];}
+    slice.copy_from_slice(&values);
     count as i32
 }
 
