@@ -66,10 +66,6 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Er
     return std::ffi::CStr::from_ptr(cstr).to_str();         //returns a result to be unwrapped later
 }
 
-pub unsafe fn mutbuf_to_mutslice<'a>(mutcbuf: *mut u8, size: usize) -> &'a mut [u8] {
-    return unsafe{std::slice::from_raw_parts_mut(mutcbuf, size)};         
-}
-
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
     return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
 }
