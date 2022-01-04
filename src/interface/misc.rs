@@ -51,6 +51,11 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     for i in 0..count {slice[i] = 0u8;}
     count as i32
 }
+pub fn fill(bufptr: *mut u8, count: usize, values:&Vec<u8>) -> i32 {
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    for i in 0..count {slice[i] = values[i];}
+    count as i32
+}
 
 // Wrapper to return a dictionary (hashmap)
 pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
@@ -64,7 +69,6 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Er
 pub unsafe fn mutbuf_to_mutslice<'a>(mutcbuf: *mut u8, size: usize) -> &'a mut [u8] {
     return unsafe{std::slice::from_raw_parts_mut(mutcbuf, size)};         
 }
-
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
     return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
