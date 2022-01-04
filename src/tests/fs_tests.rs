@@ -7,7 +7,7 @@ mod fs_tests {
     use std::fs::OpenOptions;
 
     #[test]
-    pub fn test_fs() {/*
+    pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_chmod();
@@ -33,14 +33,14 @@ mod fs_tests {
         ut_lind_fs_statfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
-        ut_lind_fs_getdents();*/
+        ut_lind_fs_getdents();
         ut_lind_fs_dir_chdir_getcwd();
-        /*
+        
         persistencetest();
         rdwrtest();
         prdwrtest();
         chardevtest();
-        dispatch_tests::cagetest();*/
+        dispatch_tests::cagetest();
     }
 
 
