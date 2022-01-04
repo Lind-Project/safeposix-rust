@@ -185,7 +185,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
 
         RECV_SYSCALL => {
-            check_and_dispatch!(cage.send_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4))
+            check_and_dispatch!(cage.recv_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4))
         }
         RECVFROM_SYSCALL => {
             let nullity1 = interface::arg_nullity(&arg5);

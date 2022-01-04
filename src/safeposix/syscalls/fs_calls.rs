@@ -596,7 +596,10 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "recv not implemented yet")}
+                Socket(_) => {
+                    drop(filedesc_enum);
+                    self.recv_common(fd, buf, count, 0, &mut None, &fdtable)
+                }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
@@ -749,7 +752,11 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
+                Socket(_) => {
+                    drop(filedesc_enum);
+                    drop(fdtable);
+                    self.send_syscall(fd, buf, count, 0)
+                }
                 Stream(stream_filedesc_obj) => {
                     //if it's stdout or stderr, print out and we're done
                     if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
