@@ -772,6 +772,7 @@ impl Cage {
                                     return errnum;
                                 }
                             };
+                            drop(mutmetadata);
 
                             *addr = remote_addr; //populate addr with what address it connected to
                             let domain = sockfdobj.domain;
