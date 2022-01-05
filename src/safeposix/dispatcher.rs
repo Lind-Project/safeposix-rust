@@ -391,7 +391,7 @@ pub extern "C" fn lindrustinit() {
     incref_root();
     let mut mutcagetable = CAGE_TABLE.write().unwrap();
 
-    let mut utilcage = Cage{
+    let utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
     mutcagetable.insert(0, interface::RustRfc::new(utilcage));
