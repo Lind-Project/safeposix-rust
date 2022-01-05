@@ -1727,7 +1727,7 @@ impl Cage {
     
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
         let mut bytes: Vec<u8> = self.cwd.read().unwrap().to_str().unwrap().as_bytes().to_vec();
-        bytes.push(0u8);
+        bytes.push(0u8); //Adding a null terminator to the end of the string
         let length = bytes.len();
 
         if (bufsize as usize) < length {
