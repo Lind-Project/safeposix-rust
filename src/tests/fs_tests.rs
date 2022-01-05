@@ -34,7 +34,8 @@ mod fs_tests {
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
-
+        ut_lind_fs_dir_chdir_getcwd();
+        
         persistencetest();
         rdwrtest();
         prdwrtest();
@@ -868,7 +869,7 @@ mod fs_tests {
         
         assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
-        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize), 48);
+        assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize as u32), 48);
 
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;
@@ -886,6 +887,35 @@ mod fs_tests {
         }
 
         assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_dir_chdir_getcwd() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let needed = "/subdir1\0".as_bytes().to_vec().len();
+
+        let needed_u32: u32 = needed as u32;
+
+        let mut buf = vec![0u8; needed];
+        let bufptr: *mut u8 = &mut buf[0];
+
+        assert_eq!(cage.chdir_syscall("/"), 0);
+        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, 1), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, 2), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "/\0\0\0\0\0\0\0\0");
+
+        cage.mkdir_syscall("/subdir1", S_IRWXA);
+        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+
+        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32-1), -(Errno::ERANGE as i32));
+        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "/subdir1\0");
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }

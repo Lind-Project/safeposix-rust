@@ -39,6 +39,7 @@ const GETSOCKOPT_SYSCALL: i32 = 43;
 const SETSOCKOPT_SYSCALL: i32 = 44;
 const SHUTDOWN_SYSCALL: i32 = 45;
 const SELECT_SYSCALL: i32 = 46;
+const GETCWD_SYSCALL: i32 = 47;
 const POLL_SYSCALL: i32 = 48;
 const SOCKETPAIR_SYSCALL: i32 = 49;
 const GETUID_SYSCALL: i32 = 50;
@@ -195,6 +196,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         PIPE_SYSCALL => {
             check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))
+        }
+        GETCWD_SYSCALL => {
+            check_and_dispatch!(cage.getcwd_syscall, interface::get_mutcbuf(arg1), interface::get_uint(arg2))
         }
         _ => {//unknown syscall
             -1
