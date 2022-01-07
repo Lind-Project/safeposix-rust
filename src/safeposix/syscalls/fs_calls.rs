@@ -4,6 +4,7 @@
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
+use crate::safeposix::net::{NET_METADATA};
 use super::fs_constants::*;
 
 impl Cage {
@@ -1088,11 +1089,19 @@ impl Cage {
                             chardev_inode_obj.refcount += 1;
                         },
                     }
-                },
-                Pipe(normalfile_filedesc_obj) => {
-                    let pipe = PIPE_TABLE.write().unwrap().get(&normalfile_filedesc_obj.pipe).unwrap().clone();
-                    pipe.incr_ref(normalfile_filedesc_obj.flags);
-                },
+                }
+                Pipe(pipe_filedesc_obj) => {
+                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    pipe.incr_ref(pipe_filedesc_obj.flags);
+                }
+                Socket(socket_filedesc_obj) => {
+                    if let Some(socknum) = socket_filedesc_obj.socketobjectid {
+                        NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
+                    }
+                }
+                Stream(normalfile_filedesc_obj) => {
+                    // no stream refs
+                }
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
         }
@@ -1109,7 +1118,17 @@ impl Cage {
                 return close_result;
             }
         }    
-        fdtable.insert(newfd, fdtable.get(&oldfd).unwrap().clone());
+
+        // get and clone fd, wrap and insert into table.
+        let filedesc_clone;
+        {
+            let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
+            let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
+            filedesc_clone = (*&oldfiledesc_enum).clone();
+        }
+
+        let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
+        fdtable.insert(newfd, wrappedfd);
         return newfd;
     }
 
@@ -1145,14 +1164,29 @@ impl Cage {
             //one less reference to the file.
             match &*filedesc_enum {
                 //if we are a socket, we dont change disk metadata
-                Stream(_) => {},
-                Epoll(_) => {}, //Epoll closing not implemented yet
-                Socket(_) => {
-                    //drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
-                    //drop(locked_filedesc);  
-                    //let retval = Self::_cleanup_socket(self, fd, false, fdtable);
-                    //if retval != 0 {return retval;}
-                },
+                Stream(_) => {}
+                Epoll(_) => {} //Epoll closing not implemented yet
+                Socket(socket_filedesc_obj) => {
+                    let mut cleanflag = false;
+                    if let Some(socknum) = socket_filedesc_obj.socketobjectid {
+                        let mut netmeta = NET_METADATA.write().unwrap();
+                        let mut sockobjopt = netmeta.socket_object_table.get_mut(&socknum);
+                        //in case shutdown?
+                        if let Some(ref mut sockobj) = sockobjopt {
+                            let mut so_tmp = sockobj.write().unwrap();
+                            so_tmp.refcnt -= 1;
+                            cleanflag = (so_tmp.refcnt == 0);
+                        }
+                    }
+                    if(cleanflag) {
+                        drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
+                        drop(locked_filedesc);
+                        let retval = Self::_cleanup_socket(self, fd, false, fdtable);
+                        if retval < 0 {
+                            return retval;
+                        }
+                    }
+                }
                 Pipe(pipe_filedesc_obj) => {
                     let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
                
@@ -1169,7 +1203,7 @@ impl Cage {
                         PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap();
                     }
 
-                },
+                }
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
@@ -1221,7 +1255,7 @@ impl Cage {
                             } 
                         }
                     }
-                },
+                }
             }
         }
 

@@ -6,8 +6,10 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-pub use std::collections::HashMap as RustHashMap;
+pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16};
+pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
@@ -52,6 +54,20 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     count as i32
 }
 
+pub fn copy_fromrustdeque_sized(bufptr: *mut u8, count: usize, vecdeq: &RustDeque<u8>) {
+    let (slice1, slice2) = vecdeq.as_slices();
+    if slice1.len() >= count {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, count);}
+    } else {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, slice1.len());}
+        unsafe {std::ptr::copy(slice2.as_ptr(), bufptr.wrapping_offset(slice1.len() as isize), count - slice1.len());}
+    }
+}
+pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDeque<u8>) {
+    let byteslice = unsafe {std::slice::from_raw_parts(bufptr, count)};
+    vecdeq.extend(byteslice.iter());
+}
+
 // Wrapper to return a dictionary (hashmap)
 pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
@@ -71,6 +87,7 @@ pub struct AdvisoryLock {
     advisory_lock: RustRfc<Mutex<i32>>,
     advisory_condvar: Condvar
 }
+
 impl AdvisoryLock {
     pub fn new() -> Self {
         Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
@@ -122,5 +139,11 @@ impl AdvisoryLock {
             self.advisory_condvar.notify_all(); //in case readers are waiting
             true
         } else {false}
+    }
+}
+
+impl Clone for AdvisoryLock {
+    fn clone(&self) -> Self {
+        AdvisoryLock::new()
     }
 }
