@@ -20,6 +20,7 @@ pub mod net_tests {
         ut_lind_net_udp_bad_bind();
         ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
+        ut_lind_net_gethostname();
     }
 
 
@@ -813,6 +814,40 @@ pub mod net_tests {
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
         thread.join().unwrap();
 
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let hostnme = format!("{}{}", DEFAULT_HOSTNAME, "\0");
+
+        let mut buf = vec![0u8; 5];
+        let bufptr: *mut u8 = &mut buf[0];
+
+        assert_eq!(cage.gethostname_syscall(bufptr, -1), -(Errno::EINVAL as i32));
+
+        assert_eq!(cage.gethostname_syscall(bufptr, 5), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Lind\0");
+
+        assert_eq!(cage.gethostname_syscall(bufptr, 4), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Lind\0");
+
+        assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li\0\0\0");
+
+        let mut buf = vec![0u8; 4];
+        let bufptr: *mut u8 = &mut buf[0];        
+        assert_eq!(cage.gethostname_syscall(bufptr, 4), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Lind");
+
+        let mut buf = vec![0u8; 2];
+        let bufptr: *mut u8 = &mut buf[0];        
+        assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
+        
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
