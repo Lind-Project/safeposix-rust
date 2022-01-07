@@ -43,6 +43,10 @@ pub fn flush_stdout() {
     io::stdout().flush().unwrap();
 }
 
+pub fn get_errno() -> i32 {
+    (unsafe{*libc::__errno_location()}) as i32
+}
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
