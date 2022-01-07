@@ -5,7 +5,7 @@ pub mod net_tests {
     use super::super::*;
     use std::mem::size_of;
 
-    pub fn net_tests() {
+    pub fn net_tests() {/*
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
         ut_lind_net_bind_on_zero();
@@ -19,7 +19,7 @@ pub mod net_tests {
         ut_lind_net_socketoptions();
         ut_lind_net_udp_bad_bind();
         ut_lind_net_udp_simple();
-        ut_lind_net_udp_connect();
+        ut_lind_net_udp_connect();*/
         ut_lind_net_gethostname();
     }
 
