@@ -1167,7 +1167,7 @@ impl Cage {
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname_syscall(&self, address_ptr: &mut [u8], length: usize) -> i32 {
+    pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: usize) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "gethostname_syscall", "provided length argument is invalid");
         }
@@ -1176,9 +1176,9 @@ impl Cage {
         bytes.push(0u8); //Adding a null terminator to the end of the string
         let name_length = bytes.len();
         
-        let len = name_length;
-        if (lengt < len){
-            len = lengt;
+        let mut len = name_length;
+        if length < len {
+            len = length;
         }
 
         interface::fill(address_ptr, len, &bytes);
