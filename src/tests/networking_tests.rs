@@ -13,7 +13,7 @@ pub mod net_tests {
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
-        ut_lind_net_poll(); //WIP
+        ut_lind_net_poll(); //WIP -- done, just need to check it on something that's not a Mac
         ut_lind_net_recvfrom();
         ut_lind_net_select(); //WIP
         ut_lind_net_shutdown();
@@ -435,7 +435,7 @@ pub mod net_tests {
 
         let mut serverpoll = interface::PollStruct{fd: serversockfd, events: POLLIN, revents: 0};
         let mut filepoll = interface::PollStruct{fd: filefd, events: POLLIN, revents: 0};
-        let mut polled: &[interface::PollStruct] = &[serverpoll, filepoll];
+        let mut polled = vec![serverpoll, filepoll];
 
         //client 1 connects to the server to send and recv data...
         let thread = interface::helper_thread(move || {
@@ -466,8 +466,8 @@ pub mod net_tests {
             assert_eq!(cage2.exit_syscall(), 0);
         });
 
+        //acting as the server and processing the request
         let thread3 = interface::helper_thread(move || {
-            //acting as the server and processing the request
             let mut counter = 0; // this is to make sure that the loop doesn't go on forever
             loop {
                 counter = counter + 1;
@@ -479,7 +479,7 @@ pub mod net_tests {
                 let mut infds: Vec<i32>;
                 let mut outfds: Vec<i32>;
                 
-                for &polledfile in polled {
+                for polledfile in polled {
                     if polledfile.revents & POLLIN == 0 {
                         infds.push(polledfile.fd);
                     } 
@@ -503,7 +503,7 @@ pub mod net_tests {
                         assert_eq!(cage.write_syscall(sockfd, str2cbuf("test"), 4), 4);
                         assert_eq!(cage.lseek_syscall(sockfd, 0, SEEK_SET), 0);
                         //Once the write is successful into a file, modify the file descriptor so that its ready for reading out of the file.
-                        for &polledfile in polled {
+                        for polledfile in polled {
                             if polledfile.fd == sockfd {
                                 polledfile.events = POLLOUT;
                             }
@@ -513,14 +513,14 @@ pub mod net_tests {
                         assert_eq!(cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0), 4);
                         if cbuf2str(&buf) == "test" {
                             //This socket is ready for writing, modify the socket descriptor to be in read-write mode. This socket can write data out to network 
-                            for &polledfile in polled {
+                            for polledfile in polled {
                                 if polledfile.fd == sockfd {
                                     polledfile.events = POLLIN | POLLOUT;
                                 }
                             }
                         } else { //No data means remote socket closed, hence close the client socket in server, also remove this socket from polling. 
                             assert_eq!(cage.close_syscall(sockfd), 0);
-                            polled.retain(|&x| x != sockfd);
+                            polled.retain(|&x| x.fd != sockfd);
                         }
                     }
                 }
@@ -531,10 +531,10 @@ pub mod net_tests {
                         assert_eq!(cage.read_syscall(sockfd, read_buf1.as_mut_ptr(), 4), 4);
                         assert_eq!(cbuf2str(&read_buf1), "test");
                         //test for file finished, remove from polling.
-                        polled.retain(|&x| x != sockfd);
+                        polled.retain(|&x| x.fd != sockfd);
                     } else { //Data is sent out of this socket, it's no longer ready for writing, modify it only read mode.
                         assert_eq!(cage.send_syscall(sockfd, str2cbuf(&"test"), 4, 0), 4);
-                        for &polledfile in polled {
+                        for polledfile in polled {
                             if polledfile.fd == sockfd {
                                 polledfile.events = POLLIN;
                             }
@@ -547,6 +547,7 @@ pub mod net_tests {
 
         thread.join().unwrap();
         thread2.join().unwrap();
+        thread3.join().unwrap();
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
@@ -659,6 +660,18 @@ pub mod net_tests {
         interface::sleep(interface::RustDuration::from_millis(100));
         
         thread.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_net_select() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap()};
+
+        
 
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
