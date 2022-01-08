@@ -12,7 +12,7 @@ pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomic
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
-pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
+pub use std::sync::{RwLock as RustLock, Arc as RustRfc, RwLockReadGuard as RustReadGuard};
 use std::sync::{Mutex, Condvar};
 
 use libc::mmap;
@@ -41,6 +41,10 @@ pub fn log_to_stderr(s: &str) {
 // Flush contents of stdout
 pub fn flush_stdout() {
     io::stdout().flush().unwrap();
+}
+
+pub fn get_errno() -> i32 {
+    (unsafe{*libc::__errno_location()}) as i32
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
