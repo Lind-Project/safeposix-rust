@@ -474,7 +474,7 @@ pub mod net_tests {
                 if counter == 600 { break; }
 
                 //start a while true loop for processing requests
-                let pollretvalue = cage.poll_syscall(&mut polled, Some(interface::RustDuration::ZERO));
+                let pollretvalue = cage.poll_syscall(&mut polled.as_mut_slice(), Some(interface::RustDuration::ZERO));
                 assert!(pollretvalue > 0);
                 let mut infds: Vec<i32>;
                 let mut outfds: Vec<i32>;
