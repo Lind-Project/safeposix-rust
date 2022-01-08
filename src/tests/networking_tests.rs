@@ -13,10 +13,13 @@ pub mod net_tests {
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
+        ut_lind_net_poll(); //WIP
         ut_lind_net_recvfrom();
+        ut_lind_net_select(); //WIP
         ut_lind_net_shutdown();
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
+        ut_lind_net_socketpair(); //WIP -- done, just need to check it on something that's not a Mac
         ut_lind_net_udp_bad_bind();
         ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
@@ -389,8 +392,6 @@ pub mod net_tests {
         
         let thread = interface::helper_thread(move || {
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-            
-
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4::default());
             assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
             
@@ -409,6 +410,144 @@ pub mod net_tests {
         
         thread.join().unwrap();
         
+        assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_net_poll() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap()};
+
+        let filefd = cage.open_syscall("/netpolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert!(filefd > 0);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        let port: u16 = 53001;
+        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 4), 0); 
+
+        let mut serverpoll = interface::PollStruct{fd: serversockfd, events: POLLIN, revents: 0};
+        let mut filepoll = interface::PollStruct{fd: filefd, events: POLLIN, revents: 0};
+        let mut polled: &[interface::PollStruct] = &[serverpoll, filepoll];
+
+        //client 1 connects to the server to send and recv data...
+        let thread = interface::helper_thread(move || {
+            interface::sleep(interface::RustDuration::from_millis(100));
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+
+            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
+            assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
+            //giving it a longer pause time to that it can process all of the data that it is recieving
+            interface::sleep(interface::RustDuration::from_millis(1000));
+
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(), 0);
+        });
+
+        //client 2 connects to the server to send and recv data...
+        let thread2 = interface::helper_thread(move || {
+            //give it a longer time so that it can sufficiently process all of the data
+            interface::sleep(interface::RustDuration::from_millis(100));
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+
+            assert_eq!(cage2.connect_syscall(clientsockfd2, &socket), 0);
+            assert_eq!(cage2.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
+
+            interface::sleep(interface::RustDuration::from_millis(1000));
+
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(), 0);
+        });
+
+        let thread3 = interface::helper_thread(move || {
+            //acting as the server and processing the request
+            let mut counter = 0; // this is to make sure that the loop doesn't go on forever
+            loop {
+                counter = counter + 1;
+                if counter == 600 { break; }
+
+                //start a while true loop for processing requests
+                let pollretvalue = cage.poll_syscall(&mut polled, Some(interface::RustDuration::ZERO));
+                assert!(pollretvalue > 0);
+                let mut infds: Vec<i32>;
+                let mut outfds: Vec<i32>;
+                
+                for &polledfile in polled {
+                    if polledfile.revents & POLLIN == 0 {
+                        infds.push(polledfile.fd);
+                    } 
+                    if polledfile.revents & POLLOUT == 0 {
+                        outfds.push(polledfile.fd);
+                    } 
+                }
+                
+                //check for any activity in the input sockets
+                for sockfd in infds {
+                    //If the socket returned was listerner socket, then there's a new connection
+                    //so we accept it, and put the client socket in the list of inputs.
+                    if sockfd == serversockfd {
+                        let port: u16 = 53001;
+                        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+                        let mut addr = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+                        
+                        let newsockfd = cage.accept_syscall(sockfd, &mut addr);
+                        polled.push(interface::PollStruct{fd: newsockfd, events: POLLIN, revents: 0})
+                    } else if sockfd == filefd { //Write to a file...
+                        assert_eq!(cage.write_syscall(sockfd, str2cbuf("test"), 4), 4);
+                        assert_eq!(cage.lseek_syscall(sockfd, 0, SEEK_SET), 0);
+                        //Once the write is successful into a file, modify the file descriptor so that its ready for reading out of the file.
+                        for &polledfile in polled {
+                            if polledfile.fd == sockfd {
+                                polledfile.events = POLLOUT;
+                            }
+                        }
+                    } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
+                        let mut buf = sizecbuf(4);
+                        assert_eq!(cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0), 4);
+                        if cbuf2str(&buf) == "test" {
+                            //This socket is ready for writing, modify the socket descriptor to be in read-write mode. This socket can write data out to network 
+                            for &polledfile in polled {
+                                if polledfile.fd == sockfd {
+                                    polledfile.events = POLLIN | POLLOUT;
+                                }
+                            }
+                        } else { //No data means remote socket closed, hence close the client socket in server, also remove this socket from polling. 
+                            assert_eq!(cage.close_syscall(sockfd), 0);
+                            polled.retain(|&x| x != sockfd);
+                        }
+                    }
+                }
+
+                for sockfd in outfds {
+                    if sockfd == filefd {
+                        let mut read_buf1 = sizecbuf(4);
+                        assert_eq!(cage.read_syscall(sockfd, read_buf1.as_mut_ptr(), 4), 4);
+                        assert_eq!(cbuf2str(&read_buf1), "test");
+                        //test for file finished, remove from polling.
+                        polled.retain(|&x| x != sockfd);
+                    } else { //Data is sent out of this socket, it's no longer ready for writing, modify it only read mode.
+                        assert_eq!(cage.send_syscall(sockfd, str2cbuf(&"test"), 4, 0), 4);
+                        for &polledfile in polled {
+                            if polledfile.fd == sockfd {
+                                polledfile.events = POLLIN;
+                            }
+                        }
+                    }
+                }
+            }
+            assert_eq!(cage.close_syscall(serversockfd), 0);
+        });  
+
+        thread.join().unwrap();
+        thread2.join().unwrap();
+
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
@@ -688,6 +827,75 @@ pub mod net_tests {
         assert_eq!(optstore, 1);
         
         assert_eq!(cage.exit_syscall(), 0);
+        lindrustfinalize();
+    }
+
+
+
+    pub fn ut_lind_net_socketpair() {
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let arc_cage = interface::RustRfc::new(cage);
+
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(Cage::socketpair_syscall(cage, AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
+
+        let thread = interface::helper_thread(move || {
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+            
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15); 
+
+            assert_eq!(cage2.exit_syscall(), 0);
+        });
+
+        assert_eq!((&*arc_cage).send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
+
+        let mut buf2 = sizecbuf(15);
+        (&*arc_cage).recv_syscall(socketpair.sock2, buf2.as_mut_ptr(), 15, 0);
+        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
+    
+        thread.join().unwrap();
+
+        assert_eq!((&*arc_cage).close_syscall(socketpair.sock1), 0);
+        assert_eq!((&*arc_cage).close_syscall(socketpair.sock2), 0);
+
+        // end of the TCP test
+
+        socketpair = interface::SockPair::default();
+        assert_eq!(Cage::socketpair_syscall(cage, AF_INET, SOCK_DGRAM, 0, &mut socketpair), 0);
+
+        let thread = interface::helper_thread(move || {
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+            
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15); 
+
+            assert_eq!(cage2.exit_syscall(), 0);
+        });
+
+        assert_eq!((&*arc_cage).send_syscall(socketpair.sock2, str2cbuf("test"), 4, 0), 4);
+
+        let mut buf2 = sizecbuf(15);
+        (&*arc_cage).recv_syscall(socketpair.sock2, buf2.as_mut_ptr(), 15, 0);
+        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
+    
+        thread.join().unwrap();
+
+        assert_eq!((&*arc_cage).close_syscall(socketpair.sock1), 0);
+        assert_eq!((&*arc_cage).close_syscall(socketpair.sock2), 0);
+
+        //end of the UDP test
+
+        assert_eq!((&*arc_cage).exit_syscall(), 0);
         lindrustfinalize();
     }
 
