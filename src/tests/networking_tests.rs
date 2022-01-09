@@ -667,9 +667,30 @@ pub mod net_tests {
 
 
 
-    pub fn ut_lind_net_select() {
+    pub fn ut_lind_net_select () {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap()};
+
+        let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert!(filefd > 0);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        let port: u16 = 53001;
+        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 4), 0); 
+
+        let mut inputs = interface::RustHashSet::<i32>::new();
+        let mut outputs = interface::RustHashSet::<i32>::new();
+        let mut excepts = interface::RustHashSet::<i32>::new();
+
+        inputs.insert(serversockfd);
+        inputs.insert(filefd);
+        outputs.insert(filefd);
 
         
 
