@@ -25,7 +25,7 @@ impl Cage {
             sndbuf: 131070, //buffersize, which is only used by getsockopt
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             state: ConnState::NOTCONNECTED, //we start without a connection
-            advlock: interface::AdvisoryLock::new(),
+            advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
             flags: flags,
             errno: 0,
             localaddr: None,
@@ -1239,7 +1239,7 @@ impl Cage {
             let epollobjfd = EpollDesc {
                 mode: 0000,
                 registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
-                advlock: interface::AdvisoryLock::new(),
+                advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
                 errno: 0,
                 flags: 0
             };

@@ -39,6 +39,7 @@ const GETSOCKOPT_SYSCALL: i32 = 43;
 const SETSOCKOPT_SYSCALL: i32 = 44;
 const SHUTDOWN_SYSCALL: i32 = 45;
 const SELECT_SYSCALL: i32 = 46;
+const GETCWD_SYSCALL: i32 = 47;
 const POLL_SYSCALL: i32 = 48;
 const SOCKETPAIR_SYSCALL: i32 = 49;
 const GETUID_SYSCALL: i32 = 50;
@@ -72,6 +73,7 @@ use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
 use crate::interface::errnos::*;
+use super::syscalls::sys_constants::*;
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -319,7 +321,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
 
         EXIT_SYSCALL => {
-            check_and_dispatch!(cage.exit_syscall,)
+            check_and_dispatch!(cage.exit_syscall, interface::get_int(arg1))
         }
         FLOCK_SYSCALL => {
             check_and_dispatch!(cage.flock_syscall, interface::get_int(arg1), interface::get_int(arg2))
@@ -378,6 +380,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         PIPE_SYSCALL => {
             check_and_dispatch!(cage.pipe_syscall, interface::get_pipearray(arg1))
         }
+        GETCWD_SYSCALL => {
+            check_and_dispatch!(cage.getcwd_syscall, interface::get_mutcbuf(arg1), interface::get_uint(arg2))
+        }
         _ => {//unknown syscall
             -1
         }
@@ -412,7 +417,7 @@ pub extern "C" fn lindrustfinalize() {
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
-        cage.exit_syscall();
+        cage.exit_syscall(EXIT_SUCCESS);
     }
     persist_metadata(&*FS_METADATA.read().unwrap());
 }

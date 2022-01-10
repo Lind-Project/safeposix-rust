@@ -57,6 +57,11 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     for i in 0..count {slice[i] = 0u8;}
     count as i32
 }
+pub fn fill(bufptr: *mut u8, count: usize, values:&Vec<u8>) -> i32 {
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    slice.copy_from_slice(&values);
+    count as i32
+}
 
 pub fn copy_fromrustdeque_sized(bufptr: *mut u8, count: usize, vecdeq: &RustDeque<u8>) {
     let (slice1, slice2) = vecdeq.as_slices();
