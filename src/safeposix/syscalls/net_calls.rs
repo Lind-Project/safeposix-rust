@@ -1171,13 +1171,22 @@ impl Cage {
     }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
-    pub fn gethostname_syscall(&self, address_ptr: &mut [u8], length: usize) -> i32 {
-        let name_length: usize = DEFAULT_HOSTNAME.chars().count();
-        if name_length > length {
-            address_ptr[..length].copy_from_slice(&DEFAULT_HOSTNAME[..length].as_bytes());
-        } else {
-            address_ptr[..name_length].copy_from_slice(&DEFAULT_HOSTNAME.as_bytes());
+    pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
+        if length < 0 {
+            return syscall_error(Errno::EINVAL, "gethostname_syscall", "provided length argument is invalid");
         }
+
+        let mut bytes: Vec<u8> = DEFAULT_HOSTNAME.as_bytes().to_vec();
+        bytes.push(0u8); //Adding a null terminator to the end of the string
+        let name_length = bytes.len();
+        
+        let mut len = name_length;
+        if (length as usize) < len {
+            len = (length as usize);
+        }
+
+        interface::fill(address_ptr, len, &bytes);
+
         return 0;
     }
 
