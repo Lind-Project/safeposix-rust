@@ -382,7 +382,7 @@ pub mod net_tests {
         assert!(clientsockfd > 0);
         
         //binding to a socket
-        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53000_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53003_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
         let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
