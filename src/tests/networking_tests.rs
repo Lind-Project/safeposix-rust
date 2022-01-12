@@ -454,7 +454,7 @@ pub mod net_tests {
         //client 2 connects to the server to send and recv data...
         let thread2 = interface::helper_thread(move || {
             //give it a longer time so that it can sufficiently process all of the data
-            interface::sleep(interface::RustDuration::from_millis(100));
+            interface::sleep(interface::RustDuration::from_millis(200));
             let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
 
             assert_eq!(cage2.connect_syscall(clientsockfd2, &socket), 0);
