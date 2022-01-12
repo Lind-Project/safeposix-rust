@@ -6,23 +6,23 @@ pub mod net_tests {
     use std::mem::size_of;
 
     pub fn net_tests() {
-        ut_lind_net_bind();
-        ut_lind_net_bind_multiple();
-        ut_lind_net_bind_on_zero();
-        ut_lind_net_connect_basic_udp();
-        ut_lind_net_getpeername();
-        ut_lind_net_getsockname();
-        ut_lind_net_listen();
+        // ut_lind_net_bind();
+        // ut_lind_net_bind_multiple();
+        // ut_lind_net_bind_on_zero();
+        // ut_lind_net_connect_basic_udp();
+        // ut_lind_net_getpeername();
+        // ut_lind_net_getsockname();
+        // ut_lind_net_listen();
         ut_lind_net_poll(); //WIP -- done, just need to check it on something that's not a Mac
-        ut_lind_net_recvfrom();
-        ut_lind_net_select(); //WIP
-        ut_lind_net_shutdown();
-        ut_lind_net_socket();
-        ut_lind_net_socketoptions();
-        ut_lind_net_socketpair(); //WIP -- done, just need to check it on something that's not a Mac
-        ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple();
-        ut_lind_net_udp_connect();
+        // ut_lind_net_recvfrom();
+        // ut_lind_net_select(); //WIP
+        // ut_lind_net_shutdown();
+        // ut_lind_net_socket();
+        // ut_lind_net_socketoptions();
+        // ut_lind_net_socketpair(); //WIP -- done, just need to check it on something that's not a Mac
+        // ut_lind_net_udp_bad_bind();
+        // ut_lind_net_udp_simple();
+        // ut_lind_net_udp_connect();
     }
 
 
