@@ -1406,12 +1406,14 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let filedesc_enum = wrappedfd.read().unwrap();
 
+            let locktable = LOCK_TABLE.read().unwrap();
+
             let lock = match &*filedesc_enum {
-                File(normalfile_filedesc_obj) => {get_advlock(normalfile_filedesc_obj.advlock)}
-                Socket(socket_filedesc_obj) => {get_advlock(socket_filedesc_obj.advlock)}
-                Stream(stream_filedesc_obj) => {get_advlock(stream_filedesc_obj.advlock)}
-                Pipe(pipe_filedesc_obj) => {get_advlock(pipe_filedesc_obj.advlock)}
-                Epoll(epoll_filedesc_obj) => {get_advlock(epoll_filedesc_obj.advlock)}
+                File(normalfile_filedesc_obj) => {locktable.get(&normalfile_filedesc_obj.advlock).unwrap()}
+                Socket(socket_filedesc_obj) => {locktable.get(&socket_filedesc_obj.advlock).unwrap()}
+                Stream(stream_filedesc_obj) => {locktable.get(&stream_filedesc_obj.advlock).unwrap()}
+                Pipe(pipe_filedesc_obj) => {locktable.get(&pipe_filedesc_obj.advlock).unwrap()}
+                Epoll(epoll_filedesc_obj) => {locktable.get(&epoll_filedesc_obj.advlock).unwrap()}
             };
             match operation & (LOCK_SH | LOCK_EX | LOCK_UN) {
                 LOCK_SH => {
