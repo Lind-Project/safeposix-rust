@@ -158,7 +158,7 @@ pub fn add_advlock() -> Option<u64> {
     let table = LOCK_TABLE.write().unwrap();
     for fd in 0..10000 {
         if !table.contains_key(&fd) {
-            table.insert(interface::RustRfc::new(interface::interface::AdvisoryLock::new()));
+            table.insert(fd, interface::RustRfc::new(interface::interface::AdvisoryLock::new()));
             return Some(fd);
         }
     }
@@ -168,5 +168,5 @@ pub fn add_advlock() -> Option<u64> {
 
 pub fn get_advlock(locknum: u64) -> interface::AdvisoryLock {
     let table = LOCK_TABLE.read().unwrap();
-    table.get(locknum).unwrap()
+    table.get(&locknum).unwrap()
 }
