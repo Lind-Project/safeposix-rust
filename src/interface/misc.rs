@@ -74,7 +74,7 @@ pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, 
 pub struct AdvisoryLock {
     //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
     advisory_lock: RustRfc<Mutex<i32>>,
-    advisory_condvar: Condvar
+    advisory_condvar: RustRfc<Condvar>
 }
 
 impl AdvisoryLock {
