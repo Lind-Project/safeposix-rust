@@ -79,7 +79,7 @@ pub struct AdvisoryLock {
 
 impl AdvisoryLock {
     pub fn new() -> Self {
-        Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
+        Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: RustRfc::new(Condvar::new())}
     }
 
     pub fn lock_ex(&self) {
