@@ -154,7 +154,7 @@ pub fn get_next_pipe() -> Option<i32> {
     return None;
 }
 
-pub fn add_advlock() -> Option<i32> {
+pub fn add_advlock() -> Option<u64> {
     let table = LOCK_TABLE.write().unwrap();
     for fd in STARTINGPIPE..MAXPIPE {
         if !table.contains_key(&fd) {
@@ -162,11 +162,11 @@ pub fn add_advlock() -> Option<i32> {
             return Some(fd);
         }
     }
-    
+
     return None;
 }
 
-pub fn get_advlock(locknum: i32) -> AdvisoryLock {
+pub fn get_advlock(locknum: u64) -> AdvisoryLock {
     let table = LOCK_TABLE.read().unwrap();
     table.get(locknum)
 }
