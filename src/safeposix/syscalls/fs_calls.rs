@@ -125,7 +125,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock:  add_advlock().unwrap())});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock:  add_advlock().unwrap()});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -1628,7 +1628,7 @@ impl Cage {
                 return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
             };
 
-            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock:  add_advlock().unwrap())});
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock:  add_advlock().unwrap()});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
 
