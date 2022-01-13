@@ -25,8 +25,7 @@ jobs:
           echo github.ref: ${{ github.ref }}
           cd /home/lind/lind_project/
       
-      - name: Checkout lind-project with default branch (develop)
-        if: github.head_ref == ''
+      - name: Checkout lind-project
         run: |
           git --git-dir /home/lind/lind_project/.git remote update origin --prune;
           git --git-dir /home/lind/lind_project/.git checkout --force remotes/origin/develop;
