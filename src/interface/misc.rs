@@ -72,61 +72,61 @@ pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, 
 
 #[derive(Debug, Clone)]
 pub struct AdvisoryLock {
-    //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
-    advisory_lock: RustRfc<Mutex<i32>>,
-    advisory_condvar: RustRfc<Condvar>
+    // //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
+    // advisory_lock: RustRfc<Mutex<i32>>,
+    // advisory_condvar: RustRfc<Condvar>
 }
 
 impl AdvisoryLock {
-    pub fn new() -> Self {
-        Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: RustRfc::new(Condvar::new())}
-    }
+    // pub fn new() -> Self {
+    //     Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: RustRfc::new(Condvar::new())}
+    // }
 
-    pub fn lock_ex(&self) {
-        let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
-                                                               |guard| {*guard != 0}).unwrap();
-        *waitedguard = -1;
-    }
+    // pub fn lock_ex(&self) {
+    //     let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
+    //                                                            |guard| {*guard != 0}).unwrap();
+    //     *waitedguard = -1;
+    // }
 
-    pub fn lock_sh(&self) {
-        let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
-                                                               |guard| {*guard < 0}).unwrap();
-        *waitedguard += 1;
-    }
-    pub fn try_lock_ex(&self) -> bool {
-        if let Ok(mut guard) = self.advisory_lock.try_lock() {
-            if *guard == 0 {
-              *guard = -1;
-              return true
-            }
-        }
-        false
-    }
-    pub fn try_lock_sh(&self) -> bool {
-        if let Ok(mut guard) = self.advisory_lock.try_lock() {
-            if *guard >= 0 {
-              *guard += 1;
-              return true
-            }
-        }
-        false
-    }
+    // pub fn lock_sh(&self) {
+    //     let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
+    //                                                            |guard| {*guard < 0}).unwrap();
+    //     *waitedguard += 1;
+    // }
+    // pub fn try_lock_ex(&self) -> bool {
+    //     if let Ok(mut guard) = self.advisory_lock.try_lock() {
+    //         if *guard == 0 {
+    //           *guard = -1;
+    //           return true
+    //         }
+    //     }
+    //     false
+    // }
+    // pub fn try_lock_sh(&self) -> bool {
+    //     if let Ok(mut guard) = self.advisory_lock.try_lock() {
+    //         if *guard >= 0 {
+    //           *guard += 1;
+    //           return true
+    //         }
+    //     }
+    //     false
+    // }
 
-    pub fn unlock(&self) -> bool {
-        let mut guard = self.advisory_lock.lock().unwrap();
+    // pub fn unlock(&self) -> bool {
+    //     let mut guard = self.advisory_lock.lock().unwrap();
 
-        if *guard < 0 {
-            *guard -= 1;
+    //     if *guard < 0 {
+    //         *guard -= 1;
   
-            //only a writer could be waiting at this point
-            if *guard == 0 {self.advisory_condvar.notify_one();}
-            true
-        } else if *guard == -1 {
-            if *guard != -1 {return false;}
-            *guard = 0;
+    //         //only a writer could be waiting at this point
+    //         if *guard == 0 {self.advisory_condvar.notify_one();}
+    //         true
+    //     } else if *guard == -1 {
+    //         if *guard != -1 {return false;}
+    //         *guard = 0;
   
-            self.advisory_condvar.notify_all(); //in case readers are waiting
-            true
-        } else {false}
-    }
+    //         self.advisory_condvar.notify_all(); //in case readers are waiting
+    //         true
+    //     } else {false}
+    // }
 }
