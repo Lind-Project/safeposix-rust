@@ -162,6 +162,8 @@ pub fn add_advlock() -> Option<i32> {
             return Some(fd);
         }
     }
+    
+    return None;
 }
 
 pub fn get_advlock(locknum: i32) -> AdvisoryLock {
