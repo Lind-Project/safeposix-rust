@@ -13,13 +13,13 @@ pub mod net_tests {
         // ut_lind_net_getpeername();
         // ut_lind_net_getsockname();
         // ut_lind_net_listen();
-        ut_lind_net_poll();
+        // ut_lind_net_poll();
         // ut_lind_net_recvfrom();
-        ut_lind_net_select();
+        // ut_lind_net_select();
         // ut_lind_net_shutdown();
         // ut_lind_net_socket();
         // ut_lind_net_socketoptions();
-         ut_lind_net_socketpair();
+        ut_lind_net_socketpair();
         // ut_lind_net_udp_bad_bind();
         // ut_lind_net_udp_simple();
         // ut_lind_net_udp_connect();
