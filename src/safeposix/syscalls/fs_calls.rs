@@ -1442,6 +1442,8 @@ impl Cage {
         // } else {
         //     syscall_error(Errno::ENOENT, "flock", "invalid file descriptor")
         // }
+        0 //flock has  succeeded!
+
     }
 
     //------------------RMDIR SYSCALL------------------
