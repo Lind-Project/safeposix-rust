@@ -78,9 +78,10 @@ pub struct AdvisoryLock {
 }
 
 impl AdvisoryLock {
-    // pub fn new() -> Self {
-    //     Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: RustRfc::new(Condvar::new())}
-    // }
+    pub fn new() -> Self {
+        Self {}
+        // Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: RustRfc::new(Condvar::new())}
+    }
 
     // pub fn lock_ex(&self) {
     //     let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
