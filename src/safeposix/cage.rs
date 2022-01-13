@@ -42,6 +42,7 @@ pub struct StreamDesc {
     pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
     pub flags: i32,
     pub advlock: u64
+}
 
 #[derive(Debug, Clone)]
 pub struct SocketDesc {
