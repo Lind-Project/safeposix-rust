@@ -158,7 +158,7 @@ pub fn add_advlock() -> i32 {
     let table = LOCK_TABLE.write().unwrap();
     for fd in STARTINGPIPE..MAXPIPE {
         if !table.contains_key(&fd) {
-            table.insert(interface::RustRfc::new(interface::AdvisoryLock::new())
+            table.insert(interface::RustRfc::new(interface::AdvisoryLock::new()))
             return Some(fd);
         }
     }
