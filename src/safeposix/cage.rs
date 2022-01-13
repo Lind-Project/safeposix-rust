@@ -168,5 +168,5 @@ pub fn add_advlock() -> Option<u64> {
 
 pub fn get_advlock(locknum: u64) -> interface::AdvisoryLock {
     let table = LOCK_TABLE.read().unwrap();
-    table.get(locknum)
+    table.get(locknum).unwrap()
 }
