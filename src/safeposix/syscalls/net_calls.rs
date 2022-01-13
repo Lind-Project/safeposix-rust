@@ -1199,9 +1199,9 @@ impl Cage {
                 //read
                 if events & POLLIN > 0 {reads.insert(fd);}
                 //write
-                if events & POLLOUT > 0 {reads.insert(fd);}
+                if events & POLLOUT > 0 {writes.insert(fd);}
                 //err
-                if events & POLLERR > 0 {reads.insert(fd);}
+                if events & POLLERR > 0 {errors.insert(fd);}
 
                 let mut mask: u32 = 0;
 
