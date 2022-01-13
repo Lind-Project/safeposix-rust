@@ -163,7 +163,7 @@ pub fn add_advlock() -> i32 {
     }
 }
 
-pub fn add_advlock(locknum: i32) -> AdvisoryLock {
+pub fn get_advlock(locknum: i32) -> AdvisoryLock {
     let table = LOCK_TABLE.read().unwrap();
     table.get(locknum)
 }

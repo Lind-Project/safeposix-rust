@@ -1407,11 +1407,11 @@ impl Cage {
             let filedesc_enum = wrappedfd.read().unwrap();
 
             let lock = match &*filedesc_enum {
-                File(normalfile_filedesc_obj) => {&normalfile_filedesc_obj.advlock}
-                Socket(socket_filedesc_obj) => {&socket_filedesc_obj.advlock}
-                Stream(stream_filedesc_obj) => {&stream_filedesc_obj.advlock}
-                Pipe(pipe_filedesc_obj) => {&pipe_filedesc_obj.advlock}
-                Epoll(epoll_filedesc_obj) => {&epoll_filedesc_obj.advlock}
+                File(normalfile_filedesc_obj) => {get_advlock(&normalfile_filedesc_obj.advlock)}
+                Socket(socket_filedesc_obj) => {get_advlock(&socket_filedesc_obj.advlock)}
+                Stream(stream_filedesc_obj) => {get_advlock(&stream_filedesc_obj.advlock)}
+                Pipe(pipe_filedesc_obj) => {get_advlock(&pipe_filedesc_obj.advlock)}
+                Epoll(epoll_filedesc_obj) => {get_advlock(&epoll_filedesc_obj.advlock)}
             };
             match operation & (LOCK_SH | LOCK_EX | LOCK_UN) {
                 LOCK_SH => {
