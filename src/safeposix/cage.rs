@@ -154,7 +154,7 @@ pub fn get_next_pipe() -> Option<i32> {
     return None;
 }
 
-pub fn add_advlock() -> i32 {
+pub fn add_advlock() -> Option<i32> {
     let table = LOCK_TABLE.write().unwrap();
     for fd in STARTINGPIPE..MAXPIPE {
         if !table.contains_key(&fd) {
