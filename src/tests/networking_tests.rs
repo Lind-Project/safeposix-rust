@@ -13,13 +13,13 @@ pub mod net_tests {
         // ut_lind_net_getpeername();
         // ut_lind_net_getsockname();
         // ut_lind_net_listen();
-        // ut_lind_net_poll(); //WIP -- done, just need to check it on something that's not a Mac
+        ut_lind_net_poll(); //WIP -- done, just need to check it on something that's not a Mac
         // ut_lind_net_recvfrom();
-        // ut_lind_net_select(); //WIP
+        //ut_lind_net_select(); //WIP
         // ut_lind_net_shutdown();
         // ut_lind_net_socket();
         // ut_lind_net_socketoptions();
-        ut_lind_net_socketpair(); //WIP -- done, just need to check it on something that's not a Mac
+        // ut_lind_net_socketpair();
         // ut_lind_net_udp_bad_bind();
         // ut_lind_net_udp_simple();
         // ut_lind_net_udp_connect();
@@ -698,7 +698,7 @@ pub mod net_tests {
         //client 1 connects to the server to send and recv data...
         let threadclient1 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(100));
-            let cage1 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
             assert_eq!(cage1.connect_syscall(clientsockfd1, &socket), 0);
             assert_eq!(cage1.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
@@ -711,13 +711,12 @@ pub mod net_tests {
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage1.close_syscall(clientsockfd1), 0);
-            assert_eq!(cage1.exit_syscall(), 0);
         });
 
         //client 2 connects to the server to send and recv data...
         let threadclient2 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(100));
-            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            let cage2 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
             assert_eq!(cage2.connect_syscall(clientsockfd2, &socket), 0);
             assert_eq!(cage2.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
@@ -730,7 +729,6 @@ pub mod net_tests {
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage2.close_syscall(clientsockfd2), 0);
-            assert_eq!(cage2.exit_syscall(), 0);
         });
 
         //acting as the server and processing the request
@@ -738,7 +736,8 @@ pub mod net_tests {
         loop {
             if counter > 600 { break; }
             counter += 1;
-            assert!(cage.select_syscall(11, &mut inputs, &mut outputs, &mut excepts, Some(interface::RustDuration::ZERO)) > 0);
+            let select_result = cage.select_syscall(11, &mut inputs, &mut outputs, &mut excepts, Some(interface::RustDuration::ZERO));
+            assert!(select_result >= 0);
             
             //Check for any activity in any of the Input sockets...
             let mut insocks_add: Vec<i32> = vec![];
@@ -969,64 +968,57 @@ pub mod net_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let mut socketpair = interface::SockPair::default();
         assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
-        let arc_cage = interface::RustRfc::new(cage.clone());
+        let cage2 = cage.clone();
 
         let thread = interface::helper_thread(move || {
-            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-            
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
             interface::sleep(interface::RustDuration::from_millis(30));
             assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15); 
-
-            assert_eq!(cage2.exit_syscall(), 0);
         });
 
-        assert_eq!((&*arc_cage).send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
+        assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
         let mut buf2 = sizecbuf(15);
-        (&*arc_cage).recv_syscall(socketpair.sock2, buf2.as_mut_ptr(), 15, 0);
+        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
         assert_eq!(cbuf2str(&buf2), "Socketpair Test");
     
         thread.join().unwrap();
 
-        assert_eq!((&*arc_cage).close_syscall(socketpair.sock1), 0);
-        assert_eq!((&*arc_cage).close_syscall(socketpair.sock2), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         // end of the TCP test
 
         socketpair = interface::SockPair::default();
         assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_DGRAM, 0, &mut socketpair), 0);
 
+        let cage2 = cage.clone();
         let thread = interface::helper_thread(move || {
-            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
-            
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
             interface::sleep(interface::RustDuration::from_millis(30));
             assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15); 
-
-            assert_eq!(cage2.exit_syscall(), 0);
         });
 
-        assert_eq!((&*arc_cage).send_syscall(socketpair.sock2, str2cbuf("test"), 4, 0), 4);
+        assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
         let mut buf2 = sizecbuf(15);
-        (&*arc_cage).recv_syscall(socketpair.sock2, buf2.as_mut_ptr(), 15, 0);
+        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
         assert_eq!(cbuf2str(&buf2), "Socketpair Test");
     
         thread.join().unwrap();
 
-        assert_eq!((&*arc_cage).close_syscall(socketpair.sock1), 0);
-        assert_eq!((&*arc_cage).close_syscall(socketpair.sock2), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         //end of the UDP test
 
-        assert_eq!((&*arc_cage).exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }
 
