@@ -30,7 +30,7 @@ pub struct FileDesc {
     pub position: usize,
     pub inode: usize,
     pub flags: i32,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::AdvisoryLock
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +38,7 @@ pub struct StreamDesc {
     pub position: usize,
     pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
     pub flags: i32,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::AdvisoryLock
 }
 
 #[derive(Debug, Clone)]
@@ -58,21 +58,21 @@ pub struct SocketDesc {
     //pub remoteaddr: Option<interface::GenSockaddr>,
     //pub last_peek: interface::RustDeque<u8>,
     pub socketobjectid: Option<i32>,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::AdvisoryLock
 }
 
 #[derive(Debug, Clone)]
 pub struct PipeDesc {
     pub pipe: i32,
     pub flags: i32,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::AdvisoryLock
 }
 
 #[derive(Debug, Clone)]
 pub struct EpollDesc {
     pub mode: i32,
     pub registered_fds: interface::RustHashMap<i32, EpollEvent>,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>,
+    pub advlock: interface::AdvisoryLock,
     pub errno: i32,
     pub flags: i32
 }
@@ -129,9 +129,9 @@ impl Cage {
     }
 
     pub fn load_lower_handle_stubs(&mut self) {
-        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
+        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::AdvisoryLock::new()})));
+        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::AdvisoryLock::new()})));
+        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::AdvisoryLock::new()})));
         let mut fdtable = self.filedescriptortable.write().unwrap();
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
