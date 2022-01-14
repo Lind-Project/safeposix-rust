@@ -158,8 +158,6 @@ pub fn add_advlock() -> Option<u64> {
     let mut table = LOCK_TABLE.write().unwrap();
     for locknum in 0..10000 {
         if !table.contains_key(&locknum) {
-            println!("new adv{:?}", locknum);
-
             table.insert(locknum, interface::AdvisoryLock::new());
             return Some(locknum);
         }
