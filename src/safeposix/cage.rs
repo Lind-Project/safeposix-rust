@@ -16,7 +16,7 @@ pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::
         interface::RustLock::new(interface::new_hashmap())
 );
 
-pub static LOCK_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<interface::AdvisoryLock>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
+pub static LOCK_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::AdvisoryLock>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
 
 #[derive(Debug, Clone)]
@@ -158,7 +158,7 @@ pub fn add_advlock() -> Option<u64> {
     let mut table = LOCK_TABLE.write().unwrap();
     for fd in 0..10000 {
         if !table.contains_key(&fd) {
-            table.insert(fd, interface::RustRfc::new(interface::AdvisoryLock::new()));
+            table.insert(fd, interface::AdvisoryLock::new());
             return Some(fd);
         }
     }
