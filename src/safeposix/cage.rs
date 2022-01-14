@@ -8,6 +8,7 @@ pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
@@ -17,7 +18,7 @@ pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::
 );
 
 pub static LOCK_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::AdvisoryLock>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
-
+static LOCK_COUNT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {
@@ -156,13 +157,9 @@ pub fn get_next_pipe() -> Option<i32> {
 
 pub fn add_advlock() -> Option<u64> {
     let mut table = LOCK_TABLE.write().unwrap();
-    for locknum in 0..10000 {
-        if !table.contains_key(&locknum) {
-            table.insert(locknum, interface::AdvisoryLock::new());
-            return Some(locknum);
-        }
-    }
-
-    return None;
+    let locknum = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+    table.insert(locknum, interface::AdvisoryLock::new());
+    
+    return Some(locknum);
 }
 
