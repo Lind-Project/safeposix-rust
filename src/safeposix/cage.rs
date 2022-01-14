@@ -157,7 +157,7 @@ pub fn get_next_pipe() -> Option<i32> {
 
 pub fn add_advlock() -> Option<u64> {
     let mut table = LOCK_TABLE.write().unwrap();
-    let locknum = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+    let locknum = LOCK_COUNT.fetch_add(1, Ordering::Relaxed);
     table.insert(locknum, interface::AdvisoryLock::new());
     
     return Some(locknum);
