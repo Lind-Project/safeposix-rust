@@ -23,6 +23,7 @@ pub mod net_tests {
         ut_lind_net_udp_bad_bind();
         ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
+        ut_lind_net_gethostname();
     }
 
 
@@ -46,7 +47,7 @@ pub mod net_tests {
         let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert_eq!(cage.bind_syscall(sockfd3, &socket), 0);
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -220,7 +221,7 @@ pub mod net_tests {
             assert_eq!(cage2.close_syscall(sockfd), 0);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
 
         //connect to the server
@@ -263,7 +264,7 @@ pub mod net_tests {
         
         thread.join().unwrap();
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -293,7 +294,7 @@ pub mod net_tests {
         sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -312,7 +313,7 @@ pub mod net_tests {
         socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50104u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
         assert_eq!(cage.connect_syscall(sockfd, &socket), 0);
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -337,7 +338,7 @@ pub mod net_tests {
         assert_eq!(cage.getpeername_syscall(sockfd, &mut retsocket), 0);
         assert_eq!(retsocket, socket);
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -365,7 +366,7 @@ pub mod net_tests {
         assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
         assert_eq!(retsocket, socket);
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
     
@@ -396,7 +397,7 @@ pub mod net_tests {
             assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
             
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
 
         interface::sleep(interface::RustDuration::from_millis(100));
@@ -410,7 +411,7 @@ pub mod net_tests {
         
         thread.join().unwrap();
         
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -647,7 +648,7 @@ pub mod net_tests {
             
             assert_eq!(cage2.close_syscall(sockfd), 0);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
 
         //connect to the server
@@ -668,7 +669,7 @@ pub mod net_tests {
         
         thread.join().unwrap();
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -839,7 +840,7 @@ pub mod net_tests {
             assert_ne!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0); //should fail
 
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
@@ -850,7 +851,7 @@ pub mod net_tests {
         
         thread.join().unwrap();
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -880,7 +881,7 @@ pub mod net_tests {
         assert!(sockfd > 0);
 
         assert_eq!(cage.close_syscall(sockfd), 0);
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -966,7 +967,7 @@ pub mod net_tests {
         assert_eq!(cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore), 0);
         assert_eq!(optstore, 1);
         
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -1052,7 +1053,7 @@ pub mod net_tests {
         //now the bind should fail...
         assert_ne!(cage.bind_syscall(sockfd, &socket), 0);
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -1088,7 +1089,7 @@ pub mod net_tests {
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
             assert_eq!(cage2.close_syscall(serverfd), 0);
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
         
         interface::sleep(interface::RustDuration::from_millis(50));
@@ -1110,7 +1111,7 @@ pub mod net_tests {
 
         assert_eq!(cage.close_syscall(sendsockfd2), 0);
         assert_eq!(cage.close_syscall(clientfd), 0);
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -1145,7 +1146,7 @@ pub mod net_tests {
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
             assert_eq!(cage2.close_syscall(listenfd), 0);
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
         
         assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
@@ -1153,6 +1154,42 @@ pub mod net_tests {
         assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
         thread.join().unwrap();
 
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let hostnme = format!("{}{}", DEFAULT_HOSTNAME, "\0");
+
+        let mut buf = vec![0u8; 5];
+        let bufptr: *mut u8 = &mut buf[0];
+        assert_eq!(cage.gethostname_syscall(bufptr, -1), -(Errno::EINVAL as i32));
+        assert_eq!(cage.gethostname_syscall(bufptr, 5), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Lind\0");
+
+        let mut buf = vec![0u8; 5];
+        let bufptr: *mut u8 = &mut buf[0];
+        assert_eq!(cage.gethostname_syscall(bufptr, 4), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Lind\0");
+
+        let mut buf = vec![0u8; 5];
+        let bufptr: *mut u8 = &mut buf[0];
+        assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li\0\0\0");
+
+        let mut buf = vec![0u8; 4];
+        let bufptr: *mut u8 = &mut buf[0];        
+        assert_eq!(cage.gethostname_syscall(bufptr, 4), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Lind");
+
+        let mut buf = vec![0u8; 2];
+        let bufptr: *mut u8 = &mut buf[0];        
+        assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
+        
         assert_eq!(cage.exit_syscall(), 0);
         lindrustfinalize();
     }

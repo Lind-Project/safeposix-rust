@@ -12,7 +12,7 @@ pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomic
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
-pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
+pub use std::sync::{RwLock as RustLock, Arc as RustRfc, RwLockReadGuard as RustReadGuard};
 use std::sync::{Mutex, Condvar};
 
 use libc::mmap;
@@ -43,6 +43,10 @@ pub fn flush_stdout() {
     io::stdout().flush().unwrap();
 }
 
+pub fn get_errno() -> i32 {
+    (unsafe{*libc::__errno_location()}) as i32
+}
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
@@ -51,6 +55,11 @@ pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
 pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     for i in 0..count {slice[i] = 0u8;}
+    count as i32
+}
+pub fn fill(bufptr: *mut u8, count: usize, values:&Vec<u8>) -> i32 {
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    slice.copy_from_slice(&values[..count]);
     count as i32
 }
 
