@@ -445,7 +445,7 @@ impl Cage {
 
                             //if we have peeked some data before, fill our buffer with that data before moving on
                             if !sockfdobj.last_peek.is_empty() {
-                                let bytecount = interface::rust_max(sockfdobj.last_peek.len(), newbuflen);
+                                let bytecount = interface::rust_min(sockfdobj.last_peek.len(), newbuflen);
                                 interface::copy_fromrustdeque_sized(buf, bytecount, &sockfdobj.last_peek);
                                 newbuflen -= bytecount;
                                 newbufptr = newbufptr.wrapping_add(bytecount);
@@ -720,6 +720,7 @@ impl Cage {
                                 if vec.is_empty() {
                                     mutmetadata.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
                                 }
+                                drop(fdtable);
                                 drop(mutmetadata);
                                 tup
                             } else {
@@ -770,6 +771,7 @@ impl Cage {
                                     return errnum;
                                 }
                             };
+                            drop(mutmetadata);
 
                             *addr = remote_addr; //populate addr with what address it connected to
                             let domain = sockfdobj.domain;
