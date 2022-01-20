@@ -386,6 +386,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         GETHOSTNAME_SYSCALL => {
             check_and_dispatch!(cage.gethostname_syscall, interface::get_mutcbuf(arg1), interface::get_isize(arg2))
         }
+        MKDIR_SYSCALL => {
+            check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
+        }
         _ => {//unknown syscall
             -1
         }
