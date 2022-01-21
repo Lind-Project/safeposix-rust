@@ -118,12 +118,14 @@ impl Cage {
 
     pub fn getgid_syscall(&self) -> i32 {
         if self.getgid == -1 {
+            self.getgid = DEFAULT_GID as i32;
             return -1
         } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
     pub fn getegid_syscall(&self) -> i32 {
         if self.getegid == -1 {
+            self.getegid = DEFAULT_GID as i32;
             return -1
         } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
@@ -131,12 +133,14 @@ impl Cage {
 
     pub fn getuid_syscall(&self) -> i32 {
         if self.getuid == -1 {
+            self.getuid = DEFAULT_GID as i32;
             return -1
         } 
         DEFAULT_GID as i32 //Lind is only run as one user so a default value is returned
     }
     pub fn geteuid_syscall(&self) -> i32 {
         if self.geteuid == -1 {
+            self.geteuid = DEFAULT_GID as i32;
             return -1
         } 
         DEFAULT_GID as i32 //Lind is only run as one user so a default value is returned
