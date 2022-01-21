@@ -222,7 +222,8 @@ pub extern "C" fn lindrustinit() {
     //init cage is its own parent
     let mut initcage = Cage{
         cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+        parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
     initcage.load_lower_handle_stubs();
     mutcagetable.insert(1, interface::RustRfc::new(initcage));
 

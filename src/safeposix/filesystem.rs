@@ -107,7 +107,8 @@ pub fn load_fs() {
     let utilcage = Cage{cageid: 0,
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
-        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
 
     let mut mutmetadata = FS_METADATA.write().unwrap();
 
