@@ -53,7 +53,8 @@ impl Cage {
         }
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
-            filedescriptortable: interface::RustLock::new(newfdtable)
+            filedescriptortable: interface::RustLock::new(newfdtable),
+            getgid: self.getgid, getuid: self.getuid, getegid: self.getegid, geteuid: self.geteuid
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
@@ -71,7 +72,9 @@ impl Cage {
         //     Epoll(_p) => p.flags & CLOEXEC
         // });
 
-        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
+        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
+            parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
+            getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
         //wasteful clone of fdtable, but mutability constraints exist
 
         {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
@@ -114,17 +117,29 @@ impl Cage {
     }
 
     pub fn getgid_syscall(&self) -> i32 {
+        if self.getgid == -1 {
+            return -1
+        } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
     pub fn getegid_syscall(&self) -> i32 {
+        if self.getegid == -1 {
+            return -1
+        } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
 
     pub fn getuid_syscall(&self) -> i32 {
-        DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+        if self.getuid == -1 {
+            return -1
+        } 
+        DEFAULT_GID as i32 //Lind is only run as one user so a default value is returned
     }
     pub fn geteuid_syscall(&self) -> i32 {
-        DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+        if self.geteuid == -1 {
+            return -1
+        } 
+        DEFAULT_GID as i32 //Lind is only run as one user so a default value is returned
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
