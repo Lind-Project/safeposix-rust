@@ -14,6 +14,7 @@
 
 use std::env;
 use std::iter::repeat;
+use std::sync::atomic::{AtomicI32};
 
 mod interface;
 mod safeposix;
@@ -109,7 +110,7 @@ fn main() {
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
                         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
-                        getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
+                        getgid: AtomicI32::new(-1), getuid: AtomicI32::new(-1), getegid: AtomicI32::new(-1), geteuid: AtomicI32::new(-1)};
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {

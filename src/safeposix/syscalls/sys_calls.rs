@@ -55,7 +55,8 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
             filedescriptortable: interface::RustLock::new(newfdtable),
-            getgid: self.getgid, getuid: self.getuid, getegid: self.getegid, geteuid: self.geteuid
+            getgid: AtomicI32::new(self.getgid.load(Ordering::Relaxed)), getuid: AtomicI32::new(self.getuid.load(Ordering::Relaxed)), getegid: AtomicI32::new(self.getegid.load(Ordering::Relaxed)), geteuid: AtomicI32::new(self.geteuid.load(Ordering::Relaxed))
+            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
