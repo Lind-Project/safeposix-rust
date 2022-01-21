@@ -7,8 +7,6 @@ use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 
 use super::sys_constants::*;
 use super::fs_constants::*;
-use std::sync::atomic::{AtomicI32, Ordering};
-
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
@@ -55,7 +53,10 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
             filedescriptortable: interface::RustLock::new(newfdtable),
-            getgid: AtomicI32::new(self.getgid.load(Ordering::Relaxed)), getuid: AtomicI32::new(self.getuid.load(Ordering::Relaxed)), getegid: AtomicI32::new(self.getegid.load(Ordering::Relaxed)), geteuid: AtomicI32::new(self.geteuid.load(Ordering::Relaxed))
+            getgid: interface::AtomicI32::new(self.getgid.load(interface::Ordering::Relaxed)), 
+            getuid: interface::AtomicI32::new(self.getuid.load(interface::Ordering::Relaxed)), 
+            getegid: interface::AtomicI32::new(self.getegid.load(interface::Ordering::Relaxed)), 
+            geteuid: interface::AtomicI32::new(self.geteuid.load(interface::Ordering::Relaxed))
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
@@ -76,7 +77,11 @@ impl Cage {
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
             parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
-            getgid: AtomicI32::new(-1), getuid: AtomicI32::new(-1), getegid: AtomicI32::new(-1), geteuid: AtomicI32::new(-1)};
+            getgid: interface::AtomicI32::new(-1), 
+            getuid: interface::AtomicI32::new(-1), 
+            getegid: interface::AtomicI32::new(-1), 
+            geteuid: interface::AtomicI32::new(-1)
+        };
         //wasteful clone of fdtable, but mutability constraints exist
 
         {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
@@ -121,31 +126,30 @@ impl Cage {
     /*if its negative 1
     return -1, but also set the values in the cage struct to the DEFAULTs for future calls*/
     pub fn getgid_syscall(&self) -> i32 {
-        if self.getgid.load(Ordering::Relaxed) == -1 {
-            self.getgid.store(DEFAULT_GID as i32, Ordering::Relaxed);
+        if self.getgid.load(interface::Ordering::Relaxed) == -1 {
+            self.getgid.store(DEFAULT_GID as i32, interface::Ordering::Relaxed);
             return -1
         }   
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
     pub fn getegid_syscall(&self) -> i32 {
-        if self.getegid.load(Ordering::Relaxed) == -1 {
-            self.getegid.store(DEFAULT_GID as i32, Ordering::Relaxed);
-            //self.getegid = DEFAULT_GID as i32;
+        if self.getegid.load(interface::Ordering::Relaxed) == -1 {
+            self.getegid.store(DEFAULT_GID as i32, interface::Ordering::Relaxed);
             return -1
         } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
 
     pub fn getuid_syscall(&self) -> i32 {
-        if self.getuid.load(Ordering::Relaxed) == -1 {
-            self.getuid.store(DEFAULT_UID as i32, Ordering::Relaxed);
+        if self.getuid.load(interface::Ordering::Relaxed) == -1 {
+            self.getuid.store(DEFAULT_UID as i32, interface::Ordering::Relaxed);
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
     pub fn geteuid_syscall(&self) -> i32 {
-        if self.geteuid.load(Ordering::Relaxed) == -1 {
-            self.geteuid.store(DEFAULT_UID as i32, Ordering::Relaxed);
+        if self.geteuid.load(interface::Ordering::Relaxed) == -1 {
+            self.geteuid.store(DEFAULT_UID as i32, interface::Ordering::Relaxed);
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
