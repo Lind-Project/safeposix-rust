@@ -73,6 +73,7 @@ use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
 use super::syscalls::sys_constants::*;
+use std::sync::atomic::{AtomicI32};
 
 
 //this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
@@ -216,14 +217,14 @@ pub extern "C" fn lindrustinit() {
     let mut utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
-        getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
+        getgid: AtomicI32::new(-1), getuid: AtomicI32::new(-1), getegid: AtomicI32::new(-1), geteuid: AtomicI32::new(-1)};
     mutcagetable.insert(0, interface::RustRfc::new(utilcage));
 
     //init cage is its own parent
     let mut initcage = Cage{
         cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
-        getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
+        getgid: AtomicI32::new(-1), getuid: AtomicI32::new(-1), getegid: AtomicI32::new(-1), geteuid: AtomicI32::new(-1)};
     initcage.load_lower_handle_stubs();
     mutcagetable.insert(1, interface::RustRfc::new(initcage));
 

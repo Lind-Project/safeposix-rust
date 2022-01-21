@@ -7,6 +7,7 @@ use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 
 use super::sys_constants::*;
 use super::fs_constants::*;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 
 impl Cage {
@@ -74,7 +75,7 @@ impl Cage {
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
             parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
-            getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
+            getgid: AtomicI32::new(-1), getuid: AtomicI32::new(-1), getegid: AtomicI32::new(-1), geteuid: AtomicI32::new(-1)};
         //wasteful clone of fdtable, but mutability constraints exist
 
         {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
@@ -115,18 +116,19 @@ impl Cage {
     pub fn getppid_syscall(&self) -> i32 {
         self.parent as i32 // mimicing the call above -- easy to change later if necessary
     }
-    
+
     /*if its negative 1
     return -1, but also set the values in the cage struct to the DEFAULTs for future calls*/
     pub fn getgid_syscall(&self) -> i32 {
-        if self.getgid == -1 {
-            //self.getgid = DEFAULT_GID as i32; 
+        if self.getgid.load(Ordering::Relaxed) == -1 {
+            self.getgid.store(DEFAULT_GID as i32, Ordering::Relaxed);
             return -1
-        } 
+        }   
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
     pub fn getegid_syscall(&self) -> i32 {
-        if self.getegid == -1 {
+        if self.getegid.load(Ordering::Relaxed) == -1 {
+            self.getegid.store(DEFAULT_GID as i32, Ordering::Relaxed);
             //self.getegid = DEFAULT_GID as i32;
             return -1
         } 
@@ -134,15 +136,15 @@ impl Cage {
     }
 
     pub fn getuid_syscall(&self) -> i32 {
-        if self.getuid == -1 {
-            //self.getuid = DEFAULT_UID as i32;
+        if self.getuid.load(Ordering::Relaxed) == -1 {
+            self.getuid.store(DEFAULT_UID as i32, Ordering::Relaxed);
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
     pub fn geteuid_syscall(&self) -> i32 {
-        if self.geteuid == -1 {
-            //self.geteuid = DEFAULT_UID as i32;
+        if self.geteuid.load(Ordering::Relaxed) == -1 {
+            self.geteuid.store(DEFAULT_UID as i32, Ordering::Relaxed);
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned

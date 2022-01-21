@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use crate::interface;
+use std::sync::atomic::{AtomicI32};
 use super::syscalls::fs_constants::*;
 use super::syscalls::sys_constants::*;
 
@@ -108,7 +109,7 @@ pub fn load_fs() {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
-        getgid: -1, getuid: -1, getegid: -1, geteuid: -1};
+        getgid: AtomicI32::new(-1), getuid: AtomicI32::new(-1), getegid: AtomicI32::new(-1), geteuid: AtomicI32::new(-1)};
 
     let mut mutmetadata = FS_METADATA.write().unwrap();
 

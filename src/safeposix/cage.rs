@@ -8,6 +8,7 @@ pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
+use std::sync::atomic::{AtomicI32};
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
 
@@ -85,10 +86,10 @@ pub struct Cage {
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: interface::RustLock<FdTable>,
-    pub getgid: i32,
-    pub getuid: i32,
-    pub getegid: i32,
-    pub geteuid: i32
+    pub getgid: AtomicI32,
+    pub getuid: AtomicI32,
+    pub getegid: AtomicI32,
+    pub geteuid: AtomicI32
 }
 
 impl Cage {
@@ -131,6 +132,27 @@ impl Cage {
         let mut cwdbox = self.cwd.write().unwrap();
         *cwdbox = newwd;
     }
+
+/*     pub fn changegid(&self, newgid: i32) {
+        
+        let mut cagegid = self.getgid.write().unwrap();
+        *cagegid = newgid;
+    }
+
+    pub fn changeegid(&self, newegid: i32) {
+        let mut cageegid = self.getegid;
+        *cageegid = newegid;
+    }
+
+    pub fn changeuid(&self, newuid: i32) {
+        let mut cageuid = self.getuid;
+        *cageuid = newuid;
+    }
+
+    pub fn changeeuid(&self, neweuid: i32) {
+        let mut cageeuid = self.geteuid;
+        *cageeuid = neweuid;
+    } */
 
     pub fn load_lower_handle_stubs(&mut self) {
         let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
