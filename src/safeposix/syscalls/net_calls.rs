@@ -446,7 +446,7 @@ impl Cage {
 
                             //if we have peeked some data before, fill our buffer with that data before moving on
                             if !sockfdobj.last_peek.is_empty() {
-                                let bytecount = interface::rust_max(sockfdobj.last_peek.len(), newbuflen);
+                                let bytecount = interface::rust_min(sockfdobj.last_peek.len(), newbuflen);
                                 interface::copy_fromrustdeque_sized(buf, bytecount, &sockfdobj.last_peek);
                                 newbuflen -= bytecount;
                                 newbufptr = newbufptr.wrapping_add(bytecount);
@@ -722,6 +722,7 @@ impl Cage {
                                 if vec.is_empty() {
                                     mutmetadata.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
                                 }
+                                drop(fdtable);
                                 drop(mutmetadata);
                                 tup
                             } else {
@@ -843,7 +844,7 @@ impl Cage {
 
                                 if !mutmetadata.pending_conn_table.contains_key(&sockfdobj.localaddr.unwrap().port()) {
                                     let sid = Self::getsockobjid(&mut *sockfdobj);
-                                    let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                                    let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
                                     let sockobj = locksock.read().unwrap();
 
                                     let listeningsocket = match sockfdobj.domain {
@@ -859,7 +860,7 @@ impl Cage {
                                         //if it returned an error, then don't insert it into new_readfds
                                         continue;
                                     }
-                                }
+                                } //if it's already got a pending connection, add it!
 
                                 //if we reach here there is a pending connection
                                 new_readfds.insert(*fd);
@@ -1212,9 +1213,9 @@ impl Cage {
                 //read
                 if events & POLLIN > 0 {reads.insert(fd);}
                 //write
-                if events & POLLOUT > 0 {reads.insert(fd);}
+                if events & POLLOUT > 0 {writes.insert(fd);}
                 //err
-                if events & POLLERR > 0 {reads.insert(fd);}
+                if events & POLLERR > 0 {errors.insert(fd);}
 
                 let mut mask: u32 = 0;
 
@@ -1395,7 +1396,7 @@ impl Cage {
         }
     
         let portlessaddr = if newdomain == AF_INET {
-            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1]).to_be()};
+            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
             let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
             interface::GenSockaddr::V4(innersockaddr)
         } else if domain == AF_INET6 {
@@ -1406,25 +1407,16 @@ impl Cage {
             unreachable!();
         };
     
-        let mut mutmetadata = NET_METADATA.write().unwrap();
         if socktype == SOCK_STREAM {
-            let port = mutmetadata._get_available_tcp_port(portlessaddr.addr(), newdomain, false);
-    
-            if let Err(e) = port {
-                this.close_syscall(sock1fd);
-                this.close_syscall(sock2fd);
-                return e;
-            }
-    
-            let mut addr = portlessaddr;
-            addr.set_port(port.unwrap());
-    
-            let bindret = this.bind_syscall(sock1fd, &addr); //len assigned arbitrarily large value
+            let bindret = this.bind_inner(sock1fd, &portlessaddr, false); //len assigned arbitrarily large value
             if bindret != 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return bindret;
             }
+
+            let mut bound_addr = portlessaddr.clone();
+            this.getsockname_syscall(sock1fd, &mut bound_addr);
     
             let listenret = this.listen_syscall(sock1fd, 1);
             if listenret != 0 {
@@ -1433,9 +1425,13 @@ impl Cage {
                 return listenret;
             }
     
-            let mut garbage_remote = addr.clone();
+            let spin_val = interface::RustRfc::new(interface::RustAtomicBool::new(false));
+            let mut garbage_remote = portlessaddr.clone();
             let thishandle2 = this.clone();
+            
+            let sub_spin_val = spin_val.clone();
             let acceptor = interface::helper_thread(move || {
+                sub_spin_val.store(true, interface::RustAtomicOrdering::Relaxed);
                 let accret = thishandle2.accept_syscall(sock1fd, &mut garbage_remote);
                 if accret < 0 {
                     let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
@@ -1450,7 +1446,9 @@ impl Cage {
                 return accret;
             });
     
-            let connret = this.connect_syscall(sock2fd, &addr);
+            while !spin_val.load(interface::RustAtomicOrdering::Relaxed) {}
+            interface::sleep(interface::RustDuration::from_micros(100)); //this is a very bad way of handling it but I don't see a better one for now?
+            let connret = this.connect_syscall(sock2fd, &bound_addr);
             if connret < 0 {
                 let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
                     Ok(i) => i,
@@ -1464,56 +1462,41 @@ impl Cage {
             let otherfd = acceptor.join().unwrap();
             sv.sock1 = sock2fd;
             sv.sock2 = otherfd;
-            return 0;
         } else if socktype == SOCK_DGRAM {
-            let port1 = mutmetadata._get_available_udp_port(portlessaddr.addr(), newdomain, false);
-    
-            if let Err(e) = port1 {
-                this.close_syscall(sock1fd);
-                this.close_syscall(sock2fd);
-                return e;
-            }
-    
-            let port2 = mutmetadata._get_available_udp_port(portlessaddr.addr(), newdomain, false);
-    
-            if let Err(e) = port2 {
-                this.close_syscall(sock1fd);
-                this.close_syscall(sock2fd);
-                return e;
-            }
-    
-            let mut addr1 = portlessaddr.clone();
-            let mut addr2 = portlessaddr;
-            addr1.set_port(port1.unwrap());
-            addr2.set_port(port2.unwrap());
-    
-            let bind1ret = this.bind_syscall(sock1fd, &addr1); //arbitrarily large length given
+            let bind1ret = this.bind_inner(sock1fd, &portlessaddr, false); //arbitrarily large length given
             if bind1ret < 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return bind1ret;
             }
     
-            let bind2ret = this.bind_syscall(sock1fd, &addr2); //arbitrarily large length given
+            let bind2ret = this.bind_inner(sock2fd, &portlessaddr, false); //arbitrarily large length given
             if bind2ret < 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return bind2ret;
             }
+
+            let mut bound1addr = portlessaddr.clone();
+            let mut bound2addr = portlessaddr.clone();
+            this.getsockname_syscall(sock1fd, &mut bound1addr);
+            this.getsockname_syscall(sock2fd, &mut bound2addr);
     
-            let conn1ret = this.connect_syscall(sock1fd, &addr2);
+            let conn1ret = this.connect_syscall(sock1fd, &bound2addr);
             if conn1ret < 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return conn1ret;
             }
     
-            let conn2ret = this.connect_syscall(sock1fd, &addr1);
+            let conn2ret = this.connect_syscall(sock2fd, &bound1addr);
             if conn2ret < 0 {
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return conn2ret;
             }
+            sv.sock1 = sock1fd;
+            sv.sock2 = sock2fd;
         } else {
             unreachable!();
         }
