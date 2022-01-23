@@ -9,6 +9,7 @@ use std::io::{self, Read, Write};
 pub use std::collections::HashMap as RustHashMap;
 pub use std::cmp::{max as rust_max, min as rust_min};
 use std::str::{from_utf8, Utf8Error};
+pub use std::sync::atomic::{AtomicI32 as RustAtomicI32, Ordering};
 
 pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
 use std::sync::{Mutex, Condvar};

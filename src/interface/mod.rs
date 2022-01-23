@@ -17,4 +17,3 @@ pub use misc::*;
 pub use timer::*;
 pub use types::*;
 pub use errnos::*;
-pub use std::sync::atomic::{AtomicI32, Ordering};

@@ -108,10 +108,10 @@ pub fn load_fs() {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
         filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
-        getgid: interface::AtomicI32::new(-1), 
-        getuid: interface::AtomicI32::new(-1), 
-        getegid: interface::AtomicI32::new(-1), 
-        geteuid: interface::AtomicI32::new(-1)
+        getgid: interface::RustAtomicI32::new(-1), 
+        getuid: interface::RustAtomicI32::new(-1), 
+        getegid: interface::RustAtomicI32::new(-1), 
+        geteuid: interface::RustAtomicI32::new(-1)
     };
 
     let mut mutmetadata = FS_METADATA.write().unwrap();

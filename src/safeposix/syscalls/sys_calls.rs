@@ -53,10 +53,10 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
             filedescriptortable: interface::RustLock::new(newfdtable),
-            getgid: interface::AtomicI32::new(self.getgid.load(interface::Ordering::Relaxed)), 
-            getuid: interface::AtomicI32::new(self.getuid.load(interface::Ordering::Relaxed)), 
-            getegid: interface::AtomicI32::new(self.getegid.load(interface::Ordering::Relaxed)), 
-            geteuid: interface::AtomicI32::new(self.geteuid.load(interface::Ordering::Relaxed))
+            getgid: interface::RustAtomicI32::new(self.getgid.load(interface::Ordering::Relaxed)), 
+            getuid: interface::RustAtomicI32::new(self.getuid.load(interface::Ordering::Relaxed)), 
+            getegid: interface::RustAtomicI32::new(self.getegid.load(interface::Ordering::Relaxed)), 
+            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::Ordering::Relaxed))
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
@@ -77,10 +77,10 @@ impl Cage {
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
             parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
-            getgid: interface::AtomicI32::new(-1), 
-            getuid: interface::AtomicI32::new(-1), 
-            getegid: interface::AtomicI32::new(-1), 
-            geteuid: interface::AtomicI32::new(-1)
+            getgid: interface::RustAtomicI32::new(-1), 
+            getuid: interface::RustAtomicI32::new(-1), 
+            getegid: interface::RustAtomicI32::new(-1), 
+            geteuid: interface::RustAtomicI32::new(-1)
         };
         //wasteful clone of fdtable, but mutability constraints exist
 

@@ -85,10 +85,10 @@ pub struct Cage {
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: interface::RustLock<FdTable>,
-    pub getgid: interface::AtomicI32,
-    pub getuid: interface::AtomicI32,
-    pub getegid: interface::AtomicI32,
-    pub geteuid: interface::AtomicI32
+    pub getgid: interface::RustAtomicI32,
+    pub getuid: interface::RustAtomicI32,
+    pub getegid: interface::RustAtomicI32,
+    pub geteuid: interface::RustAtomicI32
 }
 
 impl Cage {
