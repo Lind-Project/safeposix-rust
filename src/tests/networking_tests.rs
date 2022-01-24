@@ -33,9 +33,9 @@ pub mod net_tests {
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        //should work...
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50102u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
 
+        //first bind should work... but second bind should not
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.bind_syscall(sockfd, &socket), -(Errno::EINVAL as i32)); //already bound so should fail
 

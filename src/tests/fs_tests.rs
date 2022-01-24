@@ -207,7 +207,7 @@ pub mod fs_tests {
         //we are going to open a socket with a UDP specification...
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        //bind should not be intersting
+        //bind should not be interesting
         let mut sockad = interface::GenSockaddr::V4(interface::SockaddrV4::default());
         sockad.set_family(AF_INET as u16);
         assert_eq!(cage.bind_syscall(sockfd, &sockad), 0);
