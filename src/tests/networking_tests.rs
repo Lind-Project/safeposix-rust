@@ -450,7 +450,7 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(1000));
 
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-            cage2.exit_syscall();
+            cage2.exit_syscall(EXIT_SUCCESS);
         });
 
         cage.fork_syscall(3);
@@ -466,7 +466,7 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(1000));
 
             assert_eq!(cage3.close_syscall(serversockfd), 0);
-            cage3.exit_syscall();
+            cage3.exit_syscall(EXIT_SUCCESS);
         });
             
         //acting as the server and processing the request
@@ -551,7 +551,7 @@ pub mod net_tests {
                 }
             }
             assert_eq!(cage.close_syscall(serversockfd), 0);
-            assert_eq!(cage.exit_syscall(), 0);
+            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
         });  
 
         thread1.join().unwrap();
@@ -722,7 +722,7 @@ pub mod net_tests {
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage2.close_syscall(clientsockfd1), 0);
-            cage2.exit_syscall();
+            cage2.exit_syscall(EXIT_SUCCESS);
         });
 
         //client 2 connects to the server to send and recv data...
@@ -741,7 +741,7 @@ pub mod net_tests {
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
-            cage3.exit_syscall();
+            cage3.exit_syscall(EXIT_SUCCESS);
         });
 
         //acting as the server and processing the request
@@ -801,7 +801,7 @@ pub mod net_tests {
         threadclient1.join().unwrap();
         threadclient2.join().unwrap();
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
         lindrustfinalize();
     }
     
@@ -1028,7 +1028,7 @@ pub mod net_tests {
 
         //end of the UDP test
 
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
         lindrustfinalize();
     }
 
@@ -1190,7 +1190,7 @@ pub mod net_tests {
         assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
         
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
         lindrustfinalize();
     }
 }
