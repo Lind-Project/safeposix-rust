@@ -551,7 +551,7 @@ pub mod net_tests {
                 }
             }
             assert_eq!(cage.close_syscall(serversockfd), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
+            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });  
 
         thread1.join().unwrap();
@@ -801,7 +801,7 @@ pub mod net_tests {
         threadclient1.join().unwrap();
         threadclient2.join().unwrap();
 
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
     
@@ -1028,7 +1028,7 @@ pub mod net_tests {
 
         //end of the UDP test
 
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -1190,7 +1190,7 @@ pub mod net_tests {
         assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
         
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }
