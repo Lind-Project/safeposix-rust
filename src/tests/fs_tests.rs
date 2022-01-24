@@ -70,9 +70,9 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
-    
-    
+
+
+
     pub fn persistencetest() {
         lindrustinit();
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
@@ -108,7 +108,7 @@ pub mod fs_tests {
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
-    
+ 
         assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
 
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
@@ -469,7 +469,7 @@ pub mod fs_tests {
         let mut buf = sizecbuf(100);
         assert_eq!(cage.lseek_syscall(read_fd, 0, SEEK_SET), 0);
 
-        //why is this failing??
+        //this fails because nothing is written to the readfd (the previous write was unwritable)
         assert_eq!(cage.read_syscall(read_fd, buf.as_mut_ptr(), 100), 0);
         assert_eq!(cage.close_syscall(read_fd), 0);
 
@@ -553,7 +553,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
- 
+
 
     pub fn ut_lind_fs_fstat_complex() {
         lindrustinit();
