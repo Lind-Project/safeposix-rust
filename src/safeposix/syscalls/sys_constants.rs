@@ -24,3 +24,8 @@ pub const STACK_MAX : u64 = 1 << 32;
 
 pub const RLIMIT_STACK: u64 = 0;
 pub const RLIMIT_NOFILE: u64 = 1;
+
+// Constants for exit_syscall status
+
+pub const EXIT_SUCCESS : i32 = 0;
+pub const EXIT_FAILURE : i32 = 1;

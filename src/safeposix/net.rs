@@ -218,7 +218,7 @@ impl NetMetadata {
         Ok(port)
     }
 
-    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, sockobjid: i32) -> Result<(), i32> {
+    pub fn _release_localport(&mut self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
         if !NET_DEVICES_LIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }

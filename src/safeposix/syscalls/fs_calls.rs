@@ -126,7 +126,7 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::AdvisoryLock::new()});
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -596,7 +596,10 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "recv not implemented yet")}
+                Socket(_) => {
+                    drop(filedesc_enum);
+                    self.recv_common(fd, buf, count, 0, &mut None, fdtable)
+                }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
@@ -749,7 +752,11 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {syscall_error(Errno::EOPNOTSUPP, "write", "send not implemented yet")}
+                Socket(_) => {
+                    drop(filedesc_enum);
+                    drop(fdtable);
+                    self.send_syscall(fd, buf, count, 0)
+                }
                 Stream(stream_filedesc_obj) => {
                     //if it's stdout or stderr, print out and we're done
                     if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
@@ -1649,7 +1656,7 @@ impl Cage {
                 return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
             };
 
-            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::AdvisoryLock::new()});
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
 
@@ -1742,5 +1749,21 @@ impl Cage {
         } else {
             syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor")
         }
+    }
+
+    //------------------------------------GETCWD SYSCALL------------------------------------
+    
+    pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
+        let mut bytes: Vec<u8> = self.cwd.read().unwrap().to_str().unwrap().as_bytes().to_vec();
+        bytes.push(0u8); //Adding a null terminator to the end of the string
+        let length = bytes.len();
+
+        if (bufsize as usize) < length {
+            return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+        }
+        
+        interface::fill(buf, length, &bytes);
+
+        0 //getcwd has succeeded!;
     }
 }

@@ -76,7 +76,7 @@ pub struct EpollEvent {
     //however, we only support EPOLL_CTL subcommands which take the fd
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[repr(C)]
 pub struct PollStruct {
     pub events: u32,
