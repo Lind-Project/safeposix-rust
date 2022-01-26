@@ -22,6 +22,7 @@ pub mod fs_tests {
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
         ut_lind_fs_fcntl();
+        ut_lind_fs_ioctl(); //TODO
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();

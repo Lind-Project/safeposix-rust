@@ -1324,6 +1324,41 @@ impl Cage {
         }
     }
 
+    //------------------------------------IOCTL SYSCALL------------------------------------
+    
+    pub fn ioctl_syscall(&self, fd: i32, request: u32, arg: i32) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+
+            let flags = match &mut *filedesc_enum {
+                Epoll(obj) => {&mut obj.flags},
+                Pipe(obj) => {&mut obj.flags},
+                Stream(obj) => {&mut obj.flags},
+                Socket(obj) => {&mut obj.flags},
+                File(obj) => {&mut obj.flags},
+            };
+            
+            //matching the tuple
+            match (request, arg) {
+                //because the arg parameter is not used in certain commands, it can be anything (..)
+                (FIONBIO, ..) => { //TODO
+                    if arg == 0 { //clear non-blocking I/O
+                        *flags |= O_NONBLOCK;
+                    }
+                    else { //set for non-blocking I/O
+                        *flags &= !O_NONBLOCK;
+                    }
+                    0
+                }
+                _ => {syscall_error(Errno::EINVAL, "ioctl", "Arguments provided do not match implemented parameters")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor")
+        }
+    }
+
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
