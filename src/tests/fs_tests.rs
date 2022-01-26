@@ -22,7 +22,7 @@ pub mod fs_tests {
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
         ut_lind_fs_fcntl();
-        ut_lind_fs_ioctl(); //TODO
+        ut_lind_fs_ioctl();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();
@@ -452,7 +452,31 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    pub fn ut_lind_fs_ioctl() {  //TODO !!
+        lindrustinit();
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let filefd = cage.open_syscall("/fcntl_file", O_CREAT | O_EXCL, S_IRWXA);
+
+        //set the setfd flag
+        assert_eq!(cage.fcntl_syscall(sockfd, F_SETFD, O_CLOEXEC), 0);
+
+        //checking to see if the wrong flag was set or not
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0), 1);
+
+        //let's get some more flags on the filefd
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY|O_NONBLOCK), 0);
+
+        //checking if the flags are updated...
+        assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, 0), 2048);
+
+        assert_eq!(cage.close_syscall(filefd), 0);
+        assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     pub fn ut_lind_fs_fdflags() {
         lindrustinit();
