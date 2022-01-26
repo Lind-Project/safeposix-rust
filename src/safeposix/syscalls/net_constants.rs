@@ -265,6 +265,16 @@ pub const SO_PEERNAME: i32 = 28;
 pub const SO_ACCEPTCONN: i32 = 30;
 
 
+
+//haven't found libc values for the rest, yet
+// pub const SO_SNDBUFFORCE: i32 = 32;
+// pub const SO_RCVBUFFORCE: i32 = 33;
+// pub const SO_NO_CHECK: i32 = 11;
+// pub const SO_PRIORITY: i32 = 12;
+// pub const SO_BSDCOMPAT: i32 = 14;
+// pub const SO_PASSCRED: i32 = 16;
+// pub const SO_PEERCRED: i32 = 17;
+
 // pub const SO_SECURITY_AUTHENTICATION: i32 = 22;
 // pub const SO_SECURITY_ENCRYPTION_TRANSPORT: i32 = 23;
 // pub const SO_SECURITY_ENCRYPTION_NETWORK: i32 = 24;
@@ -275,6 +285,7 @@ pub const SO_ACCEPTCONN: i32 = 30;
 // pub const SO_ATTACH_FILTER: i32 = 26;
 // pub const SO_DETACH_FILTER: i32 = 27;
 
+// pub const SO_PEERNAME: i32 = 28;
 // pub const SO_TIMESTAMP: i32 = 29;
 // pub const SCM_TIMESTAMP: i32 = SO_TIMESTAMP;
 

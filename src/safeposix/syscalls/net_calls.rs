@@ -644,6 +644,7 @@ impl Cage {
                 return Self::_cleanup_socket(self, fd, true, &mut fdtable);
             }
             SHUT_RDWR => {
+                //BUG:: need to check for duplicate entries
                 return Self::_cleanup_socket(self, fd, false, &mut fdtable);
             }
             _ => {
@@ -943,7 +944,7 @@ impl Cage {
         }
         *readfds = new_readfds;
         *writefds = new_writefds;
-        return retval;
+        return retval; //package out fd_set?
     }
 
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
@@ -1017,6 +1018,7 @@ impl Cage {
         return 0;
     }
 
+    //int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
         
