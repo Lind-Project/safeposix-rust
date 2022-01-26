@@ -350,14 +350,14 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
                 if addrlen < size_of::<interface::SockaddrV4>() as u32 {
                     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
                 }
-                let v4_ptr = pointer as *mut interface::SockaddrV4;
+                let v4_ptr = pointer as *const interface::SockaddrV4;
                 return Ok(interface::GenSockaddr::V4(unsafe{*v4_ptr}));
             }
             /*AF_INET6*/ 30 => {
                 if addrlen < size_of::<interface::SockaddrV6>() as u32 {
                     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
                 }
-                let v6_ptr = pointer as *mut interface::SockaddrV6;
+                let v6_ptr = pointer as *const interface::SockaddrV6;
                 return Ok(interface::GenSockaddr::V6(unsafe{*v6_ptr}));
             }
             _ => return Err(syscall_error(Errno::EOPNOTSUPP, "dispatcher", "sockaddr family not supported"))
