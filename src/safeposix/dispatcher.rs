@@ -170,13 +170,11 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SOCKET_SYSCALL => {
             check_and_dispatch!(cage.socket_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
         }
-
         BIND_SYSCALL => {
             let addrlen = get_onearg!(interface::get_uint(arg3));
             let addr = get_onearg!(interface::get_sockaddr(arg2, addrlen));
             check_and_dispatch!(cage.bind_syscall, interface::get_int(arg1), Ok::<&interface::GenSockaddr, i32>(&addr))
         }
-
         SEND_SYSCALL => {
             check_and_dispatch!(cage.send_syscall, interface::get_int(arg1), interface::get_cbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4))
         }
@@ -185,7 +183,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let addr = get_onearg!(interface::get_sockaddr(arg5, addrlen));
             check_and_dispatch!(cage.sendto_syscall, interface::get_int(arg1), interface::get_cbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&interface::GenSockaddr, i32>(&addr))
         }
-
         RECV_SYSCALL => {
             check_and_dispatch!(cage.recv_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4))
         }
@@ -208,7 +205,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 syscall_error(Errno::EINVAL, "recvfrom", "exactly one of the last two arguments was zero")
             }
         }
-
         CONNECT_SYSCALL => {
             let addrlen = get_onearg!(interface::get_uint(arg3));
             let addr = get_onearg!(interface::get_sockaddr(arg2, addrlen));
@@ -234,7 +230,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 syscall_error(Errno::EINVAL, "accept", "exactly one of the last two arguments was zero")
             }
         }
-
         GETPEERNAME_SYSCALL => {
             let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //value doesn't matter
             if interface::arg_nullity(&arg2) || interface::arg_nullity(&arg3) {
@@ -259,7 +254,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             }
             rv
         }
-
         GETSOCKOPT_SYSCALL => {
             let mut sockval = 0;
             if interface::arg_nullity(&arg4) || interface::arg_nullity(&arg5) {
@@ -276,7 +270,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             //we take it as a given that the length is 4 both in and out
             rv
         }
-
         SETSOCKOPT_SYSCALL => {
             let sockval;
             if !interface::arg_nullity(&arg4) {
@@ -289,11 +282,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             }
             check_and_dispatch!(cage.setsockopt_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), Ok::<i32, i32>(sockval))
         }
-
         SHUTDOWN_SYSCALL => {
             check_and_dispatch!(cage.netshutdown_syscall, interface::get_int(arg1), interface::get_int(arg2))
         }
-
         SELECT_SYSCALL => {
             let nfds = get_onearg!(interface::get_int(arg1));
             if nfds < 0 { //RLIMIT_NOFILE check as well?
@@ -315,11 +306,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let nfds = get_onearg!(interface::get_usize(arg2));
             check_and_dispatch!(cage.poll_syscall, interface::get_pollstruct_slice(arg1, nfds), interface::get_duration_from_millis(arg3))
         }
-
         SOCKETPAIR_SYSCALL => {
             check_and_dispatch_socketpair!(Cage::socketpair_syscall, cage, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3), interface::get_sockpair(arg4))
         }
-
         EXIT_SYSCALL => {
             check_and_dispatch!(cage.exit_syscall, interface::get_int(arg1))
         }

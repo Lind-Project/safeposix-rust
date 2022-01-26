@@ -6,12 +6,12 @@ use super::cage::{Cage, FileDescriptor};
 //Because other processes on the OS may allocate ephemeral ports, we allocate them from high to
 //low whereas the OS allocates them from low to high
 //Additionally, we can't tell whether a port is truly rebindable, this is because even when a port
-//is closed sometimes there still is cleanup that the OS needs to do (particularly this is true for
-//listening ports). Therefore, we will assign ephemeral ports rather than simply from the highest
-//available one, in a cyclic fashion skipping over unavailable ports. While this still may cause
-//issues if specific port adresses in the ephemeral port range are allocated and closed before an
-//ephemeral port would be bound there, it is much less likely that this will happen and is easy to
-//avoid and nonstandard in user programs. See the code for _get_available_udp_port and its tcp
+//is closed sometimes there still is cleanup that the OS needs to do (for ephemeral ports which end
+//up in the TIME_WAIT state). Therefore, we will assign ephemeral ports rather than simply from the
+//highest available one, in a cyclic fashion skipping over unavailable ports. While this still may
+//cause issues if specific port adresses in the ephemeral port range are allocated and closed before
+//an ephemeral port would be bound there, it is much less likely that this will happen and is easy
+//to avoid and nonstandard in user programs. See the code for _get_available_udp_port and its tcp
 //counterpart for the implementation details.
 const EPHEMERAL_PORT_RANGE_START: u16 = 32768; //sane default on linux
 const EPHEMERAL_PORT_RANGE_END: u16 = 60999;
