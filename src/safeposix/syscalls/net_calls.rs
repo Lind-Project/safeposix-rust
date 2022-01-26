@@ -1032,8 +1032,7 @@ impl Cage {
                         if optname == TCP_NODELAY {
                             return 0;
                         }
-                        return 0; //temp for Apache
-                        //return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
                         let optbit = 1 << optname;
@@ -1092,7 +1091,9 @@ impl Cage {
                             }
                             //should always be one -- can only handle it being 1
                             SO_OOBINLINE => {
-                                assert_eq!(optval, 1); //TODO: change this to return an error rather than crash all of lind
+                                if optval != 1 {
+                                    return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "does not support OOBINLINE being set to anything but 1");
+                                }
                                 return 0;
                             }
                             _ => {
