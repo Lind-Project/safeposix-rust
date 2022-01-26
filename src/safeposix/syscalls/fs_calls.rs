@@ -1343,14 +1343,19 @@ impl Cage {
             //matching the tuple
             match (request, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
-                (FIONBIO, ..) => { //TODO
-                    if arg == 0 { //clear non-blocking I/O
-                        *flags |= O_NONBLOCK;
+                (FIONBIO, ..) => {
+                    match &mut *filedesc_enum {
+                        Socket(_) => {
+                            if arg == 0 { //clear non-blocking I/O
+                                *flags |= O_NONBLOCK;
+                            }
+                            else { //set for non-blocking I/O
+                                *flags &= !O_NONBLOCK;
+                            }
+                            0
+                        }
+                        _ => {syscall_error(Errno::ENOTTY, "ioctl", "The specified request does not apply to the kind of object that the file descriptor fd references.")}
                     }
-                    else { //set for non-blocking I/O
-                        *flags &= !O_NONBLOCK;
-                    }
-                    0
                 }
                 _ => {syscall_error(Errno::EINVAL, "ioctl", "Arguments provided do not match implemented parameters")}
             }
