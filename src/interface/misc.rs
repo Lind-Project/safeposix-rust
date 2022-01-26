@@ -6,11 +6,13 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-pub use std::collections::HashMap as RustHashMap;
+pub use std::collections::{HashMap as RustHashMap, HashSet as RustHashSet, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16};
+pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
-pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
+pub use std::sync::{RwLock as RustLock, Arc as RustRfc, RwLockReadGuard as RustReadGuard};
 use std::sync::{Mutex, Condvar};
 
 use libc::mmap;
@@ -41,6 +43,10 @@ pub fn flush_stdout() {
     io::stdout().flush().unwrap();
 }
 
+pub fn get_errno() -> i32 {
+    (unsafe{*libc::__errno_location()}) as i32
+}
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
@@ -53,8 +59,22 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
 }
 pub fn fill(bufptr: *mut u8, count: usize, values:&Vec<u8>) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
-    slice.copy_from_slice(&values);
+    slice.copy_from_slice(&values[..count]);
     count as i32
+}
+
+pub fn copy_fromrustdeque_sized(bufptr: *mut u8, count: usize, vecdeq: &RustDeque<u8>) {
+    let (slice1, slice2) = vecdeq.as_slices();
+    if slice1.len() >= count {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, count);}
+    } else {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, slice1.len());}
+        unsafe {std::ptr::copy(slice2.as_ptr(), bufptr.wrapping_offset(slice1.len() as isize), count - slice1.len());}
+    }
+}
+pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDeque<u8>) {
+    let byteslice = unsafe {std::slice::from_raw_parts(bufptr, count)};
+    vecdeq.extend(byteslice.iter());
 }
 
 // Wrapper to return a dictionary (hashmap)
