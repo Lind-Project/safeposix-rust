@@ -1326,7 +1326,7 @@ impl Cage {
 
     //------------------------------------IOCTL SYSCALL------------------------------------
     
-    pub fn ioctl_syscall(&self, fd: i32, request: u32, arg: i32) -> i32 {
+    pub fn ioctl_syscall(&self, fd: i32, request: u32, buf: *mut u8) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1341,11 +1341,12 @@ impl Cage {
             };
             
             //matching the tuple
-            match (request, arg) {
+            match (request) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
-                (FIONBIO, ..) => {
+                (FIONBIO) => {
                     match &mut *filedesc_enum {
                         Socket(_) => {
+                            arg: i32 = *buf;
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
                             }

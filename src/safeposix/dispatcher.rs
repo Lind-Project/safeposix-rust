@@ -162,7 +162,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.fcntl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
         }
         IOCTL_SYSCALL => {
-            check_and_dispatch!(cage.ioctl_syscall, interface::get_int(arg1), interface::get_uint(arg2), interface::get_int(arg3))
+            check_and_dispatch!(cage.ioctl_syscall, interface::get_int(arg1), interface::get_uint(arg2), interface::get_mutcbuf(arg3))
         }
         GETPPID_SYSCALL => {
             check_and_dispatch!(cage.getppid_syscall,)
