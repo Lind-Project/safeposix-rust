@@ -29,7 +29,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_bind() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
@@ -54,7 +54,7 @@ pub mod net_tests {
     
 
     pub fn ut_lind_net_bind_on_zero() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //both the server and the socket are run from this file
@@ -271,7 +271,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_bind_multiple() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -301,7 +301,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_connect_basic_udp() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //should be okay...
@@ -320,7 +320,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_getpeername() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //doing a few things with connect -- only UDP right now
@@ -345,7 +345,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_getsockname() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -373,7 +373,7 @@ pub mod net_tests {
     
     
     pub fn ut_lind_net_listen() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -418,7 +418,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_poll() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let filefd = cage.open_syscall("/netpolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -564,7 +564,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_recvfrom() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -676,7 +676,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_select () {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -808,7 +808,7 @@ pub mod net_tests {
     
 
     pub fn ut_lind_net_shutdown() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -858,7 +858,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_socket() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -888,7 +888,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_socketoptions() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -974,7 +974,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_socketpair() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let mut socketpair = interface::SockPair::default();
         assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
@@ -1035,7 +1035,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_udp_bad_bind() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -1060,7 +1060,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_udp_simple() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //just going to test the basic connect with UDP now...
@@ -1117,7 +1117,7 @@ pub mod net_tests {
 
 
     pub fn ut_lind_net_udp_connect() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //getting the sockets set up...
@@ -1159,7 +1159,7 @@ pub mod net_tests {
     }
 
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let hostnme = format!("{}{}", DEFAULT_HOSTNAME, "\0");
