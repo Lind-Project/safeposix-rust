@@ -109,7 +109,11 @@ fn main() {
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
-                        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+                        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+                        getgid: interface::RustAtomicI32::new(-1), 
+                        getuid: interface::RustAtomicI32::new(-1), 
+                        getegid: interface::RustAtomicI32::new(-1), 
+                        geteuid: interface::RustAtomicI32::new(-1)};
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {

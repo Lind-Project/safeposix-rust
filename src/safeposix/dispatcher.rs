@@ -396,13 +396,25 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+        parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        getgid: interface::RustAtomicI32::new(-1), 
+        getuid: interface::RustAtomicI32::new(-1), 
+        getegid: interface::RustAtomicI32::new(-1), 
+        geteuid: interface::RustAtomicI32::new(-1)
+    };
     mutcagetable.insert(0, interface::RustRfc::new(utilcage));
 
     //init cage is its own parent
     let mut initcage = Cage{
-        cageid: 1, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 1, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+        cageid: 1, 
+        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 1, 
+        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        getgid: interface::RustAtomicI32::new(-1), 
+        getuid: interface::RustAtomicI32::new(-1), 
+        getegid: interface::RustAtomicI32::new(-1), 
+        geteuid: interface::RustAtomicI32::new(-1)
+    };
     initcage.load_lower_handle_stubs();
     mutcagetable.insert(1, interface::RustRfc::new(initcage));
 
