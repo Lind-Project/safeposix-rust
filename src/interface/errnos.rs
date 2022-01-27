@@ -2,8 +2,14 @@
 // Error handling for SafePOSIX
 use crate::interface;
 
-pub static VERBOSE: interface::RustLazyGlobal<bool> = interface::RustLazyGlobal::new(|| false );
+use std::sync::atomic::{AtomicBool, Ordering};
 
+static VERBOSE: AtomicBool = AtomicBool::new(false);
+
+
+pub fn set_verbose() {
+  VERBOSE.store(true, Ordering::Relaxed);
+}
 
 //A macro which takes the enum and adds to it a try_from trait which can convert values back to
 //enum variants
@@ -166,7 +172,7 @@ reversible_enum! {
 }
 
 pub fn syscall_error(e: Errno, syscall: &str, message: &str) -> i32 {
-    if *VERBOSE {
+    if VERBOSE.load(Ordering::Relaxed) {
         let msg = format!("Error in syscall: {} - {:?}: {}", syscall, e, message);
         interface::log_to_stderr(&msg);
     }
