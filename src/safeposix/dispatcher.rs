@@ -70,7 +70,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 
 
 use crate::interface;
-use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData};
+use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlUnion};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
