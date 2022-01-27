@@ -385,7 +385,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 }
 
 #[no_mangle]
-pub extern "C" fn lindrustinit() {
+pub extern "C" fn lindrustinit(verbosity: isize) {
+
+    if verbosity > 0 { *VERBOSE = true };
     load_fs();
     incref_root();
     incref_root();

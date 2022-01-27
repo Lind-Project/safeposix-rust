@@ -104,7 +104,7 @@ update [hostsource] [linddest]  : Copies files from the host file system into th
 }
 
 fn main() {
-    lindrustinit();
+    lindrustinit(0); // no verbosity
     let mut args = env::args();
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
