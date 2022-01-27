@@ -1326,7 +1326,7 @@ impl Cage {
 
     //------------------------------------IOCTL SYSCALL------------------------------------
     
-    pub fn ioctl_syscall(&self, fd: i32, request: u32, buf: *mut u8) -> i32 {
+    pub fn ioctl_syscall(&self, fd: i32, request: u32, unionbuf: &mut IoctlUnion) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1344,7 +1344,7 @@ impl Cage {
                 (FIONBIO) => {
                     match &mut *filedesc_enum {
                         Socket(_) => {
-                            arg: i32 = *buf;
+                            arg: i32 = unionbuf.arg_char;
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
                             }

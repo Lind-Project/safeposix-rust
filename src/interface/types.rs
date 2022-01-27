@@ -96,6 +96,13 @@ pub struct TimeVal {
     pub tv_usec: i64
 }
 
+#[repr(C)]
+pub union IoctlUnion {
+    pub arg_int: i32,
+    pub arg_char: char
+    //Right now, we do not support passing struct pointers to ioctl as the related call are not implemented
+}
+
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -121,7 +128,8 @@ pub union Arg {
   pub dispatch_epollevent: *mut EpollEvent,
   pub dispatch_structtimeval: *mut TimeVal,
   pub dispatch_pipearray: *mut PipeArray,
-  pub dispatch_sockpair: *mut SockPair
+  pub dispatch_sockpair: *mut SockPair,
+  pub dispatch_ioctlunion: *mut IoctlUnion
 }
 
 
@@ -242,6 +250,14 @@ pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i
 
 pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> {
     let pointer = unsafe{union_argument.dispatch_fsdatastruct};
+    if !pointer.is_null() {    
+        return Ok(unsafe{&mut *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_ioctlunion<'a>(union_argument: Arg) -> Result<&'a mut IoctlUnion, i32> {
+    let pointer = unsafe{union_argument.dispatch_ioctlunion};
     if !pointer.is_null() {    
         return Ok(unsafe{&mut *pointer});
     }
