@@ -1340,9 +1340,7 @@ impl Cage {
                 File(obj) => {&mut obj.flags},
             };
             
-            //matching the tuple
             match (request) {
-                //because the arg parameter is not used in certain commands, it can be anything (..)
                 (FIONBIO) => {
                     match &mut *filedesc_enum {
                         Socket(_) => {
