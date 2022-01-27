@@ -4,6 +4,7 @@
 use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
+use crate::safeposix::net::{NET_METADATA};
 
 use super::sys_constants::*;
 use super::fs_constants::*;
@@ -20,21 +21,30 @@ impl Cage {
                 let fd = value.read().unwrap();
 
                 //only file inodes have real inode objects currently
-                let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
+                match &*fd {
+                    File(normalfile_filedesc_obj) => {
+                        let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
 
-                if let Some(inodenum) = inodenum_option {
-                    //increment the reference count on the inode
-                    let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                    match inode {
-                        Inode::File(f) => {f.refcount += 1;}
-                        Inode::CharDev(f) => {f.refcount += 1;}
-                        Inode::Dir(f) => {f.refcount += 1;}
+                        if let Some(inodenum) = inodenum_option {
+                            //increment the reference count on the inode
+                            let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                            match inode {
+                                Inode::File(f) => {f.refcount += 1;}
+                                Inode::CharDev(f) => {f.refcount += 1;}
+                                Inode::Dir(f) => {f.refcount += 1;}
+                            }
+                        }
                     }
-                }
-
-                if let Pipe(f) = &*fd {
-                    let pipe = PIPE_TABLE.write().unwrap().get(&f.pipe).unwrap().clone();
-                    pipe.incr_ref(f.flags)
+                    Pipe(pipe_filedesc_obj) => {
+                        let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                        pipe.incr_ref(pipe_filedesc_obj.flags)
+                    }
+                    Socket(socket_filedesc_obj) => {
+                        if let Some(socknum) = socket_filedesc_obj.socketobjectid {
+                            NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
+                        }
+                    }
+                    _ => {}
                 }
                 
                 let newfdobj = (&*fd).clone();
@@ -53,10 +63,10 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
             filedescriptortable: interface::RustLock::new(newfdtable),
-            getgid: interface::RustAtomicI32::new(self.getgid.load(interface::Ordering::Relaxed)), 
-            getuid: interface::RustAtomicI32::new(self.getuid.load(interface::Ordering::Relaxed)), 
-            getegid: interface::RustAtomicI32::new(self.getegid.load(interface::Ordering::Relaxed)), 
-            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::Ordering::Relaxed))
+            getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
+            getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
+            getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
+            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed))
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
@@ -126,30 +136,30 @@ impl Cage {
     /*if its negative 1
     return -1, but also set the values in the cage struct to the DEFAULTs for future calls*/
     pub fn getgid_syscall(&self) -> i32 {
-        if self.getgid.load(interface::Ordering::Relaxed) == -1 {
-            self.getgid.store(DEFAULT_GID as i32, interface::Ordering::Relaxed);
+        if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.getgid.store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1
         }   
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
     pub fn getegid_syscall(&self) -> i32 {
-        if self.getegid.load(interface::Ordering::Relaxed) == -1 {
-            self.getegid.store(DEFAULT_GID as i32, interface::Ordering::Relaxed);
+        if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.getegid.store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1
         } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
 
     pub fn getuid_syscall(&self) -> i32 {
-        if self.getuid.load(interface::Ordering::Relaxed) == -1 {
-            self.getuid.store(DEFAULT_UID as i32, interface::Ordering::Relaxed);
+        if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.getuid.store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
     pub fn geteuid_syscall(&self) -> i32 {
-        if self.geteuid.load(interface::Ordering::Relaxed) == -1 {
-            self.geteuid.store(DEFAULT_UID as i32, interface::Ordering::Relaxed);
+        if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.geteuid.store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned

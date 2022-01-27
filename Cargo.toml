@@ -1,12 +1,13 @@
 [package]
 name = "rustposix"
 version = "0.1.0"
-authors = ["Nicholas Smith Renner <nrenner@nyu.edu>"]
+authors = ["Nicholas Smith Renner <nrenner@nyu.edu>", "Jonathan Eli Singer <jes965@nyu.edu>", "Tristan J. Brigham <tristanbrigham22@gmail.com>"]
 edition = "2018"
 
 [lib]
 path = "src/lib.rs"
 crate-type = ["cdylib"]
+test = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

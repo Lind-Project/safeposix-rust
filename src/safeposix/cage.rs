@@ -50,13 +50,12 @@ pub struct SocketDesc {
     pub options: i32,
     pub sndbuf: i32,
     pub rcvbuf: i32,
-    //pub state: ConnState,
+    pub state: ConnState,
     pub flags: i32,
     pub errno: i32,
-    //pub pendingconnections: Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>,
-    //pub localaddr: Option<interface::GenSockaddr>,
-    //pub remoteaddr: Option<interface::GenSockaddr>,
-    //pub last_peek: interface::RustDeque<u8>,
+    pub localaddr: Option<interface::GenSockaddr>,
+    pub remoteaddr: Option<interface::GenSockaddr>,
+    pub last_peek: interface::RustDeque<u8>,
     pub socketobjectid: Option<i32>,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>
 }
