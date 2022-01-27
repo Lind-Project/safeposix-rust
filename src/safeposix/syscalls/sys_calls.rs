@@ -9,7 +9,6 @@ use crate::safeposix::net::{NET_METADATA};
 use super::sys_constants::*;
 use super::fs_constants::*;
 
-
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         let mut mutcagetable = CAGE_TABLE.write().unwrap();
@@ -63,7 +62,12 @@ impl Cage {
         }
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
-            filedescriptortable: interface::RustLock::new(newfdtable)
+            filedescriptortable: interface::RustLock::new(newfdtable),
+            getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
+            getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
+            getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
+            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed))
+            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
@@ -81,7 +85,13 @@ impl Cage {
         //     Epoll(_p) => p.flags & CLOEXEC
         // });
 
-        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone())};
+        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
+            parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
+            getgid: interface::RustAtomicI32::new(-1), 
+            getuid: interface::RustAtomicI32::new(-1), 
+            getegid: interface::RustAtomicI32::new(-1), 
+            geteuid: interface::RustAtomicI32::new(-1)
+        };
         //wasteful clone of fdtable, but mutability constraints exist
 
         {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
@@ -123,17 +133,35 @@ impl Cage {
         self.parent as i32 // mimicing the call above -- easy to change later if necessary
     }
 
+    /*if its negative 1
+    return -1, but also set the values in the cage struct to the DEFAULTs for future calls*/
     pub fn getgid_syscall(&self) -> i32 {
+        if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.getgid.store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
+            return -1
+        }   
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
     pub fn getegid_syscall(&self) -> i32 {
+        if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.getegid.store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
+            return -1
+        } 
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
 
     pub fn getuid_syscall(&self) -> i32 {
+        if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.getuid.store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
+            return -1
+        } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
     pub fn geteuid_syscall(&self) -> i32 {
+        if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
+            self.geteuid.store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
+            return -1
+        } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
 
