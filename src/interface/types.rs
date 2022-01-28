@@ -264,11 +264,11 @@ pub fn get_ioctlunion<'a>(union_argument: Arg) -> Result<&'a mut IoctlUnion, i32
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn get_ioctlunion_int<'a>(unionbuf: &mut IoctlUnion) -> Result<i32, i32> {,
+pub fn get_ioctlunion_int<'a>(unionbuf: &mut IoctlUnion) -> Result<i32, i32> {
     if let Ok(arg) = unsafe{unionbuf.arg_int} {
         return Ok(arg);
     } else {
-        return Err(syscall_error(Errno::EINVAL, "ioctl", "request or argp is not valid"));
+        return Err(-1);
     }
 }
 
