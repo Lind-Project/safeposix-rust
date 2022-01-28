@@ -1346,7 +1346,12 @@ impl Cage {
                 FIONBIO => {
                     match filetype {
                         3 => {
-                            let arg: i32 = interface::get_ioctlunion_int(unionbuf);
+                            let arg: i32;
+                            match interface::get_ioctlunion_int(unionbuf){
+                                Ok(res) => arg = res,
+                                Err(err) => return Err(err),
+                            };
+
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
                             }
