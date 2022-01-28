@@ -1350,10 +1350,10 @@ impl Cage {
                             let arg: i32 = interface::get_ioctlunion_int(unionbuf);
                             println!("Debug print! Ioctl is here :: 2");
                             if arg == 0 { //clear non-blocking I/O
-                                *flags |= O_NONBLOCK;
+                                *flags &= !O_NONBLOCK;
                             }
                             else { //set for non-blocking I/O
-                                *flags &= !O_NONBLOCK;
+                                *flags |= O_NONBLOCK;
                             }
                             println!("Debug print! Ioctl is here :: 3");
                             0
