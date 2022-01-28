@@ -1326,26 +1326,35 @@ impl Cage {
 
     //------------------------------------IOCTL SYSCALL------------------------------------
     
+    enum FileType {
+        Epoll,
+        Pipe,
+        Stream,
+        Socket,
+        File,
+        None
+    }
+
     pub fn ioctl_syscall(&self, fd: i32, request: u32, unionbuf: &mut IoctlUnion) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             
-            let type: i8 = -1;
+            let filetype: FileType = FileType::None;
 
             let flags = match &mut *filedesc_enum {
-                Epoll(obj) => {type = 0; &mut obj.flags},
-                Pipe(obj) => {type = 1; &mut obj.flags},
-                Stream(obj) => {type = 2; &mut obj.flags},
-                Socket(obj) => {type = 3; &mut obj.flags},
-                File(obj) => {type = 4; &mut obj.flags},
+                Epoll(obj) => {filetype = FileType::Epoll; &mut obj.flags},
+                Pipe(obj) => {filetype = FileType::Pipe; &mut obj.flags},
+                Stream(obj) => {filetype = FileType::Stream; &mut obj.flags},
+                Socket(obj) => {filetype = FileType::Socket; &mut obj.flags},
+                File(obj) => {filetype = FileType::File; &mut obj.flags},
             };
 
             match (request) {
                 FIONBIO => {
-                    match type {
-                        3 => {
+                    match filetype {
+                        FileType::Socket => {
                             let arg: i32 = unionbuf.arg_int;
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
