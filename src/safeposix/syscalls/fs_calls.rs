@@ -1346,7 +1346,7 @@ impl Cage {
                 FIONBIO => {
                     match filetype {
                         3 => {
-                            let arg: i32 = unionbuf.arg_int;
+                            let arg: i32 = get_ioctlunion_int(unionbuf);
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
                             }
