@@ -1339,10 +1339,10 @@ impl Cage {
                 Socket(obj) => {&mut obj.flags},
                 File(obj) => {&mut obj.flags},
             };
-            
+
             match (request) {
                 FIONBIO => {
-                    match &mut *filedesc_enum {
+                    match filedesc_enum {
                         Socket(_) => {
                             let arg: i32 = unionbuf.arg_int;
                             if arg == 0 { //clear non-blocking I/O
