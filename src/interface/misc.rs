@@ -77,14 +77,6 @@ pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDe
     vecdeq.extend(byteslice.iter());
 }
 
-pub fn get_ioctlunion_int<'a>(unionbuf: &mut IoctlUnion) -> i32 {
-    unsafe{unionbuf.arg_int}
-}
-
-pub fn get_ioctlunion_char<'a>(unionbuf: &mut IoctlUnion) -> char {
-    unsafe{unionbuf.arg_char}
-}
-
 // Wrapper to return a dictionary (hashmap)
 pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
