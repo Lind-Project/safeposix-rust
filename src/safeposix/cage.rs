@@ -26,6 +26,16 @@ pub enum FileDescriptor {
 }
 
 #[derive(Debug, Clone)]
+pub enum FileType {
+    Epoll,
+    Pipe,
+    Stream,
+    Socket,
+    File,
+    None
+}
+
+#[derive(Debug, Clone)]
 pub struct FileDesc {
     pub position: usize,
     pub inode: usize,

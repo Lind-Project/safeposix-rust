@@ -2,7 +2,7 @@
 
 // File system related system calls
 use crate::interface;
-use crate::safeposix::cage::{*, FileDescriptor::*};
+use crate::safeposix::cage::{*, FileDescriptor::*, FileType::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use super::fs_constants::*;
@@ -1325,15 +1325,6 @@ impl Cage {
     }
 
     //------------------------------------IOCTL SYSCALL------------------------------------
-    
-    enum FileType {
-        Epoll,
-        Pipe,
-        Stream,
-        Socket,
-        File,
-        None
-    }
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, unionbuf: &mut IoctlUnion) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
@@ -1341,7 +1332,7 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             
-            let filetype: FileType = FileType::None;
+            let issocket: FileType = FileType::None;
 
             let flags = match &mut *filedesc_enum {
                 Epoll(obj) => {filetype = FileType::Epoll; &mut obj.flags},
