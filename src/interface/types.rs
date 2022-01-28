@@ -264,14 +264,6 @@ pub fn get_ioctlunion<'a>(union_argument: Arg) -> Result<&'a mut IoctlUnion, i32
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn get_ioctlunion_int<'a>(unionbuf: &mut IoctlUnion) -> Result<i32, i32> {
-    if let Ok(arg) = unsafe{unionbuf.arg_int} {
-        return Ok(arg);
-    } else {
-        return Err(-1);
-    }
-}
-
 /// Given the vector of tuples produced from getdents_syscall, each of which consists of 
 /// a ClippedDirent struct and a u8 vector representing the name, and also given the 
 /// pointer to the base of the buffer to which the getdents structs should be copied, 
