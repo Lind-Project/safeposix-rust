@@ -1346,13 +1346,16 @@ impl Cage {
                 FIONBIO => {
                     match filetype {
                         3 => {
+                            println!("Debug print! Ioctl is here :: 1");
                             let arg: i32 = interface::get_ioctlunion_int(unionbuf);
+                            println!("Debug print! Ioctl is here :: 2");
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
                             }
                             else { //set for non-blocking I/O
                                 *flags &= !O_NONBLOCK;
                             }
+                            println!("Debug print! Ioctl is here :: 3");
                             0
                         }
                         _ => {syscall_error(Errno::ENOTTY, "ioctl", "The specified request does not apply to the kind of object that the file descriptor fd references.")}
