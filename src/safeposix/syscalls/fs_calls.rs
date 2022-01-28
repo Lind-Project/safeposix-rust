@@ -1331,19 +1331,21 @@ impl Cage {
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
+            
+            let type: i8 = -1;
 
             let flags = match &mut *filedesc_enum {
-                Epoll(obj) => {&mut obj.flags},
-                Pipe(obj) => {&mut obj.flags},
-                Stream(obj) => {&mut obj.flags},
-                Socket(obj) => {&mut obj.flags},
-                File(obj) => {&mut obj.flags},
+                Epoll(obj) => {type = 0; &mut obj.flags},
+                Pipe(obj) => {type = 1; &mut obj.flags},
+                Stream(obj) => {type = 2; &mut obj.flags},
+                Socket(obj) => {type = 3; &mut obj.flags},
+                File(obj) => {type = 4; &mut obj.flags},
             };
 
             match (request) {
                 FIONBIO => {
-                    match filedesc_enum {
-                        Socket(_) => {
+                    match type {
+                        3 => {
                             let arg: i32 = unionbuf.arg_int;
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
