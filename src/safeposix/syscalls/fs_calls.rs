@@ -1341,10 +1341,10 @@ impl Cage {
             };
             
             match (request) {
-                (FIONBIO) => {
+                FIONBIO => {
                     match &mut *filedesc_enum {
                         Socket(_) => {
-                            arg: i32 = unionbuf.arg_char;
+                            let arg: i32 = unionbuf.arg_int;
                             if arg == 0 { //clear non-blocking I/O
                                 *flags |= O_NONBLOCK;
                             }
