@@ -19,7 +19,7 @@ pub mod pipe_tests {
         let byte_chunk: usize = 131072;
         let num_writes: usize = 8192;
 
-        lindrustinit();
+        lindrustinit(0);
 
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
@@ -44,7 +44,7 @@ pub mod pipe_tests {
         let byte_chunk: usize = 131072;
         let num_writes: usize = 8192;
         
-        lindrustinit();
+        lindrustinit(0);
 
         let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 

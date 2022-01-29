@@ -10,7 +10,7 @@ pub mod fs_tests {
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        lindrustinit();
+        lindrustinit(0);
         load_fs_special_files(CAGE_TABLE.read().unwrap().get(&1).unwrap());
         lindrustfinalize();
 
@@ -52,7 +52,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_simple() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         assert_eq!(cage.access_syscall("/", F_OK), 0);
@@ -75,7 +75,7 @@ pub mod fs_tests {
 
 
     pub fn persistencetest() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         cage.unlink_syscall("/testfile");
@@ -104,7 +104,7 @@ pub mod fs_tests {
 
 
     pub fn rdwrtest() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -135,7 +135,7 @@ pub mod fs_tests {
 
 
     pub fn prdwrtest() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -162,7 +162,7 @@ pub mod fs_tests {
 
 
     pub fn chardevtest() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
@@ -192,7 +192,7 @@ pub mod fs_tests {
 
         //testing a muck up with the inode table where the regular close does not work as intended
 
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //write should work
@@ -227,7 +227,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_chmod() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -255,7 +255,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_dir_chdir() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         
         //testing the ability to make and change to directories
@@ -281,7 +281,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_dir_mode() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let filepath1 = "/subdirDirMode1";
@@ -304,7 +304,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_dir_multiple() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
@@ -327,7 +327,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_dup() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -383,7 +383,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_dup2() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -427,7 +427,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_fcntl() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -453,7 +453,7 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_ioctl() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let mut union0: IoctlUnion = IoctlUnion {arg_int : 0};
@@ -491,7 +491,7 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_fdflags() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let path = "/fdFlagsFile";
@@ -526,7 +526,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_file_link_unlink() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let path = "/fileLink";
@@ -568,7 +568,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_file_lseek_past_end() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let path = "/lseekPastEnd";
@@ -593,7 +593,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_fstat_complex() {
-        lindrustinit();
+        lindrustinit(0);
 
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let path = "/complexFile";
@@ -615,7 +615,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_getuid() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //testing to make sure that all of the gid and uid values are good to go when system is initialized
@@ -631,7 +631,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_load_fs() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let mut statdata = StatData::default();
@@ -655,7 +655,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_persistence_setup() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let path1 = "/simpleFileName";
@@ -718,7 +718,7 @@ pub mod fs_tests {
             restore_metadata(&mut metadata);
         }
 
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         //taken from the set up call:
         let path1 = "/simpleFileName";
@@ -736,7 +736,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_mknod() {
         // let's create /dev/null
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let dev = makedev(&DevNo {major: 1, minor: 3});
         let path = "/null";
@@ -785,7 +785,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_multiple_open() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         //try to open several files at once -- the fd's should not be overwritten
@@ -821,7 +821,7 @@ pub mod fs_tests {
     
 
     pub fn ut_lind_fs_rmdir() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let path = "/parent_dir/dir";
@@ -836,7 +836,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_stat_file_complex() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let fd = cage.open_syscall("/fooComplex", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
@@ -864,7 +864,7 @@ pub mod fs_tests {
 
 
     pub fn ut_lind_fs_stat_file_mode() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let path = "/fooFileMode";
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
@@ -889,7 +889,7 @@ pub mod fs_tests {
 
     
     pub fn  ut_lind_fs_statfs() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let mut fsdata = FSData::default();
 
@@ -904,7 +904,7 @@ pub mod fs_tests {
     
     
     pub fn ut_lind_fs_rename() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let old_path = "/test_dir";
@@ -916,7 +916,7 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_ftruncate() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let fd = cage.open_syscall("/ftruncate", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -942,7 +942,7 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_truncate() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let path = String::from("/truncate");
@@ -969,7 +969,7 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_getdents() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
 
         let bufsize = 50;
@@ -1001,7 +1001,7 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_dir_chdir_getcwd() {
-        lindrustinit();
+        lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
         let needed = "/subdir1\0".as_bytes().to_vec().len();
 
