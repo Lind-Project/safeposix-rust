@@ -19,51 +19,113 @@ pub const SOCK_SEQPACKET: i32 = 5; //sequenced packet stream
 pub const SOCK_CLOEXEC: i32 = 02000000;
 pub const SOCK_NONBLOCK: i32 = 0x4000;
 
+/* Supported address families. */
+pub const AF_UNSPEC: i32 = 0;
+pub const AF_UNIX: i32 = 1; /* Unix domain sockets   */
+pub const AF_LOCAL: i32 = 1; /* POSIX name for AF_UNIX */
+pub const AF_INET: i32 = 2; /* Internet IP Protocol  */
+pub const AF_AX25: i32 = 3; /* Amateur Radio AX.25   */
+pub const AF_IPX: i32 = 4; /* Novell IPX    */
+pub const AF_APPLETALK: i32 = 5; /* AppleTalk DDP   */
+pub const AF_NETROM: i32 = 6; /* Amateur Radio NET/ROM  */
+pub const AF_BRIDGE: i32 = 7; /* Multiprotocol bridge  */
+pub const AF_ATMPVC: i32 = 8; /* ATM PVCs   */
+pub const AF_X25: i32 = 9; /* Reserved for X.25 project  */
+pub const AF_INET6: i32 = 10; /* IP version 6   */
+pub const AF_ROSE: i32 = 11; /* Amateur Radio X.25 PLP */
+pub const AF_DECnet: i32 = 12; /* Reserved for DECnet project */
+pub const AF_NETBEUI: i32 = 13; /* Reserved for 802.2LLC project*/
+pub const AF_SECURITY: i32 = 14; /* Security callback pseudo AF */
+pub const AF_KEY: i32 = 15;      /* PF_KEY key management API */
+pub const AF_NETLINK: i32 = 16;
+pub const AF_ROUTE: i32 = AF_NETLINK; /* Alias to emulate 4.4BSD */
+pub const AF_PACKET: i32 = 17; /* Packet family  */
+pub const AF_ASH: i32 = 18; /* Ash    */
+pub const AF_ECONET: i32 = 19; /* Acorn Econet   */
+pub const AF_ATMSVC: i32 = 20; /* ATM SVCs   */
+pub const AF_RDS: i32 = 21; /* RDS sockets    */
+pub const AF_SNA: i32 = 22; /* Linux SNA Project (nutters!) */
+pub const AF_IRDA: i32 = 23; /* IRDA sockets   */
+pub const AF_PPPOX: i32 = 24; /* PPPoX sockets  */
+pub const AF_WANPIPE: i32 = 25; /* Wanpipe API Sockets */
+pub const AF_LLC: i32 = 26; /* Linux LLC   */
+pub const AF_IB: i32 = 27; /* Native InfiniBand address */
+pub const AF_MPLS: i32 = 28; /* MPLS */
+pub const AF_CAN: i32 = 29; /* Controller Area Network      */
+pub const AF_TIPC: i32 = 30; /* TIPC sockets   */
+pub const AF_BLUETOOTH: i32 = 31; /* Bluetooth sockets   */
+pub const AF_IUCV: i32 = 32; /* IUCV sockets   */
+pub const AF_RXRPC: i32 = 33; /* RxRPC sockets   */
+pub const AF_ISDN: i32 = 34; /* mISDN sockets   */
+pub const AF_PHONET: i32 = 35; /* Phonet sockets  */
+pub const AF_IEEE802154: i32 = 36; /* IEEE802154 sockets  */
+pub const AF_CAIF: i32 = 37; /* CAIF sockets   */
+pub const AF_ALG: i32 = 38; /* Algorithm sockets  */
+pub const AF_NFC: i32 = 39; /* NFC sockets   */
+pub const AF_VSOCK: i32 = 40; /* vSockets   */
+pub const AF_KCM: i32 = 41; /* Kernel Connection Multiplexor*/
+pub const AF_QIPCRTR: i32 = 42; /* Qualcomm IPC Router          */
+pub const AF_SMC: i32 = 43; /* smc sockets: reserve number for
+                     * PF_SMC protocol family that
+                     * reuses AF_INET address family
+                     */
+pub const AF_XDP: i32 = 44; /* XDP sockets   */
+pub const AF_MCTP: i32 = 45; /* Management component
+     * transport protocol
+     */
 
-// Address families...
+pub const AF_MAX: i32 = 46; /* For now.. */
 
-pub const AF_UNSPEC: i32 = 0;       // unspecified
-pub const AF_UNIX: i32 = 1;         // local to host (pipes)
-pub const AF_LOCAL: i32 = AF_UNIX;  // backward compatibility
-pub const AF_INET: i32 = 2;         // internetwork: UDP, TCP, etc.
-pub const AF_IMPLINK: i32 = 3;      // arpanet imp addresses
-pub const AF_PUP: i32 = 4;          // pup protocols: e.g. BSP
-pub const AF_CHAOS: i32 = 5;        // mit CHAOS protocols
-pub const AF_NS: i32 = 6;           // XEROX NS protocols
-pub const AF_ISO: i32 = 7;          // ISO protocols
-pub const AF_OSI: i32 = AF_ISO;
-pub const AF_ECMA: i32 = 8;         // European computer manufacturers
-pub const AF_DATAKIT: i32 = 9;      // datakit protocols
-pub const AF_CCITT: i32 = 10;       // CCITT protocols, X.25 etc
-pub const AF_SNA: i32 = 11;         // IBM SNA
-pub const AF_DECnet: i32 = 12;      // DECnet
-pub const AF_DLI: i32 = 13;         // DEC Direct data link interface
-pub const AF_LAT: i32 = 14;         // LAT
-pub const AF_HYLINK: i32 = 15;      // NSC Hyperchannel
-pub const AF_APPLETALK: i32 = 16;   // Apple Talk
-pub const AF_ROUTE: i32 = 17;       // Internal Routing Protocol
-pub const AF_LINK: i32 = 18;        // Link layer interface
-pub const pseudo_AF_XTP: i32 = 19;  // eXpress Transfer Protocol (no AF)
-pub const AF_COIP: i32 = 20;        // connection-oriented IP, aka ST II
-pub const AF_CNT: i32 = 21;         // Computer Network Technology
-pub const pseudo_AF_RTIP: i32 = 22; // Help Identify RTIP packets
-pub const AF_IPX: i32 = 23;         // Novell Internet Protocol
-pub const AF_SIP: i32 = 24;         // Simple Internet Protocol
-pub const pseudo_AF_PIP: i32 = 25;  // Help Identify PIP packets
-pub const pseudo_AF_BLUE: i32 = 26; // Identify packets for Blue Box - Not used
-pub const AF_NDRV: i32 = 27;        // Network Driver 'raw' access
-pub const AF_ISDN: i32 = 28;        // Integrated Services Digital Network
-pub const AF_E164: i32 = AF_ISDN;   // CCITT E.164 recommendation
-pub const pseudo_AF_KEY: i32 = 29;  // Internal key-management function
-pub const AF_INET6: i32 = 30;       // IPv6
-pub const AF_NATM: i32 = 31;        // native ATM access
-pub const AF_SYSTEM: i32 = 32;      // Kernel event messages
-pub const AF_NETBIOS: i32 = 33;     // NetBIOS
-pub const AF_PPP: i32 = 34;         // PPP communication protocol
-pub const pseudo_AF_HDRCMPLT: i32 = 35;// Used by BPF to not rewrite headers in interface output routines
-pub const AF_RESERVED_36: i32 = 36; // Reserved for internal usage
-pub const AF_IEEE80211: i32 = 37;   // IEEE 802.11 protocol
-pub const AF_MAX: i32 = 38;
+/* Protocol families, same as address families. */
+pub const PF_UNSPEC: i32 = AF_UNSPEC;
+pub const PF_UNIX: i32 = AF_UNIX;
+pub const PF_LOCAL: i32 = AF_LOCAL;
+pub const PF_INET: i32 = AF_INET;
+pub const PF_AX25: i32 = AF_AX25;
+pub const PF_IPX: i32 = AF_IPX;
+pub const PF_APPLETALK: i32 = AF_APPLETALK;
+pub const PF_NETROM: i32 = AF_NETROM;
+pub const PF_BRIDGE: i32 = AF_BRIDGE;
+pub const PF_ATMPVC: i32 = AF_ATMPVC;
+pub const PF_X25: i32 = AF_X25;
+pub const PF_INET6: i32 = AF_INET6;
+pub const PF_ROSE: i32 = AF_ROSE;
+pub const PF_DECnet: i32 = AF_DECnet;
+pub const PF_NETBEUI: i32 = AF_NETBEUI;
+pub const PF_SECURITY: i32 = AF_SECURITY;
+pub const PF_KEY: i32 = AF_KEY;
+pub const PF_NETLINK: i32 = AF_NETLINK;
+pub const PF_ROUTE: i32 = AF_ROUTE;
+pub const PF_PACKET: i32 = AF_PACKET;
+pub const PF_ASH: i32 = AF_ASH;
+pub const PF_ECONET: i32 = AF_ECONET;
+pub const PF_ATMSVC: i32 = AF_ATMSVC;
+pub const PF_RDS: i32 = AF_RDS;
+pub const PF_SNA: i32 = AF_SNA;
+pub const PF_IRDA: i32 = AF_IRDA;
+pub const PF_PPPOX: i32 = AF_PPPOX;
+pub const PF_WANPIPE: i32 = AF_WANPIPE;
+pub const PF_LLC: i32 = AF_LLC;
+pub const PF_IB: i32 = AF_IB;
+pub const PF_MPLS: i32 = AF_MPLS;
+pub const PF_CAN: i32 = AF_CAN;
+pub const PF_TIPC: i32 = AF_TIPC;
+pub const PF_BLUETOOTH: i32 = AF_BLUETOOTH;
+pub const PF_IUCV: i32 = AF_IUCV;
+pub const PF_RXRPC: i32 = AF_RXRPC;
+pub const PF_ISDN: i32 = AF_ISDN;
+pub const PF_PHONET: i32 = AF_PHONET;
+pub const PF_IEEE802154: i32 = AF_IEEE802154;
+pub const PF_CAIF: i32 = AF_CAIF;
+pub const PF_ALG: i32 = AF_ALG;
+pub const PF_NFC: i32 = AF_NFC;
+pub const PF_VSOCK: i32 = AF_VSOCK;
+pub const PF_KCM: i32 = AF_KCM;
+pub const PF_QIPCRTR: i32 = AF_QIPCRTR;
+pub const PF_SMC: i32 = AF_SMC;
+pub const PF_XDP: i32 = AF_XDP;
+pub const PF_MCTP: i32 = AF_MCTP;
+pub const PF_MAX: i32 = AF_MAX;
 
 // protocols...
 
@@ -175,49 +237,6 @@ pub const IPPROTO_RAW: i32 = 255;      // raw IP packet
 pub const IPPROTO_MAX: i32 = 256;
 // last return value of *_input(), meaning "all job for this pkt is done".
 pub const IPPROTO_DONE: i32 = 257;
-
-
-// Protocol families are derived from above...
-
-pub const PF_UNSPEC: i32 = AF_UNSPEC;
-pub const PF_LOCAL: i32 = AF_LOCAL;
-pub const PF_UNIX: i32 = PF_LOCAL;          // backward compatibility
-pub const PF_FILE: i32 = PF_LOCAL;          // used on Linux
-pub const PF_INET: i32 = AF_INET;
-pub const PF_IMPLINK: i32 = AF_IMPLINK;
-pub const PF_PUP: i32 = AF_PUP;
-pub const PF_CHAOS: i32 = AF_CHAOS;
-pub const PF_NS: i32 = AF_NS;
-pub const PF_ISO: i32 = AF_ISO;
-pub const PF_OSI: i32 = AF_ISO;
-pub const PF_ECMA: i32 = AF_ECMA;
-pub const PF_DATAKIT: i32 = AF_DATAKIT;
-pub const PF_CCITT: i32 = AF_CCITT;
-pub const PF_SNA: i32 = AF_SNA;
-pub const PF_DECnet: i32 = AF_DECnet;
-pub const PF_DLI: i32 = AF_DLI;
-pub const PF_LAT: i32 = AF_LAT;
-pub const PF_HYLINK: i32 = AF_HYLINK;
-pub const PF_APPLETALK: i32 = AF_APPLETALK;
-pub const PF_ROUTE: i32 = AF_ROUTE;
-pub const PF_LINK: i32 = AF_LINK;
-pub const PF_XTP: i32 = pseudo_AF_XTP;     // really just proto family, no AF
-pub const PF_COIP: i32 = AF_COIP;
-pub const PF_CNT: i32 = AF_CNT;
-pub const PF_SIP: i32 = AF_SIP;
-pub const PF_IPX: i32 = AF_IPX;            // same format as AF_NS
-pub const PF_RTIP: i32 = pseudo_AF_RTIP;   // same format as AF_INET
-pub const PF_PIP: i32 = pseudo_AF_PIP;
-pub const PF_NDRV: i32 = AF_NDRV;
-pub const PF_ISDN: i32 = AF_ISDN;
-pub const PF_KEY: i32 = pseudo_AF_KEY;
-pub const PF_INET6: i32 = AF_INET6;
-pub const PF_NATM: i32 = AF_NATM;
-pub const PF_SYSTEM: i32 = AF_SYSTEM;
-pub const PF_NETBIOS: i32 = AF_NETBIOS;
-pub const PF_PPP: i32 = AF_PPP;
-pub const PF_RESERVED_36: i32 = AF_RESERVED_36;
-pub const PF_MAX: i32 = AF_MAX;
 
 pub const MSG_OOB: i32        = 0x01; /* Process out-of-band data.  */
 pub const MSG_PEEK: i32       = 0x02; /* Peek at incoming messages.  */
