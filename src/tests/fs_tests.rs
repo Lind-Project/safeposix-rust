@@ -22,6 +22,7 @@ pub mod fs_tests {
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
         ut_lind_fs_fcntl();
+        ut_lind_fs_ioctl();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();
@@ -451,7 +452,46 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    pub fn ut_lind_fs_ioctl() {
+        lindrustinit(0);
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        
+        let mut arg0: i32 = 0;
+        let mut arg1: i32 = 1;
 
+        let mut union0: IoctlPtrUnion = IoctlPtrUnion {int_ptr : &mut arg0};
+        let mut union1: IoctlPtrUnion = IoctlPtrUnion {int_ptr : &mut arg1};
+
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let filefd = cage.open_syscall("/ioctl_file", O_CREAT | O_EXCL, S_IRWXA);
+
+        //try to use FIONBIO for a non-socket
+        assert_eq!(cage.ioctl_syscall(filefd, FIONBIO, union0), -(Errno::ENOTTY as i32));
+
+        //clear the O_NONBLOCK flag
+        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
+
+        //checking to see if the flag was updated
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0)&O_NONBLOCK, 0);
+
+        //set the O_NONBLOCK flag
+        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union1), 0);
+
+        //checking to see if the flag was updated
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0)&O_NONBLOCK, O_NONBLOCK);
+
+        //clear the O_NONBLOCK flag
+        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
+
+        //checking to see if the flag was updated
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0)&O_NONBLOCK, 0);
+
+        assert_eq!(cage.close_syscall(filefd), 0);
+        assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     pub fn ut_lind_fs_fdflags() {
         lindrustinit(0);
