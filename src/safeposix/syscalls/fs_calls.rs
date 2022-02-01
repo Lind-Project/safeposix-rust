@@ -1324,6 +1324,52 @@ impl Cage {
         }
     }
 
+    //------------------------------------IOCTL SYSCALL------------------------------------
+
+    pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
+        let fdtable = self.filedescriptortable.write().unwrap();
+
+        if let Some(wrappedfd) = fdtable.get(&fd) {
+            let mut filedesc_enum = wrappedfd.write().unwrap();
+            
+            let filetype: i8;
+
+            let flags = match &mut *filedesc_enum {
+                Epoll(obj) => {filetype = 0; &mut obj.flags},
+                Pipe(obj) => {filetype = 1; &mut obj.flags},
+                Stream(obj) => {filetype = 2; &mut obj.flags},
+                Socket(obj) => {filetype = 3; &mut obj.flags},
+                File(obj) => {filetype = 4; &mut obj.flags},
+            };
+
+            match (request) {
+                FIONBIO => {
+                    let arg_result = interface::get_ioctl_int(ptrunion);
+                    //matching the tuple
+                    match (arg_result, filetype) {
+                        (Err(arg_result), ..)=> {
+                            return arg_result; //syscall_error
+                        }
+                        (Ok(arg_result), 3) => {
+                            let arg: i32 = arg_result;
+                            if arg == 0 { //clear non-blocking I/O
+                                *flags &= !O_NONBLOCK;
+                            }
+                            else { //set for non-blocking I/O
+                                *flags |= O_NONBLOCK;
+                            }
+                            0
+                        }
+                        _ => {syscall_error(Errno::ENOTTY, "ioctl", "The specified request does not apply to the kind of object that the file descriptor fd references.")}
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "ioctl", "Arguments provided do not match implemented parameters")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor")
+        }
+    }
+
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {

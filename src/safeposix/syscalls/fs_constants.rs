@@ -77,6 +77,9 @@ pub const F_SETLEASE: i32 = 1024;
 pub const F_GETLEASE: i32 = 1025;
 pub const F_NOTIFY: i32 = 1026;
 
+//Commands for IOCTL
+pub const FIONBIO: u32 = 21537;
+
 //File types for open/stat etc.
 pub const S_IFBLK: i32 = 0o60000;
 pub const S_IFCHR: i32 = 0o20000;
