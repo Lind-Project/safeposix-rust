@@ -1433,12 +1433,10 @@ impl Cage {
                         Ok(i) => i,
                         Err(()) => panic!("Unknown errno value from accept within socketpair returned!"),
                     };
-                    thishandle2.close_syscall(sock1fd);
-                    thishandle2.close_syscall(sock2fd);
-                    return syscall_error(sockerrno, "socketpair", "The libc call to accept within socketpair failed!");
+                    return Err(syscall_error(sockerrno, "socketpair", "The libc call to accept within socketpair failed!"));
                 }
                 thishandle2.close_syscall(sock1fd);
-                return accret;
+                return Ok(accret);
             });
     
             let connret = this.connect_syscall(sock2fd, &bound_addr);
@@ -1447,12 +1445,22 @@ impl Cage {
                     Ok(i) => i,
                     Err(()) => panic!("Unknown errno value from connect within socketpair returned!"),
                 };
+                let _ = acceptor.join().unwrap(); //make sure to synchronize threads, assigned to _ to get rid of unused result warning
                 this.close_syscall(sock1fd);
                 this.close_syscall(sock2fd);
                 return syscall_error(sockerrno, "socketpair", "The libc call to connect within socketpair failed!");
             }
     
-            let otherfd = acceptor.join().unwrap();
+            let fullaccres = acceptor.join().unwrap(); //unwrap to assume the thread did not die
+            //the error is handled in the parent thread to make sure both threads are synchronized when erroring out (i.e. closes)
+            let otherfd = match fullaccres {
+                Ok(fd) => fd,
+                Err(syserr) => {
+                    this.close_syscall(sock1fd);
+                    this.close_syscall(sock2fd);
+                    return syserr;
+                }
+            };
             sv.sock1 = sock2fd;
             sv.sock2 = otherfd;
         } else if socktype == SOCK_DGRAM {
