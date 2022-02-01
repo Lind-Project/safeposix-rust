@@ -1326,7 +1326,7 @@ impl Cage {
 
     //------------------------------------IOCTL SYSCALL------------------------------------
 
-    pub fn ioctl_syscall(&self, fd: i32, request: u32, unionbuf: &mut IoctlUnion) -> i32 {
+    pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
         let fdtable = self.filedescriptortable.write().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
@@ -1344,9 +1344,14 @@ impl Cage {
 
             match (request) {
                 FIONBIO => {
-                    match filetype {
-                        3 => {
-                            let arg: i32 = interface::get_ioctlunion_int(unionbuf);
+                    let arg_result = interface::get_ioctl_int(ptrunion);
+                    //matching the tuple
+                    match (arg_result, filetype) {
+                        (Err(arg_result), ..)=> {
+                            return arg_result; //syscall_error
+                        }
+                        (Ok(arg_result), 3) => {
+                            let arg: i32 = arg_result;
                             if arg == 0 { //clear non-blocking I/O
                                 *flags &= !O_NONBLOCK;
                             }

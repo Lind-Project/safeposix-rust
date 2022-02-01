@@ -70,7 +70,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 
 
 use crate::interface;
-use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlUnion};
+use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
@@ -162,7 +162,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.fcntl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
         }
         IOCTL_SYSCALL => {
-            check_and_dispatch!(cage.ioctl_syscall, interface::get_int(arg1), interface::get_uint(arg2), interface::get_ioctlunion(arg3))
+            check_and_dispatch!(cage.ioctl_syscall, interface::get_int(arg1), interface::get_uint(arg2), interface::get_ioctlptrunion(arg3))
         }
         GETPPID_SYSCALL => {
             check_and_dispatch!(cage.getppid_syscall,)

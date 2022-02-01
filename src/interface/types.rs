@@ -96,10 +96,11 @@ pub struct TimeVal {
     pub tv_usec: i64
 }
 
+#[derive(Copy, Clone)]
 #[repr(C)]
-pub union IoctlUnion {
-    pub arg_int: i32,
-    pub arg_char: char
+pub union IoctlPtrUnion {
+    pub int_ptr: *mut i32,
+    pub c_char_ptr: *mut u8
     //Right now, we do not support passing struct pointers to ioctl as the related call are not implemented
 }
 
@@ -129,7 +130,7 @@ pub union Arg {
   pub dispatch_structtimeval: *mut TimeVal,
   pub dispatch_pipearray: *mut PipeArray,
   pub dispatch_sockpair: *mut SockPair,
-  pub dispatch_ioctlunion: *mut IoctlUnion
+  pub dispatch_ioctlptrunion: IoctlPtrUnion
 }
 
 
@@ -256,20 +257,24 @@ pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> 
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn get_ioctlunion<'a>(union_argument: Arg) -> Result<&'a mut IoctlUnion, i32> {
-    let pointer = unsafe{union_argument.dispatch_ioctlunion};
+pub fn get_ioctlptrunion(union_argument: Arg) -> Result<IoctlPtrUnion, i32> {
+    return Ok(unsafe{union_argument.dispatch_ioctlptrunion});
+}
+
+pub fn get_ioctl_int<'a>(ptrunion: IoctlPtrUnion) -> Result<i32, i32> {
+    let pointer = unsafe{ptrunion.int_ptr};
     if !pointer.is_null() {    
-        return Ok(unsafe{&mut *pointer});
+        return Ok(unsafe{*pointer});
     }
-    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+    return Err(syscall_error(Errno::EFAULT, "ioctl", "argp is not valid"));
 }
 
-pub fn get_ioctlunion_int<'a>(unionbuf: &mut IoctlUnion) -> i32 {
-    unsafe{unionbuf.arg_int}
-}
-
-pub fn get_ioctlunion_char<'a>(unionbuf: &mut IoctlUnion) -> char {
-    unsafe{unionbuf.arg_char}
+pub fn get_ioctl_char<'a>(ptrunion: IoctlPtrUnion) -> Result<u8, i32> {
+    let pointer = unsafe{ptrunion.c_char_ptr};
+    if !pointer.is_null() {    
+        return Ok(unsafe{*pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "ioctl", "argp is not valid"));
 }
 
 /// Given the vector of tuples produced from getdents_syscall, each of which consists of 
