@@ -1423,13 +1423,10 @@ impl Cage {
                 return listenret;
             }
     
-            let spin_val = interface::RustRfc::new(interface::RustAtomicBool::new(false));
             let mut garbage_remote = portlessaddr.clone();
             let thishandle2 = this.clone();
             
-            let sub_spin_val = spin_val.clone();
             let acceptor = interface::helper_thread(move || {
-                sub_spin_val.store(true, interface::RustAtomicOrdering::Relaxed);
                 let accret = thishandle2.accept_syscall(sock1fd, &mut garbage_remote);
                 if accret < 0 {
                     let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
@@ -1444,8 +1441,6 @@ impl Cage {
                 return accret;
             });
     
-            while !spin_val.load(interface::RustAtomicOrdering::Relaxed) {}
-            interface::sleep(interface::RustDuration::from_micros(100)); //this is a very bad way of handling it but I don't see a better one for now?
             let connret = this.connect_syscall(sock2fd, &bound_addr);
             if connret < 0 {
                 let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
