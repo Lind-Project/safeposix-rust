@@ -1392,9 +1392,8 @@ impl Cage {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     }
                 }
+                log_metadata(&metadata, inodenum, Some(thisinode));
             }
-            log_metadata(&metadata, inodenum, Some(thisinode));
-
             else {
                 //there doesn't seem to be a good syscall error errno for this
                 return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");

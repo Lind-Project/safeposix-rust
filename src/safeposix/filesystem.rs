@@ -143,7 +143,7 @@ pub fn load_fs() {
             let logvec = log_fileobj.readfile_to_new_string(0).unwrap().lines();
             for logline in logvec.iter_mut() {
                 let entry : LogEntry;
-                *entry = interface::serde_deserialize_from_string(&metadatastring).unwrap();
+                *entry = interface::serde_deserialize_from_string(&logline).unwrap();
                 match entry.inode {
                     Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, inode),
                     None => mutmetadata.inodetable.remove(&entry.inodenum),
