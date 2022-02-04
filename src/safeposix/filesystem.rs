@@ -194,7 +194,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
     let mut entrystring = inodenum.to_string();
     entrystring.push('-');
-    entrystring.push_str(&interface::serde_serialize_to_string(&entry).unwrap());
+    entrystring.push_str(&interface::serde_serialize_to_string(&inode).unwrap());
     entrystring.push('\n');
 
     // write to file
