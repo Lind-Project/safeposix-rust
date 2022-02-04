@@ -83,9 +83,9 @@ pub struct FilesystemMetadata {
 
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
-pub struct LogEntry<'a> {
+pub struct LogEntry {
     pub inodenum: usize,
-    pub inode: Option<&'a Inode>
+    pub inode: Option<Inode>
 }
 
 
@@ -194,7 +194,7 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 
 
 // Serialize New Metadata to JSON, write to logfile
-pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode: Option<&Inode>) {
+pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode: Option<Inode>) {
   
     // pack and serialize log entry
     let entry = LogEntry{inodenum: newinodenum, inode: newinode};
