@@ -194,7 +194,7 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 
 
 // Serialize New Metadata to JSON, write to logfile
-pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode: Option<Inode>) {
+pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode: Option<&Inode>) {
   
     // pack and serialize log entry
     let entry = LogEntry{inodenum: newinodenum, inode: newinode};
