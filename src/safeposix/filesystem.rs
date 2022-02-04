@@ -83,9 +83,9 @@ pub struct FilesystemMetadata {
 
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
-pub struct LogEntry {
+pub struct LogEntry<'a> {
     pub inodenum: usize,
-    pub inode: Option<&Inode>
+    pub inode: Option<&'a Inode>
 }
 
 
@@ -145,7 +145,7 @@ pub fn load_fs() {
                 let entry : LogEntry;
                 entry = interface::serde_deserialize_from_string(&logline).unwrap();
                 match entry.inode {
-                    Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, inode),
+                    Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, *inode),
                     None => mutmetadata.inodetable.remove(&entry.inodenum),
                 };
             }
