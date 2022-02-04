@@ -136,10 +136,10 @@ pub fn load_fs() {
             for logline in logvec.iter_mut() {
                 let mut entry = logline.split('-');
                 let inodenum = entry.next();
-                let inode : Inode = interface::serde_deserialize_from_string(&entry.next()).unwrap();
+                let inode : Option<Inode> = interface::serde_deserialize_from_string(&entry.next()).unwrap();
                 match inode {
-                    Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, inode),
-                    None => mutmetadata.inodetable.remove(&entry.inodenum),
+                    Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
+                    None => mutmetadata.inodetable.remove(inodenum),
                 };
             }
         }
