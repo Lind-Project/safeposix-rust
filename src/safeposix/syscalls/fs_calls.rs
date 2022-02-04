@@ -69,8 +69,11 @@ impl Cage {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                log_metadata(&mutmetadata, newinodenum, Some(newinode.as_ref()));
                 mutmetadata.inodetable.insert(newinodenum, newinode);
+                let entry = LogEntry{inodenum: newinodenum, inode: newinode};
+                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                log_metadata(&mutmetadata, entrystring);
+
             }
 
             //If the file exists (we don't need to look at parent here)
