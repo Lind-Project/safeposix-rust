@@ -80,6 +80,7 @@ pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile>
     EmulatedFile::new(filename, create)
 }
 
+#[derive(Debug)]
 pub struct EmulatedFile {
     filename: String,
     abs_filename: RustPathBuf,
