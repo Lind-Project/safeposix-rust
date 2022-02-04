@@ -70,7 +70,7 @@ impl Cage {
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(&mutmetadata, newinodenum, Some(newinode));
+                log_metadata(&mutmetadata, newinodenum, Some(&newinode));
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -178,7 +178,7 @@ impl Cage {
                 else {unreachable!();}
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
-                log_metadata(&mutmetadata, newinodenum, Some(newinode));
+                log_metadata(&mutmetadata, newinodenum, Some(&newinode));
                 0 //mkdir has succeeded
             }
 
@@ -230,7 +230,7 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
 
-                log_metadata(&mutmetadata, newinodenum, Some(newinode));
+                log_metadata(&mutmetadata, newinodenum, Some(&newinode));
                 0 //mknod has succeeded
             }
 
