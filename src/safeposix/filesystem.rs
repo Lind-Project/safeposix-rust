@@ -202,7 +202,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode:
     entrystring.push('\n');
 
     // write to file
-    let mut metadata_fileobj = &metadata.logfile.unwrap();
+    let mut metadata_fileobj = &mut metadata.logfile.unwrap();
     metadata_fileobj.writefile_from_string(entrystring).unwrap();
     metadata_fileobj.close().unwrap();
 }
