@@ -70,7 +70,7 @@ impl Cage {
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-                let entry = LogEntry{inodenum: newinodenum, inode: newinode};
+                let entry = LogEntry{inodenum: newinodenum, inode: Some(newinode)};
                 let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
                 log_metadata(&mutmetadata, entrystring);
 
@@ -180,8 +180,9 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-
-                log_metadata(&mutmetadata, newinodenum, Some(newinode));
+                let entry = LogEntry{inodenum: newinodenum, inode: Some(newinode)};
+                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                log_metadata(&mutmetadata, entrystring);
                 0 //mkdir has succeeded
             }
 
@@ -232,8 +233,9 @@ impl Cage {
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-
-                log_metadata(&mutmetadata, newinodenum, Some(newinode));
+                let entry = LogEntry{inodenum: newinodenum, inode: Some(newinode)};
+                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                log_metadata(&mutmetadata, entrystring);
                 0 //mknod has succeeded
             }
 
@@ -273,7 +275,9 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                log_metadata(&mutmetadata, inodenum, Some(*inodeobj));
+                                let entry = LogEntry{inodenum: inodenum, inode: Some(*inodeobj)};
+                                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                                log_metadata(&mutmetadata, entrystring);
                                 0 //link has succeeded
                             }
 
@@ -291,7 +295,9 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                log_metadata(&mutmetadata, inodenum, Some(*inodeobj));
+                                let entry = LogEntry{inodenum: inodenum, inode: Some(*inodeobj)};
+                                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                                log_metadata(&mutmetadata, entrystring);
                                 0 //link has succeeded
                             }
 
@@ -354,7 +360,9 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
-                log_metadata(&mutmetadata, inodenum, None);
+                let entry = LogEntry{inodenum: inodenum, inode: None};
+                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                log_metadata(&mutmetadata, entrystring);
 
                 0 //unlink has succeeded
             }
@@ -737,7 +745,9 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
-                                    log_metadata(&metadata, normalfile_filedesc_obj.inode, Some(*inodeobj));
+                                    let entry = LogEntry{inodenum: normalfile_filedesc_obj.inode, inode: Some(*inodeobj)};
+                                    let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                                    log_metadata(&mutmetadata, entrystring);
                                 } //update file size if necessary
                                 
                                 byteswritten as i32
@@ -840,7 +850,9 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
-                               log_metadata(&metadata, normalfile_filedesc_obj.inode, Some(*inodeobj));
+                               let entry = LogEntry{inodenum: normalfile_filedesc_obj.inode, inode: Some(*inodeobj)};
+                               let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                               log_metadata(&mutmetadata, entrystring);                            
                             } //update file size if necessary
 
                             retval
@@ -1233,7 +1245,9 @@ impl Cage {
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                 } 
-                                log_metadata(&mutmetadata, inodenum, None);
+                                let entry = LogEntry{inodenum: inodenum, inode: None};
+                                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                                log_metadata(&mutmetadata, entrystring);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
@@ -1247,8 +1261,9 @@ impl Cage {
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
-                                log_metadata(&mutmetadata, inodenum, None);
-                            } 
+                                let entry = LogEntry{inodenum: inodenum, inode: None};
+                                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                                log_metadata(&mutmetadata, entrystring);                            } 
                         }
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
@@ -1261,8 +1276,9 @@ impl Cage {
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
-                                log_metadata(&mutmetadata, inodenum, None);
-                            } 
+                                let entry = LogEntry{inodenum: inodenum, inode: None};
+                                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                                log_metadata(&mutmetadata, entrystring);                            } 
                         }
                     }
                 }
@@ -1395,7 +1411,9 @@ impl Cage {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     }
                 }
-                log_metadata(&metadata, inodenum, Some(*thisinode));
+                let entry = LogEntry{inodenum: inodenum, inode: Some(*thisinode)};
+                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                log_metadata(&mutmetadata, entrystring);
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1560,7 +1578,10 @@ impl Cage {
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
-                        log_metadata(&metadata, inodenum, None);
+                        let entry = LogEntry{inodenum: inodenum, inode: None};
+                        let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                        log_metadata(&mutmetadata, entrystring);       
+                        
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1603,7 +1624,9 @@ impl Cage {
 
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
-                    log_metadata(&metadata, parent_inodenum, Some(*pardir_inodeobj));
+                    let entry = LogEntry{inodenum: parent_inodenum, inode: Some(*pardir_inodeobj)};
+                    let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                    log_metadata(&mutmetadata, entrystring);       
                 }
                 0 // success
             }
@@ -1650,7 +1673,9 @@ impl Cage {
                                      // extra data are cut off
                                 fileobject.shrink(length as usize);
                             } 
-                            log_metadata(&mutmetadata, inodenum, Some(*inodeobj));
+                            let entry = LogEntry{inodenum: inodenum, inode: Some(*inodeobj)};
+                            let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+                            log_metadata(&mutmetadata, entrystring);    
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
