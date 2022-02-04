@@ -747,7 +747,7 @@ impl Cage {
                                     normalfile_inode_obj.size = newposition;
                                     let entry = LogEntry{inodenum: normalfile_filedesc_obj.inode, inode: Some(*inodeobj)};
                                     let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
-                                    log_metadata(&mutmetadata, entrystring);
+                                    log_metadata(&metadata, entrystring);
                                 } //update file size if necessary
                                 
                                 byteswritten as i32
@@ -852,7 +852,7 @@ impl Cage {
                                normalfile_inode_obj.size = newposition;
                                let entry = LogEntry{inodenum: normalfile_filedesc_obj.inode, inode: Some(*inodeobj)};
                                let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
-                               log_metadata(&mutmetadata, entrystring);                            
+                               log_metadata(&metadata, entrystring);                            
                             } //update file size if necessary
 
                             retval
@@ -1413,7 +1413,7 @@ impl Cage {
                 }
                 let entry = LogEntry{inodenum: inodenum, inode: Some(*thisinode)};
                 let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
-                log_metadata(&mutmetadata, entrystring);
+                log_metadata(&metadata, entrystring);
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1580,7 +1580,7 @@ impl Cage {
                         }
                         let entry = LogEntry{inodenum: inodenum, inode: None};
                         let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
-                        log_metadata(&mutmetadata, entrystring);       
+                        log_metadata(&metadata, entrystring);       
                         
                         0 // success
                     }
@@ -1626,7 +1626,7 @@ impl Cage {
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                     let entry = LogEntry{inodenum: parent_inodenum, inode: Some(*pardir_inodeobj)};
                     let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
-                    log_metadata(&mutmetadata, entrystring);       
+                    log_metadata(&metadata, entrystring);       
                 }
                 0 // success
             }
