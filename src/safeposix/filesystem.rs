@@ -75,7 +75,7 @@ pub struct DirectoryInode {
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
     #[serde(skip)] // skip logfile handle
-    pub logfile: interface::EmulatedFile,
+    pub logfile: Option<interface::EmulatedFile>,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
@@ -99,7 +99,7 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
 impl FilesystemMetadata {
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
-        let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
+        let mut retval = FilesystemMetadata {logfile: None, nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
         //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially,
@@ -140,7 +140,7 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let logvec = log_fileobj.readfile_to_new_string().unwrap().lines();
+            let logvec: Vec<&str> = log_fileobj.readfile_to_new_string().unwrap().lines().collect();
             for logline in logvec.iter_mut() {
                 let entry : LogEntry;
                 *entry = interface::serde_deserialize_from_string(&logline).unwrap();
@@ -166,7 +166,7 @@ pub fn load_fs() {
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let mut mutmetadata = FS_METADATA.write().unwrap();
-    *mutmetadata.logfile = log_fileobj;
+    *mutmetadata.logfile = Some(log_fileobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
@@ -201,7 +201,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode:
     let entrystring = interface::serde_serialize_to_string(entry).unwrap().push('\n');
 
     // write to file
-    let mut metadata_fileobj = &metadata.logfile;
+    let mut metadata_fileobj = &metadata.logfile.unwrap();
     metadata_fileobj.writefile_from_string(entrystring).unwrap();
     metadata_fileobj.close().unwrap();
 }
