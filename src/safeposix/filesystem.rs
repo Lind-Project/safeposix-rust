@@ -135,7 +135,7 @@ pub fn load_fs() {
             let mut logvec: Vec<&str> = log_fileobj.readfile_to_new_string().unwrap().lines().collect();
             for logline in logvec.iter_mut() {
                 let mut entry = logline.split('-');
-                let inodenum = entry.next().unwrap();
+                let inodenum : usize = entry.next().unwrap().parse().unwrap();
                 let inode : Option<Inode> = interface::serde_deserialize_from_string(&entry.next().unwrap()).unwrap();
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
