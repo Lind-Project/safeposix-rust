@@ -139,7 +139,7 @@ pub fn load_fs() {
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
-            let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
+            let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
             let logvec = log_fileobj.readfile_to_new_string(0).unwrap().lines();
             for logline in logvec.iter_mut() {
                 let entry : LogEntry;
@@ -151,6 +151,7 @@ pub fn load_fs() {
             }
         }
 
+
     } else {
        *mutmetadata = FilesystemMetadata::blank_fs_init();
        drop(mutmetadata);
@@ -161,6 +162,11 @@ pub fn load_fs() {
        persist_metadata(&metadata);
     }
 
+    // finally, reinstantiate the log file and assign it to the metadata struct
+    let _ = interface::removefile(LOGFILENAME.to_string());
+    let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
+    let mut mutmetadata = FS_METADATA.write().unwrap();
+    *mutmetadata.logfile = log_fileobj;
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
