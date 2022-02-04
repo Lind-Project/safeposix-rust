@@ -143,11 +143,11 @@ pub fn load_fs() {
             let logvec: Vec<&str> = log_fileobj.readfile_to_new_string().unwrap().lines().collect();
             for logline in logvec.iter_mut() {
                 let entry : LogEntry;
-                *entry = interface::serde_deserialize_from_string(&logline).unwrap();
+                entry = interface::serde_deserialize_from_string(&logline).unwrap();
                 match entry.inode {
                     Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, inode),
                     None => mutmetadata.inodetable.remove(&entry.inodenum),
-                }
+                };
             }
         }
 
@@ -198,7 +198,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode:
   
     // pack and serialize log entry
     let entry = LogEntry{inodenum: newinodenum, inode: newinode};
-    let entrystring = interface::serde_serialize_to_string(entry).unwrap().push('\n');
+    let entrystring = interface::serde_serialize_to_string(&entry).unwrap().push('\n');
 
     // write to file
     let mut metadata_fileobj = &metadata.logfile.unwrap();
