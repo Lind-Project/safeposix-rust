@@ -198,7 +198,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
     // pack and serialize log entry
     let inode = metadata.inodetable.get(&inodenum);
-    let entry = LogEntry{inodenum: inodenum, inode: inode};
+    let entry = LogEntry{inodenum: inodenum, inode: *inode};
     let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
     entrystring.push('\n');
 
