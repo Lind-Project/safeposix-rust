@@ -22,14 +22,14 @@ type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
 pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
     interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
 
-#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug, Copy, Clone)]
 pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
     Dir(DirectoryInode),
 }
 
-#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug, Copy, Clone)]
 pub struct GenericInode {
     pub size: usize,
     pub uid: u32,
@@ -42,7 +42,7 @@ pub struct GenericInode {
     pub ctime: u64,
     pub mtime: u64
 }
-#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug, Copy, Clone)]
 pub struct DeviceInode {
     pub size: usize,
     pub uid: u32,
@@ -57,7 +57,7 @@ pub struct DeviceInode {
     pub dev: DevNo,
 }
 
-#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug, Copy, Clone)]
 pub struct DirectoryInode {
     pub size: usize,
     pub uid: u32,
