@@ -139,7 +139,7 @@ pub fn load_fs() {
                 let inode : Option<Inode> = interface::serde_deserialize_from_string(&entry.next().unwrap()).unwrap();
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
-                    None => mutmetadata.inodetable.remove(inodenum),
+                    None => mutmetadata.inodetable.remove(&inodenum),
                 };
             }
         }
