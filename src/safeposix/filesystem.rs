@@ -83,9 +83,9 @@ pub struct FilesystemMetadata {
 
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
-pub struct LogEntry {
+pub struct LogEntry<'a> {
     pub inodenum: usize,
-    pub inode: Option<Inode>
+    pub inode: Option<&'a Inode>
 }
 
 
