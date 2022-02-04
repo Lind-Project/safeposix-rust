@@ -1393,6 +1393,8 @@ impl Cage {
                     }
                 }
             }
+            log_metadata(&metadata, inodenum, Some(thisinode));
+
             else {
                 //there doesn't seem to be a good syscall error errno for this
                 return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
@@ -1400,7 +1402,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
-        log_metadata(&metadata, inodenum, Some(thisinode));
         0 //success!
     }
 
@@ -1599,8 +1600,8 @@ impl Cage {
 
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
+                    log_metadata(&metadata, parent_inodenum, Some(parent_dir));
                 }
-                log_metadata(&metadata, parent_inodenum, Some(parent_dir));
                 0 // success
             }
         }
