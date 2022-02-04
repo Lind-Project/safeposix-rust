@@ -196,9 +196,17 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 // Serialize New Metadata to JSON, write to logfile
 pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
+    let wrappedinode: Option<Inode>;
+
     // pack and serialize log entry
-    let inode = metadata.inodetable.get(&inodenum);
-    let entry = LogEntry{inodenum: inodenum, inode: *inode};
+    if let Some(inode) = metadata.inodetable.get(&inodenum) {
+        wrappedinode = Some(*inode);
+    }
+    else {
+        wrappedinode = None;
+    }
+
+    let entry = LogEntry{inodenum: inodenum, inode: wrappedinode};
     let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
     entrystring.push('\n');
 
