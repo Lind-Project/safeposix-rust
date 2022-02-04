@@ -288,7 +288,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                log_metadata(&mutmetadata, inodenum, Some(inodeobj));
+                                log_metadata(&mutmetadata, inodenum, Some(*inodeobj));
                                 0 //link has succeeded
                             }
 
@@ -734,7 +734,7 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
-                                    log_metadata(&metadata, normalfile_filedesc_obj.inode, Some(inodeobj));
+                                    log_metadata(&metadata, normalfile_filedesc_obj.inode, Some(*inodeobj));
                                 } //update file size if necessary
                                 
                                 byteswritten as i32
@@ -837,7 +837,7 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
-                               log_metadata(&metadata, normalfile_filedesc_obj.inode, Some(inodeobj));
+                               log_metadata(&metadata, normalfile_filedesc_obj.inode, Some(*inodeobj));
                             } //update file size if necessary
 
                             retval
@@ -1392,7 +1392,7 @@ impl Cage {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     }
                 }
-                log_metadata(&metadata, inodenum, Some(thisinode));
+                log_metadata(&metadata, inodenum, Some(*thisinode));
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1599,7 +1599,7 @@ impl Cage {
 
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
-                    log_metadata(&metadata, parent_inodenum, Some(parent_dir));
+                    log_metadata(&metadata, parent_inodenum, Some(*parent_dir));
                 }
                 0 // success
             }
@@ -1646,7 +1646,7 @@ impl Cage {
                                      // extra data are cut off
                                 fileobject.shrink(length as usize);
                             } 
-                            log_metadata(&mutmetadata, inodenum, Some(inodeobj));
+                            log_metadata(&mutmetadata, inodenum, Some(*inodeobj));
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
