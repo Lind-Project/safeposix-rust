@@ -198,7 +198,7 @@ impl EmulatedFile {
         Ok(bytes_written)
     }
 
-    // Reads entire file into provided C-buffer
+    // Reads entire file into String
     pub fn readfile_to_new_string(&self, offset: usize) -> std::io::Result<String> {
 
 
@@ -217,7 +217,7 @@ impl EmulatedFile {
         }
     }
 
-    // Write to entire file from provided C-buffer
+    // Write to entire file from provided String
     pub fn writefile_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
 
         let length = buf.len();

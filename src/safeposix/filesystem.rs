@@ -9,6 +9,9 @@ use super::cage::Cage;
 
 pub const METADATAFILENAME: &str = "lind.metadata";
 
+pub const LOGFILENAME: &str = "lind.md.log";
+
+
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
@@ -71,10 +74,20 @@ pub struct DirectoryInode {
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
+    #[serde(skip)] // skip logfile handle
+    pub logfile: EmulatedFile,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
 }
+
+
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+pub struct LogEntry {
+    pub inodenum: usize,
+    pub inode: Option<Inode>
+}
+
 
 pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> interface::RustHashMap<String, usize> {
     let mut retval = interface::RustHashMap::new();
@@ -123,6 +136,21 @@ pub fn load_fs() {
 
         metadata_fileobj.close().unwrap();
         restore_metadata(&mut mutmetadata);
+
+        // if we have a log file at this point, we need to sync it with the existing metadata
+        if interface::pathexists(LOGFILENAME.to_string()) {
+            let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
+            let logvec = log_fileobj.readfile_to_new_string(0).unwrap().lines();
+            for logline in logvec.iter_mut() {
+                let entry : LogEntry;
+                *entry = interface::serde_deserialize_from_string(&metadatastring).unwrap();
+                match entry.inode {
+                    Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, inode),
+                    None => mutmetadata.inodetable.remove(&entry.inodenum),
+                }
+            }
+        }
+
     } else {
        *mutmetadata = FilesystemMetadata::blank_fs_init();
        drop(mutmetadata);
@@ -156,6 +184,20 @@ pub fn load_fs_special_files(utilcage: &Cage) {
     if utilcage.mknod_syscall("/dev/random", S_IFCHR as u32, makedev(&DevNo {major: 1, minor: 8})) != 0 {
         interface::log_to_stderr("making /dev/random failed. Skipping");
     }
+}
+
+
+// Serialize New Metadata to JSON, write to logfile
+pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode: Option<Inode>) {
+  
+    // pack and serialize log entry
+    let entry = LogEntry{inodenum: newinodenum, inode: newinode};
+    let entrystring = interface::serde_serialize_to_string(entry).unwrap().push('\n');
+
+    // write to file
+    let mut metadata_fileobj = &metadata.logfile;
+    metadata_fileobj.writefile_from_string(entrystring, self.filesize).unwrap();
+    metadata_fileobj.close().unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
