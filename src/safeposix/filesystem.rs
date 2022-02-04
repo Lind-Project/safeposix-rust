@@ -197,7 +197,7 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode: Option<&Inode>) {
   
     // pack and serialize log entry
-    let entry = LogEntry{inodenum: newinodenum, inode: newinode};
+    let entry = LogEntry{inodenum: newinodenum, inode: *newinode};
     let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
     entrystring.push('\n');
 
