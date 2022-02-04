@@ -270,7 +270,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                log_metadata(&mutmetadata, inodenum, Some(inodeobj);
+                                log_metadata(&mutmetadata, inodenum, Some(inodeobj));
                                 0 //link has succeeded
                             }
 
@@ -288,7 +288,7 @@ impl Cage {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
-                                log_metadata(&mutmetadata, inodenum, Some(inodeobj);
+                                log_metadata(&mutmetadata, inodenum, Some(inodeobj));
                                 0 //link has succeeded
                             }
 
