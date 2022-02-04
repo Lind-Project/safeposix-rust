@@ -198,9 +198,8 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push('\n');
 
     // write to file
-    let mut metadata_fileobj = &mut metadata.logfile.unwrap();
+    let metadata_fileobj = &mut metadata.logfile.unwrap();
     metadata_fileobj.writefile_from_string(entrystring).unwrap();
-    metadata_fileobj.close().unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
