@@ -166,7 +166,7 @@ pub fn load_fs() {
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let mut mutmetadata = FS_METADATA.write().unwrap();
-    *mutmetadata.logfile = Some(log_fileobj);
+    mutmetadata.logfile = Some(log_fileobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
