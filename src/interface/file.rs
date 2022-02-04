@@ -199,8 +199,9 @@ impl EmulatedFile {
     }
 
     // Reads entire file into String
-    pub fn readfile_to_new_string(&self, offset: usize) -> std::io::Result<String> {
+    pub fn readfile_to_new_string(&self) -> std::io::Result<String> {
 
+        let offset = self.filesize;
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
@@ -218,10 +219,11 @@ impl EmulatedFile {
     }
 
     // Write to entire file from provided String
-    pub fn writefile_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
+    pub fn writefile_from_string(&mut self, buf: String) -> std::io::Result<()> {
 
         let length = buf.len();
-
+        let offset = self.filesize;
+    
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 

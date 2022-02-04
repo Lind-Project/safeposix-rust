@@ -75,7 +75,7 @@ pub struct DirectoryInode {
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
     #[serde(skip)] // skip logfile handle
-    pub logfile: EmulatedFile,
+    pub logfile: interface::EmulatedFile,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
@@ -140,7 +140,7 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let logvec = log_fileobj.readfile_to_new_string(0).unwrap().lines();
+            let logvec = log_fileobj.readfile_to_new_string().unwrap().lines();
             for logline in logvec.iter_mut() {
                 let entry : LogEntry;
                 *entry = interface::serde_deserialize_from_string(&logline).unwrap();
@@ -202,7 +202,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode:
 
     // write to file
     let mut metadata_fileobj = &metadata.logfile;
-    metadata_fileobj.writefile_from_string(entrystring, self.filesize).unwrap();
+    metadata_fileobj.writefile_from_string(entrystring).unwrap();
     metadata_fileobj.close().unwrap();
 }
 
@@ -217,7 +217,7 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
 
     // write to file
     let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadata_fileobj.writefile_from_string(metadatastring, 0).unwrap();
+    metadata_fileobj.writefile_from_string(metadatastring).unwrap();
     metadata_fileobj.close().unwrap();
 }
 
@@ -226,7 +226,7 @@ pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
     // Read JSON from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatastring = metadata_fileobj.readfile_to_new_string(0).unwrap();
+    let metadatastring = metadata_fileobj.readfile_to_new_string().unwrap();
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
