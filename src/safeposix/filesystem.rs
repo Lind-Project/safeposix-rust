@@ -198,7 +198,8 @@ pub fn log_metadata(metadata: &FilesystemMetadata, newinodenum: usize, newinode:
   
     // pack and serialize log entry
     let entry = LogEntry{inodenum: newinodenum, inode: newinode};
-    let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap().push('\n');
+    let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+    entrystring.push('\n');
 
     // write to file
     let mut metadata_fileobj = &metadata.logfile.unwrap();
