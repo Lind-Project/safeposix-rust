@@ -81,14 +81,6 @@ pub struct FilesystemMetadata {
     pub inodetable: interface::RustHashMap<usize, Inode>
 }
 
-
-#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
-pub struct LogEntry {
-    pub inodenum: usize,
-    pub inode: Option<Inode>
-}
-
-
 pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> interface::RustHashMap<String, usize> {
     let mut retval = interface::RustHashMap::new();
     retval.insert(".".to_string(), curinode);
@@ -142,9 +134,10 @@ pub fn load_fs() {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
             let mut logvec: Vec<&str> = log_fileobj.readfile_to_new_string().unwrap().lines().collect();
             for logline in logvec.iter_mut() {
-                let entry : LogEntry;
-                entry = interface::serde_deserialize_from_string(&logline).unwrap();
-                match entry.inode {
+                let mut entry = logline.split('-');
+                let inodenum = entry.next();
+                let inode : Inode = interface::serde_deserialize_from_string(&entry.next()).unwrap();
+                match inode {
                     Some(inode) => mutmetadata.inodetable.insert(entry.inodenum, inode),
                     None => mutmetadata.inodetable.remove(&entry.inodenum),
                 };
@@ -196,18 +189,12 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 // Serialize New Metadata to JSON, write to logfile
 pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
-    let wrappedinode: Option<Inode>;
-
     // pack and serialize log entry
-    if let Some(inode) = metadata.inodetable.get(&inodenum) {
-        wrappedinode = Some(*inode);
-    }
-    else {
-        wrappedinode = None;
-    }
+    let inode = metadata.inodetable.get(&inodenum);
 
-    let entry = LogEntry{inodenum: inodenum, inode: wrappedinode};
-    let mut entrystring = interface::serde_serialize_to_string(&entry).unwrap();
+    let entrystring = inodenum.as_str();
+    entrystring.push('-');
+    entrystring.push(interface::serde_serialize_to_string(&entry).unwrap());
     entrystring.push('\n');
 
     // write to file
