@@ -160,7 +160,8 @@ pub fn load_fs() {
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let mut mutmetadata = FS_METADATA.write().unwrap();
-    mutmetadata.logfile.write().unwrap() = Some(log_fileobj);
+    let mut logfile = mutmetadata.logfile.write().unwrap();
+    *logfile = Some(log_fileobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
@@ -199,7 +200,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push('\n');
 
     // write to file
-    metadata.logfile.write().unwrap().unwrap()writefile_from_string(entrystring).unwrap();
+    metadata.logfile.write().unwrap().unwrap().writefile_from_string(entrystring).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
