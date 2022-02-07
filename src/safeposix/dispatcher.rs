@@ -390,7 +390,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
-    interface::VERBOSE.set(verbosity);
+    interface::VERBOSE.set(verbosity).unwrap();
     
     load_fs();
     incref_root();

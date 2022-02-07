@@ -1,3 +1,5 @@
+#![allow(dead_code)] //suppress warning for these functions not being used in main library target
+
 use std::fs::File;
 use std::io::{Read, prelude};
 use std::ffi::CStr;

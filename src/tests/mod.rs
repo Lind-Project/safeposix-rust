@@ -1,3 +1,5 @@
+#![allow(dead_code)] //suppress warning for these functions not being used in targets other than the tests
+
 mod fs_tests;
 mod pipe_tests;
 mod networking_tests;
