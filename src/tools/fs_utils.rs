@@ -157,6 +157,7 @@ fn main() {
         }
 
         "format" => {
+            lind_deltree(&utilcage, "/"); //This doesn't actually fully remove all of the linddata files... TODO: debug
             let mut metadata = FS_METADATA.write().unwrap();
             *metadata = FilesystemMetadata::blank_fs_init();
             drop(metadata);

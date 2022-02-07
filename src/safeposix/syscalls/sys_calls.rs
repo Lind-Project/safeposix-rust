@@ -22,7 +22,7 @@ impl Cage {
 
                 //only file inodes have real inode objects currently
                 match &*fd {
-                    File(normalfile_filedesc_obj) => {
+                    File(_normalfile_filedesc_obj) => {
                         let inodenum_option = if let File(f) = &*fd {Some(f.inode)} else {None};
 
                         if let Some(inodenum) = inodenum_option {
@@ -180,7 +180,7 @@ impl Cage {
         0
     }
 
-    pub fn setrlimit(&self, res_type: u64, limit_value: u64) -> i32 {
+    pub fn setrlimit(&self, res_type: u64, _limit_value: u64) -> i32 {
         match res_type{
             RLIMIT_NOFILE => {
                 if NOFILE_CUR > NOFILE_MAX {-1} else {0}

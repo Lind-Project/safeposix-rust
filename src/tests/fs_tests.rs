@@ -459,8 +459,8 @@ pub mod fs_tests {
         let mut arg0: i32 = 0;
         let mut arg1: i32 = 1;
 
-        let mut union0: IoctlPtrUnion = IoctlPtrUnion {int_ptr : &mut arg0};
-        let mut union1: IoctlPtrUnion = IoctlPtrUnion {int_ptr : &mut arg1};
+        let union0: IoctlPtrUnion = IoctlPtrUnion {int_ptr : &mut arg0};
+        let union1: IoctlPtrUnion = IoctlPtrUnion {int_ptr : &mut arg1};
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let filefd = cage.open_syscall("/ioctl_file", O_CREAT | O_EXCL, S_IRWXA);
@@ -985,7 +985,7 @@ pub mod fs_tests {
 
         unsafe{
             let first_dirent = baseptr as *mut interface::ClippedDirent;
-            assert_eq!((*first_dirent).d_off, 24);
+            assert!((*first_dirent).d_off == 24);
             let reclen_matched: bool = ((*first_dirent).d_reclen == 24);
             assert_eq!(reclen_matched, true);
             

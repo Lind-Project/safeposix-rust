@@ -395,7 +395,7 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn copy_out_sockaddr(union_argument: Arg, len_argument: Arg, gensock: interface::GenSockaddr) {
+pub fn copy_out_sockaddr(union_argument: Arg, _len_argument: Arg, gensock: interface::GenSockaddr) {
     let copyoutaddr = unsafe{union_argument.dispatch_sockaddrstruct} as *mut u8;
     let addrlen = unsafe{union_argument.dispatch_socklen_t_ptr};
     assert!(!copyoutaddr.is_null());

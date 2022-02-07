@@ -774,9 +774,7 @@ impl Cage {
                             drop(mutmetadata);
 
                             *addr = remote_addr; //populate addr with what address it connected to
-                            let domain = sockfdobj.domain;
-
-                            let id = newsockobj.socketobjectid.clone();
+                            let _domain = sockfdobj.domain;
 
                             //socket inserter code
                             let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
@@ -1181,7 +1179,7 @@ impl Cage {
         
         let mut len = name_length;
         if (length as usize) < len {
-            len = (length as usize);
+            len = length as usize;
         }
 
         interface::fill(address_ptr, len, &bytes);

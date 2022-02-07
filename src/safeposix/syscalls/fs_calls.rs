@@ -1104,7 +1104,7 @@ impl Cage {
                         NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
                     }
                 }
-                Stream(normalfile_filedesc_obj) => {
+                Stream(_normalfile_filedesc_obj) => {
                     // no stream refs
                 }
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
@@ -1180,10 +1180,10 @@ impl Cage {
                         if let Some(ref mut sockobj) = sockobjopt {
                             let mut so_tmp = sockobj.write().unwrap();
                             so_tmp.refcnt -= 1;
-                            cleanflag = (so_tmp.refcnt == 0);
+                            cleanflag = so_tmp.refcnt == 0;
                         }
                     }
-                    if(cleanflag) {
+                    if cleanflag {
                         drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
                         drop(locked_filedesc);
                         let retval = Self::_cleanup_socket(self, fd, false, fdtable);
@@ -1340,7 +1340,7 @@ impl Cage {
                 File(obj) => {filetype = 4; &mut obj.flags},
             };
 
-            match (request) {
+            match request {
                 FIONBIO => {
                     let arg_result = interface::get_ioctl_int(ptrunion);
                     //matching the tuple
@@ -1628,7 +1628,7 @@ impl Cage {
                             // get file object table with write lock
                             let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
                             
-                            let mut fileobject = fobjtable.get_mut(&inodenum).unwrap();
+                            let fileobject = fobjtable.get_mut(&inodenum).unwrap();
                             let filesize = normalfile_inode_obj.size as isize;
                             
                             // if length is greater than original filesize,
@@ -1644,7 +1644,7 @@ impl Cage {
                                 }
                             } else { // if length is smaller than original filesize,
                                      // extra data are cut off
-                                fileobject.shrink(length as usize);
+                                fileobject.shrink(length as usize).unwrap();
                             } 
                             log_metadata(&mutmetadata, inodenum);    
                         }
@@ -1745,7 +1745,7 @@ impl Cage {
                             let mut bufcount = 0;
                             let mut curr_size;
                             let mut count = 0;
-                            let mut temp_len = 0;
+                            let mut temp_len;
 
                             // iterate over filename-inode pairs in dict
                             for (filename, inode) in dir_inode_obj.filename_to_inode_dict.clone().into_iter().skip(position) {
