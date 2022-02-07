@@ -199,7 +199,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push('\n');
 
     // write to file
-    LOGFILE.get_mut().unwrap().writefile_from_string(entrystring).unwrap();
+    LOGFILE.get().unwrap().writefile_from_string(entrystring).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
