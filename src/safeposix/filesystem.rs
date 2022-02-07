@@ -11,7 +11,7 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
 
-pub static LOGFILE: RustOnceCell<interface::EmulatedFile> = SyncOnceCell::new();
+pub static LOGFILE: interface::RustOnceCell<interface::EmulatedFile> = interface::RustOnceCell::new();
 
 
 
