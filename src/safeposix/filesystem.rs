@@ -11,6 +11,9 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
 
+pub static LOGFILE: RustOnceCell<interface::EmulatedFile> = SyncOnceCell::new();
+
+
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||
@@ -74,8 +77,6 @@ pub struct DirectoryInode {
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
-    #[serde(skip)] // skip logfile handle
-    pub logfile: interface::RustRfc<interface::RustLock<Option<interface::EmulatedFile>>>,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
@@ -159,9 +160,7 @@ pub fn load_fs() {
     // finally, reinstantiate the log file and assign it to the metadata struct
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
-    let mut mutmetadata = FS_METADATA.write().unwrap();
-    let mut logfile = mutmetadata.logfile.write().unwrap();
-    *logfile = Some(log_fileobj);
+    LOGFILE.set(log_fileobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
@@ -200,7 +199,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push('\n');
 
     // write to file
-    metadata.logfile.write().unwrap().unwrap().writefile_from_string(entrystring).unwrap();
+    LOGFILE.get_mut().writefile_from_string(entrystring).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
