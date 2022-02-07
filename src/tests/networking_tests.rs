@@ -71,7 +71,7 @@ pub mod net_tests {
         
         //binding to a socket
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
         
@@ -97,7 +97,6 @@ pub mod net_tests {
             buf = sizecbuf(100);
             assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 100, 0, &mut Some(&mut socket2)), 100);        //reading the input message
             assert_eq!(cbuf2str(&buf), &"A".repeat(100));
-            buf = sizecbuf(100);
             buf = sizecbuf(100);
 
             interface::sleep(interface::RustDuration::from_millis(200)); 
@@ -148,7 +147,6 @@ pub mod net_tests {
             //Writing 50, peek 50
             assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 50, MSG_PEEK, &mut Some(&mut socket2)), 50);
             assert_eq!(cbuf2str(&buf), "A".repeat(50) + &"\0".repeat(50));
-            buf = sizecbuf(100);
             assert_eq!(cage2.close_syscall(sockfd), 0);
 
 
@@ -355,7 +353,7 @@ pub mod net_tests {
         assert_eq!(retsocket.port(), 0);
         assert_eq!(retsocket.addr(), interface::GenIpaddr::V4(interface::V4Addr::default()));
 
-        let mut socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50104u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50104u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
         
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
@@ -384,7 +382,7 @@ pub mod net_tests {
         
         //binding to a socket
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53003_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
@@ -578,7 +576,7 @@ pub mod net_tests {
         
         //binding to a socket
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
         
@@ -642,7 +640,6 @@ pub mod net_tests {
             //process the fourth test...
             //Writing 50, peek 50
             assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 50, MSG_PEEK, &mut Some(&mut socket2)), 50);
-            buf = sizecbuf(100);
             
             interface::sleep(interface::RustDuration::from_millis(100)); 
             
@@ -694,7 +691,7 @@ pub mod net_tests {
 
         let mut inputs = interface::RustHashSet::<i32>::new();
         let mut outputs = interface::RustHashSet::<i32>::new();
-        let mut excepts = interface::RustHashSet::<i32>::new();
+        let     excepts = interface::RustHashSet::<i32>::new();
 
         inputs.insert(serversockfd);
         inputs.insert(filefd);
@@ -759,7 +756,7 @@ pub mod net_tests {
             for sock in binputs {
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if sock == serversockfd {
-                    let mut sockfd = cage.accept_syscall(sock, &mut socket); //really can only make sure that the fd is valid
+                    let sockfd = cage.accept_syscall(sock, &mut socket); //really can only make sure that the fd is valid
                     assert!(sockfd > 0);
                     inputs.insert(sockfd);
                     outputs.insert(sockfd);
@@ -819,7 +816,7 @@ pub mod net_tests {
         
         //binding to a socket
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50431_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 10), 0);
         
@@ -895,7 +892,7 @@ pub mod net_tests {
         assert!(sockfd > 0);
 
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50115_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(sockfd, 4), 0);
 
@@ -1042,10 +1039,10 @@ pub mod net_tests {
         assert!(sockfd > 0); //checking that the sockfd is valid
 
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50116_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
-        let sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50303_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket2 = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        let _sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50303_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let socket2 = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.connect_syscall(sockfd, &socket2), 0);
@@ -1099,7 +1096,7 @@ pub mod net_tests {
         assert!(sendsockfd2 > 0);
 
         let sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50992_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket2 = interface::GenSockaddr::V4(sockaddr2); //127.0.0.1
+        let socket2 = interface::GenSockaddr::V4(sockaddr2); //127.0.0.1
 
         interface::sleep(interface::RustDuration::from_millis(50));
 
@@ -1124,8 +1121,7 @@ pub mod net_tests {
         let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 51111_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        let mut socket_clone = socket.clone();
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
         assert!(listenfd > 0);
         assert!(sendfd > 0);
@@ -1161,8 +1157,6 @@ pub mod net_tests {
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
         lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
-
-        let hostnme = format!("{}{}", DEFAULT_HOSTNAME, "\0");
 
         let mut buf = vec![0u8; 5];
         let bufptr: *mut u8 = &mut buf[0];
