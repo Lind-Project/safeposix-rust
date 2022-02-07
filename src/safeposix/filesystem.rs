@@ -75,7 +75,7 @@ pub struct DirectoryInode {
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
     #[serde(skip)] // skip logfile handle
-    pub logfile: Option<interface::RustRfc<interface::EmulatedFile>>,
+    pub logfile: Option<interface::RustRfc<interface::RustLockMinterface::EmulatedFile>>>,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
@@ -157,7 +157,7 @@ pub fn load_fs() {
 
     // finally, reinstantiate the log file and assign it to the metadata struct
     let _ = interface::removefile(LOGFILENAME.to_string());
-    let log_fileobj = interface::RustRfc::new(interface::openfile(LOGFILENAME.to_string(), true).unwrap());
+    let log_fileobj = interface::RustRfc::new(interface::RustLock::new(interface::openfile(LOGFILENAME.to_string(), true).unwrap()));
     let mut mutmetadata = FS_METADATA.write().unwrap();
     mutmetadata.logfile = Some(log_fileobj);
 }
@@ -198,7 +198,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push('\n');
 
     // write to file
-    metadata.logfile.as_ref().unwrap().clone().writefile_from_string(entrystring).unwrap();
+    metadata.logfile.unwrap().clone().writefile_from_string(entrystring).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
