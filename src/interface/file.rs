@@ -11,7 +11,7 @@ use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
-pub use std::lazy::{SyncLazy as RustLazyGlobal, RustOnceCell};
+pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
 
 
 use std::os::unix::io::{AsRawFd, RawFd};
