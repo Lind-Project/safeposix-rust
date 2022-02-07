@@ -75,7 +75,7 @@ pub struct DirectoryInode {
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
     #[serde(skip)] // skip logfile handle
-    pub logfile: Option<interface::RustRfc<interface::RustLockMinterface::EmulatedFile>>>,
+    pub logfile: Option<interface::RustRfc<interface::RustLock<interface::EmulatedFile>>>,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
