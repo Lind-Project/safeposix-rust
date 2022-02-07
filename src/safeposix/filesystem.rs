@@ -75,7 +75,7 @@ pub struct DirectoryInode {
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
     #[serde(skip)] // skip logfile handle
-    pub logfile: Option<interface::RustRfc<interface::RustLock<interface::EmulatedFile>>>,
+    pub logfile: interface::RustRfc<interface::RustLock<Option<interface::EmulatedFile>>>,
     pub nextinode: usize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
@@ -91,7 +91,7 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
 impl FilesystemMetadata {
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
-        let mut retval = FilesystemMetadata {logfile: None, nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
+        let mut retval = FilesystemMetadata {logfile: interface::RustRfc::new(interface::RustLock::new(None)), nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
         //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially,
@@ -155,11 +155,12 @@ pub fn load_fs() {
        persist_metadata(&metadata);
     }
 
+
     // finally, reinstantiate the log file and assign it to the metadata struct
     let _ = interface::removefile(LOGFILENAME.to_string());
-    let log_fileobj = interface::RustRfc::new(interface::RustLock::new(interface::openfile(LOGFILENAME.to_string(), true).unwrap()));
+    let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let mut mutmetadata = FS_METADATA.write().unwrap();
-    mutmetadata.logfile = Some(log_fileobj);
+    mutmetadata.logfile.write().unwrap() = Some(log_fileobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
