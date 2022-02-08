@@ -133,7 +133,7 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let logstring = log_fileobj.readfile_to_new_bytes().unwrap();
+            let logstring = log_fileobj.readfile_to_new_string().unwrap();
             let mut logvec: Vec<&str> = logstring.lines().collect();
             for logline in logvec.iter_mut() {
                 let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline.as_bytes()).unwrap();
@@ -207,7 +207,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push(b'\n');
 
     // write to file
-    LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(entrybytes).unwrap();
+    LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(&entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
@@ -221,7 +221,7 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
 
     // write to file
     let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadata_fileobj.writefile_from_bytes(entrybytes).unwrap();
+    metadata_fileobj.writefile_from_bytes(&entrybytes).unwrap();
     metadata_fileobj.close().unwrap();
 }
 
