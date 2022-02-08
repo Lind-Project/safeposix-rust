@@ -71,7 +71,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
-use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGFILENAME};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGFILE, LOGFILENAME};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
 
@@ -437,6 +437,7 @@ pub extern "C" fn lindrustfinalize() {
     persist_metadata(&*FS_METADATA.read().unwrap());
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
+        LOGFILE.get().unwrap().write().unwrap().close();
         let _ = interface::removefile(LOGFILENAME.to_string());
     }
 }
