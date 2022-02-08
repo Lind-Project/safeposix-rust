@@ -164,8 +164,8 @@ fn main() {
             load_fs_special_files(&utilcage);
 
             let metadata2 = FS_METADATA.read().unwrap();
-            persist_metadata(&*metadata2);
-            return;
+            // persist_metadata(&*metadata2);
+            // return;
         }
 
         "deltree" => {
