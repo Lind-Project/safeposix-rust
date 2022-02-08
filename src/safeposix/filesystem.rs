@@ -11,7 +11,7 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
 
-pub static LOGFILE: interface::RustOnceCell<interface::EmulatedFile> = interface::RustOnceCell::new();
+pub static LOGFILE: interface::RustOnceCell<interface::RustRfc<interface::RustLock<interface::EmulatedFile>>> = interface::RustOnceCell::new();
 
 
 
@@ -160,7 +160,7 @@ pub fn load_fs() {
     // finally, reinstantiate the log file and assign it to the metadata struct
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
-    LOGFILE.set(log_fileobj);
+    LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
@@ -199,7 +199,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     entrystring.push('\n');
 
     // write to file
-    LOGFILE.get().unwrap().writefile_from_string(entrystring).unwrap();
+    LOGFILE.get().unwrap().write().unwrapy().writefile_from_string(entrystring).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
