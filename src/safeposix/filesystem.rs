@@ -166,7 +166,7 @@ pub fn load_fs() {
 
 }
 
-fn create_log() {
+pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
