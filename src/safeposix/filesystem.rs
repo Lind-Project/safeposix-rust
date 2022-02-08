@@ -133,8 +133,8 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let logstring = log_fileobj.readfile_to_new_string().unwrap();
-            let mut logvec: Vec<&str> = logstring.lines().collect();
+            let logbytes = log_fileobj.readfile_to_new_bytes().unwrap();
+            let mut logvec: Vec<Vec<u8>> = logstring.split('\n').collect();
             for logline in logvec.iter_mut() {
                 let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline.as_bytes()).unwrap();
                 let (inodenum, inode) = serialpair;
@@ -230,11 +230,11 @@ pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
     // Read JSON from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatastring = metadata_fileobj.readfile_to_new_string().unwrap();
+    let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    *metadata = interface::serde_deserialize_from_bytes(&metadatastring.as_bytes()).unwrap();
+    *metadata = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
