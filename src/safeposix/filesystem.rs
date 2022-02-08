@@ -161,7 +161,7 @@ pub fn load_fs() {
     // finally, reinstantiate the log file and assign it to the metadata struct
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
-    LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
+    let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
