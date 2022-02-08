@@ -201,14 +201,15 @@ impl EmulatedFile {
     }
 
     // Reads entire file into String
-    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
+    pub fn readfile_to_new_string(&self) -> std::io::Result<String> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut stringbuf = Vec::new();
+                let mut stringbuf = String::new();
+                let mut buffer = Vec::new();
                 let mut fobj = f.lock().unwrap();
-                fobj.read_to_end(&mut stringbuf)?;
+                fobj.read_to_string(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
         }

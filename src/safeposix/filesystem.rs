@@ -136,7 +136,7 @@ pub fn load_fs() {
             let logstring = log_fileobj.readfile_to_new_bytes().unwrap();
             let mut logvec: Vec<&str> = logstring.lines().collect();
             for logline in logvec.iter_mut() {
-                let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline).unwrap();
+                let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline.as_bytes()).unwrap();
                 let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
@@ -203,25 +203,25 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
     let serialpair: (usize, Option<&Inode>) = (inodenum, inode);
 
-    let mut entrystring = interface::serde_serialize_to_bytes(&serialpair).unwrap();
+    let mut entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
     entrystring.push(b'\n');
 
     // write to file
-    LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(entrystring).unwrap();
+    LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
 pub fn persist_metadata(metadata: &FilesystemMetadata) {
   
     // Serialize metadata to string
-    let metadatastring = interface::serde_serialize_to_bytes(&metadata).unwrap();
+    let entrybytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
     let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadata_fileobj.writefile_from_bytes(metadatastring).unwrap();
+    metadata_fileobj.writefile_from_bytes(entrybytes).unwrap();
     metadata_fileobj.close().unwrap();
 }
 
@@ -230,11 +230,11 @@ pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
     // Read JSON from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatastring = metadata_fileobj.readfile_to_new_bytes().unwrap();
+    let metadatastring = metadata_fileobj.readfile_to_new_string().unwrap();
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    *metadata = interface::serde_deserialize_from_bytes(&metadatastring).unwrap();
+    *metadata = interface::serde_deserialize_from_bytes(&metadatastring.as_bytes()).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
