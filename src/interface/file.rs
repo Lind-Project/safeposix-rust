@@ -211,7 +211,7 @@ impl EmulatedFile {
                 let mut fobj = f.lock().unwrap();
                 let bufreader = BufReader::new(*fobj);
                 let stringbuf = bufreader.split(b'-').map(|l| l.unwrap()).collect();
-                // fobj.read_to_end(&mut stringbuf)?;
+
                 Ok(stringbuf) // return new buf string
             }
         }
