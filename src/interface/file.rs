@@ -201,7 +201,7 @@ impl EmulatedFile {
     }
 
     // Reads entire file into String
-    pub fn readfile_to_new_vec(&self) -> std::io::Result<String> {
+    pub fn readfile_to_new_bytes(&self) -> std::io::Result<String> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
@@ -215,7 +215,7 @@ impl EmulatedFile {
     }
 
     // Write to entire file from provided String
-    pub fn writefile_from_vec(&mut self, buf: &[u8]) -> std::io::Result<()> {
+    pub fn writefile_from_bytes(&mut self, buf: &[u8]) -> std::io::Result<()> {
 
         let length = buf.len();
         let offset = self.filesize;
