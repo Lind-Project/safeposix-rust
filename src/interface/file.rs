@@ -201,7 +201,7 @@ impl EmulatedFile {
     }
 
     // Reads entire file into String
-    pub fn readfile_to_new_bytes(&self) -> std::io::Result<String> {
+    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
