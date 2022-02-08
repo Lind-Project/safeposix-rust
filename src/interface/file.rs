@@ -203,17 +203,11 @@ impl EmulatedFile {
     // Reads entire file into String
     pub fn readfile_to_new_string(&self) -> std::io::Result<String> {
 
-        let offset = self.filesize;
-
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
                 let mut stringbuf = String::new();
                 let mut fobj = f.lock().unwrap();
-                if offset > self.filesize {
-                    panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
                 fobj.read_to_string(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
