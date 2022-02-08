@@ -11,6 +11,7 @@ use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
+use std::io::{self, BufReader};
 pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
 
 
@@ -201,15 +202,17 @@ impl EmulatedFile {
     }
 
     // Reads entire file into bytes
-    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
+    pub fn readfile_to_new_bytes(&self) -> Vec<Vec<u8>>> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
                 let mut stringbuf = Vec::new();
                 let mut fobj = f.lock().unwrap();
-                fobj.read_to_end(&mut stringbuf)?;
-                Ok(stringbuf) // return new buf string
+                let bufreader = BufReader::new(fobj);
+                bufreader.split(b'-').map(|l| l.unwrap()).collect();
+                // fobj.read_to_end(&mut stringbuf)?;
+                // Ok(stringbuf) // return new buf string
             }
         }
     }
