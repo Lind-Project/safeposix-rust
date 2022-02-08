@@ -207,7 +207,6 @@ impl EmulatedFile {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
                 let mut stringbuf = String::new();
-                let mut buffer = Vec::new();
                 let mut fobj = f.lock().unwrap();
                 fobj.read_to_string(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
