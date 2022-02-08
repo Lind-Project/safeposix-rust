@@ -143,7 +143,7 @@ pub fn load_fs() {
                     None => mutmetadata.inodetable.remove(&inodenum),
                 };
             }
-
+            log_fileobj.close();
             let _ = interface::removefile(LOGFILENAME.to_string());
 
         }
