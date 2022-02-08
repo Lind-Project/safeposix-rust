@@ -146,10 +146,14 @@ pub fn load_fs() {
             }
         }
 
+        create_log();
+
 
     } else {
        *mutmetadata = FilesystemMetadata::blank_fs_init();
        drop(mutmetadata);
+
+       create_log();
 
        load_fs_special_files(&utilcage);
 
@@ -157,8 +161,10 @@ pub fn load_fs() {
        persist_metadata(&metadata);
     }
 
+}
 
-    // finally, reinstantiate the log file and assign it to the metadata struct
+fn create_log() {
+    // reinstantiate the log file and assign it to the metadata struct
     let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
