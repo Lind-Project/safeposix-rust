@@ -136,7 +136,7 @@ pub fn load_fs() {
             let logstring = log_fileobj.readfile_to_new_string().unwrap();
             let mut logvec: Vec<&str> = logstring.lines().collect();
             for logline in logvec.iter_mut() {
-                let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_string(&logline).unwrap();
+                let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline).unwrap();
                 let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
@@ -203,18 +203,18 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
     let serialpair: (usize, Option<&Inode>) = (inodenum, inode);
 
-    let mut entrystring = interface::serde_serialize_to_string(&serialpair).unwrap();
+    let mut entrystring = interface::serde_serialize_to_bytes(&serialpair).unwrap();
     entrystring.push('\n');
 
     // write to file
-    LOGFILE.get().unwrap().write().unwrap().writefile_from_string(entrystring).unwrap();
+    LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(entrystring).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
 pub fn persist_metadata(metadata: &FilesystemMetadata) {
   
     // Serialize metadata to string
-    let metadatastring = interface::serde_serialize_to_string(&metadata).unwrap();
+    let metadatastring = interface::serde_serialize_to_bytes(&metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
@@ -234,7 +234,7 @@ pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    *metadata = interface::serde_deserialize_from_string(&metadatastring).unwrap();
+    *metadata = interface::serde_deserialize_from_bytes(&metadatastring).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {

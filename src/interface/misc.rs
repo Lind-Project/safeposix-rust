@@ -20,7 +20,7 @@ use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
-pub use serde_json::{to_string as serde_serialize_to_string, from_str as serde_deserialize_from_string};
+pub use bincode::{serialize as serde_serialize_to_bytes, deserialize as serde_deserialize_from_bytes};
 
 pub fn log_from_ptr(buf: *const u8, length: usize) {
     if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
