@@ -133,7 +133,7 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let mut logvec: Vec<&str> = log_fileobj.readfile_to_new_string().unwrap().lines().collect();
+            let mut logvec: Vec<String> = log_fileobj.readfile_to_new_string().unwrap().lines().collect();
             for logline in logvec.iter_mut() {
                 let mut entry = logline.split('-');
                 let inodenum : usize = entry.next().unwrap().parse().unwrap();
