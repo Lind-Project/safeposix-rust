@@ -201,21 +201,21 @@ impl EmulatedFile {
     }
 
     // Reads entire file into String
-    pub fn readfile_to_new_string(&self) -> std::io::Result<String> {
+    pub fn readfile_to_new_vec(&self) -> std::io::Result<String> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut stringbuf = String::new();
+                let mut stringbuf = Vec::new();
                 let mut fobj = f.lock().unwrap();
-                fobj.read_to_string(&mut stringbuf)?;
+                fobj.read_to_end(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
         }
     }
 
     // Write to entire file from provided String
-    pub fn writefile_from_string(&mut self, buf: String) -> std::io::Result<()> {
+    pub fn writefile_from_vec(&mut self, buf: &[u8]) -> std::io::Result<()> {
 
         let length = buf.len();
         let offset = self.filesize;
@@ -228,7 +228,7 @@ impl EmulatedFile {
                     panic!("Seek offset extends past the EOF!");
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
-                fobj.write(buf.as_bytes())?;
+                fobj.write(buf)?;
             }
         }
 
