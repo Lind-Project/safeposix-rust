@@ -134,7 +134,7 @@ pub fn load_fs() {
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
             let logbytes = log_fileobj.readfile_to_new_bytes().unwrap();
-            let mut logvec: Vec<Vec<u8>> = logstring.split('\n').collect();
+            let mut logvec: Vec<Vec<u8>> = logbytes.split('\n').collect();
             for logline in logvec.iter_mut() {
                 let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline.as_bytes()).unwrap();
                 let (inodenum, inode) = serialpair;
