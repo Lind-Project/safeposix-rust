@@ -202,7 +202,7 @@ impl EmulatedFile {
     }
 
     // Reads entire file into bytes
-    pub fn readfile_to_new_bytes(&self) -> Vec<Vec<u8>>> {
+    pub fn readfile_to_new_bytes(&self) -> Vec<Vec<u8>> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),

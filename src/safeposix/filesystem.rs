@@ -133,8 +133,8 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let logbytes = log_fileobj.readfile_to_new_bytes().unwrap();
-            let mut logvec: Vec<Vec<u8>> = logbytes.split(b'\n').collect();
+            let logvec = log_fileobj.readfile_to_new_bytes().unwrap();
+            // let mut logvec: Vec<Vec<u8>> = logbytes.split(b'\n').collect();
             for logline in logvec.iter_mut() {
                 let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline).unwrap();
                 let (inodenum, inode) = serialpair;
