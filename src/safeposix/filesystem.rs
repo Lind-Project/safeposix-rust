@@ -136,7 +136,7 @@ pub fn load_fs() {
             let logstring = log_fileobj.readfile_to_new_string().unwrap();
             let mut logvec: Vec<&str> = logstring.lines().collect();
             for logline in logvec.iter_mut() {
-                let mut entry = logline.split('\0');
+                let mut entry = logline.split('-');
                 let inodenum : usize = entry.next().unwrap().parse().unwrap();
                 let inode : Option<Inode> = interface::serde_deserialize_from_string(&entry.next().unwrap()).unwrap();
                 match inode {
@@ -201,7 +201,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let inode = metadata.inodetable.get(&inodenum);
 
     let mut entrystring = inodenum.to_string();
-    entrystring.push('\0');
+    entrystring.push('-');
     entrystring.push_str(&interface::serde_serialize_to_string(&inode).unwrap());
     entrystring.push('\n');
 
