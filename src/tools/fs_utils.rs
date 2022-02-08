@@ -162,10 +162,6 @@ fn main() {
             *metadata = FilesystemMetadata::blank_fs_init();
             drop(metadata);
             load_fs_special_files(&utilcage);
-
-            let metadata2 = FS_METADATA.read().unwrap();
-            // persist_metadata(&*metadata2);
-            // return;
         }
 
         "deltree" => {
