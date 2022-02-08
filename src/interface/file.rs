@@ -12,6 +12,7 @@ pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustP
 pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
 use std::io::{self, BufReader};
+use std::io::prelude::*;
 pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
 
 
