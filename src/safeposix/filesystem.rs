@@ -143,6 +143,9 @@ pub fn load_fs() {
                     None => mutmetadata.inodetable.remove(&inodenum),
                 };
             }
+
+            let _ = interface::removefile(LOGFILENAME.to_string());
+
         }
 
 
@@ -165,7 +168,6 @@ pub fn load_fs() {
 
 fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
-    let _ = interface::removefile(LOGFILENAME.to_string());
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
     let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
 }
