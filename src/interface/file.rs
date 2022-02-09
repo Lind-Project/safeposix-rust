@@ -209,8 +209,8 @@ impl EmulatedFile {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
                 let fclone = f.clone();
-                let mut fobj = fclone.lock().unwrap();
-                let bufreader = BufReader::new(*fobj);
+                let mut fobj = fclone.lock().unwrap().deref();
+                let bufreader = BufReader::new(fobj);
                 let stringbuf = bufreader.split(b'-').map(|l| l.unwrap()).collect();
 
                 Ok(stringbuf) // return new buf string
