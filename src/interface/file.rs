@@ -208,7 +208,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.clone().lock().unwrap();
                 let bufreader = BufReader::new(*fobj);
                 let stringbuf = bufreader.split(b'-').map(|l| l.unwrap()).collect();
 
