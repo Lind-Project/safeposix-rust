@@ -209,7 +209,7 @@ impl EmulatedFile {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
                 let fclone = f.clone();
-                let mut fobj = match fclone.lock() {
+                let fobj = match fclone.lock() {
                     Ok(guard) => guard,
                     Err(poison) => poison.into_inner()
                 };
