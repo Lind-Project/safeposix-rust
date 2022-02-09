@@ -14,7 +14,7 @@ use std::io::{SeekFrom, Seek, Read, Write};
 use std::io::{self, BufReader};
 use std::io::prelude::*;
 pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
-
+use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
