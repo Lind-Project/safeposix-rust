@@ -13,7 +13,7 @@ test = true
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-bincode = "1.2.1"
+serde_cbor = "0.10"
 libc = "0.2"
 ringbuf = "0.2.6"
 
