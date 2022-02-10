@@ -214,7 +214,7 @@ impl EmulatedFile {
                     Err(poison) => poison.into_inner()
                 };
                 let bufreader = BufReader::new(fobj.deref());
-                let stringbuf = bufreader.split(b'-').map(|l| l.unwrap()).collect();
+                let stringbuf = bufreader.split(b'\n').map(|l| l.unwrap()).collect();
 
                 Ok(stringbuf) // return new buf string
             }
