@@ -1213,7 +1213,7 @@ impl Cage {
                 //err
                 if events & POLLERR > 0 {errors.insert(fd);}
 
-                let mut mask: u32 = 0;
+                let mut mask: i16 = 0;
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
                 if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO)) > 0 {
