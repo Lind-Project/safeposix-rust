@@ -173,7 +173,7 @@ pub fn create_log() {
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
 
     // add indefinite array encoding
-    let mut vec: Vec<u8> = Vec::new();
+    let mut indef_encoding: Vec<u8> = Vec::new();
     indef_encoding.push(0x9F);
     log_fileobj.writefile_from_bytes(&indef_encoding).unwrap();
     let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
@@ -240,7 +240,7 @@ pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    *metadata = interface::serde_deserialize_from_bytes(&metadatabytes[0]).unwrap();
+    *metadata = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {

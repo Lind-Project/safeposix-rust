@@ -210,7 +210,7 @@ impl EmulatedFile {
             Some(f) => { 
                 let mut stringbuf = Vec::new();
                 let mut fobj = f.lock().unwrap();
-                fobj.read_to_string(&mut stringbuf)?;
+                fobj.read_to_end(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
         }
