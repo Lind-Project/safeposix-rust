@@ -79,9 +79,9 @@ pub struct EpollEvent {
 #[derive(Debug, Default)]
 #[repr(C)]
 pub struct PollStruct {
-    pub events: u32,
-    pub revents: u32,
-    pub fd: i32 
+    pub fd: i32,
+    pub events: i16,
+    pub revents: i16
 }
 
 #[repr(C)]
