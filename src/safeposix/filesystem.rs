@@ -139,12 +139,13 @@ pub fn load_fs() {
             let logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
 
             for serialpair in logvec.iter() {
-                let (inodenum, inode) = &*serialpair;
+                let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
                     None => mutmetadata.inodetable.remove(&inodenum),
                 };
             }
+            
             let _logclose = log_fileobj.close();
             let _logremove = interface::removefile(LOGFILENAME.to_string());
 
