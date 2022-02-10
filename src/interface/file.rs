@@ -203,19 +203,14 @@ impl EmulatedFile {
     }
 
     // Reads entire file into bytes
-    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<Vec<u8>>> {
+    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let fclone = f.clone();
-                let fobj = match fclone.lock() {
-                    Ok(guard) => guard,
-                    Err(poison) => poison.into_inner()
-                };
-                let bufreader = BufReader::new(fobj.deref());
-                let stringbuf = bufreader.split(b'\n').map(|l| l.unwrap()).collect();
-
+                let mut stringbuf = Vec::new();
+                let mut fobj = f.lock().unwrap();
+                fobj.read_to_string(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
         }

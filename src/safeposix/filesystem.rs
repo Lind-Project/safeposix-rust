@@ -133,9 +133,12 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let mut logvec = log_fileobj.readfile_to_new_bytes().unwrap();
-            for logline in logvec.iter_mut() {
-                let serialpair: (usize, Option<Inode>) = interface::serde_deserialize_from_bytes(&logline).unwrap();
+            let mut logbytes = log_fileobj.readfile_to_new_bytes().unwrap();
+            // add end of indefinite encoding
+            logbytes.push(0xFF);
+            let logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
+
+            for serialpair in logvec.iter_mut() {
                 let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
@@ -168,6 +171,11 @@ pub fn load_fs() {
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
     let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
+
+    // add indefinite array encoding
+    let mut vec: Vec<u8> = Vec::new();
+    indef_encoding.push(0x9F);
+    log_fileobj.writefile_from_bytes(&indef_encoding).unwrap();
     let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
 }
 
@@ -203,7 +211,6 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let serialpair: (usize, Option<&Inode>) = (inodenum, inode);
 
     let mut entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
-    entrybytes.push(b'\n');
 
     // write to file
     LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(&entrybytes).unwrap();
