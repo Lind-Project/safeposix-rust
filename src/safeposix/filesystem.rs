@@ -138,7 +138,7 @@ pub fn load_fs() {
             logbytes.push(0xFF);
             let logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
 
-            for serialpair in logvec.iter_mut() {
+            for serialpair in logvec.iter() {
                 let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
