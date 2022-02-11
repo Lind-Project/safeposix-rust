@@ -18,6 +18,8 @@ use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
+use mmap::{MemoryMap, MapOption};
+
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> Vec<String> {
@@ -273,6 +275,130 @@ impl EmulatedFile {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct EmulatedFileMap {
+    filename: String,
+    abs_filename: RustPathBuf,
+    fobj: File,
+    maps: Option<Vec<MemoryMap>>
+    map_ptr: usize,
+}
+
+pub fn mapfile(filename: String) -> std::io::Result<EmulatedFileMap> {
+    EmulatedFile::new(filename)
+}
+
+impl EmulatedFileMap {
+
+    fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
+        assert_is_allowed_filename(&filename);
+
+        let mut openfiles = OPEN_FILES.lock().unwrap();
+
+        if openfiles.contains(&filename) {
+            panic!("FileInUse");
+        }
+
+        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+
+
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone());
+
+        let absolute_filename = fs::canonicalize(&path)?;
+
+        openfiles.insert(filename.clone());
+
+        let maps : Vec<MemoryMap> = Vec::new();
+
+        let mapsize = i32::pow(2, 20);
+
+        let offset = 0;
+
+        // Allocate space in the file first
+        self.fobj.seek(SeekFrom::Start((offset) as u64)).unwrap();
+        let zero_vec = vec![0; mapsize];
+        self.fobj.write(&zero_vec).unwrap();
+        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
+
+        let mmap_opts = &[
+            // Then make the mapping *public* so it is written back to the file
+            MapOption::MapNonStandardFlags(libc::MAP_SHARED),
+            MapOption::MapReadable,
+            MapOption::MapWritable,
+            MapOption::MapOffset(offset as usize),
+            MapOption::MapFd(f.as_raw_fd()),
+        ];
+
+        let mmap = MemoryMap::new(mapsize, mmap_opts).unwrap();
+
+        maps.push(mmap);
+        
+
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: f, maps: Some(maps), mapptr: 0})
+
+    }
+
+    pub fn write_to_map(bytes_to_write: &[u8]) {
+
+        let mapsize = i32::pow(2, 20);
+
+        let map_buf_start = self.maps.last().data + self.mapptr;
+        let writelen = bytes_to_write.len();
+
+        if writelen + self.mapptr < mapsize {
+
+            let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, writelen) };
+            mapslice.copy_from_slice(bytes_to_write);
+
+        }
+        else {
+
+            let firstwrite = mapsize - self.mapptr;
+            let secondwrite = writelen - firstwrite;
+
+            let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, firstwrite) };
+            mapslice.copy_from_slice(bytes_to_write[0..firstwrite]);
+
+            self.increase_map(mapsize);
+
+            let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start + firstwrite, secondwrite) };
+            mapslice.copy_from_slice(bytes_to_write[firstwrite..secondwrite]);
+
+        }
+        
+    }
+
+    fn increase_map(mapsize: usize) {
+
+        let mapsize = i32::pow(2, 20);
+        let offset = mapsize * self.maps.len();
+
+        // Allocate space in the file first
+        self.fobj.seek(SeekFrom::Start((offset) as u64)).unwrap();
+        let zero_vec = vec![0; mapsize];
+        self.fobj.write(&zero_vec).unwrap();
+        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
+
+        let mmap_opts = &[
+            // Then make the mapping *public* so it is written back to the file
+            MapOption::MapNonStandardFlags(libc::MAP_SHARED),
+            MapOption::MapReadable,
+            MapOption::MapWritable,
+            MapOption::MapOffset(offset as usize),
+            MapOption::MapFd(self.fobj.as_raw_fd()),
+        ];
+
+        let mmap = MemoryMap::new(mapsize, mmap_opts).unwrap();
+
+        self.maps.push(mmap);
+
+        self.mapptr = 0;
+
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
