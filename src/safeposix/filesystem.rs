@@ -136,7 +136,7 @@ pub fn load_fs() {
             let mut logbytes = log_fileobj.readfile_to_new_bytes().unwrap();
             // add end of indefinite encoding
             logbytes.push(0xFF);
-            let logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
+            let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
 
             for serialpair in logvec.drain(..) {
                 let (inodenum, inode) = serialpair;
@@ -171,7 +171,7 @@ pub fn load_fs() {
 
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
-    let log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
+    let mut log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
 
     // add indefinite array encoding
     let mut indef_encoding: Vec<u8> = Vec::new();
@@ -211,7 +211,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
     let serialpair: (usize, Option<&Inode>) = (inodenum, inode);
 
-    let mut entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
+    let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
     LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(&entrybytes).unwrap();
