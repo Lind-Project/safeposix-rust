@@ -276,13 +276,12 @@ impl EmulatedFile {
     }
 }
 
-#[derive(Debug)]
 pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: File,
-    maps: Option<Vec<MemoryMap>>
-    map_ptr: usize,
+    maps: Option<Vec<MemoryMap>>,
+    map_ptr: usize
 }
 
 pub fn mapfile(filename: String) -> std::io::Result<EmulatedFileMap> {
@@ -366,7 +365,7 @@ impl EmulatedFileMap {
             mapslice.copy_from_slice(bytes_to_write[firstwrite..secondwrite]);
 
         }
-        
+
     }
 
     fn increase_map(mapsize: usize) {
