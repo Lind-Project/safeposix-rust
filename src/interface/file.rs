@@ -311,7 +311,7 @@ impl EmulatedFileMap {
 
         let maps : Vec<MemoryMap> = Vec::new();
 
-        let mapsize = isize::pow(2, 20);
+        let mapsize = usize::pow(2, 20);
 
         let offset: u64 = 0;
 
