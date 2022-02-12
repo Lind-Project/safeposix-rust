@@ -339,7 +339,7 @@ impl EmulatedFileMap {
 
     }
 
-    pub fn write_to_map(&mut self, bytes_to_write: &[u8]) {
+    pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
         let map_buf_start = unsafe { self.maps.last().unwrap().data().offset(self.mapptr as isize) };
         let writelen = bytes_to_write.len();
@@ -369,6 +369,8 @@ impl EmulatedFileMap {
 
 
         }
+
+        Ok()
 
     }
 
