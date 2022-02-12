@@ -18,7 +18,7 @@ use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use mmap::{MemoryMap, MapOption};
+use memmmap::{MmapMut, MmapOptions};
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
@@ -276,11 +276,12 @@ impl EmulatedFile {
     }
 }
 
+#[derive(Debug)]
 pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
-    maps: Arc<Mutex<Vec<MemoryMap>>>,
+    maps: Arc<Mutex<Vec<MmapMut>>>,
     mapptr: usize,
     mapsize: usize
 }
@@ -315,12 +316,6 @@ impl EmulatedFileMap {
 
         let offset: u64 = 0;
 
-        // Allocate space in the file first
-        f.seek(SeekFrom::Start(offset)).unwrap();
-        let zero_vec = vec![0; mapsize];
-        f.write(&zero_vec).unwrap();
-        f.seek(SeekFrom::Start(offset)).unwrap();
-
         let mmap_opts = &[
             // Then make the mapping *public* so it is written back to the file
             MapOption::MapNonStandardFlags(libc::MAP_SHARED),
@@ -332,7 +327,14 @@ impl EmulatedFileMap {
 
         let mmap = MemoryMap::new(mapsize, mmap_opts).unwrap();
 
-        maps.push(mmap);
+
+        let mmap = unsafe {
+            MmapOptions::new()
+                        .offset(offset)
+                        .map(f)?
+        };
+
+        maps.push(mmap.unwrap()?);
         
 
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), maps: Arc::new(Mutex::new(maps)), mapptr: 0, mapsize: mapsize})
@@ -388,24 +390,13 @@ impl EmulatedFileMap {
 
         let offset = (self.mapsize * maps.len()) as u64;
 
-        // Allocate space in the file first
-        f.seek(SeekFrom::Start(offset)).unwrap();
-        let zero_vec = vec![0; self.mapsize];
-        f.write(&zero_vec).unwrap();
-        f.seek(SeekFrom::Start(offset)).unwrap();
+        let mmap = unsafe {
+            MmapOptions::new()
+                        .offset(offset)
+                        .map(f)?
+        };
 
-        let mmap_opts = &[
-            // Then make the mapping *public* so it is written back to the file
-            MapOption::MapNonStandardFlags(libc::MAP_SHARED),
-            MapOption::MapReadable,
-            MapOption::MapWritable,
-            MapOption::MapOffset(offset as usize),
-            MapOption::MapFd(f.as_raw_fd()),
-        ];
-
-        let mmap = MemoryMap::new(self.mapsize, mmap_opts).unwrap();
-
-        maps.push(mmap);
+        maps.push(mmap.unwrap());
 
         self.mapptr = 0;
 
