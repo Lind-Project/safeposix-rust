@@ -318,10 +318,10 @@ impl EmulatedFileMap {
         let mmap = unsafe {
             MmapOptions::new()
                         .offset(offset)
-                        .map(f)?
+                        .map(&f)?
         };
 
-        maps.push(mmap.unwrap()?);
+        maps.push(mmap);
         
 
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), maps: Arc::new(Mutex::new(maps)), mapptr: 0, mapsize: mapsize})
@@ -380,10 +380,10 @@ impl EmulatedFileMap {
         let mmap = unsafe {
             MmapOptions::new()
                         .offset(offset)
-                        .map(f)?
+                        .map(&f)?
         };
 
-        maps.push(mmap.unwrap());
+        maps.push(mmap);
 
         self.mapptr = 0;
 
