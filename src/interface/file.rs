@@ -415,7 +415,9 @@ impl EmulatedFileMap {
         let mut openfiles = OPEN_FILES.lock().unwrap();
         openfiles.remove(&self.filename);
 
-        for map in self.maps.drain(..) {
+        let mut maps = self.maps.lock().unwrap();
+
+        for map in maps.drain(..) {
             drop(map);
         }
 
