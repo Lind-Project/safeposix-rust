@@ -333,7 +333,7 @@ impl EmulatedFileMap {
 
         let mut maps = self.maps.lock().unwrap();
 
-        let map_buf_start = unsafe { maps.last().unwrap().data().offset(self.mapptr as isize) };
+        let map_buf_start = unsafe { maps.last().unwrap().get_mut(self.mapptr as isize) };
         let writelen = bytes_to_write.len();
 
         if writelen + self.mapptr < self.mapsize {
@@ -356,7 +356,7 @@ impl EmulatedFileMap {
             self.increase_map();
 
             let mut maps = self.maps.lock().unwrap();
-            let map_buf_start = unsafe { maps.last().unwrap().data().offset(self.mapptr as isize) };
+            let map_buf_start = unsafe { maps.last().unwrap().get_mut(self.mapptr as isize) };
 
             let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, secondwrite) };
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
