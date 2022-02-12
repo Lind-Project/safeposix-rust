@@ -341,7 +341,7 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) {
 
-        let map_buf_start = self.maps.last().data + self.mapptr;
+        let map_buf_start = self.maps.last().unwrap().data + self.mapptr;
         let writelen = bytes_to_write.len();
 
         if writelen + self.mapptr < self.mapsize {
