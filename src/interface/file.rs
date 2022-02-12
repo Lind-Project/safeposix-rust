@@ -282,7 +282,7 @@ pub struct EmulatedFileMap {
     fobj: File,
     maps: Vec<MemoryMap>,
     mapptr: isize,
-    mapsize: usize
+    mapsize: isize
 }
 
 pub fn mapfile(filename: String) -> std::io::Result<EmulatedFileMap> {
@@ -311,7 +311,7 @@ impl EmulatedFileMap {
 
         let maps : Vec<MemoryMap> = Vec::new();
 
-        let mapsize = usize::pow(2, 20);
+        let mapsize = isize::pow(2, 20);
 
         let offset: u64 = 0;
 
