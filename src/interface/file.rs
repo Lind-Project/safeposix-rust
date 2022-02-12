@@ -318,7 +318,7 @@ impl EmulatedFileMap {
         let mmap = unsafe {
             MmapOptions::new()
                         .offset(offset)
-                        .map(&f)?
+                        .map_mut(&f)?
         };
 
         maps.push(mmap);
@@ -380,7 +380,7 @@ impl EmulatedFileMap {
         let mmap = unsafe {
             MmapOptions::new()
                         .offset(offset)
-                        .map(&f)?
+                        .map_mut(&f)?
         };
 
         maps.push(mmap);
