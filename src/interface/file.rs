@@ -341,7 +341,10 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-        let map_buf_start = unsafe { self.maps.last().unwrap().data().offset(self.mapptr as isize) };
+
+        let mut maps = self.maps.lock().unwrap();
+
+        let map_buf_start = unsafe { maps.last().unwrap().data().offset(self.mapptr as isize) };
         let writelen = bytes_to_write.len();
 
         if writelen + self.mapptr < self.mapsize {
@@ -360,10 +363,13 @@ impl EmulatedFileMap {
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
-
+            drop(maps);
             self.increase_map();
 
-            let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start.offset(firstwrite as isize), secondwrite) };
+            let mut maps = self.maps.lock().unwrap();
+            let map_buf_start = unsafe { maps.last().unwrap().data().offset(self.mapptr as isize) };
+
+            let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, secondwrite) };
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
 
@@ -376,7 +382,10 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
-        let offset = (self.mapsize * self.maps.len()) as u64;
+        let mut maps = self.maps.lock().unwrap();
+
+
+        let offset = (self.mapsize * maps.len()) as u64;
 
         // Allocate space in the file first
         self.fobj.seek(SeekFrom::Start(offset)).unwrap();
@@ -395,7 +404,7 @@ impl EmulatedFileMap {
 
         let mmap = MemoryMap::new(self.mapsize, mmap_opts).unwrap();
 
-        self.maps.push(mmap);
+        maps.push(mmap);
 
         self.mapptr = 0;
 
