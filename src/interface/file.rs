@@ -303,7 +303,7 @@ impl EmulatedFileMap {
         let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
 
 
-        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone());
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
 
         let absolute_filename = fs::canonicalize(&path)?;
 
@@ -339,7 +339,7 @@ impl EmulatedFileMap {
 
     }
 
-    pub fn write_to_map(bytes_to_write: &[u8]) {
+    pub fn write_to_map(&mut self, bytes_to_write: &[u8]) {
 
         let map_buf_start = self.maps.last().data + self.mapptr;
         let writelen = bytes_to_write.len();
@@ -367,7 +367,7 @@ impl EmulatedFileMap {
 
     }
 
-    fn increase_map(mapsize: usize) {
+    fn increase_map(&mut self, mapsize: usize) {
 
         let offset = self.mapsize * self.maps.len();
 
