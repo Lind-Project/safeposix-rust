@@ -348,6 +348,7 @@ impl EmulatedFileMap {
 
             let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, writelen) };
             mapslice.copy_from_slice(bytes_to_write);
+            self.mapptr += writelen;
 
         }
         else {
@@ -357,11 +358,15 @@ impl EmulatedFileMap {
 
             let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, firstwrite) };
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
+            self.mapptr += firstwrite;
+
 
             self.increase_map();
 
             let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start.offset(firstwrite as isize), secondwrite) };
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
+            self.mapptr += secondwrite;
+
 
         }
 
