@@ -281,7 +281,7 @@ pub struct EmulatedFileMap {
     abs_filename: RustPathBuf,
     fobj: File,
     maps: Option<Vec<MemoryMap>>,
-    map_ptr: usize,
+    mapptr: usize,
     mapsize: usize
 }
 
@@ -356,12 +356,12 @@ impl EmulatedFileMap {
             let secondwrite = writelen - firstwrite;
 
             let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, firstwrite) };
-            mapslice.copy_from_slice(bytes_to_write[0..firstwrite]);
+            mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
 
             self.increase_map(self.mapsize);
 
             let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start + firstwrite, secondwrite) };
-            mapslice.copy_from_slice(bytes_to_write[firstwrite..secondwrite]);
+            mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
 
         }
 
