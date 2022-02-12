@@ -310,23 +310,11 @@ impl EmulatedFileMap {
 
         openfiles.insert(filename.clone());
 
-        let mut maps : Vec<MemoryMap> = Vec::new();
+        let mut maps : Vec<MmapMut> = Vec::new();
 
         let mapsize = usize::pow(2, 20);
 
         let offset: u64 = 0;
-
-        let mmap_opts = &[
-            // Then make the mapping *public* so it is written back to the file
-            MapOption::MapNonStandardFlags(libc::MAP_SHARED),
-            MapOption::MapReadable,
-            MapOption::MapWritable,
-            MapOption::MapOffset(offset as usize),
-            MapOption::MapFd(f.as_raw_fd()),
-        ];
-
-        let mmap = MemoryMap::new(mapsize, mmap_opts).unwrap();
-
 
         let mmap = unsafe {
             MmapOptions::new()
