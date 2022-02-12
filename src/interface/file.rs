@@ -281,7 +281,8 @@ pub struct EmulatedFileMap {
     abs_filename: RustPathBuf,
     fobj: File,
     maps: Option<Vec<MemoryMap>>,
-    map_ptr: usize
+    map_ptr: usize,
+    mapsize: usize
 }
 
 pub fn mapfile(filename: String) -> std::io::Result<EmulatedFileMap> {
@@ -310,7 +311,7 @@ impl EmulatedFileMap {
 
         let maps : Vec<MemoryMap> = Vec::new();
 
-        let mapsize = i32::pow(2, 20);
+        let mapsize = usize::pow(2, 20);
 
         let offset = 0;
 
@@ -334,18 +335,16 @@ impl EmulatedFileMap {
         maps.push(mmap);
         
 
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: f, maps: Some(maps), mapptr: 0})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: f, maps: Some(maps), mapptr: 0, mapsize: mapsize})
 
     }
 
     pub fn write_to_map(bytes_to_write: &[u8]) {
 
-        let mapsize = i32::pow(2, 20);
-
         let map_buf_start = self.maps.last().data + self.mapptr;
         let writelen = bytes_to_write.len();
 
-        if writelen + self.mapptr < mapsize {
+        if writelen + self.mapptr < self.mapsize {
 
             let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, writelen) };
             mapslice.copy_from_slice(bytes_to_write);
@@ -353,13 +352,13 @@ impl EmulatedFileMap {
         }
         else {
 
-            let firstwrite = mapsize - self.mapptr;
+            let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
 
             let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, firstwrite) };
             mapslice.copy_from_slice(bytes_to_write[0..firstwrite]);
 
-            self.increase_map(mapsize);
+            self.increase_map(self.mapsize);
 
             let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start + firstwrite, secondwrite) };
             mapslice.copy_from_slice(bytes_to_write[firstwrite..secondwrite]);
@@ -370,12 +369,11 @@ impl EmulatedFileMap {
 
     fn increase_map(mapsize: usize) {
 
-        let mapsize = i32::pow(2, 20);
-        let offset = mapsize * self.maps.len();
+        let offset = self.mapsize * self.maps.len();
 
         // Allocate space in the file first
         self.fobj.seek(SeekFrom::Start((offset) as u64)).unwrap();
-        let zero_vec = vec![0; mapsize];
+        let zero_vec = vec![0; self.mapsize];
         self.fobj.write(&zero_vec).unwrap();
         self.fobj.seek(SeekFrom::Start(offset)).unwrap();
 
@@ -388,7 +386,7 @@ impl EmulatedFileMap {
             MapOption::MapFd(self.fobj.as_raw_fd()),
         ];
 
-        let mmap = MemoryMap::new(mapsize, mmap_opts).unwrap();
+        let mmap = MemoryMap::new(self.mapsize, mmap_opts).unwrap();
 
         self.maps.push(mmap);
 
