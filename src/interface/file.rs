@@ -370,7 +370,7 @@ impl EmulatedFileMap {
 
         }
 
-        Ok()
+        Ok(())
 
     }
 
