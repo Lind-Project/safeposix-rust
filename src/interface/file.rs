@@ -18,6 +18,7 @@ use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
+use crate memmap;
 use memmmap::{MmapMut, MmapOptions};
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
