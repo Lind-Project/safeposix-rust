@@ -333,7 +333,7 @@ impl EmulatedFileMap {
 
         let mut maps = self.maps.lock().unwrap();
 
-        let mapslice = maps.last().unwrap().get_mut(self.mapptr);
+        let mapslice = maps.last().unwrap().get_mut(self.mapptr).unwrap();
         let writelen = bytes_to_write.len();
 
         if writelen + self.mapptr < self.mapsize {
@@ -354,7 +354,7 @@ impl EmulatedFileMap {
             self.increase_map();
 
             let mut maps = self.maps.lock().unwrap();
-            let mapslice = maps.last().unwrap().get_mut(self.mapptr);
+            let mapslice = maps.last().unwrap().get_mut(self.mapptr).unwrap();
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
 
