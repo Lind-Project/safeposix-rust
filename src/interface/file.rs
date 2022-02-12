@@ -383,15 +383,16 @@ impl EmulatedFileMap {
     fn increase_map(&mut self) {
 
         let mut maps = self.maps.lock().unwrap();
+        let mut f = self.fobj.lock().unwrap();
 
 
         let offset = (self.mapsize * maps.len()) as u64;
 
         // Allocate space in the file first
-        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
+        f.seek(SeekFrom::Start(offset)).unwrap();
         let zero_vec = vec![0; self.mapsize];
-        self.fobj.write(&zero_vec).unwrap();
-        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
+        f.write(&zero_vec).unwrap();
+        f.seek(SeekFrom::Start(offset)).unwrap();
 
         let mmap_opts = &[
             // Then make the mapping *public* so it is written back to the file
@@ -399,7 +400,7 @@ impl EmulatedFileMap {
             MapOption::MapReadable,
             MapOption::MapWritable,
             MapOption::MapOffset(offset as usize),
-            MapOption::MapFd(self.fobj.as_raw_fd()),
+            MapOption::MapFd(f.as_raw_fd()),
         ];
 
         let mmap = MemoryMap::new(self.mapsize, mmap_opts).unwrap();
