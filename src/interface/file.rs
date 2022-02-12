@@ -316,10 +316,10 @@ impl EmulatedFileMap {
         let offset: u64 = 0;
 
         // Allocate space in the file first
-        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
+        f.seek(SeekFrom::Start(offset)).unwrap();
         let zero_vec = vec![0; mapsize];
-        self.fobj.write(&zero_vec).unwrap();
-        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
+        f.write(&zero_vec).unwrap();
+        f.seek(SeekFrom::Start(offset)).unwrap();
 
         let mmap_opts = &[
             // Then make the mapping *public* so it is written back to the file
