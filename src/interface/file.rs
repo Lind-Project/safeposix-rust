@@ -398,6 +398,15 @@ impl EmulatedFileMap {
         self.mapptr = 0;
 
     }
+
+    pub fn close(&self) -> std::io::Result<()> {
+        let mut openfiles = OPEN_FILES.lock().unwrap();
+        
+        drop(self.maps);
+
+        openfiles.remove(&self.filename);
+        Ok(())
+    }
 }
 
 
