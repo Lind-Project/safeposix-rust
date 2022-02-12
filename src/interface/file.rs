@@ -279,8 +279,8 @@ impl EmulatedFile {
 pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
-    fobj: File,
-    maps: Vec<MemoryMap>,
+    fobj: Arc<Mutex<File>>,
+    maps: Arc<Mutex<Vec<MemoryMap>>,
     mapptr: usize,
     mapsize: usize
 }
@@ -335,7 +335,7 @@ impl EmulatedFileMap {
         maps.push(mmap);
         
 
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: f, maps: maps, mapptr: 0, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), maps: Arc::new(Mutex::new(maps)), mapptr: 0, mapsize: mapsize})
 
     }
 
