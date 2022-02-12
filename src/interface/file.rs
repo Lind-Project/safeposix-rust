@@ -280,13 +280,13 @@ pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: File,
-    maps: Option<Vec<MemoryMap>>,
+    maps: Vec<MemoryMap>,
     mapptr: usize,
     mapsize: usize
 }
 
 pub fn mapfile(filename: String) -> std::io::Result<EmulatedFileMap> {
-    EmulatedFile::new(filename)
+    EmulatedFileMap::new(filename)
 }
 
 impl EmulatedFileMap {
@@ -335,7 +335,7 @@ impl EmulatedFileMap {
         maps.push(mmap);
         
 
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: f, maps: Some(maps), mapptr: 0, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: f, maps: maps, mapptr: 0, mapsize: mapsize})
 
     }
 
