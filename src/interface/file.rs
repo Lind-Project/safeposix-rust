@@ -285,7 +285,7 @@ pub struct EmulatedFileMap {
     mapsize: usize
 }
 
-pub fn mapfile(filename: String) -> std::io::Result<EmulatedFileMap> {
+pub fn mapfilenew(filename: String) -> std::io::Result<EmulatedFileMap> {
     EmulatedFileMap::new(filename)
 }
 
@@ -401,10 +401,12 @@ impl EmulatedFileMap {
 
     pub fn close(&self) -> std::io::Result<()> {
         let mut openfiles = OPEN_FILES.lock().unwrap();
-        
-        drop(self.maps);
-
         openfiles.remove(&self.filename);
+
+        for map in self.maps.drain(..) {
+            drop(map);
+        }
+
         Ok(())
     }
 }

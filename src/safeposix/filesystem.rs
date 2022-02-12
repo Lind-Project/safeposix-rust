@@ -11,7 +11,7 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
 
-pub static LOGFILE: interface::RustOnceCell<interface::RustRfc<interface::RustLock<interface::EmulatedFile>>> = interface::RustOnceCell::new();
+pub static LOGMAP: interface::RustOnceCell<interface::RustRfc<interface::RustLock<interface::EmulatedFileMap>>> = interface::RustOnceCell::new();
 
 
 
@@ -133,7 +133,10 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            let mut logbytes = log_fileobj.readfile_to_new_bytes().unwrap();
+            //create indefinite encoding, then read log file
+             let mut logbytes: Vec<u8> = Vec::new();
+            logbytes.push(0x9F);
+            logbytes.append(log_fileobj.readfile_to_new_bytes().unwrap());
             // add end of indefinite encoding
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
@@ -171,13 +174,9 @@ pub fn load_fs() {
 
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
-    let mut log_fileobj = interface::openfile(LOGFILENAME.to_string(), true).unwrap();
+    let mut log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
 
-    // add indefinite array encoding
-    let mut indef_encoding: Vec<u8> = Vec::new();
-    indef_encoding.push(0x9F);
-    log_fileobj.writefile_from_bytes(&indef_encoding).unwrap();
-    let _ret = LOGFILE.set(interface::RustRfc::new(interface::RustLock::new(log_fileobj)));
+    let _ret = LOGMAP.set(interface::RustRfc::new(interface::RustLock::new(log_mapobj)));
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
@@ -214,7 +213,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
-    LOGFILE.get().unwrap().write().unwrap().writefile_from_bytes(&entrybytes).unwrap();
+    LOGMAP.get().unwrap().write().unwrap().write_to_map(&entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
