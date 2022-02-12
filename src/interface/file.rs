@@ -346,7 +346,7 @@ impl EmulatedFileMap {
 
         if writelen + self.mapptr < self.mapsize {
 
-            let mut mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, writelen) };
+            let mapslice = unsafe { slice::from_raw_parts_mut(map_buf_start, writelen) };
             mapslice.copy_from_slice(bytes_to_write);
 
         }
