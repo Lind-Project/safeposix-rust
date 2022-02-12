@@ -313,10 +313,10 @@ impl EmulatedFileMap {
 
         let mapsize = usize::pow(2, 20);
 
-        let offset = 0;
+        let offset: u64 = 0;
 
         // Allocate space in the file first
-        self.fobj.seek(SeekFrom::Start((offset) as u64)).unwrap();
+        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
         let zero_vec = vec![0; mapsize];
         self.fobj.write(&zero_vec).unwrap();
         self.fobj.seek(SeekFrom::Start(offset)).unwrap();
@@ -369,10 +369,10 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self, mapsize: usize) {
 
-        let offset = self.mapsize * self.maps.len();
+        let offset = (self.mapsize * self.maps.len()) as u64;
 
         // Allocate space in the file first
-        self.fobj.seek(SeekFrom::Start((offset) as u64)).unwrap();
+        self.fobj.seek(SeekFrom::Start(offset)).unwrap();
         let zero_vec = vec![0; self.mapsize];
         self.fobj.write(&zero_vec).unwrap();
         self.fobj.seek(SeekFrom::Start(offset)).unwrap();
