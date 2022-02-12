@@ -281,7 +281,7 @@ pub struct EmulatedFileMap {
     abs_filename: RustPathBuf,
     fobj: File,
     maps: Vec<MemoryMap>,
-    mapptr: usize,
+    mapptr: isize,
     mapsize: usize
 }
 
