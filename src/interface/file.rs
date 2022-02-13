@@ -324,12 +324,14 @@ impl EmulatedFileMap {
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
         let mut maps = self.maps.lock().unwrap();
+        let f = self.fobj.lock().unwrap();
+
         let writelen = bytes_to_write.len();
         let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
 
         if writelen + self.mapptr < self.mapsize {
 
-            f.set_len((curfilelen + writelen) as u64)?
+            f.set_len((curfilelen + writelen) as u64);
             let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
@@ -339,7 +341,7 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-            f.set_len((curfilelen + firstwrite) as u64)?
+            f.set_len((curfilelen + firstwrite) as u64);
             let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
@@ -347,6 +349,7 @@ impl EmulatedFileMap {
             drop(maps);
             self.increase_map();
             let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
+            f.set_len((curfilelen + secondwrite) as u64);
 
             let mut maps = self.maps.lock().unwrap();
             let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
