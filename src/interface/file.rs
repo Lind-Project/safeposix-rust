@@ -383,7 +383,7 @@ impl EmulatedFileMap {
         let mut maps = self.maps.lock().unwrap();
 
         for map in maps.drain(..) {
-            munmap(map.as_mut_ptr() as *mut c_void, self.mapsize);
+            unsafe {munmap(map.as_mut_ptr() as *mut c_void, self.mapsize)};
         }
 
         Ok(())
