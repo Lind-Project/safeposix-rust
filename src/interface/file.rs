@@ -303,8 +303,7 @@ impl EmulatedFileMap {
 
         let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
 
-
-        let mut f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
 
         let absolute_filename = fs::canonicalize(&path)?;
 
@@ -333,7 +332,7 @@ impl EmulatedFileMap {
 
         if writelen + self.mapptr < self.mapsize {
 
-            let mut mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
+            let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
        
@@ -342,7 +341,7 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-            let mut mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
+            let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
@@ -350,7 +349,7 @@ impl EmulatedFileMap {
             self.increase_map();
 
             let mut maps = self.maps.lock().unwrap();
-            let mut mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
+            let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
 
@@ -363,7 +362,7 @@ impl EmulatedFileMap {
     fn increase_map(&mut self) {
 
         let mut maps = self.maps.lock().unwrap();
-        let mut f = self.fobj.lock().unwrap();
+        let f = self.fobj.lock().unwrap();
 
 
         let offset = (self.mapsize * maps.len()) as i64;
