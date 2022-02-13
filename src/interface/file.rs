@@ -17,7 +17,8 @@ pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
 use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use memmap::{MmapOptions, MmapMut};
+use libc::{mmap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED};
+use std::ffi::c_void;
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
@@ -280,7 +281,7 @@ pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
-    maps: Arc<Mutex<Vec<MmapMut>>>,
+    maps: Arc<Mutex<Vec<Vec<u8>>>>,
     mapptr: usize,
     mapsize: usize
 }
@@ -313,15 +314,12 @@ impl EmulatedFileMap {
 
         let mapsize = usize::pow(2, 20);
 
-        let offset: u64 = 0;
+        let offset: i64 = 0;
 
-        let mmap = unsafe {
-            MmapOptions::new()
-                        .offset(offset)
-                        .map_mut(&f)
-        };
-
-        maps.push(mmap.unwrap());
+        let map_addr = unsafe{mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)}
+        let mmap = unsafe { Vec<u8>::from_raw_parts_mut(map_addr, mapsize, mapsize) };
+      
+        maps.push(mmap);
         
 
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), maps: Arc::new(Mutex::new(maps)), mapptr: 0, mapsize: mapsize})
@@ -371,16 +369,12 @@ impl EmulatedFileMap {
         let mut f = self.fobj.lock().unwrap();
 
 
-        let offset = (self.mapsize * maps.len()) as u64;
+        let offset = (self.mapsize * maps.len()) as i64;
 
-        let mmap = unsafe {
-            MmapOptions::new()
-                        .offset(offset)
-                        .map_mut(&f)
-        };
-
-        maps.push(mmap.unwrap());
-
+        let map_addr = unsafe{mmap(0 as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)}
+        let mmap = unsafe { Vec<u8>::from_raw_parts_mut(map_addr, mapsize, mapsize) };
+      
+        maps.push(mmap);
         self.mapptr = 0;
 
     }
@@ -392,7 +386,7 @@ impl EmulatedFileMap {
         let mut maps = self.maps.lock().unwrap();
 
         for map in maps.drain(..) {
-            drop(map);
+            munmap(map.as_ptr, self.mapsize);
         }
 
         Ok(())
