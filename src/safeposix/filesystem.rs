@@ -174,8 +174,7 @@ pub fn load_fs() {
 
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
-    let mut log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
-
+    let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
     let _ret = LOGMAP.set(interface::RustRfc::new(interface::RustLock::new(log_mapobj)));
 }
 
