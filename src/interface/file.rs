@@ -317,7 +317,7 @@ impl EmulatedFileMap {
         let offset: i64 = 0;
 
         let map_addr = unsafe{mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)}
-        let mmap = unsafe { Vec::<u8>::from_raw_parts_mut(map_addr, mapsize, mapsize) };
+        let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr, mapsize, mapsize) };
       
         maps.push(mmap);
         
@@ -328,23 +328,21 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-
         let mut maps = self.maps.lock().unwrap();
-
-        let mapslice = maps.last().unwrap().get_mut(self.mapptr).unwrap();
         let writelen = bytes_to_write.len();
 
         if writelen + self.mapptr < self.mapsize {
 
+            let mapslice = &maps.last().unwrap()[self.mapptr:(self.mapptr + writelen)]
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
-
+       
         }
         else {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-
+            let mapslice = &maps.last().unwrap()[self.mapptr:(self.mapptr + firstwrite)]
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
@@ -352,10 +350,9 @@ impl EmulatedFileMap {
             self.increase_map();
 
             let mut maps = self.maps.lock().unwrap();
-            let mapslice = maps.last().unwrap().get_mut(self.mapptr).unwrap();
+            let mapslice = &maps.last().unwrap()[self.mapptr:(self.mapptr + secondwrite)]
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
-
 
         }
 
@@ -372,7 +369,7 @@ impl EmulatedFileMap {
         let offset = (self.mapsize * maps.len()) as i64;
 
         let map_addr = unsafe{mmap(0 as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)}
-        let mmap = unsafe { Vec::<u8>::from_raw_parts_mut(map_addr, mapsize, mapsize) };
+        let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr, mapsize, mapsize) };
       
         maps.push(mmap);
         self.mapptr = 0;
@@ -386,7 +383,7 @@ impl EmulatedFileMap {
         let mut maps = self.maps.lock().unwrap();
 
         for map in maps.drain(..) {
-            munmap(map.as_ptr, self.mapsize);
+            munmap(map.as_ptr(), self.mapsize);
         }
 
         Ok(())
