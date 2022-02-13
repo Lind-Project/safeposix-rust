@@ -313,7 +313,7 @@ impl EmulatedFileMap {
 
         let map_addr = unsafe{mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)};
         let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize) };
-        f.set_len(0 as u64)?
+        f.set_len(0 as u64);
 
         maps.push(mmap);
         
