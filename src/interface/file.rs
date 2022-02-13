@@ -333,7 +333,7 @@ impl EmulatedFileMap {
 
         if writelen + self.mapptr < self.mapsize {
 
-            let mut mapslice = maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
+            let mut mapslice = &maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
        
@@ -342,7 +342,7 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-            let mut mapslice = maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
+            let mut mapslice = &maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
@@ -350,7 +350,7 @@ impl EmulatedFileMap {
             self.increase_map();
 
             let mut maps = self.maps.lock().unwrap();
-            let mut mapslice = maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
+            let mut mapslice = &maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
 
