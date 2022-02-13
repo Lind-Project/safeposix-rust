@@ -371,7 +371,7 @@ impl EmulatedFileMap {
         let mut maps = self.maps.lock().unwrap();
         let f = self.fobj.lock().unwrap();
 
-        let offset =(self.mapsize * maps.len();
+        let offset =self.mapsize * maps.len();
         f.set_len((offset + self.mapsize) as u64);
 
         let map_addr = unsafe{mmap(0 as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
