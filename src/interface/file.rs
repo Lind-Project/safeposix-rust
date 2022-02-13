@@ -313,11 +313,14 @@ impl EmulatedFileMap {
 
         let mapsize = usize::pow(2, 20);
 
+        f.set_len(mapsize as u64)?
+
         let offset: i64 = 0;
 
         let map_addr = unsafe{mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)};
         let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize) };
-      
+        f.set_len(0 as u64)?
+
         maps.push(mmap);
         
 
@@ -329,9 +332,11 @@ impl EmulatedFileMap {
 
         let mut maps = self.maps.lock().unwrap();
         let writelen = bytes_to_write.len();
+        let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
 
         if writelen + self.mapptr < self.mapsize {
 
+            f.set_len((curfilelen + writelen) as u64)?
             let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
@@ -341,12 +346,14 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
+            f.set_len((curfilelen + firstwrite) as u64)?
             let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
             drop(maps);
             self.increase_map();
+            let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
 
             let mut maps = self.maps.lock().unwrap();
             let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
@@ -367,9 +374,12 @@ impl EmulatedFileMap {
 
         let offset = (self.mapsize * maps.len()) as i64;
 
+        f.set_len((offset + self.mapsize) as u64)?
+
+
         let map_addr = unsafe{mmap(0 as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)};
         let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.mapsize, self.mapsize) };
-      
+        f.set_len((offset) as u64)?
         maps.push(mmap);
         self.mapptr = 0;
 
