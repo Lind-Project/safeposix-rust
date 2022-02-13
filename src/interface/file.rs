@@ -310,7 +310,7 @@ impl EmulatedFileMap {
 
         openfiles.insert(filename.clone());
 
-        let mut maps : Vec<MmapMut> = Vec::new();
+        let mut maps : Vec<Vec<u8>> = Vec::new();
 
         let mapsize = usize::pow(2, 20);
 
