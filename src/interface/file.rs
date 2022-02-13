@@ -369,7 +369,7 @@ impl EmulatedFileMap {
         let offset = (self.mapsize * maps.len()) as i64;
 
         let map_addr = unsafe{mmap(0 as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset)};
-        let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize) };
+        let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.mapsize, self.mapsize) };
       
         maps.push(mmap);
         self.mapptr = 0;
