@@ -19,6 +19,7 @@ use std::ops::Deref;
 use std::os::unix::io::{AsRawFd, RawFd};
 use libc::{mmap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED};
 use std::ffi::c_void;
+use std::ptr::drop_in_place;
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
@@ -389,8 +390,8 @@ impl EmulatedFileMap {
         let mut maps = self.maps.lock().unwrap();
 
         for mut map in maps.drain(..) {
-            // unsafe {munmap(map.as_mut_ptr() as *mut c_void, self.mapsize)};
-            drop(map);
+            unsafe {munmap(map.as_mut_ptr() as *mut c_void, self.mapsize)};
+            drop_in_place(map);
         }
 
         Ok(())
