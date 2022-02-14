@@ -353,13 +353,13 @@ impl EmulatedFileMap {
             drop(f);
             self.increase_map();
 
-            let &mut map = self.map.lock().unwrap().unwrap();
+            let mut map = &self.map.lock().unwrap().unwrap();
             let f = self.fobj.lock().unwrap();
 
             let curfilelen = self.mapsize + self.mapptr;
             f.set_len((curfilelen + secondwrite) as u64);
 
-            let mapslice = map[self.mapptr..(self.mapptr + secondwrite)];
+            let mapslice = &map[self.mapptr..(self.mapptr + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
 
