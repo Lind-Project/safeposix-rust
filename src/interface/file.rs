@@ -311,6 +311,8 @@ impl EmulatedFileMap {
         f.set_len(mapsize as u64);
         let offset = 0;
 
+        let map : Vec::<u8>;
+
         unsafe {
             let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
             let map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
@@ -347,14 +349,14 @@ impl EmulatedFileMap {
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
-            drop(maps);
+            drop(map);
             drop(f);
             self.increase_map();
 
             let mut map = self.map.lock().unwrap();
             let f = self.fobj.lock().unwrap();
 
-            let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
+            let curfilelen = self.mapsize + self.mapptr;
             f.set_len((curfilelen + secondwrite) as u64);
 
             let mapslice = &mut map[self.mapptr..(self.mapptr + secondwrite)];
@@ -382,7 +384,7 @@ impl EmulatedFileMap {
             Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
         
-        f.set_len((offset) as u64);
+        f.set_len(self.mapsize as u64);
         self.mapsize = new_mapsize;
     }
 
