@@ -385,7 +385,7 @@ impl EmulatedFileMap {
             let newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
 
-        let self.map = Arc::new(Mutex::new(newmap));
+        self.map = Arc::new(Mutex::new(newmap));
         
         f.set_len(self.mapsize as u64);
         self.mapsize = new_mapsize;
