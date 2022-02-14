@@ -377,7 +377,7 @@ impl EmulatedFileMap {
 
 
         unsafe {
-            let old_map_addr = map.into_raw_parts());
+            let old_map_addr = map.into_raw_parts();
             let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, 0);
             Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
@@ -393,7 +393,7 @@ impl EmulatedFileMap {
         let mut map = self.map.lock().unwrap();
 
         unsafe {
-            let map_addr = map.into_raw_parts());
+            let map_addr = map.into_raw_parts();
             munmap(map_addr as *mut c_void, self.mapsize);
         }
     
