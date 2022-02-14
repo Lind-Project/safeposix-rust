@@ -326,7 +326,7 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-        let mut map = self.map.lock().unwrap().unwrap().as_ref();
+        let mut map = self.map.lock().unwrap().unwrap();
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
