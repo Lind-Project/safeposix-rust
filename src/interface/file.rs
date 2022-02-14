@@ -314,7 +314,11 @@ impl EmulatedFileMap {
 
 
         let mut mmapvec = Vec::with_capacity(mapsize);
-        let map_addr = unsafe{mmap(mmapvec.as_mut_ptr() as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
+        unsafe {
+            mmapvec.set_len(self.mapsize);
+            let map_addr = mmap(mmapvec.as_mut_ptr() as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+        }
+      
         // let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize) };
         f.set_len(0 as u64);
 
@@ -378,7 +382,13 @@ impl EmulatedFileMap {
         f.set_len((offset + self.mapsize) as u64);
 
         let mut mmapvec = Vec::with_capacity(self.mapsize);
-        let map_addr = unsafe{mmap(mmapvec.as_mut_ptr() as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
+
+        unsafe {
+            mmapvec.set_len(self.mapsize);
+            let map_addr = mmap(mmapvec.as_mut_ptr() as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+        }
+        
+        
         // let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.mapsize, self.mapsize) };
         f.set_len((offset) as u64);
         maps.push(mmapvec);
