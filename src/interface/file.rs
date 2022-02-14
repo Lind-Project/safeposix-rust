@@ -390,8 +390,10 @@ impl EmulatedFileMap {
         let mut maps = self.maps.lock().unwrap();
 
         for mut map in maps.drain(..) {
-            unsafe {munmap(map.as_mut_ptr() as *mut c_void, self.mapsize)};
-            drop_in_place(map.as_mut_ptr());
+            unsafe {
+                munmap(map.as_mut_ptr() as *mut c_void, self.mapsize);
+                drop_in_place(map.as_mut_ptr());
+            }
         }
 
         Ok(())
