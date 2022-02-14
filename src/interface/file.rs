@@ -371,7 +371,7 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
-        let mut mapopt = self.map.lock().unwrap()
+        let mut mapopt = self.map.lock().unwrap();
         let mut map = mapopt.take().unwrap();
 
         let f = self.fobj.lock().unwrap();
