@@ -335,7 +335,7 @@ impl EmulatedFileMap {
         if writelen + self.mapptr < self.mapsize {
 
             f.set_len((curfilelen + writelen) as u64);
-            let mapslice = map[self.mapptr..(self.mapptr + writelen)];
+            let mapslice = &map[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
        
