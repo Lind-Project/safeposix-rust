@@ -312,11 +312,13 @@ impl EmulatedFileMap {
         f.set_len(mapsize as u64);
         let offset = 0;
 
-        let map_addr = unsafe{mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
-        let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize) };
+
+        let mut mmapvec = Vec::with_capacity(mapsize);
+        let map_addr = unsafe{mmap(mmapvec.as_mut_ptr() as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
+        // let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize) };
         f.set_len(0 as u64);
 
-        maps.push(mmap);
+        maps.push(mmapvec);
         
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), maps: Arc::new(Mutex::new(maps)), mapptr: 0, mapsize: mapsize})
 
@@ -375,10 +377,11 @@ impl EmulatedFileMap {
         let offset =self.mapsize * maps.len();
         f.set_len((offset + self.mapsize) as u64);
 
-        let map_addr = unsafe{mmap(0 as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
-        let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.mapsize, self.mapsize) };
+        let mut mmapvec = Vec::with_capacity(mapsize);
+        let map_addr = unsafe{mmap(mmapvec.as_mut_ptr() as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64)};
+        // let mmap = unsafe { Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.mapsize, self.mapsize) };
         f.set_len((offset) as u64);
-        maps.push(mmap);
+        maps.push(mmapvec);
         self.mapptr = 0;
 
     }
@@ -392,7 +395,6 @@ impl EmulatedFileMap {
         for mut map in maps.drain(..) {
             unsafe {
                 munmap(map.as_mut_ptr() as *mut c_void, self.mapsize);
-                drop_in_place(map.as_mut_ptr());
             }
         }
 
