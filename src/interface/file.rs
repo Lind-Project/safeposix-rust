@@ -326,7 +326,7 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-        let mut mapoption = self.map.lock().unwrap()
+        let mut mapoption = self.map.lock().unwrap();
         let mut map = mapoption.unwrap();
         let f = self.fobj.lock().unwrap();
 
@@ -354,7 +354,7 @@ impl EmulatedFileMap {
             drop(f);
             self.increase_map();
 
-            let mut mapoption = self.map.lock().unwrap()
+            let mut mapoption = self.map.lock().unwrap();
             let mut map = mapoption.unwrap();
             let f = self.fobj.lock().unwrap();
 
@@ -373,7 +373,7 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
-        let mut mapoption = self.map.lock().unwrap()
+        let mut mapoption = self.map.lock().unwrap();
         let mut map = mapoption.unwrap();
         let f = self.fobj.lock().unwrap();
 
