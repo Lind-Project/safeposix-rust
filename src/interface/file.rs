@@ -371,7 +371,7 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
-        let &mut map = self.map.lock().unwrap().unwrap();
+        let mut map = self.map.lock().unwrap().take();
         let f = self.fobj.lock().unwrap();
 
         let new_mapsize = self.mapsize + usize::pow(2, 20);
@@ -386,7 +386,7 @@ impl EmulatedFileMap {
             let newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
 
-        self.map = Arc::new(Mutex::new(Some(newmap)));
+        self.map = Some(newmap);
         
         f.set_len(self.mapsize as u64);
         self.mapsize = new_mapsize;
