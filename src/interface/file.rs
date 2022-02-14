@@ -386,11 +386,11 @@ impl EmulatedFileMap {
         let mut openfiles = OPEN_FILES.lock().unwrap();
         openfiles.remove(&self.filename);
 
-        let mut maps = self.maps.lock().unwrap();
+        // let mut maps = self.maps.lock().unwrap();
 
-        for mut map in maps.drain(..) {
-            unsafe {munmap(map.as_mut_ptr() as *mut c_void, self.mapsize)};
-        }
+        // for mut map in maps.drain(..) {
+        //     unsafe {munmap(map.as_mut_ptr() as *mut c_void, self.mapsize)};
+        // }
 
         Ok(())
     }
