@@ -315,7 +315,7 @@ impl EmulatedFileMap {
 
         unsafe {
             let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_FIXED |MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
-            let map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
+            map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
       
         f.set_len(0 as u64);
@@ -388,7 +388,7 @@ impl EmulatedFileMap {
             let (old_map_addr, len, cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, 0);
-            let newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
+            newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
 
         mapopt.replace(newmap);
