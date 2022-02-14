@@ -282,7 +282,7 @@ pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
-    maps: Arc<Mutex<Vec<u8>>>,
+    map: Arc<Mutex<Vec<u8>>>,
     mapptr: usize,
     mapsize: usize
 }
