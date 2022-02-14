@@ -17,7 +17,7 @@ pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
 use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED};
 use std::ffi::c_void;
 use std::ptr::drop_in_place;
 
@@ -282,7 +282,7 @@ pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
-    maps: Arc<Mutex<Vec<Vec<u8>>>>,
+    maps: Arc<Mutex<Vec<u8>>>,
     mapptr: usize,
     mapsize: usize
 }
@@ -307,36 +307,33 @@ impl EmulatedFileMap {
         let absolute_filename = fs::canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
-        let mut maps : Vec<Vec<u8>> = Vec::new();
         let mapsize = usize::pow(2, 20);     
         f.set_len(mapsize as u64);
         let offset = 0;
 
-        let mut mmapvec = Vec::with_capacity(mapsize);
-        let mut map_addr = 0 as *mut c_void;
         unsafe {
-            mmapvec.set_len(mapsize);
-            map_addr = mmap(mmapvec.as_mut_ptr() as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+            let map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
-        // f.set_len(0 as u64);
-        maps.push(mmapvec);
+      
+        f.set_len(0 as u64);
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), maps: Arc::new(Mutex::new(maps)), mapptr: 0, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(map)), mapptr: 0, mapsize: mapsize})
 
     }
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-        let mut maps = self.maps.lock().unwrap();
+        let mut map = self.map.lock().unwrap();
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
-        let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
+        let curfilelen = self.mapsize + self.mapptr;
 
         if writelen + self.mapptr < self.mapsize {
 
-            // f.set_len((curfilelen + writelen) as u64);
-            let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + writelen)];
+            f.set_len((curfilelen + writelen) as u64);
+            let mapslice = &mut map[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
        
@@ -345,8 +342,8 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-            // f.set_len((curfilelen + firstwrite) as u64);
-            let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + firstwrite)];
+            f.set_len((curfilelen + firstwrite) as u64);
+            let mapslice = &mut map[self.mapptr..(self.mapptr + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
 
@@ -354,13 +351,13 @@ impl EmulatedFileMap {
             drop(f);
             self.increase_map();
 
-            let mut maps = self.maps.lock().unwrap();
+            let mut map = self.map.lock().unwrap();
             let f = self.fobj.lock().unwrap();
 
             let curfilelen = (maps.len() * self.mapsize) + self.mapptr;
-            // f.set_len((curfilelen + secondwrite) as u64);
+            f.set_len((curfilelen + secondwrite) as u64);
 
-            let mapslice = &mut maps.last_mut().unwrap()[self.mapptr..(self.mapptr + secondwrite)];
+            let mapslice = &mut map[self.mapptr..(self.mapptr + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
             self.mapptr += secondwrite;
 
@@ -372,37 +369,34 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
-        let mut maps = self.maps.lock().unwrap();
+        let mut map = self.map.lock().unwrap();
         let f = self.fobj.lock().unwrap();
 
-        let offset = self.mapsize * maps.len();
-        f.set_len((offset + self.mapsize) as u64);
+        let new_mapsize = self.mapsize + usize::pow(2, 20);
+        f.set_len(new_mapsize as u64);
 
-        let mut mmapvec = Vec::with_capacity(self.mapsize);
 
         unsafe {
-            mmapvec.set_len(self.mapsize);
-            let map_addr = mmap(mmapvec.as_mut_ptr() as *mut c_void, self.mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+            let old_map_addr = map.into_raw_parts());
+            let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, 0);
+            Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
         
-        // f.set_len((offset) as u64);
-        maps.push(mmapvec);
-        self.mapptr = 0;
-
+        f.set_len((offset) as u64);
+        self.mapsize = new_mapsize;
     }
 
     pub fn close(&self) -> std::io::Result<()> {
         let mut openfiles = OPEN_FILES.lock().unwrap();
         openfiles.remove(&self.filename);
 
-        let mut maps = self.maps.lock().unwrap();
+        let mut map = self.map.lock().unwrap();
 
-        for mut map in maps.drain(..) {
-            unsafe {
-                munmap(map.as_mut_ptr() as *mut c_void, self.mapsize);
-            }
+        unsafe {
+            let map_addr = map.into_raw_parts());
+            munmap(map_addr as *mut c_void, self.mapsize);
         }
-
+    
         Ok(())
     }
 }
