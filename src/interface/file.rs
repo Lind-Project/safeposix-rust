@@ -326,7 +326,7 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-        let mut map = self.map.lock().unwrap().unwrap();
+        let &mut map = self.map.lock().unwrap().unwrap();
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
@@ -353,7 +353,7 @@ impl EmulatedFileMap {
             drop(f);
             self.increase_map();
 
-            let mut map = self.map.lock().unwrap().unwrap();
+            let &mut map = self.map.lock().unwrap().unwrap();
             let f = self.fobj.lock().unwrap();
 
             let curfilelen = self.mapsize + self.mapptr;
@@ -398,7 +398,8 @@ impl EmulatedFileMap {
         let mut openfiles = OPEN_FILES.lock().unwrap();
         openfiles.remove(&self.filename);
 
-        let mut map = self.map.lock().unwrap().unwrap();
+        let mut mapopt = self.map.lock().unwrap();
+        let mut map = mapopt.take().unwrap();
 
         unsafe {
             let (map_addr, len, cap) = map.into_raw_parts();
