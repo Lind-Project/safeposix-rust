@@ -353,8 +353,7 @@ impl EmulatedFileMap {
             drop(f);
             self.increase_map();
 
-            let mut mapoption = self.map.lock().unwrap();
-            let mut map = mapoption.unwrap();
+            let mut mapoption = self.map.lock().unwrap().unwrap();
             let f = self.fobj.lock().unwrap();
 
             let curfilelen = self.mapsize + self.mapptr;
