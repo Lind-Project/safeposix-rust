@@ -282,7 +282,7 @@ pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
-    map: Arc<Mutex<Vec<u8>>>,
+    map: Arc<Mutex<Option<Vec<u8>>>>,
     mapptr: usize,
     mapsize: usize
 }
@@ -314,19 +314,20 @@ impl EmulatedFileMap {
         let map : Vec::<u8>;
 
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_FIXED |MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
             let map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
       
         f.set_len(0 as u64);
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(map)), mapptr: 0, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Some(Arc::new(Mutex::new(map))), mapptr: 0, mapsize: mapsize})
 
     }
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
-        let mut map = self.map.lock().unwrap();
+        let mut mapoption = self.map.lock().unwrap()
+        let mut map = mapoption.unwrap();
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
@@ -353,7 +354,8 @@ impl EmulatedFileMap {
             drop(f);
             self.increase_map();
 
-            let mut map = self.map.lock().unwrap();
+            let mut mapoption = self.map.lock().unwrap()
+            let mut map = mapoption.unwrap();
             let f = self.fobj.lock().unwrap();
 
             let curfilelen = self.mapsize + self.mapptr;
@@ -371,7 +373,8 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
-        let mut map = self.map.to_owned().into_inner().unwrap();
+        let mut mapoption = self.map.lock().unwrap()
+        let mut map = mapoption.unwrap();
         let f = self.fobj.lock().unwrap();
 
         let new_mapsize = self.mapsize + usize::pow(2, 20);
@@ -386,7 +389,7 @@ impl EmulatedFileMap {
             let newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
 
-        self.map = Arc::new(Mutex::new(newmap));
+        self.map = Some(Arc::new(Mutex::new(newmap)));
         
         f.set_len(self.mapsize as u64);
         self.mapsize = new_mapsize;
