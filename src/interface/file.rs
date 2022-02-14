@@ -328,7 +328,7 @@ impl EmulatedFileMap {
 
 
         let mut mapopt = self.map.lock().unwrap();
-        let mut map = mapopt.unwrap();
+        let mut map = mapopt.unwrap().as_ref();
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
