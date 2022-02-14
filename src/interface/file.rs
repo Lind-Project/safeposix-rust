@@ -377,6 +377,7 @@ impl EmulatedFileMap {
         let new_mapsize = self.mapsize + usize::pow(2, 20);
         f.set_len(new_mapsize as u64);
 
+        let newmap : Vec::<u8>;
 
         unsafe {
             let (old_map_addr, len, cap) = map.into_raw_parts();
