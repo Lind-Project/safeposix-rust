@@ -144,7 +144,7 @@ pub fn load_fs() {
             //read log file
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
             let sizearray = &logread[0..countsize].try_into().unwrap();
-            let logsize : usize = usize::from_be_bytes(sizearay);
+            let logsize : usize = usize::from_be_bytes(sizearray);
 
             //create indefinite encoding
             let mut logbytes: Vec<u8> = Vec::new();
