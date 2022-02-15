@@ -400,7 +400,7 @@ impl EmulatedFileMap {
 
         unsafe {
             let (old_count_map_addr, countlen, _countcap) = map.into_raw_parts();
-            assert_eq!(self.countmapsize, len);
+            assert_eq!(self.countmapsize, countlen);
             let (old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_count_map_addr as *mut c_void, (self.countmapsize + self.mapsize), (self.countmapsize + new_mapsize), MREMAP_MAYMOVE);
