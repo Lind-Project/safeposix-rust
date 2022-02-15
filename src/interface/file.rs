@@ -318,7 +318,7 @@ impl EmulatedFileMap {
             map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
       
-        // f.set_len(0 as u64);
+        f.set_len(0 as u64);
         
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), mapptr: 0, mapsize: mapsize})
 
