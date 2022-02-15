@@ -332,11 +332,10 @@ impl EmulatedFileMap {
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
-        let curfilelen = self.mapsize + self.mapptr;
 
         if writelen + self.mapptr < self.mapsize {
 
-            f.set_len((curfilelen + writelen) as u64);
+            f.set_len((self.mapptr + writelen) as u64);
             let mapslice = &mut map[self.mapptr..(self.mapptr + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.mapptr += writelen;
@@ -346,7 +345,7 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-            f.set_len((curfilelen + firstwrite) as u64);
+            f.set_len((self.mapptr + firstwrite) as u64);
             let mapslice = &mut map[self.mapptr..(self.mapptr + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.mapptr += firstwrite;
@@ -358,9 +357,7 @@ impl EmulatedFileMap {
             let mut mapopt = self.map.lock().unwrap();
             let mut map = mapopt.as_deref_mut().unwrap();
             let f = self.fobj.lock().unwrap();
-
-            let curfilelen = self.mapsize + self.mapptr;
-            f.set_len((curfilelen + secondwrite) as u64);
+            f.set_len((self.mapptr + secondwrite) as u64);
 
             let mapslice = &mut map[self.mapptr..(self.mapptr + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
