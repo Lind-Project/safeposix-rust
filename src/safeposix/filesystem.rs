@@ -11,7 +11,9 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
 
-pub static LOGMAP: interface::RustOnceCell<interface::RustRfc<interface::RustLock<interface::EmulatedFileMap>>> = interface::RustOnceCell::new();
+pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
+    interface::RustLazyGlobal::new(|| interface::RustRfc::new(interface::RustLock::new(None)))
+);
 
 
 
@@ -175,7 +177,8 @@ pub fn load_fs() {
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
     let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
-    let _ret = LOGMAP.set(interface::RustRfc::new(interface::RustLock::new(log_mapobj)));
+    let mut logobj = self.LOGMAP.lock().unwrap();
+    logobj.replace(log_mapobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
