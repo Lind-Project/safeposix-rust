@@ -17,7 +17,7 @@ pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
 use std::ops::Deref;
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_FIXED, MAP_SHARED};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED};
 use std::ffi::c_void;
 use std::ptr::drop_in_place;
 
@@ -314,7 +314,7 @@ impl EmulatedFileMap {
         let map : Vec::<u8>;
 
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_FIXED |MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
             map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
       
