@@ -404,11 +404,10 @@ impl EmulatedFileMap {
             let (old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_count_map_addr as *mut c_void, (self.countmapsize + self.mapsize), (self.countmapsize + new_mapsize), MREMAP_MAYMOVE);
-            newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
 
-            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.countmapsize, self.countmapsize);
+            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.countmapsize, self.countmapsize);
             let map_ptr = map_addr as *mut u8;
-            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(self.countmapsize as isize), new_mapsize, new_mapsize);
+            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(self.countmapsize as isize), new_mapsize, new_mapsize);
         }
 
         mapopt.replace(newmap);
