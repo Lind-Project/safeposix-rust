@@ -319,6 +319,7 @@ impl EmulatedFileMap {
         let offset = ptrmapsize;
 
         let map : Vec::<u8>;
+        let ptrmap : Vec::<u8>;
 
         unsafe {
 
@@ -379,7 +380,7 @@ impl EmulatedFileMap {
         // update the bytes written in the map portion
         let mut ptrmapopt = self.ptrmap.lock().unwrap();
         let mut ptrmap = ptrmapopt.as_deref_mut().unwrap();
-        ptrmap.copy_from_slice(self.mapptr.to_be_bytes());
+        ptrmap.copy_from_slice(&self.mapptr.to_be_bytes());
 
         Ok(())
 
@@ -416,7 +417,7 @@ impl EmulatedFileMap {
         let mut map = mapopt.take().unwrap();
 
         let mut ptrmapopt = self.ptrmap.lock().unwrap();
-        let mut ptrmap = mapptropt.as_deref_mut().unwrap();
+        let mut ptrmap = ptrmapopt.as_deref_mut().unwrap();
 
         unsafe {
 
