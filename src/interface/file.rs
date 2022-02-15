@@ -277,7 +277,7 @@ impl EmulatedFile {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deref)]
 pub struct EmulatedFileMap {
     filename: String,
     abs_filename: RustPathBuf,
