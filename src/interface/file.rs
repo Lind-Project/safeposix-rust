@@ -410,6 +410,10 @@ impl EmulatedFileMap {
             newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(self.countmapsize as isize), new_mapsize, new_mapsize);
         }
 
+        let maperr = interface::Errno::from_discriminant(interface::get_errno());
+        println!("{:?}", maperr);
+
+
         mapopt.replace(newmap);
         countmapopt.replace(newcountmap);
         self.mapsize = new_mapsize;
