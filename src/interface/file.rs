@@ -378,8 +378,8 @@ impl EmulatedFileMap {
 
         // update the bytes written in the map portion
         let mut ptrmapopt = self.ptrmap.lock().unwrap();
-        let mut ptrmap = mapptropt.as_deref_mut().unwrap();
-        ptrmap.copy_from_slice(self.mapptr.to_string().as_bytes())
+        let mut ptrmap = ptrmapopt.as_deref_mut().unwrap();
+        ptrmap.copy_from_slice(self.mapptr.to_be_bytes());
 
         Ok(())
 
