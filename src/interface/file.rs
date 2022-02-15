@@ -286,6 +286,7 @@ pub struct EmulatedFileMap {
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
     map: Arc<Mutex<Option<Vec<u8>>>>,
+    ptrmap:  Arc<Mutex<Option<Vec<u8>>>>,
     mapptr: usize,
     mapsize: usize
 }
@@ -312,18 +313,24 @@ impl EmulatedFileMap {
 
         let mapsize = usize::pow(2, 20);     
         f.set_len(mapsize as u64);
-        let offset = 0;
+
+        let ptrmapsize = 8;
+        let ptrmapoffset = 0;
+        let offset = ptrmapsize;
 
         let map : Vec::<u8>;
 
         unsafe {
+
+            let ptrmap_addr = mmap(0 as *mut c_void, ptrmapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, ptrmapoffset as i64);
+            ptrmap =  Vec::<u8>::from_raw_parts(ptrmap_addr as *mut u8, ptrmapsize, ptrmapsize);
+
             let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
             map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
       
-        f.set_len(0 as u64);
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), mapptr: 0, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), ptrmap: Arc::new(Mutex::new(Some(ptrmap))), mapptr: 0, mapsize: mapsize})
 
     }
 
@@ -369,6 +376,11 @@ impl EmulatedFileMap {
 
         }
 
+        // update the bytes written in the map portion
+        let mut ptrmapopt = self.ptrmap.lock().unwrap();
+        let mut ptrmap = mapptropt.as_deref_mut().unwrap();
+        ptrmap.copy_from_slice(self.mapptr.to_string().as_bytes())
+
         Ok(())
 
     }
@@ -403,7 +415,15 @@ impl EmulatedFileMap {
         let mut mapopt = self.map.lock().unwrap();
         let mut map = mapopt.take().unwrap();
 
+        let mut ptrmapopt = self.ptrmap.lock().unwrap();
+        let mut ptrmap = mapptropt.as_deref_mut().unwrap();
+
         unsafe {
+
+            let (ptrmap_addr, len, cap) = ptrmap.into_raw_parts();
+            assert_eq!(8, len);
+            munmap(ptrmap_addr as *mut c_void, 8);
+
             let (map_addr, len, cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
             munmap(map_addr as *mut c_void, self.mapsize);
