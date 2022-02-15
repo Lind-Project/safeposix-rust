@@ -327,7 +327,7 @@ impl EmulatedFileMap {
 
             let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, countmapsize as i64);
 
-            interface::Errno::from_discriminant(interface::get_errno());
+            let maperr = interface::Errno::from_discriminant(interface::get_errno());
 
             map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
