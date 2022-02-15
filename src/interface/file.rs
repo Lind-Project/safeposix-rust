@@ -327,8 +327,6 @@ impl EmulatedFileMap {
             let map_ptr = map_addr as *mut u8;
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize as isize), mapsize, mapsize);
         }
-        let maperr = interface::Errno::from_discriminant(interface::get_errno());
-
         
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), countmapsize: countmapsize, mapsize: mapsize})
 
@@ -405,15 +403,10 @@ impl EmulatedFileMap {
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_count_map_addr as *mut c_void, (self.countmapsize + self.mapsize), (self.countmapsize + new_mapsize), MREMAP_MAYMOVE);
 
-            println!("new map addr {:?}", map_addr);
             newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.countmapsize, self.countmapsize);
             let map_ptr = map_addr as *mut u8;
             newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(self.countmapsize as isize), new_mapsize, new_mapsize);
         }
-
-        let maperr = interface::Errno::from_discriminant(interface::get_errno());
-        println!("{:?}", maperr);
-
 
         mapopt.replace(newmap);
         countmapopt.replace(newcountmap);
