@@ -392,10 +392,16 @@ impl EmulatedFileMap {
             newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
         }
 
+        println!("finished mapping old addr {:?} new addr {:?}", old_map_addr, map_addr);
+
+
         mapopt.replace(newmap);
         
         f.set_len(self.mapsize as u64);
         self.mapsize = new_mapsize;
+
+        println!("returning");
+
     }
 
     pub fn close(&self) -> std::io::Result<()> {
