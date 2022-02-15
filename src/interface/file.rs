@@ -390,9 +390,11 @@ impl EmulatedFileMap {
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, 0);
             newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
+
+            println!("finished mapping old addr {:?} new addr {:?}", old_map_addr, map_addr);
+
         }
 
-        println!("finished mapping old addr {:?} new addr {:?}", old_map_addr, map_addr);
 
 
         mapopt.replace(newmap);
