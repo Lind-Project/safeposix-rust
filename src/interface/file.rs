@@ -399,7 +399,7 @@ impl EmulatedFileMap {
 
 
         unsafe {
-            let (old_count_map_addr, countlen, _countcap) = map.into_raw_parts();
+            let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
             assert_eq!(self.countmapsize, countlen);
             let (old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
