@@ -178,7 +178,7 @@ pub fn load_fs() {
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
     let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
-    let mut logobj = self.LOGMAP.lock().unwrap();
+    let mut logobj = LOGMAP.lock().unwrap();
     logobj.replace(log_mapobj);
 }
 

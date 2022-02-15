@@ -437,9 +437,9 @@ pub extern "C" fn lindrustfinalize() {
     persist_metadata(&*FS_METADATA.read().unwrap());
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
-        let _logclose = LOGMAP.get().unwrap().write().unwrap().close();
-        let mut logobj = self.LOGMAP.lock().unwrap();
-        let mut _log = logobj.take().unwrap();
+        let mut logobj = LOGMAP.lock().unwrap();
+        let mut log = logobj.take().unwrap();
+        log.close();
         let _logremove = interface::removefile(LOGFILENAME.to_string());
     }
 }
