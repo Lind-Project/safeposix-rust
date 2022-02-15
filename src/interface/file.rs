@@ -286,8 +286,9 @@ pub struct EmulatedFileMap {
     abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
     map: Arc<Mutex<Option<Vec<u8>>>>,
-    ptrmap:  Arc<Mutex<Option<Vec<u8>>>>,
-    mapptr: usize,
+    count: usize,
+    countmap:  Arc<Mutex<Option<Vec<u8>>>>,
+    countmapsize: usize,
     mapsize: usize
 }
 
@@ -311,27 +312,25 @@ impl EmulatedFileMap {
         let absolute_filename = fs::canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
-        let mapsize = usize::pow(2, 20);     
-        f.set_len(mapsize as u64);
-
-        let ptrmapsize = 8;
-        let ptrmapoffset = 0;
-        let offset = ptrmapsize;
+        let mapsize = usize::pow(2, 20);   
+        let countmapsize = 8;
+  
+        f.set_len((countmapsize + mapsize) as u64);
 
         let map : Vec::<u8>;
-        let ptrmap : Vec::<u8>;
+        let countmap : Vec::<u8>;
 
         unsafe {
 
-            let ptrmap_addr = mmap(0 as *mut c_void, ptrmapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, ptrmapoffset as i64);
-            ptrmap =  Vec::<u8>::from_raw_parts(ptrmap_addr as *mut u8, ptrmapsize, ptrmapsize);
+            let countmap_addr = mmap(0 as *mut c_void, countmapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            countmap =  Vec::<u8>::from_raw_parts(countmap_addr as *mut u8, countmapsize, countmapsize);
 
-            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, offset as i64);
+            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, countmapsize as i64);
             map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
         }
       
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), ptrmap: Arc::new(Mutex::new(Some(ptrmap))), mapptr: 0, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), countmapsize: countmapsize, mapsize: mapsize})
 
     }
 
@@ -344,21 +343,21 @@ impl EmulatedFileMap {
 
         let writelen = bytes_to_write.len();
 
-        if writelen + self.mapptr < self.mapsize {
+        if writelen + self.count < self.mapsize {
 
-            let mapslice = &mut map[self.mapptr..(self.mapptr + writelen)];
+            let mapslice = &mut map[self.count..(self.count + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
-            self.mapptr += writelen;
+            self.count += writelen;
        
         }
         else {
 
-            let firstwrite = self.mapsize - self.mapptr;
+            let firstwrite = self.mapsize - self.count;
             let secondwrite = writelen - firstwrite;
 
-            let mapslice = &mut map[self.mapptr..(self.mapptr + firstwrite)];
+            let mapslice = &mut map[self.count..(self.count + firstwrite)];
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
-            self.mapptr += firstwrite;
+            self.count += firstwrite;
 
             drop(mapopt);
             drop(f);
@@ -368,16 +367,16 @@ impl EmulatedFileMap {
             let mut map = mapopt.as_deref_mut().unwrap();
             let f = self.fobj.lock().unwrap();
 
-            let mapslice = &mut map[self.mapptr..(self.mapptr + secondwrite)];
+            let mapslice = &mut map[self.count..(self.count + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..]);
-            self.mapptr += secondwrite;
+            self.count += secondwrite;
 
         }
 
         // update the bytes written in the map portion
-        let mut ptrmapopt = self.ptrmap.lock().unwrap();
-        let mut ptrmap = ptrmapopt.as_deref_mut().unwrap();
-        ptrmap.copy_from_slice(&self.mapptr.to_be_bytes());
+        let mut countmapopt = self.countmap.lock().unwrap();
+        let mut countmap = countmapopt.as_deref_mut().unwrap();
+        countmap.copy_from_slice(&self.count.to_be_bytes());
 
         Ok(())
 
@@ -412,14 +411,14 @@ impl EmulatedFileMap {
         let mut mapopt = self.map.lock().unwrap();
         let mut map = mapopt.take().unwrap();
 
-        let mut ptrmapopt = self.ptrmap.lock().unwrap();
-        let mut ptrmap = ptrmapopt.take().unwrap();
+        let mut countmapopt = self.countmap.lock().unwrap();
+        let mut countmap = countmapopt.take().unwrap();
 
         unsafe {
 
-            let (ptrmap_addr, len, cap) = ptrmap.into_raw_parts();
-            assert_eq!(8, len);
-            munmap(ptrmap_addr as *mut c_void, 8);
+            let (countmap_addr, len, cap) = countmap.into_raw_parts();
+            assert_eq!(self.countmapsize, len);
+            munmap(countmap_addr as *mut c_void, 8);
 
             let (map_addr, len, cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
