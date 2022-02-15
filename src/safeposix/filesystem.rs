@@ -137,14 +137,17 @@ pub fn load_fs() {
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
 
+            let countsize = 8;
+
             //read log file
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
-            let logsize : usize = usize::from_be_bytes(&logread[0..8]);
+            let sizearray = <&[u8; 8]>::try_from(&logread[0..countsize]);
+            let logsize : usize = usize::from_be_bytes(sizearay);
 
             //create indefinite encoding
             let mut logbytes: Vec<u8> = Vec::new();
             logbytes.push(0x9F);
-            logbytes.append(&mut logread[8..(8 + logsize)]);
+            logbytes.extend_from_slice(&mut logread[countsize..(countsize + logsize)]);
             // add end of indefinite encoding
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
