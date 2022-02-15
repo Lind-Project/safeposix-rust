@@ -417,7 +417,7 @@ impl EmulatedFileMap {
         let mut map = mapopt.take().unwrap();
 
         let mut ptrmapopt = self.ptrmap.lock().unwrap();
-        let mut ptrmap = ptrmapopt.as_deref_mut().unwrap();
+        let mut ptrmap = ptrmapopt.take().unwrap();
 
         unsafe {
 
