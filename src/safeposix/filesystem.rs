@@ -141,7 +141,7 @@ pub fn load_fs() {
 
             //read log file
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
-            let sizearray = <&[u8; 8]>::RustConvert(&logread[0..countsize]);
+            let sizearray = <&[u8; 8]>::interface::RustConvert(&logread[0..countsize]);
             let logsize : usize = usize::from_be_bytes(sizearay);
 
             //create indefinite encoding
