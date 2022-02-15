@@ -392,7 +392,7 @@ impl EmulatedFileMap {
         let f = self.fobj.lock().unwrap();
 
         let new_mapsize = self.mapsize + usize::pow(2, 20);
-        f.set_len(new_mapsize as u64);
+        f.set_len((self.countmapsize + new_mapsize) as u64);
 
         let newmap : Vec::<u8>;
         let newcountmap : Vec::<u8>;
@@ -432,11 +432,11 @@ impl EmulatedFileMap {
 
         unsafe {
 
-            let (countmap_addr, len, cap) = countmap.into_raw_parts();
-            assert_eq!(self.countmapsize, len);
+            let (countmap_addr, countlen, _countcap) = countmap.into_raw_parts();
+            assert_eq!(self.countmapsize, countlen);
             munmap(countmap_addr as *mut c_void, 8);
 
-            let (map_addr, len, cap) = map.into_raw_parts();
+            let (map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
             munmap(map_addr as *mut c_void, self.mapsize);
         }
