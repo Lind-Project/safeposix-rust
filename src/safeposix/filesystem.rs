@@ -136,10 +136,15 @@ pub fn load_fs() {
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            //create indefinite encoding, then read log file
+
+            //read log file
+            let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
+            let logsize : usize = usize::from_be_bytes(logread[0..8]);
+
+            //create indefinite encoding
              let mut logbytes: Vec<u8> = Vec::new();
             logbytes.push(0x9F);
-            logbytes.append(&mut log_fileobj.readfile_to_new_bytes().unwrap());
+            logbytes.append(&logread[8..(8 + logsize)]);
             // add end of indefinite encoding
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
