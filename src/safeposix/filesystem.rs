@@ -217,7 +217,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
     // write to file
     let mut map = LOGMAP.write().unwrap();
-    *map.write_to_map(&entrybytes).unwrap();
+    map.write_to_map(&entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
