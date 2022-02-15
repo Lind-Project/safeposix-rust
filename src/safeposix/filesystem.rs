@@ -216,8 +216,8 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
-    let mut mapopt = LOGMAP.write().unwrap();
-    mapopt.as_ref_mut().write_to_map(&entrybytes).unwrap();
+    let mut map = LOGMAP.write().unwrap()as_deref_mut().unwrap();
+    map.write_to_map(&entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
