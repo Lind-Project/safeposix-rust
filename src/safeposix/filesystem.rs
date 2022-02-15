@@ -139,12 +139,12 @@ pub fn load_fs() {
 
             //read log file
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
-            let logsize : usize = usize::from_be_bytes(logread[0..8]);
+            let logsize : usize = usize::from_be_bytes(&logread[0..8]);
 
             //create indefinite encoding
-             let mut logbytes: Vec<u8> = Vec::new();
+            let mut logbytes: Vec<u8> = Vec::new();
             logbytes.push(0x9F);
-            logbytes.append(&logread[8..(8 + logsize)]);
+            logbytes.append(&mut logread[8..(8 + logsize)]);
             // add end of indefinite encoding
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
