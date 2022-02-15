@@ -336,8 +336,6 @@ impl EmulatedFileMap {
 
         let writelen = bytes_to_write.len();
 
-        println!("writelen {:?}", writelen);
-
         if writelen + self.mapptr < self.mapsize {
 
             f.set_len((self.mapptr + writelen) as u64);
@@ -350,9 +348,6 @@ impl EmulatedFileMap {
 
             let firstwrite = self.mapsize - self.mapptr;
             let secondwrite = writelen - firstwrite;
-
-            println!("firstwrite {:?}", firstwrite);
-            println!("secondwrite {:?}", secondwrite);
 
             f.set_len((self.mapptr + firstwrite) as u64);
             let mapslice = &mut map[self.mapptr..(self.mapptr + firstwrite)];
@@ -368,9 +363,6 @@ impl EmulatedFileMap {
             let f = self.fobj.lock().unwrap();
             f.set_len((self.mapptr + secondwrite) as u64);
 
-            println!("firstwrite {:?}", firstwrite);
-            println!("secondwrite {:?}", secondwrite);
-
             let mapslice = &mut map[self.mapptr..(self.mapptr + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..]);
             self.mapptr += secondwrite;
@@ -384,13 +376,8 @@ impl EmulatedFileMap {
     fn increase_map(&mut self) {
 
         let mut mapopt = self.map.lock().unwrap();
-        let mut map = mapopt.take().unwrap();
-        println!("pre flock map");
-        
+        let mut map = mapopt.take().unwrap();        
         let f = self.fobj.lock().unwrap();
-
-
-        println!("post f lock map");
 
         let new_mapsize = self.mapsize + usize::pow(2, 20);
         f.set_len(new_mapsize as u64);
@@ -402,21 +389,11 @@ impl EmulatedFileMap {
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, MREMAP_MAYMOVE);
             newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
-            println!("Errno {:?}", interface::Errno::from_discriminant(interface::get_errno()));
-
-            println!("finished mapping old addr {:?} new addr {:?}", old_map_addr, map_addr);
-
         }
 
-
-
         mapopt.replace(newmap);
-        
         f.set_len(self.mapsize as u64);
         self.mapsize = new_mapsize;
-
-        println!("returning");
-
     }
 
     pub fn close(&self) -> std::io::Result<()> {
