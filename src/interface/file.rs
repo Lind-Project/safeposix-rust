@@ -372,7 +372,7 @@ impl EmulatedFileMap {
             println!("secondwrite {:?}", secondwrite);
 
             let mapslice = &mut map[self.mapptr..(self.mapptr + secondwrite)];
-            mapslice.copy_from_slice(&bytes_to_write[firstwrite..secondwrite]);
+            mapslice.copy_from_slice(&bytes_to_write[firstwrite..]);
             self.mapptr += secondwrite;
 
         }
