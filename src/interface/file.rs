@@ -373,8 +373,12 @@ impl EmulatedFileMap {
 
         let mut mapopt = self.map.lock().unwrap();
         let mut map = mapopt.take().unwrap();
-
+        println!("pre flock map");
+        
         let f = self.fobj.lock().unwrap();
+
+
+        println!("post f lock map");
 
         let new_mapsize = self.mapsize + usize::pow(2, 20);
         f.set_len(new_mapsize as u64);
