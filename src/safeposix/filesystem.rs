@@ -178,7 +178,7 @@ pub fn load_fs() {
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
     let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
-    let mut logobj = LOGMAP.lock().unwrap();
+    let mut logobj = LOGMAP.write().unwrap();
     logobj.replace(log_mapobj);
 }
 
@@ -216,7 +216,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
-    LOGMAP.get().unwrap().write().unwrap().write_to_map(&entrybytes).unwrap();
+    LOGMAP.write().unwrap().write_to_map(&entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to JSON, write to file
