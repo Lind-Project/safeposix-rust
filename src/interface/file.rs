@@ -21,6 +21,9 @@ use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED};
 use std::ffi::c_void;
 use std::ptr::drop_in_place;
 
+use crate::interface;
+
+
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 pub fn listfiles() -> Vec<String> {
@@ -390,6 +393,7 @@ impl EmulatedFileMap {
             assert_eq!(self.mapsize, len);
             let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, 0);
             newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
+            println!("Errno {:?}", Errno::from_discriminant(interface::get_errno()))
 
             println!("finished mapping old addr {:?} new addr {:?}", old_map_addr, map_addr);
 
