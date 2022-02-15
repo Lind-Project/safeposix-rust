@@ -322,13 +322,10 @@ impl EmulatedFileMap {
 
         unsafe {
 
-            let countmap_addr = mmap(0 as *mut c_void, countmapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
-            countmap =  Vec::<u8>::from_raw_parts(countmap_addr as *mut u8, countmapsize, countmapsize);
-
-            let map_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, countmapsize as i64);
-
-
-            map =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, mapsize, mapsize);
+            let map_addr = mmap(0 as *mut c_void, countmapsize + mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, countmapsize, countmapsize);
+            let map_ptr = map_addr as *mut u8;
+            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize), mapsize, mapsize);
         }
         let maperr = interface::Errno::from_discriminant(interface::get_errno());
 
@@ -389,21 +386,33 @@ impl EmulatedFileMap {
 
         let mut mapopt = self.map.lock().unwrap();
         let mut map = mapopt.take().unwrap();        
+        let mut countmapopt = self.countmap.lock().unwrap();
+        let mut countmap = countmapopt.take().unwrap(); 
+
         let f = self.fobj.lock().unwrap();
 
         let new_mapsize = self.mapsize + usize::pow(2, 20);
         f.set_len(new_mapsize as u64);
 
         let newmap : Vec::<u8>;
+        let newcountmap : Vec::<u8>;
+
 
         unsafe {
-            let (old_map_addr, len, cap) = map.into_raw_parts();
+            let (old_count_map_addr, countlen, _countcap) = map.into_raw_parts();
+            assert_eq!(self.countmapsize, len);
+            let (old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
-            let map_addr = mremap(old_map_addr as *mut c_void, self.mapsize, new_mapsize, MREMAP_MAYMOVE);
+            let map_addr = mremap(old_count_map_addr as *mut c_void, (self.countmapsize + self.mapsize), (self.countmapsize + new_mapsize), MREMAP_MAYMOVE);
             newmap = Vec::<u8>::from_raw_parts(map_addr as *mut u8, new_mapsize, new_mapsize);
+
+            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, countmapsize, countmapsize);
+            let map_ptr = map_addr as *mut u8;
+            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize), new_mapsize, new_mapsize);
         }
 
         mapopt.replace(newmap);
+        countmapopt.replace(newcountmap)
         self.mapsize = new_mapsize;
     }
 
