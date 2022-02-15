@@ -12,7 +12,8 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 pub const LOGFILENAME: &str = "lind.md.log";
 
 pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
-    interface::RustLazyGlobal::new(|| interface::RustRfc::new(interface::RustLock::new(None)))
+    interface::RustLazyGlobal::new(|| 
+        interface::RustRfc::new(interface::RustLock::new(None))
 );
 
 
