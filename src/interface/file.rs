@@ -378,9 +378,9 @@ impl EmulatedFileMap {
 
         // open count and map to resize mmap, and file to increase file size
         let mut mapopt = self.map.lock().unwrap();
-        let mut map = mapopt.take().unwrap();        
+        let map = mapopt.take().unwrap();        
         let mut countmapopt = self.countmap.lock().unwrap();
-        let mut countmap = countmapopt.take().unwrap(); 
+        let countmap = countmapopt.take().unwrap(); 
         let f = self.fobj.lock().unwrap();
 
         // add another 1MB to mapsize
@@ -395,9 +395,9 @@ impl EmulatedFileMap {
         unsafe {
             let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
             assert_eq!(self.countmapsize, countlen);
-            let (old_map_addr, len, _cap) = map.into_raw_parts();
+            let (_old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
-            let map_addr = mremap(old_count_map_addr as *mut c_void, (self.countmapsize + self.mapsize), (self.countmapsize + new_mapsize), MREMAP_MAYMOVE);
+            let map_addr = mremap(old_count_map_addr as *mut c_void, self.countmapsize + self.mapsize, self.countmapsize + new_mapsize, MREMAP_MAYMOVE);
 
             newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.countmapsize, self.countmapsize);
             let map_ptr = map_addr as *mut u8;
