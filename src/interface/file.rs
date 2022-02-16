@@ -332,7 +332,6 @@ impl EmulatedFileMap {
 
         let mut mapopt = self.map.lock().unwrap();
         let map = mapopt.as_deref_mut().unwrap();
-        let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
 
@@ -354,13 +353,11 @@ impl EmulatedFileMap {
 
             // increase the map another 1MB
             drop(mapopt);
-            drop(f);
             self.increase_map();
 
             // and write the second half
             let mut mapopt = self.map.lock().unwrap();
             let map = mapopt.as_deref_mut().unwrap();
-            let f = self.fobj.lock().unwrap();
 
             let mapslice = &mut map[self.count..(self.count + secondwrite)];
             mapslice.copy_from_slice(&bytes_to_write[firstwrite..]);
