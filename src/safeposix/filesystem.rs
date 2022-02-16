@@ -162,8 +162,7 @@ pub fn load_fs() {
             let _logremove = interface::removefile(LOGFILENAME.to_string());
 
         }
-
-
+        // then recreate the log
         create_log();
 
 
