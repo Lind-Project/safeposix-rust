@@ -16,6 +16,8 @@ pub use std::lazy::{SyncLazy as RustLazyGlobal};
 use std::os::unix::io::{AsRawFd, RawFd};
 use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
 use std::ffi::c_void;
+use std::convert::TryInto;
+
 
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));

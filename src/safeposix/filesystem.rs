@@ -7,8 +7,6 @@ use super::syscalls::sys_constants::*;
 
 use super::cage::Cage;
 
-use std::convert::TryInto;
-
 pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
