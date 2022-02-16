@@ -11,17 +11,11 @@ use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
-use std::io::{self, BufReader};
-use std::io::prelude::*;
-pub use std::lazy::{SyncLazy as RustLazyGlobal, SyncOnceCell as RustOnceCell};
-use std::ops::Deref;
+pub use std::lazy::{SyncLazy as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
 use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
 use std::ffi::c_void;
-use std::ptr::drop_in_place;
-
-use crate::interface;
 
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
@@ -299,6 +293,7 @@ pub fn mapfilenew(filename: String) -> std::io::Result<EmulatedFileMap> {
 impl EmulatedFileMap {
 
     fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
+        // create new file like a normal emulated file, but always create
         assert_is_allowed_filename(&filename);
 
         let mut openfiles = OPEN_FILES.lock().unwrap();
@@ -314,14 +309,14 @@ impl EmulatedFileMap {
 
         let mapsize = usize::pow(2, 20);   
         let countmapsize = 8;
-  
-        f.set_len((countmapsize + mapsize) as u64);
+        // set the file equal to where were mapping the count and the actual map
+        _size = f.set_len((countmapsize + mapsize) as u64).unwrap();
 
         let map : Vec::<u8>;
         let countmap : Vec::<u8>;
 
+        // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
         unsafe {
-
             let map_addr = mmap(0 as *mut c_void, countmapsize + mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
             countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, countmapsize, countmapsize);
             let map_ptr = map_addr as *mut u8;
@@ -341,15 +336,15 @@ impl EmulatedFileMap {
 
         let writelen = bytes_to_write.len();
 
+        // if were writing to space left in current map, its easy
         if writelen + self.count < self.mapsize {
 
             let mapslice = &mut map[self.count..(self.count + writelen)];
             mapslice.copy_from_slice(bytes_to_write);
             self.count += writelen;
        
-        }
-        else {
-
+        } else {
+            // other wise break up write into remaining space
             let firstwrite = self.mapsize - self.count;
             let secondwrite = writelen - firstwrite;
 
@@ -357,10 +352,12 @@ impl EmulatedFileMap {
             mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
             self.count += firstwrite;
 
+            // increase the map another 1MB
             drop(mapopt);
             drop(f);
             self.increase_map();
 
+            // and write the second half
             let mut mapopt = self.map.lock().unwrap();
             let mut map = mapopt.as_deref_mut().unwrap();
             let f = self.fobj.lock().unwrap();
@@ -382,13 +379,14 @@ impl EmulatedFileMap {
 
     fn increase_map(&mut self) {
 
+        // open count and map to resize mmap, and file to increase file size
         let mut mapopt = self.map.lock().unwrap();
         let mut map = mapopt.take().unwrap();        
         let mut countmapopt = self.countmap.lock().unwrap();
         let mut countmap = countmapopt.take().unwrap(); 
-
         let f = self.fobj.lock().unwrap();
 
+        // add another 1MB to mapsize
         let new_mapsize = self.mapsize + usize::pow(2, 20);
         f.set_len((self.countmapsize + new_mapsize) as u64);
 
@@ -396,6 +394,7 @@ impl EmulatedFileMap {
         let newcountmap : Vec::<u8>;
 
 
+        // destruct count and map and re-map
         unsafe {
             let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
             assert_eq!(self.countmapsize, countlen);
@@ -408,12 +407,14 @@ impl EmulatedFileMap {
             newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(self.countmapsize as isize), new_mapsize, new_mapsize);
         }
 
+        // replace maps
         mapopt.replace(newmap);
         countmapopt.replace(newcountmap);
         self.mapsize = new_mapsize;
     }
 
     pub fn close(&self) -> std::io::Result<()> {
+        // remove file as open file and deconstruct map
         let mut openfiles = OPEN_FILES.lock().unwrap();
         openfiles.remove(&self.filename);
 
