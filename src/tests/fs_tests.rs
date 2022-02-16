@@ -19,16 +19,15 @@ pub mod fs_tests {
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dir_mode();
         ut_lind_fs_dir_multiple();
-        // ut_lind_fs_dup();
-        // ut_lind_fs_dup2();
+        ut_lind_fs_dup();
+        ut_lind_fs_dup2();
         ut_lind_fs_fcntl();
-        // ut_lind_fs_ioctl();
+        ut_lind_fs_ioctl();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();
         ut_lind_fs_fstat_complex();
-        // ut_lind_fs_getdents();
-        // ut_lind_fs_getuid();
+        ut_lind_fs_getuid();
         ut_lind_fs_load_fs();
         ut_lind_fs_mknod();
         ut_lind_fs_multiple_open();
@@ -43,7 +42,7 @@ pub mod fs_tests {
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
         ut_lind_fs_dir_chdir_getcwd();
-        // persistencetest();
+        persistencetest();
         rdwrtest();
         prdwrtest();
         chardevtest();
@@ -95,7 +94,8 @@ pub mod fs_tests {
         //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
         assert_eq!(metadatastring1.len(), metadatastring2.len()); 
         drop(metadata);
-        incref_root();
+        incref_root();//for util cage first
+        incref_root();//then for init cage
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -367,8 +367,8 @@ pub mod fs_tests {
         assert_eq!(cage.close_syscall(fd), 0);
 
         //the other &fd should still work
+        assert_eq!(cage.lseek_syscall(fd2,0,SEEK_END), 4);
         assert_eq!(cage.write_syscall(fd2, str2cbuf("5678"), 4), 4);
-        cage.lseek_syscall(fd2,0,SEEK_CUR);
 
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
         let mut buffer2 = sizecbuf(8);
@@ -400,9 +400,9 @@ pub mod fs_tests {
         let fd2: i32 = cage.dup2_syscall(fd, fd+1 as i32);
 
         //read/write tests for the files
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2, 0, SEEK_CUR));
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_END), cage.lseek_syscall(fd2, 0, SEEK_END));
         assert_eq!(cage.write_syscall(fd, str2cbuf("34"), 2), 2);
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_CUR), cage.lseek_syscall(fd2, 0, SEEK_CUR));
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), cage.lseek_syscall(fd2, 0, SEEK_SET));
 
         let mut buffer = sizecbuf(4);
         assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
@@ -472,19 +472,19 @@ pub mod fs_tests {
         assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
 
         //checking to see if the flag was updated
-        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0)&O_NONBLOCK, 0);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0)&O_NONBLOCK, 0);
 
         //set the O_NONBLOCK flag
         assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union1), 0);
 
         //checking to see if the flag was updated
-        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0)&O_NONBLOCK, O_NONBLOCK);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0)&O_NONBLOCK, O_NONBLOCK);
 
         //clear the O_NONBLOCK flag
         assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
 
         //checking to see if the flag was updated
-        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0)&O_NONBLOCK, 0);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0)&O_NONBLOCK, 0);
 
         assert_eq!(cage.close_syscall(filefd), 0);
         assert_eq!(cage.close_syscall(sockfd), 0);
@@ -620,6 +620,12 @@ pub mod fs_tests {
     pub fn ut_lind_fs_getuid() {
         lindrustinit(0);
         let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        //let's get the initial -1s out of the way
+        cage.getgid_syscall();
+        cage.getegid_syscall();
+        cage.getuid_syscall();
+        cage.geteuid_syscall();
 
         //testing to make sure that all of the gid and uid values are good to go when system is initialized
         assert_eq!(cage.getgid_syscall() as u32, DEFAULT_GID);
