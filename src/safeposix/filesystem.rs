@@ -139,12 +139,12 @@ pub fn load_fs() {
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
             // read log file and parse count
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
-            let logsize = interface::convert_bytes_to_size(&logread[0..interface::countmapsize]);
+            let logsize = interface::convert_bytes_to_size(&logread[0..interface::COUNTMAPSIZE]);
 
             // create vec of log file bounded by indefinite encoding bytes (0x9F, 0xFF)
             let mut logbytes: Vec<u8> = Vec::new();
             logbytes.push(0x9F);
-            logbytes.extend_from_slice(&mut logread[interface::countmapsize..(interface::countmapsize + logsize)]);
+            logbytes.extend_from_slice(&mut logread[interface::COUNTMAPSIZE..(interface::COUNTMAPSIZE + logsize)]);
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
 

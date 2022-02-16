@@ -276,7 +276,7 @@ impl EmulatedFile {
     }
 }
 
-pub static countmapsize : usize = 8;
+pub static COUNTMAPSIZE : usize = 8;
 
 #[derive(Debug)]
 pub struct EmulatedFileMap {
@@ -312,17 +312,17 @@ impl EmulatedFileMap {
 
         let mapsize = usize::pow(2, 20);   
         // set the file equal to where were mapping the count and the actual map
-        let _newsize = f.set_len((countmapsize + mapsize) as u64).unwrap();
+        let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
 
         let map : Vec::<u8>;
         let countmap : Vec::<u8>;
 
         // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, countmapsize + mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
-            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, countmapsize, countmapsize);
+            let map_addr = mmap(0 as *mut c_void, COUNTMAPSIZE + mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
             let map_ptr = map_addr as *mut u8;
-            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize as isize), mapsize, mapsize);
+            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
         }
         
         Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
@@ -387,7 +387,7 @@ impl EmulatedFileMap {
 
         // add another 1MB to mapsize
         let new_mapsize = self.mapsize + usize::pow(2, 20);
-        let _newsize = f.set_len((countmapsize + new_mapsize) as u64).unwrap();
+        let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
 
         let newmap : Vec::<u8>;
         let newcountmap : Vec::<u8>;
@@ -396,14 +396,14 @@ impl EmulatedFileMap {
         // destruct count and map and re-map
         unsafe {
             let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
-            assert_eq!(countmapsize, countlen);
+            assert_eq!(COUNTMAPSIZE, countlen);
             let (_old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
-            let map_addr = mremap(old_count_map_addr as *mut c_void, countmapsize + self.mapsize, countmapsize + new_mapsize, MREMAP_MAYMOVE);
+            let map_addr = mremap(old_count_map_addr as *mut c_void, COUNTMAPSIZE + self.mapsize, COUNTMAPSIZE + new_mapsize, MREMAP_MAYMOVE);
 
-            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, countmapsize, countmapsize);
+            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
             let map_ptr = map_addr as *mut u8;
-            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize as isize), new_mapsize, new_mapsize);
+            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), new_mapsize, new_mapsize);
         }
 
         // replace maps
@@ -425,8 +425,8 @@ impl EmulatedFileMap {
         unsafe {
 
             let (countmap_addr, countlen, _countcap) = countmap.into_raw_parts();
-            assert_eq!(countmapsize, countlen);
-            munmap(countmap_addr as *mut c_void, countmapsize);
+            assert_eq!(COUNTMAPSIZE, countlen);
+            munmap(countmap_addr as *mut c_void, COUNTMAPSIZE);
 
             let (map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
