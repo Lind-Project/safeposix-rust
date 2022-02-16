@@ -1192,7 +1192,6 @@ pub mod net_tests {
     pub fn ut_lind_net_dns_rootserver_ping() {
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
-        #[derive(Debug)]
         struct DnsHeader {
             xid: u16,
             flags: u16,
@@ -1204,7 +1203,6 @@ pub mod net_tests {
 
         /* Structure of the bytes for an IPv4 answer */
         #[repr(C, packed(1))]
-        #[derive(Debug)]
         struct DnsRecordAT {
             compression: u16,
             typ: u16,
