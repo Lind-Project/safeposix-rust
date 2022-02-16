@@ -180,10 +180,10 @@ pub fn load_fs() {
     }
 }
 
-pub fn fsck(metadata: &FilesystemMetadata) {
+pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
 
     let mut inodes_to_remove = Vec::new();
-    for (inodenum, inode) in metadata.inodetable.iter() {
+    for (inodenum, inode) in mutmetadata.inodetable.iter() {
         match inode {
             Inode::File(ref mut normalfile_inode) => {
                 if normalfile_inode.linkcount == 0 { inodes_to_remove.push(inodenum) }
@@ -198,7 +198,7 @@ pub fn fsck(metadata: &FilesystemMetadata) {
     }
     
     for inodenum in inodes_to_remove {
-        metadata.inodetable.remove(&inodenum);
+        mutmetadata.inodetable.remove(&inodenum);
     }
 
 }
