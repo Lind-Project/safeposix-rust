@@ -144,7 +144,7 @@ pub fn load_fs() {
             // create vec of log file bounded by indefinite encoding bytes (0x9F, 0xFF)
             let mut logbytes: Vec<u8> = Vec::new();
             logbytes.push(0x9F);
-            logbytes.extend_from_slice(&mut logread[countsize..(countsize + logsize)]);
+            logbytes.extend_from_slice(&mut logread[interface::countmapsize..(interface::countmapsize + logsize)]);
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
 
