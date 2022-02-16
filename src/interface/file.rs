@@ -310,7 +310,7 @@ impl EmulatedFileMap {
         let mapsize = usize::pow(2, 20);   
         let countmapsize = 8;
         // set the file equal to where were mapping the count and the actual map
-        _size = f.set_len((countmapsize + mapsize) as u64).unwrap();
+        let _newsize = f.set_len((countmapsize + mapsize) as u64).unwrap();
 
         let map : Vec::<u8>;
         let countmap : Vec::<u8>;
