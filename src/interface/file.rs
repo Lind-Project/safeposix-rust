@@ -331,7 +331,7 @@ impl EmulatedFileMap {
 
 
         let mut mapopt = self.map.lock().unwrap();
-        let mut map = mapopt.as_deref_mut().unwrap();
+        let map = mapopt.as_deref_mut().unwrap();
         let f = self.fobj.lock().unwrap();
 
         let writelen = bytes_to_write.len();
@@ -359,7 +359,7 @@ impl EmulatedFileMap {
 
             // and write the second half
             let mut mapopt = self.map.lock().unwrap();
-            let mut map = mapopt.as_deref_mut().unwrap();
+            let map = mapopt.as_deref_mut().unwrap();
             let f = self.fobj.lock().unwrap();
 
             let mapslice = &mut map[self.count..(self.count + secondwrite)];
@@ -370,7 +370,7 @@ impl EmulatedFileMap {
 
         // update the bytes written in the map portion
         let mut countmapopt = self.countmap.lock().unwrap();
-        let mut countmap = countmapopt.as_deref_mut().unwrap();
+        let countmap = countmapopt.as_deref_mut().unwrap();
         countmap.copy_from_slice(&self.count.to_be_bytes());
 
         Ok(())
@@ -388,7 +388,7 @@ impl EmulatedFileMap {
 
         // add another 1MB to mapsize
         let new_mapsize = self.mapsize + usize::pow(2, 20);
-        f.set_len((self.countmapsize + new_mapsize) as u64);
+        let _newsize = f.set_len((self.countmapsize + new_mapsize) as u64).unwrap();
 
         let newmap : Vec::<u8>;
         let newcountmap : Vec::<u8>;
