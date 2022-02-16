@@ -137,23 +137,21 @@ pub fn load_fs() {
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
+
             let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-
-            let countsize = 8;
-
-            //read log file
+            // read log file and parse count
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
-            let sizearray = &logread[0..countsize].try_into().unwrap();
-            let logsize : usize = usize::from_be_bytes(*sizearray);
+            let logsize = interface::convert_bytes_to_size(&logread[0..interface::countmapsize]);
 
-            //create indefinite encoding
+            // create vec of log file bounded by indefinite encoding bytes (0x9F, 0xFF)
             let mut logbytes: Vec<u8> = Vec::new();
             logbytes.push(0x9F);
             logbytes.extend_from_slice(&mut logread[countsize..(countsize + logsize)]);
-            // add end of indefinite encoding
             logbytes.push(0xFF);
             let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
 
+            // drain the vector and deserialize into pairs of inodenum + inodes,
+            // if the inode exists, add it, if not, remove it
             for serialpair in logvec.drain(..) {
                 let (inodenum, inode) = serialpair;
                 match inode {
@@ -174,11 +172,9 @@ pub fn load_fs() {
     } else {
        *mutmetadata = FilesystemMetadata::blank_fs_init();
        drop(mutmetadata);
-
        create_log();
 
        load_fs_special_files(&utilcage);
-
        let metadata = FS_METADATA.read().unwrap();
        persist_metadata(&metadata);
     }
@@ -220,9 +216,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
     // pack and serialize log entry
     let inode = metadata.inodetable.get(&inodenum);
-
     let serialpair: (usize, Option<&Inode>) = (inodenum, inode);
-
     let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file

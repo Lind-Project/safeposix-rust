@@ -274,6 +274,8 @@ impl EmulatedFile {
     }
 }
 
+pub static countmapsize : usize = 8;
+
 #[derive(Debug)]
 pub struct EmulatedFileMap {
     filename: String,
@@ -282,7 +284,6 @@ pub struct EmulatedFileMap {
     map: Arc<Mutex<Option<Vec<u8>>>>,
     count: usize,
     countmap:  Arc<Mutex<Option<Vec<u8>>>>,
-    countmapsize: usize,
     mapsize: usize
 }
 
@@ -308,7 +309,6 @@ impl EmulatedFileMap {
         openfiles.insert(filename.clone());
 
         let mapsize = usize::pow(2, 20);   
-        let countmapsize = 8;
         // set the file equal to where were mapping the count and the actual map
         let _newsize = f.set_len((countmapsize + mapsize) as u64).unwrap();
 
@@ -323,7 +323,7 @@ impl EmulatedFileMap {
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize as isize), mapsize, mapsize);
         }
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), countmapsize: countmapsize, mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
 
     }
 
@@ -385,7 +385,7 @@ impl EmulatedFileMap {
 
         // add another 1MB to mapsize
         let new_mapsize = self.mapsize + usize::pow(2, 20);
-        let _newsize = f.set_len((self.countmapsize + new_mapsize) as u64).unwrap();
+        let _newsize = f.set_len((countmapsize + new_mapsize) as u64).unwrap();
 
         let newmap : Vec::<u8>;
         let newcountmap : Vec::<u8>;
@@ -394,14 +394,14 @@ impl EmulatedFileMap {
         // destruct count and map and re-map
         unsafe {
             let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
-            assert_eq!(self.countmapsize, countlen);
+            assert_eq!(countmapsize, countlen);
             let (_old_map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
-            let map_addr = mremap(old_count_map_addr as *mut c_void, self.countmapsize + self.mapsize, self.countmapsize + new_mapsize, MREMAP_MAYMOVE);
+            let map_addr = mremap(old_count_map_addr as *mut c_void, countmapsize + self.mapsize, countmapsize + new_mapsize, MREMAP_MAYMOVE);
 
-            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, self.countmapsize, self.countmapsize);
+            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, countmapsize, countmapsize);
             let map_ptr = map_addr as *mut u8;
-            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(self.countmapsize as isize), new_mapsize, new_mapsize);
+            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(countmapsize as isize), new_mapsize, new_mapsize);
         }
 
         // replace maps
@@ -423,8 +423,8 @@ impl EmulatedFileMap {
         unsafe {
 
             let (countmap_addr, countlen, _countcap) = countmap.into_raw_parts();
-            assert_eq!(self.countmapsize, countlen);
-            munmap(countmap_addr as *mut c_void, 8);
+            assert_eq!(countmapsize, countlen);
+            munmap(countmap_addr as *mut c_void, countmapsize);
 
             let (map_addr, len, _cap) = map.into_raw_parts();
             assert_eq!(self.mapsize, len);
@@ -433,6 +433,12 @@ impl EmulatedFileMap {
     
         Ok(())
     }
+}
+
+// convert a series of big endian bytes to a size
+pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
+    let sizearray = bytes_to_write.try_into().unwrap();
+    usize::from_be_bytes(*sizearray)
 }
 
 
