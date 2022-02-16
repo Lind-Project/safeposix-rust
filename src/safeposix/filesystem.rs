@@ -208,7 +208,7 @@ pub fn load_fs_special_files(utilcage: &Cage) {
     }
 }
 
-// Serialize New Metadata to JSON, write to logfile
+// Serialize New Metadata to CBOR, write to logfile
 pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
     // pack and serialize log entry
@@ -222,25 +222,25 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     map.write_to_map(&entrybytes).unwrap();
 }
 
-// Serialize Metadata Struct to JSON, write to file
+// Serialize Metadata Struct to CBOR, write to file
 pub fn persist_metadata(metadata: &FilesystemMetadata) {
   
     // Serialize metadata to string
-    let entrybytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
+    let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
     let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadata_fileobj.writefile_from_bytes(&entrybytes).unwrap();
+    metadata_fileobj.writefile_from_bytes(&metadatabytes).unwrap();
     metadata_fileobj.close().unwrap();
 }
 
-// Read file, and deserialize json to FS METADATA
+// Read file, and deserialize CBOR to FS METADATA
 pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
-    // Read JSON from file
+    // Read CBOR from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
     let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
     metadata_fileobj.close().unwrap();

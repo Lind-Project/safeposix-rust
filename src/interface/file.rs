@@ -5,7 +5,7 @@
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, canonicalize};
 use std::env;
 use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
@@ -46,7 +46,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path)?; //will return an error if the file does not exist
+    let absolute_filename = canonicalize(&path)?; //will return an error if the file does not exist
 
     fs::remove_file(absolute_filename)?;
 
@@ -276,7 +276,8 @@ impl EmulatedFile {
     }
 }
 
-pub static COUNTMAPSIZE : usize = 8;
+pub const COUNTMAPSIZE : usize = 8;
+pub const MAP_1MB : usize = usize::pow(2, 20);
 
 #[derive(Debug)]
 pub struct EmulatedFileMap {
@@ -307,10 +308,10 @@ impl EmulatedFileMap {
 
         let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
         let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
-        let absolute_filename = fs::canonicalize(&path)?;
+        let absolute_filename = canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
-        let mapsize = usize::pow(2, 20);   
+        let mapsize = MAP_1MB;   
         // set the file equal to where were mapping the count and the actual map
         let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
 
@@ -331,41 +332,20 @@ impl EmulatedFileMap {
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
 
+        let writelen = bytes_to_write.len();
+        
+        // if we're writing past the current map, increase the map another 1MB
+        if writelen + self.count > self.mapsize {
+            self.extend_map();
+        }
 
         let mut mapopt = self.map.lock().unwrap();
         let map = mapopt.as_deref_mut().unwrap();
 
-        let writelen = bytes_to_write.len();
-
-        // if were writing to space left in current map, its easy
-        if writelen + self.count < self.mapsize {
-
-            let mapslice = &mut map[self.count..(self.count + writelen)];
-            mapslice.copy_from_slice(bytes_to_write);
-            self.count += writelen;
-       
-        } else {
-            // other wise break up write into remaining space
-            let firstwrite = self.mapsize - self.count;
-            let secondwrite = writelen - firstwrite;
-
-            let mapslice = &mut map[self.count..(self.count + firstwrite)];
-            mapslice.copy_from_slice(&bytes_to_write[0..firstwrite]);
-            self.count += firstwrite;
-
-            // increase the map another 1MB
-            drop(mapopt);
-            self.increase_map();
-
-            // and write the second half
-            let mut mapopt = self.map.lock().unwrap();
-            let map = mapopt.as_deref_mut().unwrap();
-
-            let mapslice = &mut map[self.count..(self.count + secondwrite)];
-            mapslice.copy_from_slice(&bytes_to_write[firstwrite..]);
-            self.count += secondwrite;
-
-        }
+        let mapslice = &mut map[self.count..(self.count + writelen)];
+        mapslice.copy_from_slice(bytes_to_write);
+        self.count += writelen;
+    
 
         // update the bytes written in the map portion
         let mut countmapopt = self.countmap.lock().unwrap();
@@ -373,25 +353,23 @@ impl EmulatedFileMap {
         countmap.copy_from_slice(&self.count.to_be_bytes());
 
         Ok(())
-
     }
 
-    fn increase_map(&mut self) {
+    fn extend_map(&mut self) {
 
         // open count and map to resize mmap, and file to increase file size
         let mut mapopt = self.map.lock().unwrap();
-        let map = mapopt.take().unwrap();        
+        let map = mapopt.take().unwrap();
         let mut countmapopt = self.countmap.lock().unwrap();
-        let countmap = countmapopt.take().unwrap(); 
+        let countmap = countmapopt.take().unwrap();
         let f = self.fobj.lock().unwrap();
 
         // add another 1MB to mapsize
-        let new_mapsize = self.mapsize + usize::pow(2, 20);
+        let new_mapsize = self.mapsize + MAP_1MB;
         let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
 
         let newmap : Vec::<u8>;
         let newcountmap : Vec::<u8>;
-
 
         // destruct count and map and re-map
         unsafe {
@@ -442,8 +420,6 @@ pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
     let sizearray : [u8; 8] = bytes_to_write.try_into().unwrap();
     usize::from_be_bytes(sizearray)
 }
-
-
 
 #[cfg(test)]
 mod tests {
