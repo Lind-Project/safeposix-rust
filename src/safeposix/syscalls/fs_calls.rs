@@ -70,6 +70,7 @@ impl Cage {
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
+                log_metadata(&mutmetadata, pardirinode);
                 log_metadata(&mutmetadata, newinodenum);
 
             }
@@ -178,6 +179,7 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
                 mutmetadata.inodetable.insert(newinodenum, newinode);
+                log_metadata(&mutmetadata, pardirinode);
                 log_metadata(&mutmetadata, newinodenum);
                 0 //mkdir has succeeded
             }
@@ -229,6 +231,7 @@ impl Cage {
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
+                log_metadata(&mutmetadata, pardirinode);
                 log_metadata(&mutmetadata, newinodenum);
                 0 //mknod has succeeded
             }
@@ -268,6 +271,7 @@ impl Cage {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
+                                    log_metadata(&mutmetadata, pardirinode);
                                     log_metadata(&mutmetadata, inodenum);
                                 } //insert a reference to the inode in the parent directory
                                 0 //link has succeeded
@@ -286,6 +290,7 @@ impl Cage {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
+                                    log_metadata(&mutmetadata, pardirinode);
                                     log_metadata(&mutmetadata, inodenum);
                                 } //insert a reference to the inode in the parent directory
                                 0 //link has succeeded
@@ -350,6 +355,7 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
+                log_metadata(&mutmetadata, parentinodenum);
                 log_metadata(&mutmetadata, inodenum);
                 0 //unlink has succeeded
             }
@@ -1555,7 +1561,7 @@ impl Cage {
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
-
+                        log_metadata(&mutmetadata, parent_inodenum);
                         log_metadata(&metadata, inodenum);       
                         0 // success
                     }
