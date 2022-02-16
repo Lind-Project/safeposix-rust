@@ -440,7 +440,7 @@ impl EmulatedFileMap {
 // convert a series of big endian bytes to a size
 pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
     let sizearray : [u8; 8] = bytes_to_write.try_into().unwrap();
-    usize::from_be_bytes(*sizearray)
+    usize::from_be_bytes(sizearray)
 }
 
 
