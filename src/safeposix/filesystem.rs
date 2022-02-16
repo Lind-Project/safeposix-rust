@@ -179,8 +179,8 @@ pub fn load_fs() {
 }
 
 pub fn fsck(metadata: &FilesystemMetadata) {
-    for (inodenum, inode) in mutmetadata.inodetable.iter() {
-        if inode.linkcount == 0 {mutmetadata.inodetable.remove(&inodenum)};
+    for (inodenum, inode) in metadata.inodetable.iter() {
+        if inode.linkcount == 0 {metadata.inodetable.remove(&inodenum)};
     }
 }
 
