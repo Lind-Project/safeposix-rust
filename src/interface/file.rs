@@ -416,10 +416,9 @@ impl EmulatedFileMap {
         openfiles.remove(&self.filename);
 
         let mut mapopt = self.map.lock().unwrap();
-        let mut map = mapopt.take().unwrap();
-
+        let map = mapopt.take().unwrap();
         let mut countmapopt = self.countmap.lock().unwrap();
-        let mut countmap = countmapopt.take().unwrap();
+        let countmap = countmapopt.take().unwrap();
 
         unsafe {
 

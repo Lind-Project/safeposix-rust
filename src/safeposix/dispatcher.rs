@@ -438,8 +438,8 @@ pub extern "C" fn lindrustfinalize() {
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
         let mut logobj = LOGMAP.write().unwrap();
-        let mut log = logobj.take().unwrap();
-        log.close();
+        let log = logobj.take().unwrap();
+        let _close = log.close().unwrap();
         let _logremove = interface::removefile(LOGFILENAME.to_string());
     }
 }
