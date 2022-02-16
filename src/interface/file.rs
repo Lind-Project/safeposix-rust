@@ -311,7 +311,7 @@ impl EmulatedFileMap {
         let absolute_filename = canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
-        let mapsize = MAP_1MB;   
+        let mapsize = MAP_1MB - COUNTMAPSIZE;   
         // set the file equal to where were mapping the count and the actual map
         let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
 
@@ -320,7 +320,7 @@ impl EmulatedFileMap {
 
         // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, COUNTMAPSIZE + mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
             countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
             let map_ptr = map_addr as *mut u8;
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
