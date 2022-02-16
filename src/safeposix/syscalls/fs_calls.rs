@@ -1250,7 +1250,7 @@ impl Cage {
                                 mutmetadata.inodetable.remove(&inodenum);
                                 log_metadata(&mutmetadata, inodenum);     
                             } 
-                        }
+                        },
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
 
