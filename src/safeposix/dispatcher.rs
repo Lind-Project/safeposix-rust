@@ -197,11 +197,11 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 check_and_dispatch!(cage.recvfrom_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&mut Option<&mut interface::GenSockaddr>, i32>(&mut None))
             } else if !(nullity1 || nullity2) {
                 let addrlen = get_onearg!(interface::get_socklen_t_ptr(arg6));
-                let mut addr = get_onearg!(interface::get_sockaddr(arg5, addrlen));
-                let rv = check_and_dispatch!(cage.recvfrom_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&mut Option<&mut interface::GenSockaddr>, i32>(&mut Some(&mut addr)));
+                let mut newsockaddr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //dummy value, rust would complain if we used an uninitialized value here
+                let rv = check_and_dispatch!(cage.recvfrom_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_int(arg4), Ok::<&mut Option<&mut interface::GenSockaddr>, i32>(&mut Some(&mut newsockaddr)));
 
                 if rv >= 0 {
-                    interface::copy_out_sockaddr(arg5, arg6, addr);
+                    interface::copy_out_sockaddr(arg5, arg6, newsockaddr);
                 }
                 rv
             } else {
