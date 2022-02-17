@@ -189,7 +189,7 @@ pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
         } else if let Inode::CharDev(dev_inode_obj) = inode_obj {
             dev_inode_obj.linkcount != 0
         }
-    });
+    )};
 }
 
 pub fn create_log() {
