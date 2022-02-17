@@ -70,7 +70,9 @@ impl Cage {
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-                persist_metadata(&mutmetadata);
+                log_metadata(&mutmetadata, pardirinode);
+                log_metadata(&mutmetadata, newinodenum);
+
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -177,8 +179,8 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-
-                persist_metadata(&mutmetadata);
+                log_metadata(&mutmetadata, pardirinode);
+                log_metadata(&mutmetadata, newinodenum);
                 0 //mkdir has succeeded
             }
 
@@ -229,8 +231,8 @@ impl Cage {
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
-
-                persist_metadata(&mutmetadata);
+                log_metadata(&mutmetadata, pardirinode);
+                log_metadata(&mutmetadata, newinodenum);
                 0 //mknod has succeeded
             }
 
@@ -269,8 +271,9 @@ impl Cage {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
+                                    log_metadata(&mutmetadata, pardirinode);
+                                    log_metadata(&mutmetadata, inodenum);
                                 } //insert a reference to the inode in the parent directory
-                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -287,8 +290,9 @@ impl Cage {
                                 if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
+                                    log_metadata(&mutmetadata, pardirinode);
+                                    log_metadata(&mutmetadata, inodenum);
                                 } //insert a reference to the inode in the parent directory
-                                persist_metadata(&mutmetadata);
                                 0 //link has succeeded
                             }
 
@@ -351,8 +355,8 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
-                persist_metadata(&mutmetadata);
-
+                log_metadata(&mutmetadata, parentinodenum);
+                log_metadata(&mutmetadata, inodenum);
                 0 //unlink has succeeded
             }
 
@@ -734,7 +738,7 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
-                                    persist_metadata(&metadata);
+                                    log_metadata(&metadata, normalfile_filedesc_obj.inode);
                                 } //update file size if necessary
                                 
                                 byteswritten as i32
@@ -837,7 +841,7 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
-                               persist_metadata(&metadata);
+                               log_metadata(&metadata, normalfile_filedesc_obj.inode);                            
                             } //update file size if necessary
 
                             retval
@@ -1230,7 +1234,7 @@ impl Cage {
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                 } 
-                                persist_metadata(&mutmetadata);
+                                log_metadata(&mutmetadata, inodenum);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
@@ -1244,9 +1248,9 @@ impl Cage {
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
-                                persist_metadata(&mutmetadata);
+                                log_metadata(&mutmetadata, inodenum);     
                             } 
-                        }
+                        },
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
 
@@ -1258,7 +1262,7 @@ impl Cage {
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 mutmetadata.inodetable.remove(&inodenum);
-                                persist_metadata(&mutmetadata);
+                                log_metadata(&mutmetadata, inodenum);
                             } 
                         }
                     }
@@ -1392,6 +1396,7 @@ impl Cage {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     }
                 }
+                log_metadata(&metadata, inodenum);
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1400,7 +1405,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
-        persist_metadata(&metadata);
         0 //success!
     }
 
@@ -1557,7 +1561,8 @@ impl Cage {
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
                             parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
-                        persist_metadata(&metadata);
+                        log_metadata(&metadata, parent_inodenum);
+                        log_metadata(&metadata, inodenum);       
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1593,14 +1598,15 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 
-                if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                let pardir_inodeobj = metadata.inodetable.get_mut(&parent_inodenum).unwrap();
+                if let Inode::Dir(parent_dir) = pardir_inodeobj {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
 
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
+                    log_metadata(&metadata, parent_inodenum);       
                 }
-                persist_metadata(&metadata);
                 0 // success
             }
         }
@@ -1646,7 +1652,7 @@ impl Cage {
                                      // extra data are cut off
                                 fileobject.shrink(length as usize).unwrap();
                             } 
-                            persist_metadata(&mutmetadata);
+                            log_metadata(&mutmetadata, inodenum);    
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");

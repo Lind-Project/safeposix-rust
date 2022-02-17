@@ -9,6 +9,15 @@ use super::cage::Cage;
 
 pub const METADATAFILENAME: &str = "lind.metadata";
 
+pub const LOGFILENAME: &str = "lind.md.log";
+
+pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
+    interface::RustLazyGlobal::new(|| 
+        interface::RustRfc::new(interface::RustLock::new(None))
+);
+
+
+
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
@@ -19,7 +28,7 @@ type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
 pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
     interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
 
-#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug,)]
 pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
@@ -123,16 +132,75 @@ pub fn load_fs() {
 
         metadata_fileobj.close().unwrap();
         restore_metadata(&mut mutmetadata);
+
+        // if we have a log file at this point, we need to sync it with the existing metadata
+        if interface::pathexists(LOGFILENAME.to_string()) {
+
+            let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
+            // read log file and parse count
+            let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
+            let logsize = interface::convert_bytes_to_size(&logread[0..interface::COUNTMAPSIZE]);
+
+            // create vec of log file bounded by indefinite encoding bytes (0x9F, 0xFF)
+            let mut logbytes: Vec<u8> = Vec::new();
+            logbytes.push(0x9F);
+            logbytes.extend_from_slice(&mut logread[interface::COUNTMAPSIZE..(interface::COUNTMAPSIZE + logsize)]);
+            logbytes.push(0xFF);
+            let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
+
+            // drain the vector and deserialize into pairs of inodenum + inodes,
+            // if the inode exists, add it, if not, remove it
+            for serialpair in logvec.drain(..) {
+                let (inodenum, inode) = serialpair;
+                match inode {
+                    Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
+                    None => mutmetadata.inodetable.remove(&inodenum),
+                };
+            }
+
+            let _logclose = log_fileobj.close();
+            let _logremove = interface::removefile(LOGFILENAME.to_string());
+
+            // clean up broken links
+            fsck(&mut mutmetadata);
+        }
+
+        // then recreate the log
+        create_log();
+
+
     } else {
        *mutmetadata = FilesystemMetadata::blank_fs_init();
        drop(mutmetadata);
+       create_log();
 
        load_fs_special_files(&utilcage);
-
        let metadata = FS_METADATA.read().unwrap();
        persist_metadata(&metadata);
     }
+}
 
+pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
+    mutmetadata.inodetable.retain(|_inodenum, inode_obj| {
+        match inode_obj {
+            Inode::File(ref mut normalfile_inode) => {
+                normalfile_inode.linkcount != 0
+            },
+            Inode::Dir(ref mut dir_inode) => {
+                dir_inode.linkcount != 0
+            },
+            Inode::CharDev(ref mut char_inodej) => {
+                char_inodej.linkcount != 0
+            },
+         }
+    });
+}
+
+pub fn create_log() {
+    // reinstantiate the log file and assign it to the metadata struct
+    let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
+    let mut logobj = LOGMAP.write().unwrap();
+    logobj.replace(log_mapobj);
 }
 
 pub fn load_fs_special_files(utilcage: &Cage) {
@@ -158,31 +226,45 @@ pub fn load_fs_special_files(utilcage: &Cage) {
     }
 }
 
-// Serialize Metadata Struct to JSON, write to file
+// Serialize New Metadata to CBOR, write to logfile
+pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
+  
+    // pack and serialize log entry
+    let inode = metadata.inodetable.get(&inodenum);
+    let serialpair: (usize, Option<&Inode>) = (inodenum, inode);
+    let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
+
+    // write to file
+    let mut mapopt = LOGMAP.write().unwrap();
+    let map = mapopt.as_mut().unwrap();
+    map.write_to_map(&entrybytes).unwrap();
+}
+
+// Serialize Metadata Struct to CBOR, write to file
 pub fn persist_metadata(metadata: &FilesystemMetadata) {
   
     // Serialize metadata to string
-    let metadatastring = interface::serde_serialize_to_string(&metadata).unwrap();
+    let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
     let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    metadata_fileobj.writefile_from_string(metadatastring, 0).unwrap();
+    metadata_fileobj.writefile_from_bytes(&metadatabytes).unwrap();
     metadata_fileobj.close().unwrap();
 }
 
-// Read file, and deserialize json to FS METADATA
+// Read file, and deserialize CBOR to FS METADATA
 pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
-    // Read JSON from file
+    // Read CBOR from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatastring = metadata_fileobj.readfile_to_new_string(0).unwrap();
+    let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    *metadata = interface::serde_deserialize_from_string(&metadatastring).unwrap();
+    *metadata = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {

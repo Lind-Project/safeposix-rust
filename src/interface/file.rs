@@ -5,15 +5,20 @@
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, canonicalize};
 use std::env;
 use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
-pub use std::lazy::SyncLazy as RustLazyGlobal;
+pub use std::lazy::{SyncLazy as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use std::ffi::c_void;
+use std::convert::TryInto;
+
+
 
 static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
 
@@ -41,7 +46,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path)?; //will return an error if the file does not exist
+    let absolute_filename = canonicalize(&path)?; //will return an error if the file does not exist
 
     fs::remove_file(absolute_filename)?;
 
@@ -80,6 +85,7 @@ pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile>
     EmulatedFile::new(filename, create)
 }
 
+#[derive(Debug)]
 pub struct EmulatedFile {
     filename: String,
     abs_filename: RustPathBuf,
@@ -198,30 +204,26 @@ impl EmulatedFile {
         Ok(bytes_written)
     }
 
-    // Reads entire file into provided C-buffer
-    pub fn readfile_to_new_string(&self, offset: usize) -> std::io::Result<String> {
-
+    // Reads entire file into bytes
+    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut stringbuf = String::new();
+                let mut stringbuf = Vec::new();
                 let mut fobj = f.lock().unwrap();
-                if offset > self.filesize {
-                    panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                fobj.read_to_string(&mut stringbuf)?;
+                fobj.read_to_end(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
         }
     }
 
-    // Write to entire file from provided C-buffer
-    pub fn writefile_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
+    // Write to entire file from provided bytes
+    pub fn writefile_from_bytes(&mut self, buf: &[u8]) -> std::io::Result<()> {
 
         let length = buf.len();
-
+        let offset = self.filesize;
+    
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
@@ -230,7 +232,7 @@ impl EmulatedFile {
                     panic!("Seek offset extends past the EOF!");
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
-                fobj.write(buf.as_bytes())?;
+                fobj.write(buf)?;
             }
         }
 
@@ -272,6 +274,151 @@ impl EmulatedFile {
             -1
         }
     }
+}
+
+pub const COUNTMAPSIZE : usize = 8;
+pub const MAP_1MB : usize = usize::pow(2, 20);
+
+#[derive(Debug)]
+pub struct EmulatedFileMap {
+    filename: String,
+    abs_filename: RustPathBuf,
+    fobj: Arc<Mutex<File>>,
+    map: Arc<Mutex<Option<Vec<u8>>>>,
+    count: usize,
+    countmap:  Arc<Mutex<Option<Vec<u8>>>>,
+    mapsize: usize
+}
+
+pub fn mapfilenew(filename: String) -> std::io::Result<EmulatedFileMap> {
+    EmulatedFileMap::new(filename)
+}
+
+impl EmulatedFileMap {
+
+    fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
+        // create new file like a normal emulated file, but always create
+        assert_is_allowed_filename(&filename);
+
+        let mut openfiles = OPEN_FILES.lock().unwrap();
+
+        if openfiles.contains(&filename) {
+            panic!("FileInUse");
+        }
+
+        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        let absolute_filename = canonicalize(&path)?;
+        openfiles.insert(filename.clone());
+
+        let mapsize = MAP_1MB - COUNTMAPSIZE;   
+        // set the file equal to where were mapping the count and the actual map
+        let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
+
+        let map : Vec::<u8>;
+        let countmap : Vec::<u8>;
+
+        // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
+        unsafe {
+            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
+            let map_ptr = map_addr as *mut u8;
+            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
+        }
+        
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
+
+    }
+
+    pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
+
+        let writelen = bytes_to_write.len();
+        
+        // if we're writing past the current map, increase the map another 1MB
+        if writelen + self.count > self.mapsize {
+            self.extend_map();
+        }
+
+        let mut mapopt = self.map.lock().unwrap();
+        let map = mapopt.as_deref_mut().unwrap();
+
+        let mapslice = &mut map[self.count..(self.count + writelen)];
+        mapslice.copy_from_slice(bytes_to_write);
+        self.count += writelen;
+    
+
+        // update the bytes written in the map portion
+        let mut countmapopt = self.countmap.lock().unwrap();
+        let countmap = countmapopt.as_deref_mut().unwrap();
+        countmap.copy_from_slice(&self.count.to_be_bytes());
+
+        Ok(())
+    }
+
+    fn extend_map(&mut self) {
+
+        // open count and map to resize mmap, and file to increase file size
+        let mut mapopt = self.map.lock().unwrap();
+        let map = mapopt.take().unwrap();
+        let mut countmapopt = self.countmap.lock().unwrap();
+        let countmap = countmapopt.take().unwrap();
+        let f = self.fobj.lock().unwrap();
+
+        // add another 1MB to mapsize
+        let new_mapsize = self.mapsize + MAP_1MB;
+        let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
+
+        let newmap : Vec::<u8>;
+        let newcountmap : Vec::<u8>;
+
+        // destruct count and map and re-map
+        unsafe {
+            let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
+            assert_eq!(COUNTMAPSIZE, countlen);
+            let (_old_map_addr, len, _cap) = map.into_raw_parts();
+            assert_eq!(self.mapsize, len);
+            let map_addr = mremap(old_count_map_addr as *mut c_void, COUNTMAPSIZE + self.mapsize, COUNTMAPSIZE + new_mapsize, MREMAP_MAYMOVE);
+
+            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
+            let map_ptr = map_addr as *mut u8;
+            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), new_mapsize, new_mapsize);
+        }
+
+        // replace maps
+        mapopt.replace(newmap);
+        countmapopt.replace(newcountmap);
+        self.mapsize = new_mapsize;
+    }
+
+    pub fn close(&self) -> std::io::Result<()> {
+        // remove file as open file and deconstruct map
+        let mut openfiles = OPEN_FILES.lock().unwrap();
+        openfiles.remove(&self.filename);
+
+        let mut mapopt = self.map.lock().unwrap();
+        let map = mapopt.take().unwrap();
+        let mut countmapopt = self.countmap.lock().unwrap();
+        let countmap = countmapopt.take().unwrap();
+
+        unsafe {
+
+            let (countmap_addr, countlen, _countcap) = countmap.into_raw_parts();
+            assert_eq!(COUNTMAPSIZE, countlen);
+            munmap(countmap_addr as *mut c_void, COUNTMAPSIZE);
+
+            let (map_addr, len, _cap) = map.into_raw_parts();
+            assert_eq!(self.mapsize, len);
+            munmap(map_addr as *mut c_void, self.mapsize);
+        }
+    
+        Ok(())
+    }
+}
+
+// convert a series of big endian bytes to a size
+pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
+    let sizearray : [u8; 8] = bytes_to_write.try_into().unwrap();
+    usize::from_be_bytes(sizearray)
 }
 
 #[cfg(test)]
