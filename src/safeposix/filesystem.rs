@@ -160,6 +160,9 @@ pub fn load_fs() {
 
             let _logclose = log_fileobj.close();
             let _logremove = interface::removefile(LOGFILENAME.to_string());
+
+            // clean up broken links
+            fsck(&mut mutmetadata);
         }
 
         // then recreate the log
@@ -175,6 +178,18 @@ pub fn load_fs() {
        let metadata = FS_METADATA.read().unwrap();
        persist_metadata(&metadata);
     }
+}
+
+pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
+    mutmetadata.inodetable.retain(|inodenum, inode_obj| {
+        if let Inode::File(normalfile_inode_obj) = inode_obj {
+            normalfile_inode_obj.linkcount != 0
+        } else if let Inode::Dir(directory_inode_obj) = inode_obj {
+            directory_inode_obj.linkcount != 0
+        }else if let Inode::CharDev(dev_inode_obj) = inode_obj {
+            dev_inode_obj.linkcount != 0
+        }
+    });
 }
 
 pub fn create_log() {
