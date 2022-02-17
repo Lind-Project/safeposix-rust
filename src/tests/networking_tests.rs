@@ -24,6 +24,7 @@ pub mod net_tests {
         ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
         ut_lind_net_gethostname();
+        ut_lind_net_dns_rootserver_ping();
     }
 
 
@@ -1185,6 +1186,91 @@ pub mod net_tests {
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
         
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_dns_rootserver_ping() {
+        //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
+        #[repr(C)]
+        struct DnsHeader {
+            xid: u16,
+            flags: u16,
+            qdcount: u16,
+            ancount: u16,
+            nscount: u16,
+            arcount: u16
+        }
+
+        /* Structure of the bytes for an IPv4 answer */
+        #[repr(C, packed(1))]
+        struct DnsRecordAT {
+            compression: u16,
+            typ: u16,
+            clas: u16,
+            ttl: u32,
+            length: u16,
+            addr: interface::V4Addr,
+        }
+
+        lindrustinit(0);
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+
+        let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        assert!(dnssocket > 0);
+
+        let dnsh = DnsHeader {
+            xid: 0x1234u16.to_be(),
+            flags: 0x0100u16.to_be(), 
+            qdcount: 0x0001u16.to_be(),
+            ancount: 0,
+            nscount: 0,
+            arcount: 0,
+        };
+
+        //specify payload information for dns request
+        let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes();//numbers signify how many characters until next dot
+        let dnstype = 1u16; 
+        let dnsclass = 1u16;
+
+        //construct packet
+        let packetlen = std::mem::size_of::<DnsHeader>() + hostname.len() + std::mem::size_of::<u16>() + std::mem::size_of::<u16>();
+        let mut packet = vec![0u8;packetlen];
+
+        let packslice = packet.as_mut_slice();
+        let mut pslen = std::mem::size_of::<DnsHeader>();
+        unsafe {
+          let dnss = ::std::slice::from_raw_parts(((&dnsh) as *const DnsHeader) as *const u8, std::mem::size_of::<DnsHeader>());
+          packslice[..pslen].copy_from_slice(dnss);
+        }
+        packslice[pslen..pslen+hostname.len()].copy_from_slice(hostname.as_slice());
+        pslen += hostname.len();
+        packslice[pslen..pslen+2].copy_from_slice(&dnstype.to_be_bytes());
+        packslice[pslen+2..pslen+4].copy_from_slice(&dnsclass.to_be_bytes());
+
+        //send packet
+        let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([208, 67, 222, 222]) }, padding: 0}); //opendns ip addr
+        assert_eq!(cage.sendto_syscall(dnssocket, packslice.as_ptr(), packslice.len(), 0, &dnsaddr), packslice.len() as i32);
+
+        let mut dnsresp = [0u8; 512];
+
+        //recieve DNS response
+        let _resplen = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
+
+        //extract packet header
+        let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader)};
+        assert_eq!(u16::from_be(response_header.flags) & 0xf, 0);
+
+        //skip over the name
+        let mut nameptr = std::mem::size_of::<DnsHeader>();
+        while dnsresp[nameptr] != 0 {
+            nameptr += dnsresp[nameptr] as usize + 1;
+        }
+
+        //next we need to skip the null byte, qtype, and qclass to extract the main response payload
+        let recordptr = dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
+        let record = unsafe{&*recordptr};
+        assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+
         lindrustfinalize();
     }
 }
