@@ -186,7 +186,7 @@ pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
             normalfile_inode_obj.linkcount != 0
         } else if let Inode::Dir(directory_inode_obj) = inode_obj {
             directory_inode_obj.linkcount != 0
-        }else if let Inode::CharDev(dev_inode_obj) = inode_obj {
+        } else if let Inode::CharDev(dev_inode_obj) = inode_obj {
             dev_inode_obj.linkcount != 0
         }
     });
