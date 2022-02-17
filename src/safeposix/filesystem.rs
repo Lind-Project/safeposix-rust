@@ -181,7 +181,7 @@ pub fn load_fs() {
 }
 
 pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
-    mutmetadata.inodetable.retain(|inodenum, inode_obj| {
+    mutmetadata.inodetable.retain(|_inodenum, inode_obj| {
         match inode_obj {
             Inode::File(ref mut normalfile_inode) => {
                 normalfile_inode.linkcount != 0
