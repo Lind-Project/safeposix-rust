@@ -184,13 +184,13 @@ pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
     mutmetadata.inodetable.retain(|inodenum, inode_obj| {
         match inode_obj {
             Inode::File(ref mut normalfile_inode) => {
-                if normalfile_inode.linkcount != 0
+                normalfile_inode.linkcount != 0
             },
             Inode::Dir(ref mut dir_inode) => {
-                if dir_inode.linkcount != 0
+                dir_inode.linkcount != 0
             },
             Inode::CharDev(ref mut char_inodej) => {
-                if char_inodej.linkcount != 0
+                char_inodej.linkcount != 0
             },
          }
     });
