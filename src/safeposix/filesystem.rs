@@ -160,9 +160,6 @@ pub fn load_fs() {
 
             let _logclose = log_fileobj.close();
             let _logremove = interface::removefile(LOGFILENAME.to_string());
-
-            // clean up broken links
-            fsck(&mut mutmetadata);
         }
 
         // then recreate the log
@@ -178,29 +175,6 @@ pub fn load_fs() {
        let metadata = FS_METADATA.read().unwrap();
        persist_metadata(&metadata);
     }
-}
-
-pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
-
-    let mut inodes_to_remove = Vec::new();
-    for (inodenum, inode) in mutmetadata.inodetable.iter_mut() {
-        match inode {
-            Inode::File(ref mut normalfile_inode) => {
-                if normalfile_inode.linkcount == 0 { inodes_to_remove.push(inodenum) }
-            },
-            Inode::Dir(ref mut dir_inode) => {
-                if dir_inode.linkcount == 0 { inodes_to_remove.push(inodenum) }
-            },
-            Inode::CharDev(ref mut char_inodej) => {
-                if char_inodej.linkcount == 0 { inodes_to_remove.push(inodenum) }
-            },
-         }
-    }
-    
-    for inodenum in inodes_to_remove {
-        mutmetadata.inodetable.remove(&inodenum);
-    }
-
 }
 
 pub fn create_log() {
