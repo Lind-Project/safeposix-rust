@@ -79,7 +79,7 @@ pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDe
 }
 
 // Wrapper to return a dictionary (hashmap)
-pub fn new_hashmap<K: std::cmp::Eq, V>() -> RustHashMap<K, V> {
+pub fn new_hashmap<K: std::cmp::Eq + std::hash::Hash, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
 }
 
