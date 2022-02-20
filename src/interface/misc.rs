@@ -7,7 +7,7 @@
 use std::fs::File;
 use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap};
-pub use std::collections::{VecDeque as RustDeque};
+pub use std::collections::{HashMap as RustHashMap, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32};
 pub use std::thread::spawn as helper_thread;
@@ -76,11 +76,6 @@ pub fn copy_fromrustdeque_sized(bufptr: *mut u8, count: usize, vecdeq: &RustDequ
 pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDeque<u8>) {
     let byteslice = unsafe {std::slice::from_raw_parts(bufptr, count)};
     vecdeq.extend(byteslice.iter());
-}
-
-// Wrapper to return a dictionary (hashmap)
-pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
-    RustHashMap::new()
 }
 
 pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
