@@ -9,15 +9,15 @@ use super::cage::Cage;
 
 pub const METADATAFILENAME: &str = "lind.metadata";
 
-pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<FilesystemMetadata>>> = 
+pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
     interface::RustLazyGlobal::new(||
-        interface::RustRfc::new(interface::RustLock::new(FilesystemMetadata::blank_fs_init()))
+        interface::RustRfc::new(FilesystemMetadata::blank_fs_init())
     ); //we want to check if fs exists before doing a blank init, but not for now
 
 
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
-pub static FILEOBJECTTABLE: interface::RustLazyGlobal<interface::RustLock<FileObjectTable>> = 
-    interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::RustHashMap::new()));
+pub static FILEOBJECTTABLE: interface::RustLazyGlobal<FileObjectTable> = 
+    interface::RustLazyGlobal::new(|| interface::RustHashMap::new());
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub enum Inode {
@@ -107,7 +107,7 @@ pub fn load_fs() {
     let utilcage = Cage{cageid: 0,
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
-        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        filedescriptortable: interface::RustHashMap::new(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
