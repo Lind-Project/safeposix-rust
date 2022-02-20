@@ -125,9 +125,7 @@ impl EmulatedFile {
     }
 
     pub fn close(&self) -> std::io::Result<()> {
-        let mut openfiles = &OPEN_FILES;
-
-        openfiles.remove(&self.filename);
+        OPEN_FILES.remove(&self.filename);
         Ok(())
     }
 
