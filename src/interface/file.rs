@@ -99,9 +99,7 @@ impl EmulatedFile {
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
         assert_is_allowed_filename(&filename);
 
-        let mut openfiles = OPEN_FILES.unwrap();
-
-        if openfiles.contains(&filename) {
+        if OPEN_FILES.contains(&filename) {
             panic!("FileInUse");
         }
 
@@ -119,7 +117,7 @@ impl EmulatedFile {
 
         let absolute_filename = fs::canonicalize(&path)?;
 
-        openfiles.insert(filename.clone());
+        OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len();
 
         Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
