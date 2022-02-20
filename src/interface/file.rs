@@ -16,7 +16,7 @@ pub use std::lazy::SyncLazy as RustLazyGlobal;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
-static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
+static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
 pub fn listfiles() -> Vec<String> {
     let paths = fs::read_dir(&RustPath::new(
