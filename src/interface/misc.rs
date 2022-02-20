@@ -6,7 +6,7 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap};
+pub use dashmap::{DashSet as RustHashSet};
 pub use std::collections::{HashMap as RustHashMap, VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32};
