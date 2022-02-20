@@ -83,7 +83,7 @@ pub struct Cage {
     pub cageid: u64,
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
-    pub filedescriptortable: interface::RustLock<FdTable>,
+    pub filedescriptortable: FdTable,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
@@ -115,14 +115,14 @@ impl Cage {
     pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
         let mut ourwriter;
         let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
-            ourwriter = self.filedescriptortable.write().unwrap();
+            ourwriter = self.filedescriptortable;
             &mut ourwriter
         };
         writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
 
     pub fn rm_from_fd_table(&self, fd: &i32) {
-        self.filedescriptortable.write().unwrap().remove(fd);
+        self.filedescriptortable.remove(fd);
     }
 
     pub fn changedir(&self, newdir: interface::RustPathBuf) {
@@ -135,7 +135,7 @@ impl Cage {
         let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
         let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
         let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let mut fdtable = self.filedescriptortable.write().unwrap();
+        let mut fdtable = self.filedescriptortable;
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
         fdtable.insert(2, stderr);
