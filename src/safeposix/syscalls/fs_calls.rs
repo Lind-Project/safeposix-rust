@@ -787,7 +787,7 @@ impl Cage {
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
         let fdtable = self.filedescriptortable;
  
-        if let Some(wrappedfd) = fdtable.get(&fd) {
+        if let Some(wrappedfd) = *fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
 
             match &mut *filedesc_enum {
