@@ -99,7 +99,7 @@ impl EmulatedFile {
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
         assert_is_allowed_filename(&filename);
 
-        let mut openfiles = &OPEN_FILES;
+        let mut *openfiles = OPEN_FILES;
 
         if openfiles.contains(&filename) {
             panic!("FileInUse");
