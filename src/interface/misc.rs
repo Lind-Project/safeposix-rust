@@ -78,7 +78,7 @@ pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDe
     vecdeq.extend(byteslice.iter());
 }
 
-// Wrapper to return a dictionary (hashmap)
+// Wrapper to return a dictionary (dashmap)
 pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
 }
