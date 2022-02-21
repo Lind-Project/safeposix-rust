@@ -81,7 +81,7 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE;
                     if fobjtable.contains_key(&inodenum) {
                         fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
@@ -117,7 +117,7 @@ impl Cage {
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
-                let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                let mut fobjtable = FILEOBJECTTABLE;
                 if !fobjtable.contains_key(&inodenum) {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     fobjtable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
@@ -568,13 +568,13 @@ impl Cage {
                     }
 
                     let metadata = &FS_METADATA;
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
-                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
@@ -637,7 +637,7 @@ impl Cage {
                     //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
-                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
@@ -713,7 +713,7 @@ impl Cage {
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = position as isize - filesize as isize;
 
-                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
@@ -809,7 +809,7 @@ impl Cage {
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
 
-                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
@@ -1214,7 +1214,7 @@ impl Cage {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE;
 
                     match inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
@@ -1439,7 +1439,7 @@ impl Cage {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
                             //because of NaCl's internal workings we must allow mappings to extend past the end of a file
-                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobjtable = FILEOBJECTTABLE;
                             let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
                             //this is the system fd number--the number of the lind.<inodenum> file in our host system
@@ -1626,7 +1626,7 @@ impl Cage {
                         // only proceed when inode matches with a file
                         Inode::File(ref mut normalfile_inode_obj) => {
                             // get file object table with write lock
-                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE;
                             
                             let fileobject = fobjtable.get_mut(&inodenum).unwrap();
                             let filesize = normalfile_inode_obj.size as isize;
