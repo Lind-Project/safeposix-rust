@@ -460,7 +460,7 @@ impl Cage {
             //files based on the information in the inode.
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
-                    let inode = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let inode = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //populate those fields in statbuf which depend on things other than the inode object
                     statbuf.st_ino = normalfile_filedesc_obj.inode;
@@ -525,7 +525,7 @@ impl Cage {
 
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
-                    let _inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let _inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     return Self::_istatfs_helper(self, databuf);
                 },
@@ -575,7 +575,7 @@ impl Cage {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
                             let fobjtable = FILEOBJECTTABLE;
-                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode);
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
@@ -632,13 +632,13 @@ impl Cage {
                     }
 
                     let metadata = &FS_METADATA;
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //delegate to character if it's a character file, checking based on the type of the inode object
                     match inodeobj {
                         Inode::File(_) => {
                             let fobjtable = FILEOBJECTTABLE;
-                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode);
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
                                 bytesread as i32
@@ -702,7 +702,7 @@ impl Cage {
 
                     let mut metadata = FS_METADATA;
 
-                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode);
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
@@ -714,7 +714,7 @@ impl Cage {
                             let blankbytecount = position as isize - filesize as isize;
 
                             let mut fobjtable = FILEOBJECTTABLE;
-                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode);
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
                             if blankbytecount > 0 {
@@ -799,7 +799,7 @@ impl Cage {
 
                     let mut metadata = FS_METADATA;
 
-                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode);
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
@@ -810,7 +810,7 @@ impl Cage {
                             let blankbytecount = offset - filesize as isize;
 
                             let mut fobjtable = FILEOBJECTTABLE;
-                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode);
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
                             if blankbytecount > 0 {
@@ -892,7 +892,7 @@ impl Cage {
             match &mut *filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
                     let metadata = &FS_METADATA;
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //handle files/directories differently
                     match inodeobj {
@@ -1425,7 +1425,7 @@ impl Cage {
             match &mut *filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
                     let metadata = &FS_METADATA;
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //confirm inode type is mappable
                     match inodeobj {
@@ -1440,7 +1440,7 @@ impl Cage {
                             }
                             //because of NaCl's internal workings we must allow mappings to extend past the end of a file
                             let fobjtable = FILEOBJECTTABLE;
-                            let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobj = fobjtable.get(&normalfile_filedesc_obj.inode);
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
                             //this is the system fd number--the number of the lind.<inodenum> file in our host system
                             let fobjfdno = fobj.as_fd_handle_raw_int();
@@ -1736,7 +1736,7 @@ impl Cage {
                 // only proceed when fd represents a file
                 File(ref mut normalfile_filedesc_obj) => {
                     let metadata = &FS_METADATA;
-                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     match inodeobj {
                         // only proceed when inode is a dir
