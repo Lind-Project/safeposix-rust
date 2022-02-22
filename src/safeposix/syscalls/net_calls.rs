@@ -100,66 +100,66 @@ impl Cage {
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
+    fn bind_inner_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
+        if localaddr.get_family() != sockfdobj.domain as u16 {
+            return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
+        }
+        if sockfdobj.localaddr.is_some() {
+            return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
+        }
+
+        let mut mutmetadata = NET_METADATA.write().unwrap();
+        let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
+
+        let newlocalport = if prereserved {
+            localaddr.port()
+        } else {
+            let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
+            if let Err(errnum) = localout {return errnum;}
+            localout.unwrap()
+        };
+
+        let mut newsockaddr = localaddr.clone();
+        newsockaddr.set_port(newlocalport);
+
+        let sid = if let Some(id) = sockfdobj.socketobjectid {
+            id
+        } else {
+            let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+            let id = mutmetadata.insert_into_socketobjecttable(sock).unwrap();
+            sockfdobj.socketobjectid = Some(id);
+            id
+        } ;
+        let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+        let sockobj = locksock.read().unwrap();
+        let bindret = sockobj.bind(&newsockaddr);
+
+        if bindret < 0 {
+            match Errno::from_discriminant(interface::get_errno()) {
+                Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind failed!");},
+                Err(()) => panic!("Unknown errno value from socket bind returned!"),
+            };
+        }
+
+        sockfdobj.localaddr = Some(newsockaddr);
+ 
+        0
+    }
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
-
                 Socket(sockfdobj) => {
-                    if localaddr.get_family() != sockfdobj.domain as u16 {
-                        return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
-                    }
-                    if sockfdobj.localaddr.is_some() {
-                        return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
-                    }
-
-                    let mut mutmetadata = NET_METADATA.write().unwrap();
-                    let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
-
-                    let newlocalport = if prereserved {
-                        localaddr.port()
-                    } else {
-                        let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
-                        if let Err(errnum) = localout {return errnum;}
-                        localout.unwrap()
-                    };
-
-                    let mut newsockaddr = localaddr.clone();
-                    newsockaddr.set_port(newlocalport);
-
-                    let sid = if let Some(id) = sockfdobj.socketobjectid {
-                        id
-                    } else {
-                        let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                        let id = mutmetadata.insert_into_socketobjecttable(sock).unwrap();
-                        sockfdobj.socketobjectid = Some(id);
-                        id
-                    } ;
-                    let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
-                    let sockobj = locksock.read().unwrap();
-                    let bindret = sockobj.bind(&newsockaddr);
-
-                    if bindret < 0 {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind failed!");},
-                            Err(()) => panic!("Unknown errno value from socket bind returned!"),
-                        };
-                    }
-
-                    //we don't actually want/need to create the socket object now, that is done in listen or in connect or whatever
-                    sockfdobj.localaddr = Some(newsockaddr);
- 
-                    0
+                    self.bind_inner_socket(sockfdobj, localaddr, prereserved)
                 }
-
                 _ => {
-                    return syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket");
+                    syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket")
                 }
             }
         } else {
-            return syscall_error(Errno::EBADF, "bind", "invalid file descriptor");
+            syscall_error(Errno::EBADF, "bind", "invalid file descriptor")
         }
     }
 
@@ -221,10 +221,7 @@ impl Cage {
                                 };
 
                                 //unlock fdtable so that we're fine to call bind_inner
-                                drop(filedesc_enum);
-                                drop(fdtable);
-
-                                return self.bind_inner(fd, &localaddr, true); //len assigned arbitrarily large value
+                                return self.bind_inner_socket(sockfdobj, &localaddr, true);
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
@@ -498,7 +495,19 @@ impl Cage {
                         }
                         IPPROTO_UDP => {
                             if sockfdobj.localaddr.is_none() {
-                                return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
+                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(addr, Some(interface::GenSockaddr::V6(_))), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
+                                    Ok(a) => a,
+                                    Err(e) => return e,
+                                };
+
+                                let bindret = self.bind_inner_socket(sockfdobj, &localaddr, true);
+
+                                if bindret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from attempting to bind within recvfrom");},
+                                        Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                    };
+                                }
                             }
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
