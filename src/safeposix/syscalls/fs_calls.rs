@@ -65,7 +65,7 @@ impl Cage {
 
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
-                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(ind) = mutmetadata.inodetable.get(&pardirinode) {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -87,7 +87,7 @@ impl Cage {
                     }
 
                     //set size of file to 0
-                    match mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
+                    match mutmetadata.inodetable.get(&inodenum).unwrap() {
                         Inode::File(g) => {g.size = 0;}
                         _ => {
                             return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
@@ -104,7 +104,7 @@ impl Cage {
 
         //We redo our metawalk in case of O_CREAT, but this is somewhat inefficient
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&mutmetadata)) {
-            let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+            let inodeobj = mutmetadata.inodetable.get(&inodenum).unwrap();
             let mode;
             let size;
 
@@ -171,7 +171,7 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -224,7 +224,7 @@ impl Cage {
 
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
-                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -257,7 +257,7 @@ impl Cage {
                 syscall_error(Errno::ENOENT, "link", "a directory component in pathname does not exist or is a dangling symbolic link")
             }
             Some(inodenum) => {
-                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                let inodeobj = mutmetadata.inodetable.get(&inodenum).unwrap();
 
                 match inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
@@ -266,7 +266,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
@@ -284,7 +284,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(ind) = mutmetadata.inodetable.get(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                 } //insert a reference to the inode in the parent directory
@@ -323,7 +323,7 @@ impl Cage {
 
             //If both the file and the parent directory exists
             (Some(inodenum), Some(parentinodenum)) => {
-                let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                let inodeobj = mutmetadata.inodetable.get(&inodenum).unwrap();
 
                 let (currefcount, curlinkcount, has_fobj) = match inodeobj {
                     Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
@@ -331,7 +331,7 @@ impl Cage {
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
-                let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
+                let parentinodeobj = mutmetadata.inodetable.get(&parentinodenum).unwrap();
                 let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
@@ -702,7 +702,7 @@ impl Cage {
 
                     let mut metadata = FS_METADATA;
 
-                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode);
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
@@ -799,7 +799,7 @@ impl Cage {
 
                     let mut metadata = FS_METADATA;
 
-                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode);
+                    let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode);
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
@@ -1007,7 +1007,7 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
-            if let Inode::Dir(ref mut dir) = mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
+            if let Inode::Dir(ref mut dir) = mutmetadata.inodetable.get(&inodenum).unwrap() {
 
                 //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
                 dir.refcount += 1;
@@ -1082,7 +1082,7 @@ impl Cage {
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let inodeobj = mutmetadata.inodetable.get(&inodenum).unwrap();
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
                     match inodeobj {
@@ -1213,7 +1213,7 @@ impl Cage {
                 }
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let inodeobj = mutmetadata.inodetable.get(&inodenum).unwrap();
                     let mut fobjtable = FILEOBJECTTABLE;
 
                     match inodeobj {
@@ -1379,7 +1379,7 @@ impl Cage {
 
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
-            let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
+            let thisinode = metadata.inodetable.get(&inodenum).unwrap();
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
                 match thisinode {
                     Inode::File(ref mut general_inode) => {
@@ -1535,7 +1535,7 @@ impl Cage {
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
-                let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
+                let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
 
                 match inodeobj {
                     // make sure inode matches a directory
@@ -1549,7 +1549,7 @@ impl Cage {
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
                         
-                        if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                        if let Inode::Dir(parent_dir) = metadata.inodetable.get(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
@@ -1593,7 +1593,7 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 
-                if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                if let Inode::Dir(parent_dir) = metadata.inodetable.get(&parent_inodenum).unwrap() {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
 
@@ -1620,7 +1620,7 @@ impl Cage {
                 // only proceed when fd references a regular file
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let inodeobj = mutmetadata.inodetable.get(&inodenum).unwrap();
 
                     match inodeobj {
                         // only proceed when inode matches with a file
