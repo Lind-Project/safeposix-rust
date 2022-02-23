@@ -120,6 +120,7 @@ impl Cage {
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
+
     fn bind_inner_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if localaddr.get_family() != sockfdobj.domain as u16 {
             return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
@@ -165,6 +166,7 @@ impl Cage {
  
         0
     }
+
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
