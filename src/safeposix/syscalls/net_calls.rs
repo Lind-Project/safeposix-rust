@@ -593,14 +593,14 @@ impl Cage {
                                     porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
                                 }
                             }
+                            //get or create the socket and bind it before listening
+                            let sid = Self::getsockobjid(sockfdobj);
 
                             let mut mutmetadata = NET_METADATA.write().unwrap();
                             mutmetadata.listening_port_set.insert(porttuple);
 
                             sockfdobj.state = ConnState::LISTEN;
 
-                            //get or create the socket and bind it before listening
-                            let sid = Self::getsockobjid(sockfdobj);
                             let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
                             if let None = sockfdobj.localaddr {
