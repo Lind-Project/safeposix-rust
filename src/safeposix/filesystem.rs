@@ -211,7 +211,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
             interface::RustPathComponent::Normal(f) => {
                 //If we're trying to get the child of a nonexistent directory, exit out
                 if inodeno.is_none() {return (None, None);}
-                match curnode {
+                match *curnode.unwrap() {
                     Some(Inode::Dir(d)) => {
                         previnodeno = inodeno;
 
