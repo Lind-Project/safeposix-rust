@@ -11,7 +11,7 @@ use super::fs_constants::*;
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        let mut mutcagetable = CAGE_TABLE.write().unwrap();
+        let mut mutcagetable = CAGE_TABLE;
 
         //construct new cage struct with a cloned fdtable
         let mut newfdtable = interface::RustHashMap::new();
@@ -74,7 +74,7 @@ impl Cage {
     }
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
+        {CAGE_TABLE.remove(&self.cageid).unwrap();}
         
         // Uncomment for CLOEXEC implementation
         // self.filedescriptortable.write().unwrap().retain(|&_, v| !match &*v.read().unwrap() {
@@ -94,7 +94,7 @@ impl Cage {
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
-        {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
+        {CAGE_TABLE.insert(child_cageid, interface::RustRfc::new(newcage))};
         0
     }
 
@@ -120,7 +120,7 @@ impl Cage {
         decref_dir(&mut mutmetadata, &*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        CAGE_TABLE.write().unwrap().remove(&self.cageid);
+        CAGE_TABLE.remove(&self.cageid);
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
