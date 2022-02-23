@@ -104,7 +104,7 @@ macro_rules! check_and_dispatch_socketpair {
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
-    let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
+    let cage = { CAGE_TABLE.get(&cageid).unwrap().clone() };
 
     match callnum {
         ACCESS_SYSCALL => {
@@ -395,7 +395,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-    let mut mutcagetable = CAGE_TABLE.write().unwrap();
+    let mut mutcagetable = CAGE_TABLE;
 
     let utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
@@ -426,7 +426,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
-    let mut cagetable = CAGE_TABLE.write().unwrap();
+    let mut cagetable = CAGE_TABLE;
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
