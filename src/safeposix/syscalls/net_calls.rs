@@ -1323,7 +1323,7 @@ impl Cage {
 
         if let Some(wrappedfd) = fdtable.get(&epfd) {
             let filedesc_enum = wrappedfd;
-            if let Epoll(epollfdobj) = &*filedesc_enum {
+            if let Epoll(epollfdobj) = filedesc_enum {
                 if !maxevents > 0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
                 }
