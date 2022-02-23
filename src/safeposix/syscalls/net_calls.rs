@@ -425,7 +425,7 @@ impl Cage {
         }
     }
 
-    pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: interface::RustReadGuard<FdTable>) -> i32 {
+    pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>, fdtable: FdTable) -> i32 {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let clonedfd = wrappedfd.clone();
             let mut filedesc_enum = clonedfd.write().unwrap();
@@ -797,7 +797,7 @@ impl Cage {
         }
     }
 
-    fn _nonblock_peek_read(&self, fd: i32, fdtable: interface::RustReadGuard<FdTable>) -> bool{
+    fn _nonblock_peek_read(&self, fd: i32, fdtable: FdTable) -> bool{
         let flags = O_NONBLOCK | MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
