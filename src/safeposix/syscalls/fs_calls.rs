@@ -611,7 +611,7 @@ impl Cage {
                     }
 
                     // get the pipe, read from it, and return bytes read
-                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                     pipe.read_from_pipe(buf, count) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
@@ -775,7 +775,7 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
                     // get the pipe, write to it, and return bytes written
-                    let pipe = PIPE_TABLE.read().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                     pipe.write_to_pipe(buf, count) as i32
   
                 }
@@ -1102,7 +1102,7 @@ impl Cage {
                     }
                 }
                 Pipe(pipe_filedesc_obj) => {
-                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                     pipe.incr_ref(pipe_filedesc_obj.flags);
                 }
                 Socket(socket_filedesc_obj) => {
@@ -1199,7 +1199,7 @@ impl Cage {
                     }
                 }
                 Pipe(pipe_filedesc_obj) => {
-                    let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                
                     pipe.decr_ref(pipe_filedesc_obj.flags);
 
@@ -1211,7 +1211,7 @@ impl Cage {
 
                     if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
                         // last reference, lets remove it
-                        PIPE_TABLE.write().unwrap().remove(&pipe_filedesc_obj.pipe).unwrap();
+                        PIPE_TABLE.remove(&pipe_filedesc_obj.pipe).unwrap();
                     }
 
                 }
@@ -1691,7 +1691,7 @@ impl Cage {
         };
 
 
-        let mut pipetable = PIPE_TABLE.write().unwrap();
+        let mut pipetable = PIPE_TABLE;
 
         pipetable.insert(pipenumber, interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY)));
         

@@ -36,7 +36,7 @@ impl Cage {
                         }
                     }
                     Pipe(pipe_filedesc_obj) => {
-                        let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                        let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                         pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {

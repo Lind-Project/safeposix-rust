@@ -144,7 +144,7 @@ impl Cage {
 }
 
 pub fn get_next_pipe() -> Option<i32> {
-    let table = PIPE_TABLE.read().unwrap();
+    let table = PIPE_TABLE;
     for fd in STARTINGPIPE..MAXPIPE {
         if !table.contains_key(&fd) {
             return Some(fd);
