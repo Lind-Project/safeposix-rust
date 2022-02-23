@@ -198,7 +198,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
         &ourreader
     };
 
-    let mut curnode = md.inodetable.get(&ROOTDIRECTORYINODE).unwrap();
+    let mut curnode = Some(md.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
     let mut inodeno = Some(ROOTDIRECTORYINODE);
     let mut previnodeno = None;
 
