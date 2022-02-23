@@ -16,8 +16,8 @@ impl Cage {
         //construct new cage struct with a cloned fdtable
         let mut newfdtable = interface::RustHashMap::new();
         {
-            let mut mutmetadata = FS_METADATA.write().unwrap();
-            for (key, value) in self.filedescriptortable.read().unwrap().iter() {
+            let mut mutmetadata = FS_METADATA;
+            for (key, value) in self.filedescriptortable.iter() {
                 let fd = value.read().unwrap();
 
                 //only file inodes have real inode objects currently
@@ -86,7 +86,7 @@ impl Cage {
         // });
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
-            parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
+            parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.clone()),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
@@ -105,7 +105,7 @@ impl Cage {
 
         //close all remaining files in the fdtable
         {
-            let mut fdtable = self.filedescriptortable.write().unwrap();
+            let mut fdtable = self.filedescriptortable;
             let files2close = fdtable.keys().map(|x| *x).collect::<Vec<i32>>();
             for fd in files2close {
                 self._close_helper(fd, Some(&mut *fdtable));
@@ -113,7 +113,7 @@ impl Cage {
         }
 
         //get file descriptor table into a vector
-        let mut mutmetadata = FS_METADATA.write().unwrap();
+        let mut mutmetadata = FS_METADATA;
 
         let cwd_container = self.cwd.read().unwrap();
 

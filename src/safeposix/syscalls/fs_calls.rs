@@ -744,7 +744,7 @@ impl Cage {
                         }
 
                         Inode::CharDev(char_inode_obj) => {
-                            self._write_chr_file(char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
                         Inode::Dir(_) => {
@@ -844,7 +844,7 @@ impl Cage {
                         }
 
                         Inode::CharDev(char_inode_obj) => {
-                            self._write_chr_file(char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
                         Inode::Dir(_) => {
