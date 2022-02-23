@@ -594,7 +594,7 @@ impl Cage {
                                 }
                             }
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
                             mutmetadata.listening_port_set.insert(porttuple);
 
                             sockfdobj.state = ConnState::LISTEN;
