@@ -399,7 +399,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        parent: 0, filedescriptortable: interface::RustHashMap::new(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -412,7 +412,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cageid: 1, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
-        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        filedescriptortable: interface::RustHashMap::new(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -432,5 +432,5 @@ pub extern "C" fn lindrustfinalize() {
     for (_cageid, cage) in drainedcages {
         cage.exit_syscall(EXIT_SUCCESS);
     }
-    persist_metadata(&*FS_METADATA.read().unwrap());
+    persist_metadata(&*FS_METADATA);
 }

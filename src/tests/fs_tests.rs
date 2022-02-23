@@ -83,7 +83,7 @@ pub mod fs_tests {
         assert!(fd >= 0);
 
         assert_eq!(cage.close_syscall(fd), 0);
-        let mut metadata = filesystem::FS_METADATA.write().unwrap(); 
+        let mut metadata = filesystem::FS_METADATA; 
         filesystem::persist_metadata(&metadata);
 
         let metadatastring1 = interface::serde_serialize_to_string(&*metadata).unwrap(); // before restore
@@ -125,9 +125,9 @@ pub mod fs_tests {
         assert_eq!(cbuf2str(&read_buf2), "hello world!");
 
         //let's test exit's ability to close everything
-        assert_ne!(cage.filedescriptortable.read().unwrap().len(), 0);
+        assert_ne!(cage.filedescriptortable.len(), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        assert_eq!(cage.filedescriptortable.read().unwrap().len(), 0);
+        assert_eq!(cage.filedescriptortable.len(), 0);
 
         lindrustfinalize();
     }
@@ -154,9 +154,9 @@ pub mod fs_tests {
         assert_eq!(cbuf2str(&read_buf2), "hello world!");
 
         //let's test lindrustfinalize's ability to call exit to close everything
-        assert_ne!(cage.filedescriptortable.read().unwrap().len(), 0);
+        assert_ne!(cage.filedescriptortable.len(), 0);
         lindrustfinalize();
-        assert_eq!(cage.filedescriptortable.read().unwrap().len(), 0);
+        assert_eq!(cage.filedescriptortable.len(), 0);
     }
 
 
@@ -692,7 +692,7 @@ pub mod fs_tests {
 
         //have to retieve the metadata lock after the open syscall gets it
         {
-            let metadata = FS_METADATA.read().unwrap();
+            let metadata = FS_METADATA;
             persist_metadata(&*metadata);
             let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
             let result = path.unwrap().metadata().unwrap().permissions();
@@ -710,7 +710,7 @@ pub mod fs_tests {
 
         //check that the setup was run first
         {
-            let mut metadata = FS_METADATA.write().unwrap();
+            let mut metadata = FS_METADATA;
             persist_metadata(&*metadata);
             // let path = normpath(convpath(METADATAFILENAME), &cage);
             let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());

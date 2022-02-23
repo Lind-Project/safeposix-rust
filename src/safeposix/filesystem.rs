@@ -114,7 +114,7 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mut mutmetadata = FS_METADATA.write().unwrap();
+    let mut mutmetadata = FS_METADATA;
 
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
@@ -129,7 +129,7 @@ pub fn load_fs() {
 
        load_fs_special_files(&utilcage);
 
-       let metadata = FS_METADATA.read().unwrap();
+       let metadata = FS_METADATA;
        persist_metadata(&metadata);
     }
 
@@ -194,7 +194,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
     let ourreader;
     //Acquire a readlock if we were not passed in a reference
     let md = if let Some(rl) = guard {rl} else {
-        ourreader = FS_METADATA.read().unwrap(); 
+        ourreader = FS_METADATA; 
         &ourreader
     };
 
@@ -265,7 +265,7 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
 }
 
 pub fn incref_root() {
-    let mut metadata = FS_METADATA.write().unwrap();
+    let mut metadata = FS_METADATA;
     let rootinode = metadata.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap();
     if let Inode::Dir(rootdir_dirinode_obj) = rootinode {
         rootdir_dirinode_obj.refcount += 1;
