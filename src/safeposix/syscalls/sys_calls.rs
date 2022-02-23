@@ -17,7 +17,7 @@ impl Cage {
         let mut newfdtable = interface::RustHashMap::new();
         {
             let mut mutmetadata = FS_METADATA;
-            for (key, value) in self.filedescriptortable.iter() {
+            for (key, value) in self.filedescriptortable.unwrap().iter() {
                 let fd = value.read().unwrap();
 
                 //only file inodes have real inode objects currently
@@ -62,7 +62,7 @@ impl Cage {
         }
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
-            filedescriptortable: interface::RustLock::new(newfdtable),
+            filedescriptortable: newfdtable,
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
@@ -86,7 +86,7 @@ impl Cage {
         // });
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
-            parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.clone()),
+            parent: self.parent, filedescriptortable: self.filedescriptortable.clone(),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
