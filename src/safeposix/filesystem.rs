@@ -211,7 +211,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
             interface::RustPathComponent::Normal(f) => {
                 //If we're trying to get the child of a nonexistent directory, exit out
                 if inodeno.is_none() {return (None, None);}
-                match *curnode.unwrap() {         //is this inefficient? Is there a better way to do this?
+                match *curnode.unwrap() { 
                     Inode::Dir(d) => {
                         previnodeno = inodeno;
 
@@ -274,7 +274,7 @@ pub fn incref_root() {
 
 pub fn decref_dir(mutmetadata: &mut FilesystemMetadata, cwd_container: &interface::RustPathBuf) {
     if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
-        if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
+        if let Inode::Dir(ref mut cwddir) = *mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
             cwddir.refcount -= 1;
 
             //if the directory has been removed but this cwd was the last open handle to it
