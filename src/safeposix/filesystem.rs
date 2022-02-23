@@ -211,8 +211,8 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
             interface::RustPathComponent::Normal(f) => {
                 //If we're trying to get the child of a nonexistent directory, exit out
                 if inodeno.is_none() {return (None, None);}
-                match Some(*curnode.unwrap()) {
-                    Some(Inode::Dir(d)) => {
+                match *curnode.unwrap() {         //is this inefficient? Is there a better way to do this?
+                    Inode::Dir(d) => {
                         previnodeno = inodeno;
 
                         //populate child inode number from parent directory's inode dict
