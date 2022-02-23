@@ -34,6 +34,7 @@ impl Cage {
         };
         return sockfd;
     }
+
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap(); 
         let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
@@ -45,6 +46,25 @@ impl Cage {
         };
         fdtable.insert(newfd, wrappedsock);
         newfd
+    }
+
+    fn _implicit_bind(&self, sockfdobj: &mut SocketDesc, optaddr: &Option<&mut interface::GenSockaddr>) -> i32 {
+        if sockfdobj.localaddr.is_none() {
+            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(optaddr, Some(interface::GenSockaddr::V6(_))), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
+                Ok(a) => a,
+                Err(e) => return e,
+            };
+
+            let bindret = self.bind_inner_socket(sockfdobj, &localaddr, true);
+
+            if bindret < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from attempting to bind within recvfrom");},
+                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                };
+            }
+        }
+        0
     }
 
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
@@ -100,66 +120,68 @@ impl Cage {
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
+
+    fn bind_inner_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
+        if localaddr.get_family() != sockfdobj.domain as u16 {
+            return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
+        }
+        if sockfdobj.localaddr.is_some() {
+            return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
+        }
+
+        let mut mutmetadata = NET_METADATA.write().unwrap();
+        let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
+
+        let newlocalport = if prereserved {
+            localaddr.port()
+        } else {
+            let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
+            if let Err(errnum) = localout {return errnum;}
+            localout.unwrap()
+        };
+
+        let mut newsockaddr = localaddr.clone();
+        newsockaddr.set_port(newlocalport);
+
+        let sid = if let Some(id) = sockfdobj.socketobjectid {
+            id
+        } else {
+            let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+            let id = mutmetadata.insert_into_socketobjecttable(sock).unwrap();
+            sockfdobj.socketobjectid = Some(id);
+            id
+        } ;
+        let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+        let sockobj = locksock.read().unwrap();
+        let bindret = sockobj.bind(&newsockaddr);
+
+        if bindret < 0 {
+            match Errno::from_discriminant(interface::get_errno()) {
+                Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind failed!");},
+                Err(()) => panic!("Unknown errno value from socket bind returned!"),
+            };
+        }
+
+        sockfdobj.localaddr = Some(newsockaddr);
+ 
+        0
+    }
+
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let fdtable = self.filedescriptortable.read().unwrap();
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             match &mut *filedesc_enum {
-
                 Socket(sockfdobj) => {
-                    if localaddr.get_family() != sockfdobj.domain as u16 {
-                        return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
-                    }
-                    if sockfdobj.localaddr.is_some() {
-                        return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
-                    }
-
-                    let mut mutmetadata = NET_METADATA.write().unwrap();
-                    let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
-
-                    let newlocalport = if prereserved {
-                        localaddr.port()
-                    } else {
-                        let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
-                        if let Err(errnum) = localout {return errnum;}
-                        localout.unwrap()
-                    };
-
-                    let mut newsockaddr = localaddr.clone();
-                    newsockaddr.set_port(newlocalport);
-
-                    let sid = if let Some(id) = sockfdobj.socketobjectid {
-                        id
-                    } else {
-                        let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                        let id = mutmetadata.insert_into_socketobjecttable(sock).unwrap();
-                        sockfdobj.socketobjectid = Some(id);
-                        id
-                    } ;
-                    let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
-                    let sockobj = locksock.read().unwrap();
-                    let bindret = sockobj.bind(&newsockaddr);
-
-                    if bindret < 0 {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind failed!");},
-                            Err(()) => panic!("Unknown errno value from socket bind returned!"),
-                        };
-                    }
-
-                    //we don't actually want/need to create the socket object now, that is done in listen or in connect or whatever
-                    sockfdobj.localaddr = Some(newsockaddr);
- 
-                    0
+                    self.bind_inner_socket(sockfdobj, localaddr, prereserved)
                 }
-
                 _ => {
-                    return syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket");
+                    syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket")
                 }
             }
         } else {
-            return syscall_error(Errno::EBADF, "bind", "invalid file descriptor");
+            syscall_error(Errno::EBADF, "bind", "invalid file descriptor")
         }
     }
 
@@ -221,10 +243,7 @@ impl Cage {
                                 };
 
                                 //unlock fdtable so that we're fine to call bind_inner
-                                drop(filedesc_enum);
-                                drop(fdtable);
-
-                                return self.bind_inner(fd, &localaddr, true); //len assigned arbitrarily large value
+                                return self.bind_inner_socket(sockfdobj, &localaddr, true);
                             }
                         };
                     } else if sockfdobj.protocol == IPPROTO_TCP {
@@ -312,27 +331,13 @@ impl Cage {
                         }
 
                         IPPROTO_UDP => {
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-
-                            //bind the udp port as we do not bind them at bind_syscall, and this is
-                            //the last possible moment to do so
-                            if let None = sockfdobj.localaddr {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
-                                    Ok(a) => a,
-                                    Err(e) => return e,
-                                };
-                                let mutmetadata = NET_METADATA.write().unwrap();
-                                let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap().read().unwrap();
-
-                                let bindret = sockobj.bind(&localaddr);
-                                if bindret < 0 {
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind within sendto failed!");},
-                                        Err(()) => panic!("Unknown errno value from socket bind within sendto returned!"),
-                                    };
-                                }
-                                sockfdobj.localaddr = Some(localaddr);
+                            let mut tmpdest = *dest_addr;
+                            let ibindret = self._implicit_bind(&mut *sockfdobj, &Some(&mut tmpdest));
+                            if ibindret < 0 {
+                                return ibindret;
                             }
+
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
 
                             let mutmetadata = NET_METADATA.write().unwrap();
                             let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap().read().unwrap();
@@ -430,7 +435,7 @@ impl Cage {
             let clonedfd = wrappedfd.clone();
             let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
+                Socket(ref mut sockfdobj) => {
                     match sockfdobj.protocol {
                         IPPROTO_TCP => {
                             if sockfdobj.state != ConnState::CONNECTED {
@@ -497,8 +502,9 @@ impl Cage {
 
                         }
                         IPPROTO_UDP => {
-                            if sockfdobj.localaddr.is_none() {
-                                return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "BUG / FIXME: Should bind before using UDP to recv/recvfrom");
+                            let ibindret = self._implicit_bind(&mut *sockfdobj, addr);
+                            if ibindret < 0 {
+                                return ibindret;
                             }
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
@@ -807,9 +813,12 @@ impl Cage {
 
     //TODO: handle pipes
     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+        //sockfds and writefds are not really implemented at the current moment.
+        //They both always return success. However we have some intention of making
+        //writefds work at some point for pipes? We have no such intention for exceptfds
         let mut new_readfds = interface::RustHashSet::<i32>::new();
         let mut new_writefds = interface::RustHashSet::<i32>::new();
-        //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't support exceptfds for now
+        //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
     
         if nfds < STARTINGFD || nfds >= MAXFD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
@@ -823,9 +832,6 @@ impl Cage {
         };
     
         let mut retval = 0;
-        if !exceptfds.is_empty() {
-            return syscall_error(Errno::EOPNOTSUPP, "select", "We don't support exceptfds in select currently");
-        }
     
         loop { //we must block manually
             for fd in readfds.iter() {
@@ -915,7 +921,7 @@ impl Cage {
 
                         //not supported yet
                         Pipe(_) => {
-                            new_readfds.insert(*fd);
+                            new_writefds.insert(*fd);
                             retval += 1;
                         }
 
@@ -930,8 +936,13 @@ impl Cage {
                 }
 
             }
-
-            //we'd do exceptfds here if we supported them
+            
+            for fd in exceptfds.iter() {
+                //we say none of them ever have exceptional conditions
+                if !fdtable.contains_key(&fd) {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+            }
 
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
