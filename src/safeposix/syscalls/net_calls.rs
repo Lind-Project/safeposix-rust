@@ -1322,7 +1322,7 @@ impl Cage {
         let fdtable = self.filedescriptortable;
 
         if let Some(wrappedfd) = fdtable.get(&epfd) {
-            let filedesc_enum = wrappedfd.read().unwrap();
+            let filedesc_enum = wrappedfd;
             if let Epoll(epollfdobj) = &*filedesc_enum {
                 if !maxevents > 0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
@@ -1330,7 +1330,7 @@ impl Cage {
 
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
 
-                for (&key, &value) in &epollfdobj.registered_fds.unwrap() {
+                for (&key, &value) in &epollfdobj.registered_fds {
 
                     let events = value.events;
                     let mut structpoll = PollStruct {
