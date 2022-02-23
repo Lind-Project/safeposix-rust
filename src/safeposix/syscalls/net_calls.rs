@@ -34,6 +34,7 @@ impl Cage {
         };
         return sockfd;
     }
+
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
         let mut fdtable = self.filedescriptortable.write().unwrap(); 
         let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
@@ -46,6 +47,7 @@ impl Cage {
         fdtable.insert(newfd, wrappedsock);
         newfd
     }
+
     fn _implicit_bind(&self, sockfdobj: &mut SocketDesc, optaddr: &Option<&mut interface::GenSockaddr>) -> i32 {
         if sockfdobj.localaddr.is_none() {
             let localaddr = match Self::assign_new_addr(sockfdobj, matches!(optaddr, Some(interface::GenSockaddr::V6(_))), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
