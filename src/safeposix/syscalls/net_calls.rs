@@ -46,6 +46,24 @@ impl Cage {
         fdtable.insert(newfd, wrappedsock);
         newfd
     }
+    fn _implicit_bind(&self, sockfdobj: &mut SocketDesc, optaddr: &Option<&mut interface::GenSockaddr>) -> i32 {
+        if sockfdobj.localaddr.is_none() {
+            let localaddr = match Self::assign_new_addr(sockfdobj, matches!(optaddr, Some(interface::GenSockaddr::V6(_))), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
+                Ok(a) => a,
+                Err(e) => return e,
+            };
+
+            let bindret = self.bind_inner_socket(sockfdobj, &localaddr, true);
+
+            if bindret < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from attempting to bind within recvfrom");},
+                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                };
+            }
+        }
+        0
+    }
 
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
@@ -309,27 +327,13 @@ impl Cage {
                         }
 
                         IPPROTO_UDP => {
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-
-                            //bind the udp port as we do not bind them at bind_syscall, and this is
-                            //the last possible moment to do so
-                            if let None = sockfdobj.localaddr {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(dest_addr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
-                                    Ok(a) => a,
-                                    Err(e) => return e,
-                                };
-                                let mutmetadata = NET_METADATA.write().unwrap();
-                                let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap().read().unwrap();
-
-                                let bindret = sockobj.bind(&localaddr);
-                                if bindret < 0 {
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {return syscall_error(i, "sendto", "The libc call to bind within sendto failed!");},
-                                        Err(()) => panic!("Unknown errno value from socket bind within sendto returned!"),
-                                    };
-                                }
-                                sockfdobj.localaddr = Some(localaddr);
+                            let mut tmpdest = *dest_addr;
+                            let ibindret = self._implicit_bind(&mut *sockfdobj, &Some(&mut tmpdest));
+                            if ibindret < 0 {
+                                return ibindret;
                             }
+
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
 
                             let mutmetadata = NET_METADATA.write().unwrap();
                             let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap().read().unwrap();
@@ -427,7 +431,7 @@ impl Cage {
             let clonedfd = wrappedfd.clone();
             let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
+                Socket(ref mut sockfdobj) => {
                     match sockfdobj.protocol {
                         IPPROTO_TCP => {
                             if sockfdobj.state != ConnState::CONNECTED {
@@ -494,20 +498,9 @@ impl Cage {
 
                         }
                         IPPROTO_UDP => {
-                            if sockfdobj.localaddr.is_none() {
-                                let localaddr = match Self::assign_new_addr(sockfdobj, matches!(addr, Some(interface::GenSockaddr::V6(_))), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
-                                    Ok(a) => a,
-                                    Err(e) => return e,
-                                };
-
-                                let bindret = self.bind_inner_socket(sockfdobj, &localaddr, true);
-
-                                if bindret < 0 {
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from attempting to bind within recvfrom");},
-                                        Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                    };
-                                }
+                            let ibindret = self._implicit_bind(&mut *sockfdobj, addr);
+                            if ibindret < 0 {
+                                return ibindret;
                             }
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
@@ -816,9 +809,12 @@ impl Cage {
 
     //TODO: handle pipes
     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+        //sockfds and writefds are not really implemented at the current moment.
+        //They both always return success. However we have some intention of making
+        //writefds work at some point for pipes? We have no such intention for exceptfds
         let mut new_readfds = interface::RustHashSet::<i32>::new();
         let mut new_writefds = interface::RustHashSet::<i32>::new();
-        //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't support exceptfds for now
+        //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
     
         if nfds < STARTINGFD || nfds >= MAXFD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
@@ -832,9 +828,6 @@ impl Cage {
         };
     
         let mut retval = 0;
-        if !exceptfds.is_empty() {
-            return syscall_error(Errno::EOPNOTSUPP, "select", "We don't support exceptfds in select currently");
-        }
     
         loop { //we must block manually
             for fd in readfds.iter() {
@@ -924,7 +917,7 @@ impl Cage {
 
                         //not supported yet
                         Pipe(_) => {
-                            new_readfds.insert(*fd);
+                            new_writefds.insert(*fd);
                             retval += 1;
                         }
 
@@ -939,8 +932,13 @@ impl Cage {
                 }
 
             }
-
-            //we'd do exceptfds here if we supported them
+            
+            for fd in exceptfds.iter() {
+                //we say none of them ever have exceptional conditions
+                if !fdtable.contains_key(&fd) {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+            }
 
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
