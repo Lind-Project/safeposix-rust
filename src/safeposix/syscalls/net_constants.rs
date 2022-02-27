@@ -238,15 +238,33 @@ pub const IPPROTO_MAX: i32 = 256;
 // last return value of *_input(), meaning "all job for this pkt is done".
 pub const IPPROTO_DONE: i32 = 257;
 
-pub const MSG_OOB: i32        = 0x01; /* Process out-of-band data.  */
-pub const MSG_PEEK: i32       = 0x02; /* Peek at incoming messages.  */
-pub const MSG_DONTROUTE: i32  = 0x04; /* Don't use local routing.  */
-pub const MSG_EOR: i32        = 0x08; /* Data completes record.  */
-pub const MSG_TRUNC: i32      = 0x10; /* Data discarded before delivery.  */
-pub const MSG_CTRUNC: i32     = 0x20; /* Control data lost before delivery.  */
-pub const MSG_WAITALL: i32    = 0x40; /* Wait for full request or error.  */
-pub const MSG_DONTWAIT: i32   = 0x80; /* This message should be nonblocking.  */
-pub const MSG_NOSIGNAL: i32   = 0x0400;       /* Do not generate SIGPIPE on EPIPE.  */
+pub const MSG_OOB: i32 = 1;
+pub const MSG_PEEK: i32 = 2;
+pub const MSG_DONTROUTE: i32 = 4;
+pub const MSG_TRYHARD: i32 = 4;       /* Synonym for MSG_DONTROUTE for DECnet */
+pub const MSG_CTRUNC: i32 = 8;
+pub const MSG_PROBE: i32 = 0x10;	/* Do not send. Only probe path f.e. for MTU */
+pub const MSG_TRUNC: i32 = 0x20;
+pub const MSG_DONTWAIT: i32 = 0x40;	/* Nonblocking io		 */
+pub const MSG_EOR: i32 = 0x80;	/* End of record */
+pub const MSG_WAITALL: i32 = 0x100;	/* Wait for a full request */
+pub const MSG_FIN: i32 = 0x200;
+pub const MSG_SYN: i32 = 0x400;
+pub const MSG_CONFIRM: i32 = 0x800;	/* Confirm path validity */
+pub const MSG_RST: i32 = 0x1000;
+pub const MSG_ERRQUEUE: i32 = 0x2000;	/* Fetch message from error queue */
+pub const MSG_NOSIGNAL: i32 = 0x4000;	/* Do not generate SIGPIPE */
+pub const MSG_MORE: i32 = 0x8000;	/* Sender will send more */
+pub const MSG_WAITFORONE: i32 = 0x10000;	/* recvmmsg(): block until 1+ packets avail */
+pub const MSG_SENDPAGE_NOPOLICY: i32 = 0x10000; /* sendpage() internal : do no apply policy */
+pub const MSG_SENDPAGE_NOTLAST: i32 = 0x20000; /* sendpage() internal : not the last page */
+pub const MSG_BATCH: i32 = 0x40000; /* sendmmsg(): more messages coming */
+pub const MSG_EOF: i32 = MSG_FIN;
+pub const MSG_NO_SHARED_FRAGS: i32 = 0x80000; /* sendpage() internal : page frags are not shared */
+pub const MSG_SENDPAGE_DECRYPTED: i32 = 0x100000; /* sendpage() internal : page may carry
+					  * plain text and require encryption
+					  */
+
 
 //shutdown
 pub const SHUT_RD: i32 = 0;
