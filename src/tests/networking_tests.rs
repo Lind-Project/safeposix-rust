@@ -1213,7 +1213,7 @@ pub mod net_tests {
         }
 
         lindrustinit(0);
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
 
         let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(dnssocket > 0);

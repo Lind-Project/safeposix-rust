@@ -11,9 +11,9 @@ pub const METADATAFILENAME: &str = "lind.metadata";
 
 pub const LOGFILENAME: &str = "lind.md.log";
 
-pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<Option<interface::EmulatedFileMap>>> = 
+pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
     interface::RustLazyGlobal::new(|| 
-        interface::RustRfc::new(None)
+        interface::RustRfc::new(interface::RustLock::new(None))
 );
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
@@ -173,8 +173,12 @@ pub fn load_fs() {
        create_log();
 
        load_fs_special_files(&utilcage);
+<<<<<<< HEAD
 
        let metadata = FS_METADATA;
+=======
+       let metadata = FS_METADATA.read().unwrap();
+>>>>>>> 43845ce6c00bb249fe17d3cf31dc34b8aabe88fd
        persist_metadata(&metadata);
     }
 }
