@@ -152,7 +152,7 @@ pub fn load_fs() {
                 let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
-                    None => mutmetadata.inodetable.remove(&inodenum),
+                    None => mutmetadata.inodetable.remove(&inodenum).1,
                 };
             }
 
@@ -173,12 +173,8 @@ pub fn load_fs() {
        create_log();
 
        load_fs_special_files(&utilcage);
-<<<<<<< HEAD
 
        let metadata = FS_METADATA;
-=======
-       let metadata = FS_METADATA.read().unwrap();
->>>>>>> 43845ce6c00bb249fe17d3cf31dc34b8aabe88fd
        persist_metadata(&metadata);
     }
 }
