@@ -111,7 +111,7 @@ impl Cage {
             let size;
 
             //increment number of open handles to the file, retrieve other data from inode
-            match inodeobj {
+            match *inodeobj {
                 Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
@@ -261,7 +261,7 @@ impl Cage {
             Some(inodenum) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                match inodeobj {
+                match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
                         match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
@@ -329,7 +329,7 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj) = match inodeobj {
+                let (currefcount, curlinkcount, has_fobj) = match *inodeobj {
                     Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
                     Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
@@ -384,7 +384,7 @@ impl Cage {
             statbuf.st_ino = inodenum;
 
             //delegate the rest of populating statbuf to the relevant helper
-            match inodeobj {
+            match *inodeobj {
                 Inode::File(f) => {
                     Self::_istat_helper(f, statbuf);
                 },
@@ -470,7 +470,7 @@ impl Cage {
                     statbuf.st_ino = normalfile_filedesc_obj.inode;
                     statbuf.st_dev = metadata.dev_id;
 
-                    match inode {
+                    match *inode {
                         Inode::File(f) => {
                             Self::_istat_helper(&f, statbuf);
                         }
@@ -575,7 +575,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character if it's a character file, checking based on the type of the inode object
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
                             let fobjtable = FILEOBJECTTABLE.read().unwrap();
@@ -639,7 +639,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character if it's a character file, checking based on the type of the inode object
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(_) => {
                             let fobjtable = FILEOBJECTTABLE.read().unwrap();
                             let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
@@ -710,7 +710,7 @@ impl Cage {
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
 
@@ -807,7 +807,7 @@ impl Cage {
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
@@ -899,7 +899,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //handle files/directories differently
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(normalfile_inode_obj) => {
                             let eventualpos = match whence {
                                 SEEK_SET => {offset}
@@ -977,7 +977,7 @@ impl Cage {
             let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
 
             //Get the mode bits if the type of the inode is sane
-            let mode = match inodeobj {
+            let mode = match *inodeobj {
                 Inode::File(f) => {f.mode},
                 Inode::CharDev(f) => {f.mode},
                 Inode::Dir(f) => {f.mode},
@@ -1089,7 +1089,7 @@ impl Cage {
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount += 1;
                         },
@@ -1220,7 +1220,7 @@ impl Cage {
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
 
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount -= 1;
 
@@ -1432,7 +1432,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //confirm inode type is mappable
-                    match inodeobj {
+                    match *inodeobj {
                         Inode::File(normalfile_inode_obj) => {
                             //if we want to write our changes back to the file the file needs to be open for reading and writing
                             if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
@@ -1541,7 +1541,7 @@ impl Cage {
             (Some(inodenum), Some(parent_inodenum)) => {
                 let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
 
-                match inodeobj {
+                match *inodeobj {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
                         if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
@@ -1628,7 +1628,7 @@ impl Cage {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                    match inodeobj {
+                    match *inodeobj {
                         // only proceed when inode matches with a file
                         Inode::File(ref mut normalfile_inode_obj) => {
                             // get file object table with write lock
@@ -1744,7 +1744,7 @@ impl Cage {
                     let metadata = FS_METADATA;
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                    match inodeobj {
+                    match *inodeobj {
                         // only proceed when inode is a dir
                         Inode::Dir(dir_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
