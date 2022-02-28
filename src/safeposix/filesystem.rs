@@ -229,8 +229,8 @@ pub fn load_fs_special_files(utilcage: &Cage) {
 pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
     // pack and serialize log entry
-    let inode = metadata.inodetable.get(&inodenum);
-    let serialpair: (usize, Option<&Inode>) = (inodenum, &*inode);
+    let inode = metadata.inodetable.get(&inodenum).unwrap();
+    let serialpair: (usize, Option<&Inode>) = (inodenum, *inode);
     let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
