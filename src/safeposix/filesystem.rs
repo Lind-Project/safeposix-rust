@@ -152,7 +152,7 @@ pub fn load_fs() {
                 let (inodenum, inode) = serialpair;
                 match inode {
                     Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
-                    None => mutmetadata.inodetable.remove(&inodenum).1,
+                    None => mutmetadata.inodetable.remove(&inodenum).unwrap().1,
                 };
             }
 
