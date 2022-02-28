@@ -65,7 +65,7 @@ impl Cage {
 
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
-                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -83,13 +83,13 @@ impl Cage {
 
                 if O_TRUNC == (flags & O_TRUNC) {
                     //close the file object if another cage has it open
-                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE;
                     if fobjtable.contains_key(&inodenum) {
                         fobjtable.get(&inodenum).unwrap().close().unwrap();
                     }
 
                     //set size of file to 0
-                    match mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
+                    match *mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
                         Inode::File(g) => {g.size = 0;}
                         _ => {
                             return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
@@ -119,7 +119,7 @@ impl Cage {
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
-                let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                let mut fobjtable = FILEOBJECTTABLE;
                 if !fobjtable.contains_key(&inodenum) {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                     fobjtable.insert(inodenum, interface::openfile(sysfilename, true).unwrap());
@@ -173,7 +173,7 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -226,7 +226,7 @@ impl Cage {
 
                 let newinodenum = mutmetadata.nextinode;
                 mutmetadata.nextinode += 1;
-                if let Inode::Dir(parentdir) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -268,7 +268,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&mutmetadata, pardirinode);
@@ -287,7 +287,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ind) = mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&mutmetadata, pardirinode);
@@ -336,7 +336,7 @@ impl Cage {
                 }; //count current number of links and references
 
                 let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
-                let directory_parent_inode_obj = if let Inode::Dir(x) = parentinodeobj {x} else {
+                let directory_parent_inode_obj = if let Inode::Dir(x) = *parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
                 directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
@@ -386,13 +386,13 @@ impl Cage {
             //delegate the rest of populating statbuf to the relevant helper
             match *inodeobj {
                 Inode::File(f) => {
-                    Self::_istat_helper(f, statbuf);
+                    Self::_istat_helper(&f, statbuf);
                 },
                 Inode::CharDev(f) => {
-                    Self::_istat_helper_chr_file(f, statbuf);
+                    Self::_istat_helper_chr_file(&f, statbuf);
                 },
                 Inode::Dir(f) => {
-                    Self::_istat_helper_dir(f, statbuf);
+                    Self::_istat_helper_dir(&f, statbuf);
                 },
             }
             0 //stat has succeeded!
@@ -578,7 +578,7 @@ impl Cage {
                     match *inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
-                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
@@ -592,7 +592,7 @@ impl Cage {
                         }
 
                         Inode::CharDev(char_inode_obj) => {
-                            self._read_chr_file(char_inode_obj, buf, count)
+                            self._read_chr_file(&char_inode_obj, buf, count)
                         }
 
                         Inode::Dir(_) => {
@@ -641,7 +641,7 @@ impl Cage {
                     //delegate to character if it's a character file, checking based on the type of the inode object
                     match *inodeobj {
                         Inode::File(_) => {
-                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
@@ -652,7 +652,7 @@ impl Cage {
                         }
 
                         Inode::CharDev(char_inode_obj) => {
-                            self._read_chr_file(char_inode_obj, buf, count)
+                            self._read_chr_file(&char_inode_obj, buf, count)
                         }
 
                         Inode::Dir(_) => {
@@ -717,7 +717,7 @@ impl Cage {
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = position as isize - filesize as isize;
 
-                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
@@ -748,7 +748,7 @@ impl Cage {
                         }
 
                         Inode::CharDev(char_inode_obj) => {
-                            self._write_chr_file(char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
                         Inode::Dir(_) => {
@@ -813,7 +813,7 @@ impl Cage {
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
 
-                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE;
                             let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
@@ -848,7 +848,7 @@ impl Cage {
                         }
 
                         Inode::CharDev(char_inode_obj) => {
-                            self._write_chr_file(char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
                         Inode::Dir(_) => {
@@ -1011,7 +1011,7 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
-            if let Inode::Dir(ref mut dir) = mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
+            if let Inode::Dir(ref mut dir) = *mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
 
                 //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
                 dir.refcount += 1;
@@ -1218,7 +1218,7 @@ impl Cage {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                    let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                    let mut fobjtable = FILEOBJECTTABLE;
 
                     match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
@@ -1443,7 +1443,7 @@ impl Cage {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
                             //because of NaCl's internal workings we must allow mappings to extend past the end of a file
-                            let fobjtable = FILEOBJECTTABLE.read().unwrap();
+                            let fobjtable = FILEOBJECTTABLE;
                             let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
                             //this is the system fd number--the number of the lind.<inodenum> file in our host system
@@ -1553,7 +1553,7 @@ impl Cage {
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
                         
-                        if let Inode::Dir(parent_dir) = metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                        if let Inode::Dir(parent_dir) = *metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
@@ -1632,7 +1632,7 @@ impl Cage {
                         // only proceed when inode matches with a file
                         Inode::File(ref mut normalfile_inode_obj) => {
                             // get file object table with write lock
-                            let mut fobjtable = FILEOBJECTTABLE.write().unwrap();
+                            let mut fobjtable = FILEOBJECTTABLE;
                             
                             let fileobject = fobjtable.get_mut(&inodenum).unwrap();
                             let filesize = normalfile_inode_obj.size as isize;
