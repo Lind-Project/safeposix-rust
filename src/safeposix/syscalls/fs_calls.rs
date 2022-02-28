@@ -1598,8 +1598,8 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
                 }
                 
-                let pardir_inodeobj = metadata.inodetable.get_mut(&parent_inodenum).unwrap().1;
-                if let Inode::Dir(parent_dir) = pardir_inodeobj {
+                let pardir_inodeobj = metadata.inodetable.get_mut(&parent_inodenum).unwrap();
+                if let Inode::Dir(parent_dir) = *pardir_inodeobj {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
 
