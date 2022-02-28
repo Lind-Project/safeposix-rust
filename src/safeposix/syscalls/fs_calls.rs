@@ -1385,7 +1385,7 @@ impl Cage {
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
             let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                match thisinode {
+                match *thisinode {
                     Inode::File(ref mut general_inode) => {
                         general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
                     }
