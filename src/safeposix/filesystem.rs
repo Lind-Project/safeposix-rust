@@ -151,7 +151,7 @@ pub fn load_fs() {
             for serialpair in logvec.drain(..) {
                 let (inodenum, inode) = serialpair;
                 match inode {
-                    Some(inode) => mutmetadata.inodetable.insert(inodenum, inode),
+                    Some(inode) => mutmetadata.inodetable.insert(inodenum, inode).unwrap(),
                     None => mutmetadata.inodetable.remove(&inodenum).unwrap().1,
                 };
             }
