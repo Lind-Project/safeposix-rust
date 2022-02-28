@@ -168,7 +168,7 @@ impl Cage {
     }
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
-        let fdtable = self.filedescriptortable.read().unwrap();
+        let fdtable = self.filedescriptortable;
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
