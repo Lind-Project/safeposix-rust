@@ -1227,7 +1227,7 @@ impl Cage {
                             //if it's not a reg file, then we have nothing to close
                             //Inode::File is a regular file by default
                             if normalfile_inode_obj.refcount == 0 {
-                                fobjtable.remove(&inodenum).unwrap().close().unwrap();
+                                fobjtable.remove(&inodenum).unwrap().1.close().unwrap();
                                 if normalfile_inode_obj.linkcount == 0 {
                                     //removing the file from the entire filesystem (interface, metadata, and object table)
                                     mutmetadata.inodetable.remove(&inodenum);
