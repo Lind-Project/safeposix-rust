@@ -1299,7 +1299,7 @@ impl Cage {
                     EPOLL_CTL_DEL => {
                         //since remove returns the value at the key and the values will always be EpollEvents, 
                         //I am using this to optimize the code
-                        if let Some(_, EpollEvent{ events: _, fd: _ }) = epollfdobj.registered_fds.remove(&fd) {} else {
+                        if let Some(EpollEvent{ events: _, fd: _ }) = epollfdobj.registered_fds.remove(&fd) {} else {
                             return syscall_error(Errno::ENOENT, "epoll ctl", "fd is not registered with this epfd");
                         }
                     }
