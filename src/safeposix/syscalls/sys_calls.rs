@@ -106,7 +106,7 @@ impl Cage {
         //close all remaining files in the fdtable
         {
             let mut fdtable = self.filedescriptortable;
-            let files2close = fdtable.iter().1.map(|x| *x).collect::<Vec<i32>>();
+            let files2close = fdtable.iter().map(|x| *x).collect::<Vec<i32>>();
             for fd in files2close {
                 self._close_helper(fd, Some(&mut fdtable));
             }
