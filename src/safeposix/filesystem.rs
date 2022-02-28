@@ -230,7 +230,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
   
     // pack and serialize log entry
     let inode = metadata.inodetable.get(&inodenum).unwrap();
-    let serialpair: (usize, Option<&Inode>) = (inodenum, Some(*inode));
+    let serialpair: (usize, Option<&Inode>) = (inodenum, Some(&*inode));
     let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
