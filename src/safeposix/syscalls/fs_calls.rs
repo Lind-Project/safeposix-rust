@@ -1679,9 +1679,14 @@ impl Cage {
     }
 
     //------------------PIPE SYSCALL------------------
-
     pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
+        self.pipe2_syscall(pipefd, 0)
+    }
 
+    pub fn pipe2_syscall(&self, pipefd: &mut PipeArray, flags: i32) -> i32 {
+
+        let flagsmask = O_CLOEXEC;
+        let actualflags = flags & flagsmask;
         let mut fdtable = self.filedescriptortable.write().unwrap();
 
         // get next available pipe number, and set up pipe
@@ -1699,8 +1704,8 @@ impl Cage {
         // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
         // append each to pipefds list
 
-        let flags = [O_RDONLY, O_WRONLY];
-        for flag in flags {
+        let accflags = [O_RDONLY, O_WRONLY];
+        for accflag in accflags {
 
             let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
                 fd
@@ -1709,11 +1714,11 @@ impl Cage {
                 return syscall_error(Errno::ENFILE, "pipe", "no available file descriptor number could be found");
             };
 
-            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: flag, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
+            let newfd = Pipe(PipeDesc {pipe: pipenumber, flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
 
-            match flag {
+            match accflag {
                 O_RDONLY => {pipefd.readfd = thisfd;},
                 O_WRONLY => {pipefd.writefd = thisfd;},
                 _ => panic!("How did you get here."),
