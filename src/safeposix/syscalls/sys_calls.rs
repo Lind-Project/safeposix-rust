@@ -76,14 +76,21 @@ impl Cage {
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
         
-        // Uncomment for CLOEXEC implementation
-        // self.filedescriptortable.write().unwrap().retain(|&_, v| !match &*v.read().unwrap() {
-        //     File(_f) => f.flags & CLOEXEC,
-        //     Stream(_s) => s.flags & CLOEXEC,
-        //     Socket(_s) => s.flags & CLOEXEC,
-        //     Pipe(_p) => p.flags & CLOEXEC
-        //     Epoll(_p) => p.flags & CLOEXEC
-        // });
+        let mut cloexecvec = vec!();
+        for (&fdnum, inode) in self.filedescriptortable.write().unwrap().iter() {
+            if match &*inode.read().unwrap() {
+               File(f) => f.flags & O_CLOEXEC,
+               Stream(s) => s.flags & O_CLOEXEC,
+               Socket(s) => s.flags & O_CLOEXEC,
+               Pipe(p) => p.flags & O_CLOEXEC,
+               Epoll(p) => p.flags & O_CLOEXEC,
+            } != 0 {
+                cloexecvec.push(fdnum);
+            }
+        };
+        for fdnum in cloexecvec {
+            self.close_syscall(fdnum);
+        }
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
             parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
