@@ -1296,16 +1296,16 @@ impl Cage {
             match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
                 (F_GETFD, ..) => {
-                    ((*flags & O_CLOEXEC) != 0) as i32
+                    *flags & O_CLOEXEC
                 }
                 // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
-                    *flags |= O_CLOEXEC;
+                    *flags |= arg & O_CLOEXEC;
                     0
                 }
                 (F_GETFL, ..) => {
                     //for get, we just need to return the flags
-                    *flags
+                    *flags & !O_CLOEXEC
                 }
                 (F_SETFL, arg) if arg >= 0 => {
                     *flags = arg;
