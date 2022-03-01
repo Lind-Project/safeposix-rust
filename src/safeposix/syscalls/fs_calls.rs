@@ -128,7 +128,8 @@ impl Cage {
 
             //insert file descriptor into fdtableable of the cage
             let position = if 0 != flags & O_APPEND {size} else {0};
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & O_RDWRFLAGS, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
+            let allowmask = O_RDWRFLAGS | O_CLOEXEC;
+            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
             let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
             fdtable.insert(thisfd, wrappedfd);
         } else {panic!("Inode not created for some reason");}
@@ -491,7 +492,7 @@ impl Cage {
             }
             0 //fstat has succeeded!
         } else {
-            syscall_error(Errno::ENOENT, "fstat", "invalid file descriptor")
+            syscall_error(Errno::EBADF, "fstat", "invalid file descriptor")
         }
     }
 
@@ -1295,16 +1296,16 @@ impl Cage {
             match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
                 (F_GETFD, ..) => {
-                    ((*flags & O_CLOEXEC) != 0) as i32
+                    *flags & O_CLOEXEC
                 }
                 // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
-                    *flags |= O_CLOEXEC;
+                    *flags |= arg & O_CLOEXEC;
                     0
                 }
                 (F_GETFL, ..) => {
                     //for get, we just need to return the flags
-                    *flags
+                    *flags & !O_CLOEXEC
                 }
                 (F_SETFL, arg) if arg >= 0 => {
                     *flags = arg;
@@ -1518,7 +1519,7 @@ impl Cage {
             }
             0 //flock has  succeeded!
         } else {
-            syscall_error(Errno::ENOENT, "flock", "invalid file descriptor")
+            syscall_error(Errno::EBADF, "flock", "invalid file descriptor")
         }
     }
 
