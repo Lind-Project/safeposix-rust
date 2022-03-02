@@ -1368,6 +1368,10 @@ impl Cage {
                         _ => {syscall_error(Errno::ENOTTY, "ioctl", "The specified request does not apply to the kind of object that the file descriptor fd references.")}
                     }
                 }
+                FIOASYNC => { //not implemented
+                    println!("ioctl(FIOASYNC) is not implemented, and just returns 0.");
+                    0
+                }
                 _ => {syscall_error(Errno::EINVAL, "ioctl", "Arguments provided do not match implemented parameters")}
             }
         } else {
