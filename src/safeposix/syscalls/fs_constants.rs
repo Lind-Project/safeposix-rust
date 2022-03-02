@@ -79,6 +79,7 @@ pub const F_NOTIFY: i32 = 1026;
 
 //Commands for IOCTL
 pub const FIONBIO: u32 = 21537;
+pub const FIOASYNC: u32 = 21536; //not implemented
 
 //File types for open/stat etc.
 pub const S_IFBLK: i32 = 0o60000;
