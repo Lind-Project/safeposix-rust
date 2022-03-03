@@ -17,9 +17,7 @@ pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustL
 );
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
-    interface::RustLazyGlobal::new(||
-        FilesystemMetadata::blank_fs_init()
-    ); //we want to check if fs exists before doing a blank init, but not for now
+    interface::RustLazyGlobal::new(|| FilesystemMetadata::blank_fs_init()); //we want to check if fs exists before doing a blank init, but not for now
 
 
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
@@ -168,14 +166,16 @@ pub fn load_fs() {
 
 
     } else {
-       *mutmetadata = FilesystemMetadata::blank_fs_init();
-       drop(mutmetadata);
-       create_log();
+        *mutmetadata = interface::RustLazyGlobal::new(||
+        FilesystemMetadata::blank_fs_init()
+        );
+        drop(mutmetadata);
+        create_log();
 
-       load_fs_special_files(&utilcage);
+        load_fs_special_files(&utilcage);
 
-       let metadata = FS_METADATA;
-       persist_metadata(&metadata);
+        let metadata = FS_METADATA;
+        persist_metadata(&metadata);
     }
 }
 
