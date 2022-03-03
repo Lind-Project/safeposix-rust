@@ -16,7 +16,7 @@ pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustL
         interface::RustRfc::new(interface::RustLock::new(None))
 );
 
-pub static FS_METADATA: interface::RustLazyGlobal<Arc<interface::RustRfc<FilesystemMetadata>>> = 
+pub static FS_METADATA: interface::RustLazyGlobal<interface::Arc<interface::RustRfc<FilesystemMetadata>>> = 
     interface::RustLazyGlobal::new(Arc::new(|| FilesystemMetadata::blank_fs_init())); //we want to check if fs exists before doing a blank init, but not for now
 
 
