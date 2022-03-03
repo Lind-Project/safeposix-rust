@@ -17,7 +17,7 @@ impl Cage {
         let mut newfdtable = interface::RustHashMap::new();
         {
             let mut mutmetadata = FS_METADATA;
-            for (key, value) in *(self.filedescriptortable.iter()) {
+            for &(key, value) in self.filedescriptortable.iter() {
                 let fd = value.read().unwrap();
 
                 //only file inodes have real inode objects currently
