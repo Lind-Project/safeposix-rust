@@ -166,9 +166,9 @@ pub fn load_fs() {
 
 
     } else {
-        *mutmetadata = interface::RustLazyGlobal::new(||
+        *mutmetadata = interface::RustLazyGlobal::new(interface::RustRfc::new(||
         FilesystemMetadata::blank_fs_init()
-        );
+        ));
         drop(mutmetadata);
         create_log();
 
