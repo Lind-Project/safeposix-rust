@@ -18,7 +18,7 @@ impl Cage {
         {
             let mut mutmetadata = FS_METADATA;
             for refmulti in self.filedescriptortable.iter() {
-                let (key, value) = refmulti;
+                let (key, value) = refmulti.pair();
                 let fd = value.read().unwrap();
 
                 //only file inodes have real inode objects currently
