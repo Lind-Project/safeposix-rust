@@ -109,7 +109,7 @@ impl Cage {
             let mut fdtable = self.filedescriptortable;
             for fdtablepair in fdtable.iter() {
                 let (fd, _) = fdtablepair.pair();
-                self._close_helper(fd, Some(&mut fdtable));
+                self._close_helper(*fd, Some(&mut fdtable));
             }
         }
 
