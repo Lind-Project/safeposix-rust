@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use std::sync::{Arc, Mutex};
-// use std::collections::HashSet;
 use dashmap::DashSet;
 use std::fs::{self, File, OpenOptions, canonicalize};
 use std::env;
