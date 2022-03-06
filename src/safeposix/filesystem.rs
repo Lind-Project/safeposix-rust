@@ -166,7 +166,7 @@ pub fn load_fs() {
 
 
     } else {
-        *mutmetadata.clear();
+        *mutmetadata = interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::blank_fs_init()));
         drop(mutmetadata);
         create_log();
 
