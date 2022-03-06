@@ -428,7 +428,7 @@ pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
     let mut cagetable = CAGE_TABLE;
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.into_iter().collect();
-    cagetable = interface::RustLazyGlobal::new(|| interface::new_hashmap());
+    cagetable.clear();
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
         cage.exit_syscall(EXIT_SUCCESS);
