@@ -17,7 +17,7 @@ pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustL
 );
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
-    interface::RustRfc::new(interface::RustLazyGlobal::new(|| FilesystemMetadata::blank_fs_init())); //we want to check if fs exists before doing a blank init, but not for now
+    interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::blank_fs_init())); //we want to check if fs exists before doing a blank init, but not for now
 
 
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
