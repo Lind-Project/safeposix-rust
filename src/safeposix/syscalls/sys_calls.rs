@@ -11,12 +11,12 @@ use super::fs_constants::*;
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        let mut mutcagetable = CAGE_TABLE;
+        let mut mutcagetable = &CAGE_TABLE;
 
         //construct new cage struct with a cloned fdtable
         let mut newfdtable = interface::RustHashMap::new();
         {
-            let mut mutmetadata = FS_METADATA;
+            let mut mutmetadata = &FS_METADATA;
             for refmulti in self.filedescriptortable.iter() {
                 let (key, value) = refmulti.pair();
                 let fd = value.read().unwrap();
@@ -28,11 +28,11 @@ impl Cage {
 
                         if let Some(inodenum) = inodenum_option {
                             //increment the reference count on the inode
-                            let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                            match *inode {
-                                Inode::File(f) => {f.refcount += 1;}
-                                Inode::CharDev(f) => {f.refcount += 1;}
-                                Inode::Dir(f) => {f.refcount += 1;}
+                            let mut inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                            match &*inode {
+                                Inode::File(mut f) => {f.refcount += 1;}
+                                Inode::CharDev(mut f) => {f.refcount += 1;}
+                                Inode::Dir(mut f) => {f.refcount += 1;}
                             }
                         }
                     }
@@ -106,15 +106,15 @@ impl Cage {
 
         //close all remaining files in the fdtable
         {
-            let mut fdtable = self.filedescriptortable;
-            for fdtablepair in fdtable.iter() {
+            let mut fdtable = &self.filedescriptortable;
+            for fdtablepair in fdtable.iter_mut() {
                 let (fd, _) = fdtablepair.pair();
                 self._close_helper(*fd, Some(&mut fdtable));
             }
         }
 
         //get file descriptor table into a vector
-        let mut mutmetadata = FS_METADATA;
+        let mut mutmetadata = &FS_METADATA;
 
         let cwd_container = self.cwd.read().unwrap();
 

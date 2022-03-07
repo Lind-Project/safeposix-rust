@@ -119,7 +119,7 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mut mutmetadata = FS_METADATA;
+    let mut mutmetadata = &FS_METADATA;
 
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
@@ -172,7 +172,7 @@ pub fn load_fs() {
 
         load_fs_special_files(&utilcage);
 
-        let metadata = FS_METADATA;
+        let metadata = &FS_METADATA;
         persist_metadata(&metadata);
     }
 }
@@ -290,7 +290,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
             interface::RustPathComponent::Normal(f) => {
                 //If we're trying to get the child of a nonexistent directory, exit out
                 if inodeno.is_none() {return (None, None);}
-                match *curnode.unwrap() { 
+                match &*curnode.unwrap() { 
                     Inode::Dir(d) => {
                         previnodeno = inodeno;
 
@@ -344,9 +344,9 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
 }
 
 pub fn incref_root() {
-    let mut metadata = FS_METADATA;
+    let mut metadata = &FS_METADATA;
     let rootinode = metadata.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap();
-    if let Inode::Dir(rootdir_dirinode_obj) = *rootinode {
+    if let Inode::Dir(mut rootdir_dirinode_obj) = &*rootinode {
         rootdir_dirinode_obj.refcount += 1;
     } else {panic!("Root directory inode was not a directory");}
 }

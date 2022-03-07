@@ -206,7 +206,7 @@ impl NetMetadata {
         }
 
         //if we didn't assign an ephemeral port we got a prespecified port, attempt to bind there
-        if let Some(portusers) = self.used_port_set.get_mut(&muxed) {
+        if let Some(mut portusers) = self.used_port_set.get_mut(&muxed) {
             if *portusers == 0 {
                 return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
             } else {
@@ -232,7 +232,7 @@ impl NetMetadata {
             return Err(syscall_error(Errno::EINVAL, "release", "provided port has nonsensical protocol"));
         }
 
-        if let Some(portusers) = self.used_port_set.get_mut(&muxed) {
+        if let Some(mut portusers) = self.used_port_set.get_mut(&muxed) {
             if *portusers <= 1 {
                 //if it's rebindable and we're removing the last bound port or it's just not rebindable
                 if let Some(_) = self.used_port_set.remove(&muxed) {

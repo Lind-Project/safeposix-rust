@@ -698,7 +698,7 @@ pub mod fs_tests {
 
         //have to retieve the metadata lock after the open syscall gets it
         {
-            let metadata = FS_METADATA;
+            let metadata = &FS_METADATA;
             persist_metadata(&*metadata);
             let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
             let result = path.unwrap().metadata().unwrap().permissions();
@@ -716,7 +716,7 @@ pub mod fs_tests {
 
         //check that the setup was run first
         {
-            let mut metadata = FS_METADATA;
+            let mut metadata = &FS_METADATA;
             persist_metadata(&*metadata);
             // let path = normpath(convpath(METADATAFILENAME), &cage);
             let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());

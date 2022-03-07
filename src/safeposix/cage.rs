@@ -135,7 +135,7 @@ impl Cage {
         let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
         let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
         let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let mut fdtable = self.filedescriptortable;
+        let mut fdtable = &self.filedescriptortable;
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
         fdtable.insert(2, stderr);
@@ -144,7 +144,7 @@ impl Cage {
 }
 
 pub fn get_next_pipe() -> Option<i32> {
-    let table = PIPE_TABLE;
+    let table = &PIPE_TABLE;
     for fd in STARTINGPIPE..MAXPIPE {
         if !table.contains_key(&fd) {
             return Some(fd);
