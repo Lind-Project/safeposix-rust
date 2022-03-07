@@ -558,7 +558,7 @@ impl Cage {
     //------------------------------------READ SYSCALL------------------------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
-        let fdtable = self.filedescriptortable;
+        let fdtable = &self.filedescriptortable;
         
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
@@ -602,7 +602,7 @@ impl Cage {
                 }
                 Socket(_) => {
                     drop(filedesc_enum);
-                    self.recv_common(fd, buf, count, 0, &mut None, fdtable)
+                    self.recv_common(fd, buf, count, 0, &mut None, *fdtable)
                 }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
                 Pipe(pipe_filedesc_obj) => {
