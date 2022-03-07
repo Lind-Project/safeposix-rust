@@ -551,7 +551,7 @@ impl Cage {
 
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
         let fdtable = &self.filedescriptortable;
-        return self.recv_common(fd, buf, buflen, flags, &mut None, fdtable);
+        return self.recv_common(fd, buf, buflen, flags, &mut None, *fdtable);
     }
 
     //we currently ignore backlog
