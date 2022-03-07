@@ -546,7 +546,7 @@ impl Cage {
 
     pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let fdtable = &self.filedescriptortable;
-        return self.recv_common(fd, buf, buflen, flags, addr, fdtable);
+        return self.recv_common(fd, buf, buflen, flags, addr, *fdtable);
     }
 
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
@@ -876,7 +876,7 @@ impl Cage {
                                 } else {
                                     drop(sockfdobj);
                                     drop(filedesc_enum);
-                                    if self._nonblock_peek_read(*fd, fdtable) {
+                                    if self._nonblock_peek_read(*fd, *fdtable) {
                                         new_readfds.insert(*fd);
                                         retval += 1;
                                     }
