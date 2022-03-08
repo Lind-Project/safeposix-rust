@@ -1217,7 +1217,7 @@ impl Cage {
                 }
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let mut inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     let mut fobjtable = &FILEOBJECTTABLE;
 
                     match *inodeobj {
@@ -1383,7 +1383,7 @@ impl Cage {
 
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path(), Some(&metadata)) {
-            let thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
+            let mut thisinode = metadata.inodetable.get_mut(&inodenum).unwrap();
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
                 match *thisinode {
                     Inode::File(ref mut general_inode) => {
@@ -1432,7 +1432,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //confirm inode type is mappable
-                    match *inodeobj {
+                    match &*inodeobj {
                         Inode::File(normalfile_inode_obj) => {
                             //if we want to write our changes back to the file the file needs to be open for reading and writing
                             if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
@@ -1541,7 +1541,7 @@ impl Cage {
             (Some(inodenum), Some(parent_inodenum)) => {
                 let inodeobj = metadata.inodetable.get_mut(&inodenum).unwrap();
 
-                match *inodeobj {
+                match &*inodeobj {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
                         if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
@@ -1553,7 +1553,7 @@ impl Cage {
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
                         
-                        if let Inode::Dir(parent_dir) = *metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                        if let Inode::Dir(parent_dir) = &*metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
@@ -1599,7 +1599,7 @@ impl Cage {
                 }
                 
                 let pardir_inodeobj = metadata.inodetable.get_mut(&parent_inodenum).unwrap();
-                if let Inode::Dir(parent_dir) = *pardir_inodeobj {
+                if let Inode::Dir(parent_dir) = &*pardir_inodeobj {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(true_newpath.file_name().unwrap().to_str().unwrap().to_string(), inodenum);
 
