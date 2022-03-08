@@ -64,8 +64,8 @@ impl Cage {
                 });
 
                 let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
-                if let Inode::Dir(ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                *mutmetadata.nextinode += 1;
+                if let Inode::Dir(mut ind) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -89,8 +89,8 @@ impl Cage {
                     }
 
                     //set size of file to 0
-                    match *mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
-                        Inode::File(g) => {g.size = 0;}
+                    match &*mutmetadata.inodetable.get_mut(&inodenum).unwrap() {
+                        Inode::File(mut g) => {g.size = 0;}
                         _ => {
                             return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
                         }
@@ -111,10 +111,10 @@ impl Cage {
             let size;
 
             //increment number of open handles to the file, retrieve other data from inode
-            match *inodeobj {
-                Inode::File(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Dir(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::CharDev(f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+            match &*inodeobj {
+                Inode::File(mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::Dir(mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::CharDev(mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
             }
 
             //If the file is a regular file, open the file object
@@ -163,7 +163,7 @@ impl Cage {
                 }
 
                 let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
+                *mutmetadata.nextinode += 1;
                 let time = interface::timestamp(); //We do a real timestamp now
 
                 let newinode = Inode::Dir(DirectoryInode {
@@ -173,7 +173,7 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                if let Inode::Dir(parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(parentdir) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -198,7 +198,7 @@ impl Cage {
 
         let truepath = normpath(convpath(path), self);
 
-        let mut mutmetadata = &FS_METADATA;
+        let mut mutmetadata = &mut FS_METADATA;
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -225,8 +225,8 @@ impl Cage {
                 });
 
                 let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
-                if let Inode::Dir(parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                *mutmetadata.nextinode += 1;
+                if let Inode::Dir(mut parentdir) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -261,14 +261,14 @@ impl Cage {
             Some(inodenum) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                match *inodeobj {
+                match &*inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
                         match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(mut ind) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&mutmetadata, pardirinode);
@@ -287,7 +287,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(mut ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&mutmetadata, pardirinode);
@@ -329,14 +329,14 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj) = match *inodeobj {
-                    Inode::File(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
-                    Inode::CharDev(f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
+                let (currefcount, curlinkcount, has_fobj) = match &*inodeobj {
+                    Inode::File(mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
+                    Inode::CharDev(mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
                 let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
-                let directory_parent_inode_obj = if let Inode::Dir(x) = *parentinodeobj {x} else {
+                let mut directory_parent_inode_obj = if let Inode::Dir(x) = &*parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
                 directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
@@ -384,7 +384,7 @@ impl Cage {
             statbuf.st_ino = inodenum;
 
             //delegate the rest of populating statbuf to the relevant helper
-            match *inodeobj {
+            match &*inodeobj {
                 Inode::File(f) => {
                     Self::_istat_helper(&f, statbuf);
                 },
@@ -470,7 +470,7 @@ impl Cage {
                     statbuf.st_ino = normalfile_filedesc_obj.inode;
                     statbuf.st_dev = metadata.dev_id;
 
-                    match *inode {
+                    match &*inode {
                         Inode::File(f) => {
                             Self::_istat_helper(&f, statbuf);
                         }
@@ -575,7 +575,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character if it's a character file, checking based on the type of the inode object
-                    match *inodeobj {
+                    match &*inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
                             let fobjtable = &FILEOBJECTTABLE;
@@ -639,7 +639,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character if it's a character file, checking based on the type of the inode object
-                    match *inodeobj {
+                    match &*inodeobj {
                         Inode::File(_) => {
                             let fobjtable = &FILEOBJECTTABLE;
                             let fileobject = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
@@ -706,11 +706,11 @@ impl Cage {
 
                     let mut metadata = &FS_METADATA;
 
-                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                    let mut inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
-                    match *inodeobj {
+                    match &*inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = normalfile_filedesc_obj.position;
 
@@ -718,7 +718,7 @@ impl Cage {
                             let blankbytecount = position as isize - filesize as isize;
 
                             let mut fobjtable = &FILEOBJECTTABLE;
-                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let mut fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
                             if blankbytecount > 0 {
@@ -803,18 +803,18 @@ impl Cage {
 
                     let mut metadata = &FS_METADATA;
 
-                    let inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                    let mut inodeobj = metadata.inodetable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
-                    match *inodeobj {
+                    match &*inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
 
                             let mut fobjtable = &FILEOBJECTTABLE;
-                            let fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
+                            let mut fileobject = fobjtable.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
                             if blankbytecount > 0 {
@@ -828,7 +828,7 @@ impl Cage {
                             }
 
                             let newposition;
-                            let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                            let mutretval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                 //move position forward by the number of bytes we've written
                                 newposition = position + byteswritten;
 
@@ -899,7 +899,7 @@ impl Cage {
                     let inodeobj = metadata.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
                     //handle files/directories differently
-                    match *inodeobj {
+                    match &*inodeobj {
                         Inode::File(normalfile_inode_obj) => {
                             let eventualpos = match whence {
                                 SEEK_SET => {offset}
@@ -977,7 +977,7 @@ impl Cage {
             let inodeobj = metadata.inodetable.get(&inodenum).unwrap();
 
             //Get the mode bits if the type of the inode is sane
-            let mode = match *inodeobj {
+            let mode = match &*inodeobj {
                 Inode::File(f) => {f.mode},
                 Inode::CharDev(f) => {f.mode},
                 Inode::Dir(f) => {f.mode},
