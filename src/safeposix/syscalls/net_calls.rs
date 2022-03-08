@@ -546,12 +546,12 @@ impl Cage {
 
     pub fn recvfrom_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let fdtable = &self.filedescriptortable;
-        return self.recv_common(fd, buf, buflen, flags, addr, *fdtable);
+        return self.recv_common(fd, buf, buflen, flags, addr, fdtable);
     }
 
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
         let fdtable = &self.filedescriptortable;
-        return self.recv_common(fd, buf, buflen, flags, &mut None, *fdtable);
+        return self.recv_common(fd, buf, buflen, flags, &mut None, fdtable);
     }
 
     //we currently ignore backlog
