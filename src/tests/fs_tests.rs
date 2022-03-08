@@ -85,7 +85,7 @@ pub mod fs_tests {
         let mut metadata = &filesystem::FS_METADATA; 
         filesystem::persist_metadata(&metadata);
 
-        let metadatastring1 = interface::serde_serialize_to_bytes(&*metadata).unwrap(); // before restore
+        let metadatastring1 = interface::serde_serialize_to_bytes(&**metadata).unwrap(); // before restore
 
         filesystem::restore_metadata(&mut metadata); // should be the same as after restore
 
