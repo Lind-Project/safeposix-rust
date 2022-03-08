@@ -663,7 +663,7 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket(&self, fd: i32, partial: bool, fdtable: &mut FdTable) -> i32 {
+    pub fn _cleanup_socket(&self, fd: i32, partial: bool, fdtable: &FdTable) -> i32 {
 
         //The FdTable must always be passed.
 
