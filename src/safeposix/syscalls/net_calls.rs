@@ -389,7 +389,7 @@ impl Cage {
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
-                            let sockobj = metadata.socket_object_table.get(&sid).unwrap().read().unwrap();
+                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
 
                             let retval = sockobj.sendto(buf, buflen, None);
                             if retval < 0 {
