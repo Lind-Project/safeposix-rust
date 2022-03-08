@@ -389,9 +389,10 @@ impl Cage {
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
-                            let sockobj = metadata.socket_object_table.get(&sid).unwrap();
+                            let sockobjwrapper = metadata.socket_object_table.get(&sid).unwrap();
+                            let sockobj = *sockobjwrapper.read().unwrap();
 
-                            let retval = *sockobj.sendto(buf, buflen, None);
+                            let retval = sockobj.sendto(buf, buflen, None);
                             if retval < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "send", "The libc call to sendto failed!");},
