@@ -116,7 +116,7 @@ impl Cage {
         let mut ourwriter;
         let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
             ourwriter = &self.filedescriptortable;
-            mut ourwriter
+            &mut *ourwriter
         };
         writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
