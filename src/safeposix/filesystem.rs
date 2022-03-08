@@ -119,7 +119,7 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mut mutmetadata = &FS_METADATA;
+    let mut mutmetadata = &mut FS_METADATA;
 
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
@@ -172,7 +172,7 @@ pub fn load_fs() {
 
         load_fs_special_files(&utilcage);
 
-        let metadata = &FS_METADATA;
+        let metadata = &mutFS_METADATA;
         persist_metadata(&metadata);
     }
 }
@@ -253,7 +253,7 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
 }
 
 // Read file, and deserialize CBOR to FS METADATA
-pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
+pub fn restore_metadata() {
 
     // Read CBOR from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
@@ -261,7 +261,7 @@ pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    *metadata = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
+    FS_METADATA = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {

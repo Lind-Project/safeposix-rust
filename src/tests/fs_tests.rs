@@ -82,7 +82,7 @@ pub mod fs_tests {
         assert!(fd >= 0);
 
         assert_eq!(cage.close_syscall(fd), 0);
-        let mut metadata = filesystem::FS_METADATA; 
+        let mut metadata = &filesystem::FS_METADATA; 
         filesystem::persist_metadata(&metadata);
 
         let metadatastring1 = interface::serde_serialize_to_bytes(&*metadata).unwrap(); // before restore

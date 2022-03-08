@@ -876,7 +876,7 @@ impl Cage {
                                 } else {
                                     drop(sockfdobj);
                                     drop(filedesc_enum);
-                                    if self._nonblock_peek_read(*fd, *fdtable) {
+                                    if self._nonblock_peek_read(*fd, fdtable) {
                                         new_readfds.insert(*fd);
                                         retval += 1;
                                     }
@@ -1343,7 +1343,7 @@ impl Cage {
 
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
 
-                for (key, value) in epollfdobj.registered_fds {
+                for (key, value) in &epollfdobj.registered_fds {
 
                     let events = value.events;
                     let mut structpoll = PollStruct {
