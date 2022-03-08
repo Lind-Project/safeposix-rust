@@ -390,7 +390,7 @@ impl Cage {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let metadata = NET_METADATA.read().unwrap();
                             let sockobjwrapper = metadata.socket_object_table.get(&sid).unwrap();
-                            let sockobj = *sockobjwrapper.read().unwrap();
+                            let sockobj = &*sockobjwrapper.read().unwrap();
 
                             let retval = sockobj.sendto(buf, buflen, None);
                             if retval < 0 {
@@ -650,10 +650,10 @@ impl Cage {
                 return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
             }
             SHUT_WR => {
-                return Self::_cleanup_socket(self, fd, true, &mut fdtable);
+                return Self::_cleanup_socket(self, fd, true, fdtable);
             }
             SHUT_RDWR => {
-                return Self::_cleanup_socket(self, fd, false, &mut fdtable);
+                return Self::_cleanup_socket(self, fd, false, fdtable);
             }
             _ => {
                 //See http://linux.die.net/man/2/shutdown for nuance to this error
