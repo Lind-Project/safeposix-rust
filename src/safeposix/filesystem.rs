@@ -172,8 +172,8 @@ pub fn load_fs() {
 
         load_fs_special_files(&utilcage);
 
-        let metadata = &mut FS_METADATA;
-        persist_metadata(&metadata);
+        let metadata = &FS_METADATA;
+        persist_metadata(metadata);
     }
 }
 
