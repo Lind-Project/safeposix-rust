@@ -29,7 +29,7 @@ impl Cage {
                         if let Some(inodenum) = inodenum_option {
                             //increment the reference count on the inode
                             let mut inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                            match &**inode {
+                            match &*inode {
                                 Inode::File(mut f) => {*f.refcount += 1;}
                                 Inode::CharDev(ref mut f) => {*f.refcount += 1;}
                                 Inode::Dir(ref mut f) => {*f.refcount += 1;}
