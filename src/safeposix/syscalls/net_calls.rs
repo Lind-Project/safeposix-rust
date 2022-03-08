@@ -1344,7 +1344,7 @@ impl Cage {
 
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
 
-                for (key, value) in &epollfdobj.registered_fds {
+                for (key, value) in &*epollfdobj.registered_fds {
 
                     let events = value.events;
                     let mut structpoll = PollStruct {
