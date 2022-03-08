@@ -273,8 +273,8 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
     let ourreader;
     //Acquire a readlock if we were not passed in a reference
     let md = if let Some(rl) = guard {rl} else {
-        ourreader = FS_METADATA; 
-        &ourreader
+        ourreader = &FS_METADATA; 
+        ourreader
     };
 
     let mut curnode = Some(md.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
