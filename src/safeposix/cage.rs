@@ -113,10 +113,10 @@ impl Cage {
     }
 
     pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
-        let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
+        let fdtable = if let Some(fdtable_writer) = fdtable_option {fdtable_writer} else {
             &self.filedescriptortable
         };
-        writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
+        fdtable.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
 
     pub fn rm_from_fd_table(&self, fd: &i32) {
