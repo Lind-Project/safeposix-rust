@@ -261,7 +261,7 @@ pub fn restore_metadata() {
     metadata_fileobj.close().unwrap();
 
     // Restore metadata
-    FS_METADATA = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
+    *FS_METADATA = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
