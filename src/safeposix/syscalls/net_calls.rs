@@ -737,7 +737,6 @@ impl Cage {
                                 let sockobj = locksock.read().unwrap();
 
                                 drop(fdtable);
-                                drop(vec);
                                 drop(mutmetadata);
 
                                 match sockfdobj.domain {
