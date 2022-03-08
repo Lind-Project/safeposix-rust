@@ -876,7 +876,7 @@ impl Cage {
                                 } else {
                                     drop(sockfdobj);
                                     drop(filedesc_enum);
-                                    if self._nonblock_peek_read(*fd, fdtable) {
+                                    if self._nonblock_peek_read(*fd, *fdtable) {
                                         new_readfds.insert(*fd);
                                         retval += 1;
                                     }
