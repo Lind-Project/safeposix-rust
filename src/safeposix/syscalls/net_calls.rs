@@ -724,7 +724,7 @@ impl Cage {
                             };
 
                             let mut mutmetadata = NET_METADATA.write().unwrap();
-                            let (acceptedresult, remote_addr) = if let Some(vec) = mutmetadata.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
+                            let (acceptedresult, remote_addr) = if let Some(mut vec) = mutmetadata.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
                                 let tup = vec.pop().unwrap(); //pending connection tuple recieved
                                 if vec.is_empty() {

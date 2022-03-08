@@ -287,7 +287,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(mut ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(mut ind) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&mutmetadata, pardirinode);
@@ -336,7 +336,7 @@ impl Cage {
                 }; //count current number of links and references
 
                 let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
-                let mut directory_parent_inode_obj = if let Inode::Dir(x) = &*parentinodeobj {x} else {
+                let &mut directory_parent_inode_obj = if let Inode::Dir(x) = &*parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
                 directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
@@ -1089,14 +1089,14 @@ impl Cage {
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
-                    match *inodeobj {
-                        Inode::File(normalfile_inode_obj) => {
+                    match &*inodeobj {
+                        Inode::File(mut normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount += 1;
                         },
-                        Inode::Dir(dir_inode_obj) => {
+                        Inode::Dir(mut dir_inode_obj) => {
                             dir_inode_obj.refcount += 1;
                         },
-                        Inode::CharDev(chardev_inode_obj) => {
+                        Inode::CharDev(mut chardev_inode_obj) => {
                             chardev_inode_obj.refcount += 1;
                         },
                     }
