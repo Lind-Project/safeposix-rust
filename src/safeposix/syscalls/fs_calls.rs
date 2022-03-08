@@ -1626,7 +1626,7 @@ impl Cage {
                 // only proceed when fd references a regular file
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let mut inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
                     match *inodeobj {
                         // only proceed when inode matches with a file

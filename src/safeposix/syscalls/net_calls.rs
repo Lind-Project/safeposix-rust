@@ -340,7 +340,8 @@ impl Cage {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
 
                             let mutmetadata = NET_METADATA.write().unwrap();
-                            let sockobj = mutmetadata.socket_object_table.get(&sid).unwrap().read().unwrap();
+                            let sockobjwrapper = mutmetadata.socket_object_table.get(&sid).unwrap();
+                            let sockobj = &*sockobjwrapper.read().unwrap();
 
                             //we don't mind if this fails for now and we will just get the error
                             //from calling sendto
