@@ -430,7 +430,7 @@ pub extern "C" fn lindrustfinalize() {
     let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = vec![];
     let iterator = cagetable.iter();
     for refmulti in iterator {
-        drainedcages.push(refmulti.pair());
+        drainedcages.push(*(refmulti.pair()));
     }
     cagetable.clear();
     drop(cagetable);
