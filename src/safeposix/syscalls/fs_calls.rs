@@ -64,7 +64,7 @@ impl Cage {
                 });
 
                 let newinodenum = mutmetadata.nextinode;
-                *mutmetadata.nextinode += 1;
+                mutmetadata.nextinode += 1;
                 if let Inode::Dir(mut ind) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
@@ -163,7 +163,7 @@ impl Cage {
                 }
 
                 let newinodenum = mutmetadata.nextinode;
-                *mutmetadata.nextinode += 1;
+                mutmetadata.nextinode += 1;
                 let time = interface::timestamp(); //We do a real timestamp now
 
                 let newinode = Inode::Dir(DirectoryInode {
@@ -225,7 +225,7 @@ impl Cage {
                 });
 
                 let newinodenum = mutmetadata.nextinode;
-                *mutmetadata.nextinode += 1;
+                mutmetadata.nextinode += 1;
                 if let Inode::Dir(mut parentdir) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
@@ -828,7 +828,7 @@ impl Cage {
                             }
 
                             let newposition;
-                            let mutretval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
+                            let retval = if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                 //move position forward by the number of bytes we've written
                                 newposition = position + byteswritten;
 
