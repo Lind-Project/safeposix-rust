@@ -119,7 +119,7 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mut mutmetadata = &mut FS_METADATA;
+    let mut mutmetadata = &FS_METADATA;
 
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
