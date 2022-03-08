@@ -102,7 +102,7 @@ impl Cage {
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
         let ourreader;
         let rdguard = if let Some(fdtable) = fdtable_option {fdtable} else {
-            ourreader = self.filedescriptortable; &ourreader
+            ourreader = &self.filedescriptortable; ourreader
         };
         for fd in start..MAXFD{
             if !rdguard.contains_key(&fd) {
