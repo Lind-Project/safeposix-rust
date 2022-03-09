@@ -17,7 +17,7 @@ pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustL
 );
 
 pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
-    interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::blank_fs_init())); //we want to check if fs exists before doing a blank init, but not for now
+    interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::init_fs_metadata())); //we want to check if fs exists before doing a blank init, but not for now
 
 
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
@@ -106,6 +106,17 @@ impl FilesystemMetadata {
     }
 }
 
+// Read file, and deserialize CBOR to FS METADATA
+pub fn init_fs_metadata() -> FilesystemMetadata {
+    // Read CBOR from file
+    let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
+    metadata_fileobj.close().unwrap();
+
+    // Restore metadata
+    interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
+}
+
 pub fn load_fs() {
 
     // Create initial cage, probably will move this
@@ -125,9 +136,7 @@ pub fn load_fs() {
     // If it doesn't, lets create a new one, load special files, and persist it.
     if interface::pathexists(METADATAFILENAME.to_string()) {
         let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-
         metadata_fileobj.close().unwrap();
-        restore_metadata(&mut mutmetadata);
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
@@ -250,18 +259,6 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
     let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
     metadata_fileobj.writefile_from_bytes(&metadatabytes).unwrap();
     metadata_fileobj.close().unwrap();
-}
-
-// Read file, and deserialize CBOR to FS METADATA
-pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
-
-    // Read CBOR from file
-    let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-    let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
-    metadata_fileobj.close().unwrap();
-
-    // Restore metadata
-    *metadata = interface::serde_deserialize_from_bytes(&metadatabytes).unwrap();
 }
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
