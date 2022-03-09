@@ -129,7 +129,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
         }
 
-        let mutmetadata = NET_METADATA.write().unwrap();
+        let mut mutmetadata = NET_METADATA.write().unwrap();
         let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
 
         let newlocalport = if prereserved {
@@ -189,7 +189,7 @@ impl Cage {
         if let Some(addr) = &sockfdobj.localaddr {
             Ok(addr.clone())
         } else {
-            let mutmetadata = NET_METADATA.write().unwrap();
+            let mut mutmetadata = NET_METADATA.write().unwrap();
 
             //This is the specified behavior for the berkeley sockets API
             let retval = if isv6 {
@@ -339,7 +339,7 @@ impl Cage {
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
                             let sockobjwrapper = mutmetadata.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read().unwrap();
 
@@ -581,7 +581,7 @@ impl Cage {
                             let mut porttuple;
                             match sockfdobj.localaddr {
                                 Some(sla) => {
-                                    let mutmetadata = NET_METADATA.write().unwrap();
+                                    let mut mutmetadata = NET_METADATA.write().unwrap();
                                     ladr = sla.clone();
                                     porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
 
@@ -604,7 +604,7 @@ impl Cage {
                             //get or create the socket and bind it before listening
                             let sid = Self::getsockobjid(sockfdobj);
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
                             mutmetadata.listening_port_set.insert(porttuple);
 
                             sockfdobj.state = ConnState::LISTEN;
@@ -670,7 +670,7 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc = wrappedfd.write().unwrap();
             if let Socket(sockfdobj) = &mut *filedesc {
-                let mutmetadata = NET_METADATA.write().unwrap();
+                let mut mutmetadata = NET_METADATA.write().unwrap();
                 let objectid = &sockfdobj.socketobjectid;
 
                 if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
@@ -723,7 +723,7 @@ impl Cage {
                                 return syscall_error(Errno::ENFILE, "accept", "no available file descriptor number could be found");
                             };
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
                             let (acceptedresult, remote_addr) = if let Some(mut vec) = mutmetadata.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
                                 let tup = vec.pop().unwrap(); //pending connection tuple recieved
