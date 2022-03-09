@@ -79,7 +79,8 @@ impl Cage {
         
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
-        for (&fdnum, inode) in *iterator {
+        for pair in iterator {
+            let (&fdnum, inode) = pair.pair();
             if match &*inode.read().unwrap() {
                File(f) => f.flags & O_CLOEXEC,
                Stream(s) => s.flags & O_CLOEXEC,
