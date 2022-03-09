@@ -111,10 +111,10 @@ impl Cage {
             let size;
 
             //increment number of open handles to the file, retrieve other data from inode
-            match &*inodeobj {
-                Inode::File(mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Dir(mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::CharDev(mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+            match *inodeobj {
+                Inode::File(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::Dir(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::CharDev(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
             }
 
             //If the file is a regular file, open the file object
@@ -198,7 +198,7 @@ impl Cage {
 
         let truepath = normpath(convpath(path), self);
 
-        let mut mutmetadata = &mut FS_METADATA;
+        let mut mutmetadata = &FS_METADATA;
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -261,7 +261,7 @@ impl Cage {
             Some(inodenum) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                match &*inodeobj {
+                match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
                         match metawalkandparent(truenewpath.as_path(), Some(&mutmetadata)) {
@@ -329,9 +329,9 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj) = match &*inodeobj {
-                    Inode::File(mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
-                    Inode::CharDev(mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
+                let (currefcount, curlinkcount, has_fobj) = match *inodeobj {
+                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
+                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
