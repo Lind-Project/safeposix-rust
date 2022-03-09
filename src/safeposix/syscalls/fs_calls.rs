@@ -1069,8 +1069,7 @@ impl Cage {
         //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
         let mut writer;
         let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
-            writer = &self.filedescriptortable; 
-            &mut writer
+            &self.filedescriptortable; 
         };
         
         //checking if the new fd is out of range
@@ -1159,8 +1158,7 @@ impl Cage {
         //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
         let mut writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
-            writer = self.filedescriptortable; 
-            &mut writer
+            &self.filedescriptortable
         };
 
         //unpacking and getting the type to match for
