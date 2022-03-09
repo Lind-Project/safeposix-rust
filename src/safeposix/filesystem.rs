@@ -176,7 +176,6 @@ pub fn load_fs() {
 
     } else {
         create_log();
-
         load_fs_special_files(&utilcage);
 
         let metadata = &FS_METADATA;

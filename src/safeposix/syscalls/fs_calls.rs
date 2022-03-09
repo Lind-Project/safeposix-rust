@@ -174,7 +174,7 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                if let Inode::Dir(parentdir) = &*mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(ref mut parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -1550,7 +1550,7 @@ impl Cage {
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
                         
-                        if let Inode::Dir(parent_dir) = &*metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                        if let Inode::Dir(ref mut parent_dir) = *metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
