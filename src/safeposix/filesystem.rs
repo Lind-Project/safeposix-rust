@@ -177,7 +177,7 @@ pub fn load_fs() {
     }
 }
 
-pub fn fsck(mutmetadata: &mut FilesystemMetadata) {
+pub fn fsck(mutmetadata: &FilesystemMetadata) {
     mutmetadata.inodetable.retain(|_inodenum, inode_obj| {
         match inode_obj {
             Inode::File(ref mut normalfile_inode) => {
@@ -253,7 +253,7 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
 }
 
 // Read file, and deserialize CBOR to FS METADATA
-pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
+pub fn restore_metadata(metadata: &FilesystemMetadata) {
 
     // Read CBOR from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
