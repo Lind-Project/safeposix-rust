@@ -1041,7 +1041,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_exec_cloexec() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
         let mut uselessstatdata = StatData::default();
 
         let fd1 = cage.open_syscall("/cloexecuted", O_CREAT | O_TRUNC | O_RDWR | O_CLOEXEC, S_IRWXA);
@@ -1053,7 +1053,7 @@ pub mod fs_tests {
 
         assert_eq!(cage.exec_syscall(2), 0);
 
-        let execcage = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+        let execcage = {CAGE_TABLE.get(&2).unwrap().clone()};
 
         assert_eq!(execcage.fstat_syscall(fd1, &mut uselessstatdata), -(Errno::EBADF as i32));
         assert_eq!(execcage.fstat_syscall(fd2, &mut uselessstatdata), 0);
