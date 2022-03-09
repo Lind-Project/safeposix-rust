@@ -1026,7 +1026,7 @@ impl Cage {
         let mut cwd_container = self.cwd.write().unwrap();
 
         //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
-        decref_dir(&mut mutmetadata, &*cwd_container);
+        decref_dir(mutmetadata, &*cwd_container);
 
         *cwd_container = interface::RustRfc::new(truepath);
         0 //chdir has succeeded!;
