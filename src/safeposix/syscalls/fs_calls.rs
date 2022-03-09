@@ -336,7 +336,7 @@ impl Cage {
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
-                let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
+                let mut parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
                 let mut directory_parent_inode_obj = if let Inode::Dir(mut x) = *parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
