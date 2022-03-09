@@ -127,7 +127,7 @@ pub fn load_fs() {
         let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
 
         metadata_fileobj.close().unwrap();
-        restore_metadata(mutmetadata);
+        restore_metadata(&mut mutmetadata);
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
@@ -253,7 +253,7 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
 }
 
 // Read file, and deserialize CBOR to FS METADATA
-pub fn restore_metadata(metadata: &FilesystemMetadata) {
+pub fn restore_metadata(metadata: &mut FilesystemMetadata) {
 
     // Read CBOR from file
     let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
