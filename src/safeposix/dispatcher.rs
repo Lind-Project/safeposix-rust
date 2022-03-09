@@ -431,7 +431,7 @@ pub extern "C" fn lindrustfinalize() {
     let iterator = cagetable.iter();
     for refmulti in iterator {
         let (key, value) = refmulti.pair();
-        drainedcages.push((*key, *value.copy()));
+        drainedcages.push((*key, (*value).copy()));
     }
     cagetable.clear();
     drop(cagetable);
