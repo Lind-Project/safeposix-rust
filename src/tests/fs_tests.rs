@@ -42,7 +42,7 @@ pub mod fs_tests {
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
         ut_lind_fs_dir_chdir_getcwd();
-        persistencetest();
+        // persistencetest();
         rdwrtest();
         prdwrtest();
         chardevtest();
