@@ -339,7 +339,7 @@ impl Cage {
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
 
-                            let mut mutmetadata = NET_METADATA.write().unwrap();
+                            let mutmetadata = NET_METADATA.write().unwrap();
                             let sockobjwrapper = mutmetadata.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read().unwrap();
 
@@ -604,7 +604,7 @@ impl Cage {
                             //get or create the socket and bind it before listening
                             let sid = Self::getsockobjid(sockfdobj);
 
-                            let mut mutmetadata = NET_METADATA.write().unwrap();
+                            let mutmetadata = NET_METADATA.write().unwrap();
                             mutmetadata.listening_port_set.insert(porttuple);
 
                             sockfdobj.state = ConnState::LISTEN;

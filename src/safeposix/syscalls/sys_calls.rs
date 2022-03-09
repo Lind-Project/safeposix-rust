@@ -11,10 +11,10 @@ use super::fs_constants::*;
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        let mut mutcagetable = &CAGE_TABLE;
+        let mutcagetable = &CAGE_TABLE;
 
         //construct new cage struct with a cloned fdtable
-        let mut newfdtable = interface::RustHashMap::new();
+        let newfdtable = interface::RustHashMap::new();
         {
             let mutmetadata = &FS_METADATA;
             for refmulti in self.filedescriptortable.iter() {

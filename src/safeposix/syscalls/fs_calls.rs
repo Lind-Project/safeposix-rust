@@ -20,7 +20,7 @@ impl Cage {
         //file descriptor table write lock held for the whole function to prevent TOCTTOU
         let fdtable = &self.filedescriptortable;
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
             fd
@@ -144,7 +144,7 @@ impl Cage {
 
         let truepath = normpath(convpath(path), self);
 
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -199,7 +199,7 @@ impl Cage {
 
         let truepath = normpath(convpath(path), self);
 
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -336,7 +336,7 @@ impl Cage {
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
-                let mut parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
+                let parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
                 let directory_parent_inode_obj = if let Inode::Dir(ref x) = *parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
@@ -1008,7 +1008,7 @@ impl Cage {
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath, Some(&mutmetadata)) {
@@ -1164,7 +1164,7 @@ impl Cage {
         {
             let locked_filedesc = fdtable.get(&fd).unwrap();
             let filedesc_enum = locked_filedesc.read().unwrap();
-            let mut mutmetadata = &FS_METADATA;
+            let mutmetadata = &FS_METADATA;
 
             //Decide how to proceed depending on the fd type.
             //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
@@ -1177,7 +1177,7 @@ impl Cage {
                 Socket(socket_filedesc_obj) => {
                     let mut cleanflag = false;
                     if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                        let mut netmeta = NET_METADATA.write().unwrap();
+                        let netmeta = NET_METADATA.write().unwrap();
                         let mut sockobjopt = netmeta.socket_object_table.get_mut(&socknum);
                         //in case shutdown?
                         if let Some(ref mut sockobj) = sockobjopt {
@@ -1617,7 +1617,7 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
 
             let filedesc_enum = wrappedfd.read().unwrap();
-            let mut mutmetadata = &FS_METADATA;
+            let mutmetadata = &FS_METADATA;
 
             match &*filedesc_enum {
                 // only proceed when fd references a regular file
