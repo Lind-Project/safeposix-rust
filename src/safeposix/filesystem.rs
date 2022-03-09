@@ -82,7 +82,7 @@ pub struct FilesystemMetadata {
 }
 
 pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> interface::RustHashMap<String, usize> {
-    let mut retval = interface::RustHashMap::new();
+    let retval = interface::RustHashMap::new();
     retval.insert(".".to_string(), curinode);
     retval.insert("..".to_string(), parentinode);
     retval

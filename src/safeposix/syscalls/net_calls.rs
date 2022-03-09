@@ -36,7 +36,7 @@ impl Cage {
     }
 
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
-        let mut fdtable = &self.filedescriptortable; 
+        let fdtable = &self.filedescriptortable; 
         let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
 
         let newfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
@@ -645,7 +645,7 @@ impl Cage {
     }
 
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
-        let mut fdtable = &self.filedescriptortable;
+        let fdtable = &self.filedescriptortable;
         match how {
             SHUT_RD => {
                 return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
@@ -1252,7 +1252,7 @@ impl Cage {
     pub fn _epoll_object_allocator(&self) -> i32 {
 
         //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
-        let mut fdtable = &self.filedescriptortable;
+        let fdtable = &self.filedescriptortable;
         
         //get a file descriptor
         if let Some(newfd) = self.get_next_fd(None, None) {
