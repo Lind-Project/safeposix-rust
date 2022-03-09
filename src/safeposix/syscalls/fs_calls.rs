@@ -1559,7 +1559,7 @@ impl Cage {
                             
                             // remove entry of corresponding filename from filename-inode dict
                             parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
-                            parent_dir.linkcount -= 1; // decrement linkcount of parent dir
+                            *parent_dir.linkcount -= 1; // decrement linkcount of parent dir
                         }
                         log_metadata(&metadata, parent_inodenum);
                         log_metadata(&metadata, inodenum);       
