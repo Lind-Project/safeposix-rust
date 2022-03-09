@@ -114,7 +114,7 @@ impl Cage {
         }
 
         //get file descriptor table into a vector
-        ~ = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         let cwd_container = self.cwd.read().unwrap();
 
