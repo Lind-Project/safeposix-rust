@@ -1068,7 +1068,7 @@ impl Cage {
         
         //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
         let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
-            &self.filedescriptortable; 
+            &self.filedescriptortable
         };
         
         //checking if the new fd is out of range
