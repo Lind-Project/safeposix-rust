@@ -1553,7 +1553,7 @@ impl Cage {
                         // remove entry of corresponding inodenum from inodetable
                         metadata.inodetable.remove(&inodenum).unwrap();
                         
-                        if let Inode::Dir(&parent_dir) = &*metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
+                        if let Inode::Dir(parent_dir) = &*metadata.inodetable.get_mut(&parent_inodenum).unwrap() {
                             // check if parent dir has write permission
                             if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
                             
