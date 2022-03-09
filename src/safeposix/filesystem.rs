@@ -91,7 +91,7 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
 impl FilesystemMetadata {
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
-        let mut retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
+        let retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
         //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially,
@@ -130,7 +130,7 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mut mutmetadata = &FS_METADATA;
+    let mutmetadata = &FS_METADATA;
 
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
@@ -338,7 +338,7 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
 }
 
 pub fn incref_root() {
-    let mut metadata = &FS_METADATA;
+    let metadata = &FS_METADATA;
     if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(metadata.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
         rootdir_dirinode_obj.refcount += 1;
     } else {panic!("Root directory inode was not a directory");}

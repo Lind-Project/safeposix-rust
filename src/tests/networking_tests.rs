@@ -690,9 +690,9 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0); 
 
-        let mut inputs = interface::RustHashSet::<i32>::new();
-        let mut outputs = interface::RustHashSet::<i32>::new();
-        let     excepts = interface::RustHashSet::<i32>::new();
+        let inputs = interface::RustHashSet::<i32>::new();
+        let outputs = interface::RustHashSet::<i32>::new();
+        let excepts = interface::RustHashSet::<i32>::new();
 
         inputs.insert(serversockfd);
         inputs.insert(filefd);

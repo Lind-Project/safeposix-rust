@@ -339,7 +339,7 @@ impl Cage {
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
+                            let mut mutmetadata = NET_METADATA.write().unwrap();
                             let sockobjwrapper = mutmetadata.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read().unwrap();
 
@@ -820,8 +820,8 @@ impl Cage {
         //sockfds and writefds are not really implemented at the current moment.
         //They both always return success. However we have some intention of making
         //writefds work at some point for pipes? We have no such intention for exceptfds
-        let mut new_readfds = interface::RustHashSet::<i32>::new();
-        let mut new_writefds = interface::RustHashSet::<i32>::new();
+        let new_readfds = interface::RustHashSet::<i32>::new();
+        let new_writefds = interface::RustHashSet::<i32>::new();
         //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
     
         if nfds < STARTINGFD || nfds >= MAXFD {
