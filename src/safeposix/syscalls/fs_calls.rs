@@ -1150,12 +1150,12 @@ impl Cage {
  
         //check that the fd is valid
         match fdtable.get(&fd) {
-            Some(_) => {return Self::_close_helper(self, fd, Some(&mut fdtable));},
+            Some(_) => {return Self::_close_helper(self, fd, Some(fdtable));},
             None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
     }
 
-    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&mut FdTable>) -> i32 {
+    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
         //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
         let mut writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
