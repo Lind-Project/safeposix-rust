@@ -251,7 +251,7 @@ impl Cage {
         let truenewpath = normpath(convpath(newpath), self);
         let filename = truenewpath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-        let mut mutmetadata = &FS_METADATA;
+        let  mutmetadata = &FS_METADATA;
 
         match metawalk(trueoldpath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -312,7 +312,7 @@ impl Cage {
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
         let truepath = normpath(convpath(path), self);
 
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If the file does not exist
@@ -336,7 +336,7 @@ impl Cage {
                 }; //count current number of links and references
 
                 let mut parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
-                let mut directory_parent_inode_obj = if let Inode::Dir(ref x) = *parentinodeobj {x} else {
+                let &mut directory_parent_inode_obj = if let Inode::Dir(ref x) = *parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
                 directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
@@ -747,7 +747,7 @@ impl Cage {
                             }
                         }
 
-                        Inode::CharDev(char_inode_obj) => {
+                        Inode::CharDev(ref char_inode_obj) => {
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
@@ -807,7 +807,7 @@ impl Cage {
 
                     //delegate to character helper or print out if it's a character file or stream,
                     //checking based on the type of the inode object
-                    match &*inodeobj {
+                    match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
@@ -1047,7 +1047,7 @@ impl Cage {
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup", "no available file descriptor number could be found");};
-            return Self::_dup2_helper(&self, fd, nextfd, Some(&mut fdtable))
+            return Self::_dup2_helper(&self, fd, nextfd, Some(fdtable))
         } else {
             return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
         }
@@ -1058,7 +1058,7 @@ impl Cage {
 
         //if the old fd exists, execute the helper, else return error
         if let Some(_) = fdtable.get(&oldfd) {
-            return Self::_dup2_helper(&self, oldfd, newfd, Some(&mut fdtable));
+            return Self::_dup2_helper(&self, oldfd, newfd, Some(fdtable));
         } else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         }
@@ -1087,14 +1087,14 @@ impl Cage {
                     let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
-                    match &*inodeobj {
-                        Inode::File(mut normalfile_inode_obj) => {
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount += 1;
                         },
-                        Inode::Dir(mut dir_inode_obj) => {
+                        Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount += 1;
                         },
-                        Inode::CharDev(mut chardev_inode_obj) => {
+                        Inode::CharDev(ref mut chardev_inode_obj) => {
                             chardev_inode_obj.refcount += 1;
                         },
                     }
