@@ -29,7 +29,7 @@ impl Cage {
         };
 
 
-        match metawalkandparent(truepath.as_path(), Some(&mut *mutmetadata)) {
+        match metawalkandparent(truepath.as_path(), Some(mutmetadata)) {
             //If neither the file nor parent exists
             (None, None) => {
                 if 0 == (flags & O_CREAT) {
@@ -64,7 +64,7 @@ impl Cage {
                 });
 
                 let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
+                (*mutmetadata).nextinode += 1;
                 if let Inode::Dir(ref mut ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
