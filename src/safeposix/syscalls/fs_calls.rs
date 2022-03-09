@@ -1067,7 +1067,6 @@ impl Cage {
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
         
         //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
-        let mut writer;
         let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
             &self.filedescriptortable; 
         };
@@ -1156,7 +1155,6 @@ impl Cage {
 
     pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
         //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
-        let mut writer;
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             &self.filedescriptortable
         };
