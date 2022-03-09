@@ -76,7 +76,7 @@ pub struct DirectoryInode {
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct FilesystemMetadata {
-    pub nextinode: interface::RustRfc::RustAtomicUSize,
+    pub nextinode: interface::RustAtomicUSize,
     pub dev_id: u64,
     pub inodetable: interface::RustHashMap<usize, Inode>
 }
