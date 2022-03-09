@@ -46,6 +46,7 @@ pub mod fs_tests {
         rdwrtest();
         prdwrtest();
         chardevtest();
+        ut_lind_fs_exec_cloexec();
     }
 
 
@@ -437,7 +438,7 @@ pub mod fs_tests {
         assert_eq!(cage.fcntl_syscall(sockfd, F_SETFD, O_CLOEXEC), 0);
 
         //checking to see if the wrong flag was set or not
-        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0), 1);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0), O_CLOEXEC);
 
         //let's get some more flags on the filefd
         assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY|O_NONBLOCK), 0);
@@ -1035,6 +1036,33 @@ pub mod fs_tests {
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "/subdir1\0");
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_exec_cloexec() {
+        lindrustinit(0);
+        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let mut uselessstatdata = StatData::default();
+
+        let fd1 = cage.open_syscall("/cloexecuted", O_CREAT | O_TRUNC | O_RDWR | O_CLOEXEC, S_IRWXA);
+        let fd2 = cage.open_syscall("/cloexekept", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd1 > 0);
+        assert!(fd2 > 0);
+        assert_eq!(cage.fstat_syscall(fd1, &mut uselessstatdata), 0);
+        assert_eq!(cage.fstat_syscall(fd2, &mut uselessstatdata), 0);
+
+        assert_eq!(cage.exec_syscall(2), 0);
+
+        let execcage = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+
+        assert_eq!(execcage.fstat_syscall(fd1, &mut uselessstatdata), -(Errno::EBADF as i32));
+        assert_eq!(execcage.fstat_syscall(fd2, &mut uselessstatdata), 0);
+
+        assert_eq!(execcage.close_syscall(fd2), 0);
+        assert_eq!(cage.unlink_syscall("/cloexecuted"), 0);
+        assert_eq!(cage.unlink_syscall("/cloexekept"), 0);
+
+        assert_eq!(execcage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }
