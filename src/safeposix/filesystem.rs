@@ -119,7 +119,7 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mut mutmetadata = &mut FS_METADATA;
+    let mut mutmetadata = &FS_METADATA;
 
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
@@ -127,7 +127,7 @@ pub fn load_fs() {
         let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
 
         metadata_fileobj.close().unwrap();
-        restore_metadata(&mut mutmetadata);
+        restore_metadata(mutmetadata);
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
@@ -158,7 +158,7 @@ pub fn load_fs() {
             let _logremove = interface::removefile(LOGFILENAME.to_string());
 
             // clean up broken links
-            fsck(&mut mutmetadata);
+            fsck(mutmetadata);
         }
 
         // then recreate the log
