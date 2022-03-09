@@ -29,7 +29,7 @@ impl Cage {
         };
 
 
-        match metawalkandparent(truepath.as_path(), Some(mut mutmetadata)) {
+        match metawalkandparent(truepath.as_path(), Some(&mut *mutmetadata)) {
             //If neither the file nor parent exists
             (None, None) => {
                 if 0 == (flags & O_CREAT) {
