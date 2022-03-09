@@ -20,7 +20,7 @@ impl Cage {
         //file descriptor table write lock held for the whole function to prevent TOCTTOU
         let fdtable = &self.filedescriptortable;
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
-        let &mut mutmetadata = FS_METADATA;
+        let mut mutmetadata = &FS_METADATA;
 
         let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
             fd
@@ -29,7 +29,7 @@ impl Cage {
         };
 
 
-        match metawalkandparent(truepath.as_path(), Some(&mut mutmetadata)) {
+        match metawalkandparent(truepath.as_path(), Some(mut mutmetadata)) {
             //If neither the file nor parent exists
             (None, None) => {
                 if 0 == (flags & O_CREAT) {
