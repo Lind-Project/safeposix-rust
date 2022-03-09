@@ -127,7 +127,7 @@ pub fn load_fs() {
         let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
 
         metadata_fileobj.close().unwrap();
-        restore_metadata(*mutmetadata);
+        restore_metadata(mutmetadata);
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
@@ -158,7 +158,7 @@ pub fn load_fs() {
             let _logremove = interface::removefile(LOGFILENAME.to_string());
 
             // clean up broken links
-            fsck(*mutmetadata);
+            fsck(mutmetadata);
         }
 
         // then recreate the log
