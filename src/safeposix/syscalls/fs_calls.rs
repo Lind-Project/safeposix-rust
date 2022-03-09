@@ -20,7 +20,7 @@ impl Cage {
         //file descriptor table write lock held for the whole function to prevent TOCTTOU
         let fdtable = &self.filedescriptortable;
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
-        let mutmetadata = &FS_METADATA;
+        let mut mutmetadata = &FS_METADATA;
 
         let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
             fd
@@ -1080,7 +1080,7 @@ impl Cage {
         {
             let locked_filedesc = fdtable.get(&oldfd).unwrap();
             let filedesc_enum = locked_filedesc.read().unwrap();
-            let mut mutmetadata = &FS_METADATA;
+            let mutmetadata = &FS_METADATA;
 
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
