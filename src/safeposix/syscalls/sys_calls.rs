@@ -16,7 +16,7 @@ impl Cage {
         //construct new cage struct with a cloned fdtable
         let mut newfdtable = interface::RustHashMap::new();
         {
-            let mut mutmetadata = &FS_METADATA;
+            let mutmetadata = &FS_METADATA;
             for refmulti in self.filedescriptortable.iter() {
                 let (key, value) = refmulti.pair();
                 let fd = value.read().unwrap();
@@ -106,7 +106,7 @@ impl Cage {
 
         //close all remaining files in the fdtable
         {
-            let mut fdtable = &self.filedescriptortable;
+            let fdtable = &self.filedescriptortable;
             for fdtablepair in fdtable.iter_mut() {
                 let (fd, _) = fdtablepair.pair();
                 self._close_helper(*fd, Some(fdtable));
@@ -114,7 +114,7 @@ impl Cage {
         }
 
         //get file descriptor table into a vector
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         let cwd_container = self.cwd.read().unwrap();
 
