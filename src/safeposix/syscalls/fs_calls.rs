@@ -64,7 +64,7 @@ impl Cage {
                 });
 
                 let newinodenum = mutmetadata.nextinode;
-                let meta = *mutmetadata;
+                let meta: i32 = &*mutmetadata;
                 meta.nextinode += 1;
                 if let Inode::Dir(ref mut ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
