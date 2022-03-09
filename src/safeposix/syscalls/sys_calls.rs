@@ -109,7 +109,7 @@ impl Cage {
             let mut fdtable = &self.filedescriptortable;
             for fdtablepair in fdtable.iter_mut() {
                 let (fd, _) = fdtablepair.pair();
-                self._close_helper(*fd, Some(&mut fdtable));
+                self._close_helper(*fd, Some(fdtable));
             }
         }
 
@@ -118,7 +118,7 @@ impl Cage {
 
         let cwd_container = self.cwd.read().unwrap();
 
-        decref_dir(&mut mutmetadata, &*cwd_container);
+        decref_dir(mutmetadata, &*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         CAGE_TABLE.remove(&self.cageid);
