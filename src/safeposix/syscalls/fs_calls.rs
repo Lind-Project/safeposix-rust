@@ -336,7 +336,7 @@ impl Cage {
                 }; //count current number of links and references
 
                 let mut parentinodeobj = mutmetadata.inodetable.get_mut(&parentinodenum).unwrap();
-                let &directory_parent_inode_obj = if let Inode::Dir(ref x) = *parentinodeobj {x} else {
+                let directory_parent_inode_obj = if let Inode::Dir(ref x) = *parentinodeobj {x} else {
                     panic!("File was a child of something other than a directory????");
                 };
                 directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
@@ -847,7 +847,7 @@ impl Cage {
                             retval
                         }
 
-                        Inode::CharDev(char_inode_obj) => {
+                        Inode::CharDev(ref char_inode_obj) => {
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
@@ -1084,7 +1084,7 @@ impl Cage {
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                    let mut inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
                     //incrementing the ref count so that when close is executed on the dup'd file
                     //the original file does not get a negative ref count
                     match *inodeobj {
