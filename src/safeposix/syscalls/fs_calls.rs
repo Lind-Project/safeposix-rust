@@ -225,15 +225,15 @@ impl Cage {
                     atime: time, ctime: time, mtime: time, dev: devtuple(dev)
                 });
 
-                let newinodenum = &mutmetadata.nextinode.into_inner();
-                mutmetadata.nextinode.store(*newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
+                let newinodenum = mutmetadata.nextinode.into_inner();
+                mutmetadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
                 if let Inode::Dir(ref mut parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    parentdir.filename_to_inode_dict.insert(filename, *newinodenum);
+                    parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                mutmetadata.inodetable.insert(*newinodenum, newinode);
+                mutmetadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(&mutmetadata, pardirinode);
-                log_metadata(&mutmetadata, *newinodenum);
+                log_metadata(&mutmetadata, newinodenum);
                 0 //mknod has succeeded
             }
 
