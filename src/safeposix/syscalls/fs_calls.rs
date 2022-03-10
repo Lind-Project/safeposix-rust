@@ -233,7 +233,7 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 mutmetadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(&mutmetadata, pardirinode);
-                log_metadata(&mutmetadata, newinodenum;
+                log_metadata(&mutmetadata, newinodenum);
                 0 //mknod has succeeded
             }
 
