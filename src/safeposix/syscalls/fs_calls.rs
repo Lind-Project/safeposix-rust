@@ -225,7 +225,7 @@ impl Cage {
                     atime: time, ctime: time, mtime: time, dev: devtuple(dev)
                 });
 
-                let newinodenum = mutmetadata.nextinode.load(Ordering::Relaxed);
+                let newinodenum = mutmetadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
                 mutmetadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
                 if let Inode::Dir(ref mut parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
