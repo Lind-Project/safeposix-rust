@@ -20,7 +20,7 @@ impl Cage {
         //file descriptor table write lock held for the whole function to prevent TOCTTOU
         let fdtable = &self.filedescriptortable;
         //file system metadata table write lock held for the whole function to prevent TOCTTOU
-        let mut mutmetadata = &FS_METADATA;
+        let mutmetadata = &FS_METADATA;
 
         let thisfd = if let Some(fd) = self.get_next_fd(None, Some(&fdtable)) {
             fd
