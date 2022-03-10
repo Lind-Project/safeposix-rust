@@ -63,7 +63,7 @@ impl Cage {
                     atime: time, ctime: time, mtime: time,
                 });
 
-                let newinodenum = mutmetadata.nextinode.into_inner();
+                let newinodenum = mutmetadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
                 mutmetadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
                 if let Inode::Dir(ref mut ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
@@ -163,7 +163,7 @@ impl Cage {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
-                let newinodenum = mutmetadata.nextinode.into_inner();
+                let newinodenum = mutmetadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
                 mutmetadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
                 let time = interface::timestamp(); //We do a real timestamp now
 
