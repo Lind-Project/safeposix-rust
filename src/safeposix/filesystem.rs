@@ -78,7 +78,7 @@ pub struct DirectoryInode {
 pub struct FilesystemMetadata {
     pub nextinode: interface::RustAtomicUSize,
     pub dev_id: u64,
-    pub inodetable: interface::RustHashMap<interface::RustAtomicUSize, Inode>
+    pub inodetable: interface::RustHashMap<usize, Inode>
 }
 
 pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> interface::RustHashMap<String, usize> {
