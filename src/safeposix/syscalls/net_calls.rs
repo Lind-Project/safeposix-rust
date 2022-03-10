@@ -730,16 +730,11 @@ impl Cage {
                                 if vec.is_empty() {
                                     mutmetadata.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
                                 }
-                                drop(fdtable);
-                                drop(mutmetadata);
                                 tup
                             } else {
                                 let sid = Self::getsockobjid(&mut *sockfdobj);
                                 let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
                                 let sockobj = locksock.read().unwrap();
-
-                                drop(fdtable);
-                                drop(mutmetadata);
 
                                 match sockfdobj.domain {
                                     PF_INET => sockobj.accept(true),
