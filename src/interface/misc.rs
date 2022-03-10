@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUSize};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 

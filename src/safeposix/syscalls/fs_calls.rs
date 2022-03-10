@@ -63,8 +63,8 @@ impl Cage {
                     atime: time, ctime: time, mtime: time,
                 });
 
-                let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
+                let newinodenum = mutmetadata.nextinode.into_inner();
+                mutmetadata.nextinode = interface::RustAtomicUsize::new(newinodenum + 1);
                 if let Inode::Dir(ref mut ind) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
@@ -163,25 +163,25 @@ impl Cage {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
-                let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
+                let newinodenum = mutmetadata.nextinode.into_inner();
+                mutmetadata.nextinode = interface::RustAtomicUsize::new(newinodenum + 1);
                 let time = interface::timestamp(); //We do a real timestamp now
 
                 let newinode = Inode::Dir(DirectoryInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                     mode: effective_mode, linkcount: 3, refcount: 0, //2 because ., and .., as well as reference in parent directory
                     atime: time, ctime: time, mtime: time, 
-                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, interface::RustAtomicUsize::new(pardirinode))
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
                 if let Inode::Dir(ref mut parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    parentdir.filename_to_inode_dict.insert(filename, interface::RustAtomicUsize::new(newinodenum));
+                    parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
-                mutmetadata.inodetable.insert(newinodenum, interface::RustAtomicUsize::new(newinode));
-                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(pardirinode));
-                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(newinodenum));
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+                log_metadata(&mutmetadata, pardirinode);
+                log_metadata(&mutmetadata, newinodenum);
                 0 //mkdir has succeeded
             }
 
@@ -225,15 +225,15 @@ impl Cage {
                     atime: time, ctime: time, mtime: time, dev: devtuple(dev)
                 });
 
-                let newinodenum = mutmetadata.nextinode;
-                mutmetadata.nextinode += 1;
+                let newinodenum = mutmetadata.nextinode.into_inner();
+                mutmetadata.nextinode = interface::RustAtomicUsize::new(newinodenum + 1);
                 if let Inode::Dir(ref mut parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                mutmetadata.inodetable.insert(newinodenum.into_inner(), interface::RustAtomicUsize::new(newinode));
-                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(pardirinode));
-                log_metadata(&mutmetadata, newinodenum);
+                mutmetadata.inodetable.insert(newinodenum, newinode);
+                log_metadata(&mutmetadata, pardirinode);
+                log_metadata(&mutmetadata, newinodenum;
                 0 //mknod has succeeded
             }
 
