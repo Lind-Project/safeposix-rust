@@ -231,9 +231,9 @@ impl Cage {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                mutmetadata.inodetable.insert(newinodenum, interface::RustAtomicUsize::new(newinode));
+                mutmetadata.inodetable.insert(newinodenum.into_inner(), interface::RustAtomicUsize::new(newinode));
                 log_metadata(&mutmetadata, interface::RustAtomicUsize::new(pardirinode));
-                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(newinodenum));
+                log_metadata(&mutmetadata, newinodenum);
                 0 //mknod has succeeded
             }
 
