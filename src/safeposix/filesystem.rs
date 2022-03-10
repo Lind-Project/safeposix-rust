@@ -91,7 +91,7 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
 impl FilesystemMetadata {
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
-        let retval = FilesystemMetadata {nextinode: STREAMINODE + 1, dev_id: 20, inodetable: interface::RustHashMap::new()};
+        let retval = FilesystemMetadata {nextinode: interface::RustAtomicUsize::new(STREAMINODE + 1), dev_id: 20, inodetable: interface::RustHashMap::new()};
         let time = interface::timestamp(); //We do a real timestamp now
         let dirinode = DirectoryInode {size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
         //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially,

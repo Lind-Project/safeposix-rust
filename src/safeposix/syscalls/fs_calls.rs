@@ -171,17 +171,17 @@ impl Cage {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                     mode: effective_mode, linkcount: 3, refcount: 0, //2 because ., and .., as well as reference in parent directory
                     atime: time, ctime: time, mtime: time, 
-                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, interface::RustAtomicUsize::new(pardirinode))
                 });
 
                 if let Inode::Dir(ref mut parentdir) = *mutmetadata.inodetable.get_mut(&pardirinode).unwrap() {
-                    parentdir.filename_to_inode_dict.insert(filename, newinodenum);
+                    parentdir.filename_to_inode_dict.insert(filename, interface::RustAtomicUsize::new(newinodenum));
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
-                mutmetadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(&mutmetadata, pardirinode);
-                log_metadata(&mutmetadata, newinodenum);
+                mutmetadata.inodetable.insert(newinodenum, interface::RustAtomicUsize::new(newinode));
+                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(pardirinode));
+                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(newinodenum));
                 0 //mkdir has succeeded
             }
 
@@ -231,9 +231,9 @@ impl Cage {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                mutmetadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(&mutmetadata, pardirinode);
-                log_metadata(&mutmetadata, newinodenum);
+                mutmetadata.inodetable.insert(newinodenum, interface::RustAtomicUsize::new(newinode));
+                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(pardirinode));
+                log_metadata(&mutmetadata, interface::RustAtomicUsize::new(newinodenum));
                 0 //mknod has succeeded
             }
 
