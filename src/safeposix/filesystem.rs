@@ -90,6 +90,10 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
 
 impl FilesystemMetadata {
 
+    pub fn blank_fs(self) -> Self {
+        self = FilesystemMetadata::blank_fs_init();
+    }
+
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
         let retval = FilesystemMetadata {nextinode: interface::RustAtomicUsize::new(STREAMINODE + 1), dev_id: 20, inodetable: interface::RustHashMap::new()};
