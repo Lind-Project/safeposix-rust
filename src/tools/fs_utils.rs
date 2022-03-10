@@ -158,7 +158,7 @@ fn main() {
 
         "format" => {
             lind_deltree(&utilcage, "/"); //This doesn't actually fully remove all of the linddata files... TODO: debug
-            *FS_METADATA = interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::init_fs_metadata()));
+            *FS_METADATA = interface::RustRfc::new(FilesystemMetadata::init_fs_metadata());
             load_fs_special_files(&utilcage);
         }
 
