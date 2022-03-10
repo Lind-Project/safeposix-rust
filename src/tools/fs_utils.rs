@@ -109,7 +109,7 @@ fn main() {
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
-                        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+                        filedescriptortable: interface::RustHashMap::new(),
                         getgid: interface::RustAtomicI32::new(-1), 
                         getuid: interface::RustAtomicI32::new(-1), 
                         getegid: interface::RustAtomicI32::new(-1), 
@@ -158,7 +158,7 @@ fn main() {
 
         "format" => {
             lind_deltree(&utilcage, "/"); //This doesn't actually fully remove all of the linddata files... TODO: debug
-            let mut metadata = FS_METADATA.write().unwrap();
+            let mut metadata = &FS_METADATA;
             *metadata = FilesystemMetadata::blank_fs_init();
             drop(metadata);
             load_fs_special_files(&utilcage);
