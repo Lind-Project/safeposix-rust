@@ -90,7 +90,7 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
 
 impl FilesystemMetadata {
 
-    pub fn blank_fs(self) -> Self {
+    pub fn blank_fs(self) {
         self = FilesystemMetadata::blank_fs_init();
     }
 
