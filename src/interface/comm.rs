@@ -205,7 +205,7 @@ impl Socket {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
 
-    pub fn ioctl(&self, request: u32, argptr: *mut u8) -> i32 {
+    pub fn ioctl(&self, request: u32, argptr: *mut i32) -> i32 {
         unsafe {libc::ioctl(self.raw_sys_fd, request as u64, argptr as *mut libc::c_void)}
     }
 
