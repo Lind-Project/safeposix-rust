@@ -483,11 +483,11 @@ impl Cage {
                                 if buflen != buflenleft {
                                     return (buflen - buflenleft) as i32;
                                 }
-                                /* Temporarily disabled
+                                
                                 match Errno::from_discriminant(interface::get_errno()) {
-                                    Temporarily disabled Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
+                                    Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
                                     Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                };*/
+                                };
 
                             }
 
