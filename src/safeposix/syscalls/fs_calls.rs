@@ -1300,7 +1300,11 @@ impl Cage {
                 }
                 // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
-                    *flags = (*flags & !O_CLOEXEC) | (arg & O_CLOEXEC);
+                    if arg & O_CLOEXEC != 0 {
+                        *flags |= O_CLOEXEC;
+                    } else {
+                        *flags &= !O_CLOEXEC;
+                    }
                     0
                 }
                 (F_GETFL, ..) => {
