@@ -113,13 +113,14 @@ impl FilesystemMetadata {
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
 
-            println!("{:?}", metadatabytes);
 
             // Restore metadata
-            interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
-        } else {
-            FilesystemMetadata::blank_fs_init()
-        }
+            if metadatabytes != None {
+                interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
+            }
+        } 
+
+        FilesystemMetadata::blank_fs_init()
     }
 }
 
