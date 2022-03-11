@@ -1132,7 +1132,7 @@ impl Cage {
         }    
 
         // get and clone fd, wrap and insert into table.
-        let filedesc_clone;
+        let mut filedesc_clone;
         {
             let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
