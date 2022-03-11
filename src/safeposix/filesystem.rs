@@ -246,12 +246,12 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     if let Some(&inode) = metadata.inodetable.get(&inodenum) {
         let serialpair: (usize, Option<&Inode>) = (inodenum, Some(&*inode));
         let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
+
+        // write to file
+        let mut mapopt = LOGMAP.write().unwrap();
+        let map = mapopt.as_mut().unwrap();
+        map.write_to_map(&entrybytes).unwrap();
     }
-    
-    // write to file
-    let mut mapopt = LOGMAP.write().unwrap();
-    let map = mapopt.as_mut().unwrap();
-    map.write_to_map(&entrybytes).unwrap();
 }
 
 // Serialize Metadata Struct to CBOR, write to file
