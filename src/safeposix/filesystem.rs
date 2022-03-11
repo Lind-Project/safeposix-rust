@@ -114,7 +114,7 @@ impl FilesystemMetadata {
             metadata_fileobj.close().unwrap();
 
             // Restore metadata
-            interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
+            println!(interface::serde_deserialize_from_bytes(&metadatabytes));
         } 
 
         FilesystemMetadata::blank_fs_init()
