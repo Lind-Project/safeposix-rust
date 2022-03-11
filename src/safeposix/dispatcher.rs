@@ -436,14 +436,14 @@ pub extern "C" fn lindrustfinalize() {
         let (key, value) = refmulti.pair();
         drainedcages.push((*key, (*value).clone()));
     }
-    cagetable.clear();
+    cagetable.clear();  
     drop(cagetable);
     for (_cageid, cage) in drainedcages {
         cage.exit_syscall(EXIT_SUCCESS);
     }
 
     // if we get here, persist and delete log
-    persist_metadata(&*FS_METADATA);
+    persist_metadata(FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
         let mut logobj = LOGMAP.write().unwrap();

@@ -138,13 +138,16 @@ impl Cage {
 
     //------------------MKDIR SYSCALL------------------
 
-    pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
+    pub fn mkdir_syscall(&self, path: &str, mode: u32, metatable_lock: Option<&FilesystemMetadata>) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mkdir", "given path was null");}
 
         let truepath = normpath(convpath(path), self);
 
-        let mutmetadata = &FS_METADATA;
+        //pass the lock of the metadata to this helper. If passed table is none, then create new instance
+        let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
+            &FS_METADATA
+        };
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -193,13 +196,16 @@ impl Cage {
 
     //------------------MKNOD SYSCALL------------------
 
-    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable_lock: Option<&FilesystemMetadata>) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
 
         let truepath = normpath(convpath(path), self);
 
-        let mutmetadata = &FS_METADATA;
+        //pass the lock of the metadata to this helper. If passed table is none, then create new instance
+        let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
+            &FS_METADATA
+        };
 
         match metawalkandparent(truepath.as_path(), Some(&mutmetadata)) {
             //If neither the file nor parent exists
@@ -1067,7 +1073,7 @@ impl Cage {
 
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
         
-        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new instance
         let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
             &self.filedescriptortable
         };
@@ -1155,7 +1161,7 @@ impl Cage {
     }
 
     pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
-        //pass the lock of the FdTable to this helper. If passed table is none, then create new lock instance
+        //pass the lock of the FdTable to this helper. If passed table is none, then create new instance
         let fdtable = if let Some(rl) = fdtable_lock {rl} else {
             &self.filedescriptortable
         };
