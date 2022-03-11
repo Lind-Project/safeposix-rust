@@ -177,7 +177,7 @@ pub fn load_fs() {
 
     } else {
         create_log();
-        load_fs_special_files(&utilcage);
+        load_fs_special_files(&utilcage, None);
 
         let metadata = &FS_METADATA;
         persist_metadata(metadata);
@@ -207,25 +207,30 @@ pub fn create_log() {
     logobj.replace(log_mapobj);
 }
 
-pub fn load_fs_special_files(utilcage: &Cage) {
+pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&FilesystemMetadata>) {
+    
+    //pass the lock of the metadata to this helper. If passed table is none, then create new instance
+    let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
+        &FS_METADATA
+    };
 
-    if utilcage.mkdir_syscall("/dev", S_IRWXA) != 0 {
+    if utilcage.mkdir_syscall("/dev", S_IRWXA, mutmetadata) != 0 {
         interface::log_to_stderr("making /dev failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/null", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 3})) != 0 {
+    if utilcage.mknod_syscall("/dev/null", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 3}), mutmetadata) != 0 {
         interface::log_to_stderr("making /dev/null failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/zero", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 5})) != 0 {
+    if utilcage.mknod_syscall("/dev/zero", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 5}), mutmetadata) != 0 {
         interface::log_to_stderr("making /dev/zero failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/urandom", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 9})) != 0 {
+    if utilcage.mknod_syscall("/dev/urandom", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 9}), mutmetadata) != 0 {
         interface::log_to_stderr("making /dev/urandom failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/random", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 8})) != 0 {
+    if utilcage.mknod_syscall("/dev/random", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 8}), mutmetadata) != 0 {
         interface::log_to_stderr("making /dev/random failed. Skipping");
     }
 }
