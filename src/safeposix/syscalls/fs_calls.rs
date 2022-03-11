@@ -1137,6 +1137,7 @@ impl Cage {
             let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
             filedesc_clone = (*&oldfiledesc_enum).clone();
+            filedesc_clone.flags = filedesc_clone.flags & ~O_CLOEXEC; // we don't want to pass on the CLOEXEC flag
         }
 
         let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
