@@ -88,7 +88,7 @@ pub fn init_filename_to_inode_dict(curinode: usize, parentinode: usize) -> inter
     retval
 }
 
-impl<'a> FilesystemMetadata {
+impl FilesystemMetadata {
 
     pub fn blank_fs_init() -> FilesystemMetadata {
         //remove open files?
@@ -107,14 +107,14 @@ impl<'a> FilesystemMetadata {
     }
 
     // Read file, and deserialize CBOR to FS METADATA
-    pub fn init_fs_metadata<'a>() -> FilesystemMetadata {
+    pub fn init_fs_metadata() -> FilesystemMetadata {
         // Read CBOR from file
         if let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap() {
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
 
             // Restore metadata
-            println!("{:?}", interface::serde_deserialize_from_bytes::<'a, T>(&metadatabytes));
+            println!("{:?}", interface::serde_deserialize_from_bytes(&metadatabytes));
         } 
 
         FilesystemMetadata::blank_fs_init()
