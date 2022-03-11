@@ -242,14 +242,16 @@ pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&Filesystem
 // Serialize New Metadata to CBOR, write to logfile
 pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let serialpair: (usize, Option<&Inode>);
+    let entrybytes;
 
     // pack and serialize log entry
     if let Some(inode) = metadata.inodetable.get(&inodenum) {
         serialpair = (inodenum, Some(&*inode));
+        entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
     } else {
         serialpair = (inodenum, None);
+        entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
     }
-    let entrybytes = interface::serde_serialize_to_bytes(&serialpair).unwrap();
 
     // write to file
     let mut mapopt = LOGMAP.write().unwrap();
