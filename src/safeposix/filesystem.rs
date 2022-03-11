@@ -113,7 +113,7 @@ impl FilesystemMetadata {
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
 
-            assert_eq!(metadatabytes, "hello");
+            assert_eq!(metadatabytes, vec![1, 2, 3]);
 
             // Restore metadata
             interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
