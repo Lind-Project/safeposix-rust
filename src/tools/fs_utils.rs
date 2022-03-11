@@ -161,7 +161,8 @@ fn main() {
             let metadata = &FilesystemMetadata::blank_fs_init();
             persist_metadata(metadata);
             load_fs_special_files(&utilcage, Some(metadata));
-            return;
+            return; // returning because we don't want to go through lindrustfinalize
+                    // because that ends up persisting the wrong metadata
         }
 
         "deltree" => {
