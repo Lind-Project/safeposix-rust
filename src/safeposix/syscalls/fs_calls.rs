@@ -364,6 +364,8 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
+
+                drop(parentinodeobj);
                 log_metadata(&mutmetadata, parentinodenum);
                 log_metadata(&mutmetadata, inodenum);
                 0 //unlink has succeeded
