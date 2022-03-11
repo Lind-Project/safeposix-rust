@@ -205,6 +205,10 @@ impl Socket {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
 
+    pub fn ioctl(&self, request: u32, argptr: *mut libc::c_void) -> i32 {
+        unsafe {libc::ioctl(self.raw_sys_fd, request, argptr)}
+    }
+
     pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
         return if isv4 {
             let mut inneraddrbuf = SockaddrV4::default();
