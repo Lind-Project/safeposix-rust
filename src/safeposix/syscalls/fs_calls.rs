@@ -1336,7 +1336,7 @@ impl Cage {
 
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
-            
+
             match request {
                 FIONBIO => {
                     let arg_result = interface::get_ioctl_int(ptrunion);
@@ -1346,7 +1346,7 @@ impl Cage {
                             return arg_result; //syscall_error
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
-                            let flags = sockfdobj.flags;
+                            let flags = &mut sockfdobj.flags;
                             let mut arg: i32 = arg_result;
 
                             if arg == 0 { //clear non-blocking I/O
