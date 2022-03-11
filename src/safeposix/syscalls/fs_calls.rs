@@ -1337,16 +1337,13 @@ impl Cage {
         if let Some(wrappedfd) = fdtable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write().unwrap();
             
-            /*
-            let filetype: i8;
-            
             let flags = match &mut *filedesc_enum {
-                Epoll(obj) => {filetype = 0; &mut obj.flags},
-                Pipe(obj) => {filetype = 1; &mut obj.flags},
-                Stream(obj) => {filetype = 2; &mut obj.flags},
-                Socket(obj) => {filetype = 3; &mut obj.flags},
-                File(obj) => {filetype = 4; &mut obj.flags},
-            };*/
+                Epoll(obj) => {&mut obj.flags},
+                Pipe(obj) => {&mut obj.flags},
+                Stream(obj) => {&mut obj.flags},
+                Socket(obj) => {&mut obj.flags},
+                File(obj) => {&mut obj.flags},
+            };
 
             match request {
                 FIONBIO => {
