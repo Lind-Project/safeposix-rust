@@ -1296,7 +1296,7 @@ impl Cage {
                     EPOLL_CTL_DEL => {
                         //since remove returns the value at the key and the values will always be EpollEvents, 
                         //I am using this to optimize the code
-                        epollfdobj.registered_fds.remove(&fd).unwrap().1
+                        epollfdobj.registered_fds.remove(&fd).unwrap().1;
                     }
                     EPOLL_CTL_MOD => {
                         //check if the fd that we are modifying exists or not
