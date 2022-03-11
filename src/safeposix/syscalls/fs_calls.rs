@@ -1138,16 +1138,16 @@ impl Cage {
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
             filedesc_clone = (*&oldfiledesc_enum).clone();
             match filedesc_clone { // we don't want to pass on the CLOEXEC flag
-                File(mut normalfile_filedesc_obj) => {
+                File(ref mut normalfile_filedesc_obj) => {
                     normalfile_filedesc_obj.flags = normalfile_filedesc_obj.flags & !O_CLOEXEC; 
                 }
-                Pipe(mut pipe_filedesc_obj) => {
+                Pipe(ref mut pipe_filedesc_obj) => {
                     pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
                 }
-                Socket(mut socket_filedesc_obj) => {
+                Socket(ref mut socket_filedesc_obj) => {
                     socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
                 }
-                Stream(mut stream_filedesc_obj) => {
+                Stream(ref mut stream_filedesc_obj) => {
                     stream_filedesc_obj.flags = stream_filedesc_obj.flags & !O_CLOEXEC;
                 }
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
