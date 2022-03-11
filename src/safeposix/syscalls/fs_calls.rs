@@ -1137,7 +1137,7 @@ impl Cage {
             let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
             filedesc_clone = (*&oldfiledesc_enum).clone();
-            match &*filedesc_clone { // we don't want to pass on the CLOEXEC flag
+            match filedesc_clone { // we don't want to pass on the CLOEXEC flag
                 File(normalfile_filedesc_obj) => {
                     normalfile_filedesc_obj.flags = normalfile_filedesc_obj.flags & !O_CLOEXEC; 
                 }
