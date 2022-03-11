@@ -485,7 +485,7 @@ impl Cage {
                                 }
 
                                 match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
+                                    // Temporarily disabled Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
                                     Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                                 };
 
