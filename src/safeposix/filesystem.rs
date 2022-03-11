@@ -109,14 +109,14 @@ impl FilesystemMetadata {
     // Read file, and deserialize CBOR to FS METADATA
     pub fn init_fs_metadata() -> FilesystemMetadata {
         // Read CBOR from file
-        if let Some(metadata_fileobj) = interface::openfile(METADATAFILENAME.to_string(), true) {
+        if let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap() {
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
 
             // Restore metadata
             interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
         } else {
-            blank_fs_init()
+            FilesystemMetadata::blank_fs_init()
         }
     }
 }
