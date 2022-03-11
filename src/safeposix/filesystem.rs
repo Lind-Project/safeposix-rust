@@ -113,6 +113,8 @@ impl FilesystemMetadata {
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
 
+            let i: i32 = metadatabytes;
+
             // Restore metadata
             interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
         } else {
