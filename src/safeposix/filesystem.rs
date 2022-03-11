@@ -114,8 +114,8 @@ impl FilesystemMetadata {
             metadata_fileobj.close().unwrap();
 
             match interface::serde_deserialize_from_bytes(&metadatabytes) {
-                Ok(res) => {
-                    res.unwrap()
+                Ok(()) => {
+                    interface::serde_deserialize_from_bytes(&metadatabytes).unwrap()
                 }
                 Err(_) => {
                     FilesystemMetadata::blank_fs_init()
