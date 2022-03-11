@@ -11,7 +11,7 @@ pub mod fs_tests {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         lindrustinit(0);
-        load_fs_special_files(&CAGE_TABLE.get(&1).unwrap());
+        load_fs_special_files(&CAGE_TABLE.get(&1).unwrap(), None);
         lindrustfinalize();
 
         ut_lind_fs_broken_close();
@@ -919,7 +919,7 @@ pub mod fs_tests {
 
         let old_path = "/test_dir";
         assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA, None), 0);
-        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed", None), 0);
+        assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();

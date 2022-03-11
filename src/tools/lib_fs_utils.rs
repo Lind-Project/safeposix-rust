@@ -156,7 +156,7 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
         //check whether we are supposed to create missing directories, and whether we'd be
         //clobbering anything to do so (if so error out)
         if create_missing_dirs {
-            if cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA) != 0 { //let's not mirror stat data
+            if cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA, None) != 0 { //let's not mirror stat data
                 eprintln!("Lind fs path does not exist but should not be created (is rooted at non-directory) {:?}", ancestor);
                 return;
             }
