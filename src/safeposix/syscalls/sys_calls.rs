@@ -118,8 +118,7 @@ impl Cage {
             let fdtable = &self.filedescriptortable;
             for fdtablepair in fdtable.iter_mut() {
                 let (fd, _) = fdtablepair.pair();
-                drop(fdtable);
-                self._close_helper(*fd);
+                self._close_helper(*fd, Some(fdtable));
             }
         }
 
