@@ -1058,7 +1058,8 @@ impl Cage {
         if let Some(_) = fdtable.get(&fd) {
             let nextfd = if let Some(fd) = self.get_next_fd(Some(start_fd), Some(&fdtable)) {fd} 
             else {return syscall_error(Errno::ENFILE, "dup", "no available file descriptor number could be found");};
-            return Self::_dup2_helper(&self, fd, nextfd, Some(fdtable))
+            drop(fdtable);
+            return Self::_dup2_helper(&self, fd, nextfd)
         } else {
             return syscall_error(Errno::EBADF, "dup", "file descriptor not found")
         }
@@ -1069,18 +1070,17 @@ impl Cage {
 
         //if the old fd exists, execute the helper, else return error
         if let Some(_) = fdtable.get(&oldfd) {
-            return Self::_dup2_helper(&self, oldfd, newfd, Some(fdtable));
+            drop(fdtable);
+            return Self::_dup2_helper(&self, oldfd, newfd);
         } else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         }
     }
 
-    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
+    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32) -> i32 {
         
         //pass the lock of the FdTable to this helper. If passed table is none, then create new instance
-        let fdtable = if let Some(fdtb) = fdtable_lock {fdtb} else {
-            &self.filedescriptortable
-        };
+        let fdtable = &self.filedescriptortable;
         
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
@@ -1133,11 +1133,14 @@ impl Cage {
 
         //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
         if fdtable.contains_key(&newfd) {
-            let close_result = Self::_close_helper(&self, newfd, Some(fdtable));
+            drop(fdtable);
+            let close_result = Self::_close_helper(&self, newfd);
             if close_result != 0 {
                 return close_result;
             }
-        }    
+        }   
+        //regain the lock
+        let fdtable = &self.filedescriptortable; 
 
         // get and clone fd, wrap and insert into table.
         let filedesc_clone;
@@ -1159,16 +1162,17 @@ impl Cage {
  
         //check that the fd is valid
         match fdtable.get(&fd) {
-            Some(_) => {return Self::_close_helper(self, fd, Some(fdtable));},
+            Some(_) => {
+                drop(fdtable);
+                return Self::_close_helper(self, fd);
+            },
             None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
     }
 
-    pub fn _close_helper(&self, fd: i32, fdtable_lock: Option<&FdTable>) -> i32 {
+    pub fn _close_helper(&self, fd: i32) -> i32 {
         //pass the lock of the FdTable to this helper. If passed table is none, then create new instance
-        let fdtable = if let Some(rl) = fdtable_lock {rl} else {
-            &self.filedescriptortable
-        };
+        let fdtable = &self.filedescriptortable;
 
         //unpacking and getting the type to match for
         {
