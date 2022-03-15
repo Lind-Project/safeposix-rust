@@ -1066,7 +1066,7 @@ impl Cage {
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
         //if the old fd exists, execute the helper, else return error
-        if &self.filedescriptortable.contains_key(&oldfd) {
+        if self.filedescriptortable.contains_key(&oldfd) {
             return Self::_dup2_helper(&self, oldfd, newfd);
         } else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
@@ -1081,7 +1081,7 @@ impl Cage {
         }
 
         {
-            let locked_filedesc = &self.filedescriptortable.get(&oldfd).unwrap();
+            let locked_filedesc = self.filedescriptortable.get(&oldfd).unwrap();
             let filedesc_enum = locked_filedesc.read().unwrap();
             let mutmetadata = &FS_METADATA;
 
@@ -1125,7 +1125,7 @@ impl Cage {
         }
 
         //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-        if &self.filedescriptortable.contains_key(&newfd) {
+        if self.filedescriptortable.contains_key(&newfd) {
             let close_result = Self::_close_helper(&self, newfd);
             if close_result != 0 {
                 return close_result;
@@ -1135,13 +1135,13 @@ impl Cage {
         // get and clone fd, wrap and insert into table.
         let filedesc_clone;
         {
-            let locked_oldfiledesc = &self.filedescriptortable.get(&oldfd).unwrap();
+            let locked_oldfiledesc = self.filedescriptortable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
             filedesc_clone = (*&oldfiledesc_enum).clone();
         }
 
         let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
-        &self.filedescriptortable.insert(newfd, wrappedfd);
+        self.filedescriptortable.insert(newfd, wrappedfd);
         return newfd;
     }
 
@@ -1149,7 +1149,7 @@ impl Cage {
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
         //check that the fd is valid
-        match &self.filedescriptortable.contains_key(&fd) {
+        match self.filedescriptortable.contains_key(&fd) {
             true => {return Self::_close_helper(self, fd);},
             false => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
@@ -1158,7 +1158,7 @@ impl Cage {
     pub fn _close_helper(&self, fd: i32) -> i32 {
         //unpacking and getting the type to match for
         {
-            let locked_filedesc = &self.filedescriptortable.get(&fd).unwrap();
+            let locked_filedesc = self.filedescriptortable.get(&fd).unwrap();
             let filedesc_enum = locked_filedesc.read().unwrap();
 
             //Decide how to proceed depending on the fd type.
@@ -1262,7 +1262,7 @@ impl Cage {
         }
 
         //removing inode from fd table
-        &self.filedescriptortable.remove(&fd);
+        self.filedescriptortable.remove(&fd);
         0 //_close_helper has succeeded!
     }
     
