@@ -1218,10 +1218,10 @@ impl Cage {
                             //if it's not a reg file, then we have nothing to close
                             //Inode::File is a regular file by default
                             if normalfile_inode_obj.refcount == 0 {
-                                &FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
+                                FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
                                 if normalfile_inode_obj.linkcount == 0 {
                                     //removing the file from the entire filesystem (interface, metadata, and object table)
-                                    &FS_METADATA.inodetable.remove(&inodenum);
+                                    FS_METADATA.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                 } 
@@ -1232,13 +1232,13 @@ impl Cage {
                             dir_inode_obj.refcount -= 1;
 
                             //if it's not a reg file, then we have nothing to close
-                            match &FILEOBJECTTABLE.get(&inodenum) {
+                            match FILEOBJECTTABLE.get(&inodenum) {
                                 Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
                                 None => {}
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
-                                &FS_METADATA.inodetable.remove(&inodenum);
+                                FS_METADATA.inodetable.remove(&inodenum);
                                 log_metadata(&FS_METADATA, inodenum);     
                             } 
                         },
@@ -1246,13 +1246,13 @@ impl Cage {
                             char_inode_obj.refcount -= 1;
 
                             //if it's not a reg file, then we have nothing to close
-                            match &FILEOBJECTTABLE.get(&inodenum) {
+                            match FILEOBJECTTABLE.get(&inodenum) {
                                 Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
                                 None => {}
                             }
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
-                                &FS_METADATA.inodetable.remove(&inodenum);
+                                FS_METADATA.inodetable.remove(&inodenum);
                                 log_metadata(&FS_METADATA, inodenum);
                             } 
                         }
@@ -1434,7 +1434,7 @@ impl Cage {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
                             //because of NaCl's internal workings we must allow mappings to extend past the end of a file
-                            let fobj = &FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
                             //this is the system fd number--the number of the lind.<inodenum> file in our host system
                             let fobjfdno = fobj.as_fd_handle_raw_int();
