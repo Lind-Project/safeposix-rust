@@ -83,11 +83,9 @@ impl Cage {
                     }
 
                     //set size of file to 0
-                    match FS_METADATA.inodetable.get_mut(&inodenum).unwrap() {
-                        Inode::File(ref mut g) => {g.size = 0;}
-                        _ => {
-                            return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
-                        }
+                    let inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                    if let Inode::File(ref mut g) = *inode {g.size = 0;} else {
+                        return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
                     }
 
                     //remove the previous file and add a new one of 0 length
@@ -164,7 +162,8 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                if let Inode::Dir(ref mut parentdir) = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap() {
+                let inode = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                if let Inode::Dir(ref mut parentdir) = *inode {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -219,7 +218,7 @@ impl Cage {
 
                 let newinodenum = metadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
                 metadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
-                if let Inode::Dir(ref mut parentdir) = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap() {
+                if let Inode::Dir(ref mut parentdir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
