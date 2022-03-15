@@ -182,17 +182,11 @@ impl Cage {
 
     //------------------MKNOD SYSCALL------------------
 
-    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable_lock: Option<&FilesystemMetadata>) -> i32 {
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
 
         let truepath = normpath(convpath(path), self);
-
-        //pass the lock of the metadata to this helper. If passed table is none, then create new instance
-        let FS_METADATA = if let Some(mttb) = metatable_lock {mttb} else {
-            &FS_METADATA
-        };
-
         match metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
             (None, None) => {
