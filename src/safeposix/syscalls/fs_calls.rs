@@ -562,7 +562,6 @@ impl Cage {
                     match &*inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
-                            let FILEOBJECTTABLE = &FILEOBJECTTABLE;
                             let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
@@ -586,7 +585,7 @@ impl Cage {
                 }
                 Socket(_) => {
                     drop(filedesc_enum);
-                    self.recv_common(fd, buf, count, 0, &mut None, self.filedescriptortable)
+                    self.recv_common(fd, buf, count, 0, &mut None)
                 }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
                 Pipe(pipe_filedesc_obj) => {
@@ -693,7 +692,6 @@ impl Cage {
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = position as isize - filesize as isize;
 
-                            let FILEOBJECTTABLE = &FILEOBJECTTABLE;
                             let mut fileobject = FILEOBJECTTABLE.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are at a position past the end of the file!
@@ -714,7 +712,7 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
-                                    log_metadata(&metadata, normalfile_filedesc_obj.inode);
+                                    log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
                                 } //update file size if necessary
                                 
                                 byteswritten as i32
@@ -784,7 +782,6 @@ impl Cage {
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
 
-                            let FILEOBJECTTABLE = &FILEOBJECTTABLE;
                             let mut fileobject = FILEOBJECTTABLE.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
                             //we need to pad the file with blank bytes if we are seeking past the end of the file!
@@ -812,7 +809,7 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
-                               log_metadata(&metadata, normalfile_filedesc_obj.inode);                            
+                               log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);                            
                             } //update file size if necessary
 
                             retval
