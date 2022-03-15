@@ -59,7 +59,8 @@ impl Cage {
 
                 let newinodenum = FS_METADATA.nextinode.load(interface::RustAtomicOrdering::Relaxed);
                 FS_METADATA.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
-                if let Inode::Dir(ref mut ind) = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap() {
+                let inode = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                if let Inode::Dir(ref mut ind) = *inode {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
