@@ -1184,7 +1184,7 @@ impl Cage {
                     if cleanflag {
                         drop(filedesc_enum);    //to appease Rust ownership, we drop the fdtable borrow before calling cleanup_socket
                         drop(locked_filedesc);
-                        let retval = Self::_cleanup_socket(self, fd, false, fdtable);
+                        let retval = Self::_cleanup_socket(self, fd, false, self.filedescriptortable);
                         if retval < 0 {
                             return retval;
                         }
