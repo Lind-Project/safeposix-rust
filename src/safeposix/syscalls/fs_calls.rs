@@ -258,7 +258,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ref mut ind) = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&FS_METADATA, pardirinode);
@@ -277,7 +277,7 @@ impl Cage {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ref mut ind) = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap() {
+                                if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                                     ind.filename_to_inode_dict.insert(filename, inodenum);
                                     ind.linkcount += 1;
                                     log_metadata(&FS_METADATA, pardirinode);
@@ -972,7 +972,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath) {
-            if let Inode::Dir(ref mut dir) = FS_METADATA.inodetable.get_mut(&inodenum).unwrap() {
+            if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
 
                 //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
                 dir.refcount += 1;
