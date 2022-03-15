@@ -59,8 +59,7 @@ impl Cage {
 
                 let newinodenum = FS_METADATA.nextinode.load(interface::RustAtomicOrdering::Relaxed);
                 FS_METADATA.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
-                let inode = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                if let Inode::Dir(ref mut ind) = *inode {
+                if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
                 } //insert a reference to the file in the parent directory
@@ -83,8 +82,7 @@ impl Cage {
                     }
 
                     //set size of file to 0
-                    let inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                    if let Inode::File(ref mut g) = *inode {g.size = 0;} else {
+                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} else {
                         return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
                     }
 
@@ -162,8 +160,7 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                let inode = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                if let Inode::Dir(ref mut parentdir) = *inode {
+                if let Inode::Dir(ref mut parentdir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
