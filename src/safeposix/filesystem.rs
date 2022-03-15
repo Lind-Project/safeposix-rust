@@ -279,15 +279,9 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
 }
 
 //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
-pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMetadata>) -> (Option<usize>, Option<usize>) {
-    let ourreader;
-    //Acquire a readlock if we were not passed in a reference
-    let md = if let Some(rl) = guard {rl} else {
-        ourreader = &FS_METADATA; 
-        ourreader
-    };
+pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
 
-    let mut curnode = Some(md.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
+    let mut curnode = Some(FS_METADATA.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
     let mut inodeno = Some(ROOTDIRECTORYINODE);
     let mut previnodeno = None;
 
@@ -307,7 +301,7 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
                         //populate child inode number from parent directory's inode dict
                         inodeno = match d.filename_to_inode_dict.get(&f.to_str().unwrap().to_string()) {
                             Some(num) => {
-                                curnode = md.inodetable.get(&num);
+                                curnode = FS_METADATA.inodetable.get(&num);
                                 Some(*num)
                             }
 
@@ -331,8 +325,8 @@ pub fn metawalkandparent(path: &interface::RustPath, guard: Option<&FilesystemMe
     //return inode number and it's parent's number
     (inodeno, previnodeno)
 }
-pub fn metawalk(path: &interface::RustPath, guard: Option<&FilesystemMetadata>) -> Option<usize> {
-    metawalkandparent(path, guard).0
+pub fn metawalk(path: &interface::RustPath) -> Option<usize> {
+    metawalkandparent(path).0
 }
 pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPathBuf {
     //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
@@ -354,20 +348,19 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
 }
 
 pub fn incref_root() {
-    let metadata = &FS_METADATA;
-    if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(metadata.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
+    if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
         rootdir_dirinode_obj.refcount += 1;
     } else {panic!("Root directory inode was not a directory");}
 }
 
-pub fn decref_dir(mutmetadata: &FilesystemMetadata, cwd_container: &interface::RustPathBuf) {
-    if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
-        if let Inode::Dir(ref mut cwddir) = *mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
+pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
+    if let Some(cwdinodenum) = metawalk(&cwd_container) {
+        if let Inode::Dir(ref mut cwddir) = FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap() {
             cwddir.refcount -= 1;
 
             //if the directory has been removed but this cwd was the last open handle to it
             if cwddir.refcount == 0 && cwddir.linkcount == 0 {
-                mutmetadata.inodetable.remove(&cwdinodenum);
+                FS_METADATA.inodetable.remove(&cwdinodenum);
             }
         } else {panic!("Cage had a cwd that was not a directory!");}
     } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent

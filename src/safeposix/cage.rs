@@ -92,7 +92,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>, fdtable_option: Option<&FdTable>) -> Option<i32> {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> Option<i32> {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -100,12 +100,8 @@ impl Cage {
         };
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
-        let ourreader;
-        let rdguard = if let Some(fdtable) = fdtable_option {fdtable} else {
-            ourreader = &self.filedescriptortable; ourreader
-        };
         for fd in start..MAXFD{
-            if !rdguard.contains_key(&fd) {
+            if !self.filedescriptortable.contains_key(&fd) {
                 return Some(fd);
             }
         };

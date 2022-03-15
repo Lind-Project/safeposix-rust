@@ -16,7 +16,6 @@ impl Cage {
         //construct new cage struct with a cloned fdtable
         let newfdtable = interface::RustHashMap::new();
         {
-            let mutmetadata = &FS_METADATA;
             for refmulti in self.filedescriptortable.iter() {
                 let (key, value) = refmulti.pair();
                 let fd = value.read().unwrap();
@@ -28,7 +27,7 @@ impl Cage {
 
                         if let Some(inodenum) = inodenum_option {
                             //increment the reference count on the inode
-                            let mut inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
+                            let mut inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                             match *inode {
                                 Inode::File(ref mut f) => {f.refcount += 1;}
                                 Inode::CharDev(ref mut f) => {f.refcount += 1;}
@@ -55,8 +54,8 @@ impl Cage {
 
             }
             let cwd_container = self.cwd.read().unwrap();
-            if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
-                if let Inode::Dir(ref mut cwddir) = *mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
+            if let Some(cwdinodenum) = metawalk(&cwd_container) {
+                if let Inode::Dir(ref mut cwddir) = FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap() {
                     cwddir.refcount += 1;
                 } else {panic!("We changed from a directory that was not a directory in chdir!");}
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
@@ -115,19 +114,15 @@ impl Cage {
 
         //close all remaining files in the fdtable
         {
-            let fdtable = &self.filedescriptortable;
-            for fdtablepair in fdtable.iter_mut() {
+            for fdtablepair in self.filedescriptortable.iter_mut() {
                 let (fd, _) = fdtablepair.pair();
                 self._close_helper(*fd);
             }
         }
 
         //get file descriptor table into a vector
-        let mutmetadata = &FS_METADATA;
-
         let cwd_container = self.cwd.read().unwrap();
-
-        decref_dir(mutmetadata, &*cwd_container);
+        decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         CAGE_TABLE.remove(&self.cageid);
