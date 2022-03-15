@@ -135,8 +135,6 @@ pub fn load_fs() {
         geteuid: interface::RustAtomicI32::new(-1)
     };
 
-    let mutmetadata = &FS_METADATA;
-
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
     if interface::pathexists(METADATAFILENAME.to_string()) {
@@ -163,8 +161,8 @@ pub fn load_fs() {
             for serialpair in logvec.drain(..) {
                 let (inodenum, inode) = serialpair;
                 match inode {
-                    Some(inode) => mutmetadata.inodetable.insert(inodenum, inode).unwrap(),
-                    None => mutmetadata.inodetable.remove(&inodenum).unwrap().1,
+                    Some(inode) => FS_METADATA.inodetable.insert(inodenum, inode).unwrap(),
+                    None => FS_METADATA.inodetable.remove(&inodenum).unwrap().1,
                 };
             }
 
@@ -172,7 +170,7 @@ pub fn load_fs() {
             let _logremove = interface::removefile(LOGFILENAME.to_string());
 
             // clean up broken links
-            fsck(mutmetadata);
+            fsck();
         }
 
         // then recreate the log
@@ -182,14 +180,12 @@ pub fn load_fs() {
     } else {
         create_log();
         load_fs_special_files(&utilcage, None);
-
-        let metadata = &FS_METADATA;
-        persist_metadata(metadata);
+        persist_metadata(&FS_METADATA);
     }
 }
 
-pub fn fsck(mutmetadata: &FilesystemMetadata) {
-    mutmetadata.inodetable.retain(|_inodenum, inode_obj| {
+pub fn fsck() {
+    FS_METADATA.inodetable.retain(|_inodenum, inode_obj| {
         match inode_obj {
             Inode::File(ref mut normalfile_inode) => {
                 normalfile_inode.linkcount != 0
@@ -211,30 +207,25 @@ pub fn create_log() {
     logobj.replace(log_mapobj);
 }
 
-pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&FilesystemMetadata>) {
-    
-    //pass the lock of the metadata to this helper. If passed table is none, then create new instance
-    let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
-        &FS_METADATA
-    };
+pub fn load_fs_special_files(utilcage: &Cage) {
 
-    if utilcage.mkdir_syscall("/dev", S_IRWXA, Some(mutmetadata)) != 0 {
+    if utilcage.mkdir_syscall("/dev", S_IRWXA, Some(&FS_METADATA)) != 0 {
         interface::log_to_stderr("making /dev failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/null", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 3}), Some(mutmetadata)) != 0 {
+    if utilcage.mknod_syscall("/dev/null", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 3}), Some(&FS_METADATA)) != 0 {
         interface::log_to_stderr("making /dev/null failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/zero", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 5}), Some(mutmetadata)) != 0 {
+    if utilcage.mknod_syscall("/dev/zero", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 5}), Some(&FS_METADATA)) != 0 {
         interface::log_to_stderr("making /dev/zero failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/urandom", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 9}), Some(mutmetadata)) != 0 {
+    if utilcage.mknod_syscall("/dev/urandom", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 9}), Some(&FS_METADATA)) != 0 {
         interface::log_to_stderr("making /dev/urandom failed. Skipping");
     }
 
-    if utilcage.mknod_syscall("/dev/random", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 8}), Some(mutmetadata)) != 0 {
+    if utilcage.mknod_syscall("/dev/random", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 8}), Some(&FS_METADATA)) != 0 {
         interface::log_to_stderr("making /dev/random failed. Skipping");
     }
 }
