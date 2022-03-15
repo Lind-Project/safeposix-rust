@@ -1065,10 +1065,8 @@ impl Cage {
     }
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
-        let fdtable = &self.filedescriptortable;
-
         //if the old fd exists, execute the helper, else return error
-        if let Some(_) = fdtable.get(&oldfd) {
+        if &self.filedescriptortable.contains_key(&oldfd) {
             return Self::_dup2_helper(&self, oldfd, newfd);
         } else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
@@ -1077,16 +1075,13 @@ impl Cage {
 
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32) -> i32 {
         
-        //pass the lock of the FdTable to this helper. If passed table is none, then create new instance
-        let fdtable = &self.filedescriptortable;
-        
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
 
         {
-            let locked_filedesc = fdtable.get(&oldfd).unwrap();
+            let locked_filedesc = &self.filedescriptortable.get(&oldfd).unwrap();
             let filedesc_enum = locked_filedesc.read().unwrap();
             let mutmetadata = &FS_METADATA;
 
@@ -1130,7 +1125,7 @@ impl Cage {
         }
 
         //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-        if fdtable.contains_key(&newfd) {
+        if &self.filedescriptortable.contains_key(&newfd) {
             let close_result = Self::_close_helper(&self, newfd);
             if close_result != 0 {
                 return close_result;
@@ -1140,37 +1135,31 @@ impl Cage {
         // get and clone fd, wrap and insert into table.
         let filedesc_clone;
         {
-            let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
+            let locked_oldfiledesc = &self.filedescriptortable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
             filedesc_clone = (*&oldfiledesc_enum).clone();
         }
 
         let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
-        fdtable.insert(newfd, wrappedfd);
+        &self.filedescriptortable.insert(newfd, wrappedfd);
         return newfd;
     }
 
     //------------------------------------CLOSE SYSCALL------------------------------------
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
-        let fdtable = &self.filedescriptortable;
- 
         //check that the fd is valid
-        match fdtable.get(&fd) {
-            Some(_) => {return Self::_close_helper(self, fd);},
-            None => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
+        match &self.filedescriptortable.contains_key(&fd) {
+            true => {return Self::_close_helper(self, fd);},
+            false => {return syscall_error(Errno::EBADF, "close", "invalid file descriptor");},
         }
     }
 
     pub fn _close_helper(&self, fd: i32) -> i32 {
-        //pass the lock of the FdTable to this helper. If passed table is none, then create new instance
-        let fdtable = &self.filedescriptortable;
-
         //unpacking and getting the type to match for
         {
-            let locked_filedesc = fdtable.get(&fd).unwrap();
+            let locked_filedesc = &self.filedescriptortable.get(&fd).unwrap();
             let filedesc_enum = locked_filedesc.read().unwrap();
-            let mutmetadata = &FS_METADATA;
 
             //Decide how to proceed depending on the fd type.
             //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
@@ -1220,8 +1209,7 @@ impl Cage {
                 }
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let mut inodeobj = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                    let fobjtable = &FILEOBJECTTABLE;
+                    let mut inodeobj = &FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
                     match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
@@ -1230,42 +1218,42 @@ impl Cage {
                             //if it's not a reg file, then we have nothing to close
                             //Inode::File is a regular file by default
                             if normalfile_inode_obj.refcount == 0 {
-                                fobjtable.remove(&inodenum).unwrap().1.close().unwrap();
+                                &FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
                                 if normalfile_inode_obj.linkcount == 0 {
                                     //removing the file from the entire filesystem (interface, metadata, and object table)
-                                    mutmetadata.inodetable.remove(&inodenum);
+                                    &FS_METADATA.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                 } 
-                                log_metadata(&mutmetadata, inodenum);
+                                log_metadata(&&FS_METADATA, inodenum);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
 
                             //if it's not a reg file, then we have nothing to close
-                            match fobjtable.get(&inodenum) {
+                            match &FILEOBJECTTABLE.get(&inodenum) {
                                 Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
                                 None => {}
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
-                                mutmetadata.inodetable.remove(&inodenum);
-                                log_metadata(&mutmetadata, inodenum);     
+                                &FS_METADATA.inodetable.remove(&inodenum);
+                                log_metadata(&FS_METADATA, inodenum);     
                             } 
                         },
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
 
                             //if it's not a reg file, then we have nothing to close
-                            match fobjtable.get(&inodenum) {
+                            match &FILEOBJECTTABLE.get(&inodenum) {
                                 Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
                                 None => {}
                             }
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
-                                mutmetadata.inodetable.remove(&inodenum);
-                                log_metadata(&mutmetadata, inodenum);
+                                &FS_METADATA.inodetable.remove(&inodenum);
+                                log_metadata(&FS_METADATA, inodenum);
                             } 
                         }
                     }
@@ -1274,7 +1262,7 @@ impl Cage {
         }
 
         //removing inode from fd table
-        fdtable.remove(&fd);
+        &self.filedescriptortable.remove(&fd);
         0 //_close_helper has succeeded!
     }
     
@@ -1446,8 +1434,7 @@ impl Cage {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
                             //because of NaCl's internal workings we must allow mappings to extend past the end of a file
-                            let fobjtable = &FILEOBJECTTABLE;
-                            let fobj = fobjtable.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobj = &FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
                             //this is the system fd number--the number of the lind.<inodenum> file in our host system
                             let fobjfdno = fobj.as_fd_handle_raw_int();
