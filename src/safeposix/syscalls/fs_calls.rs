@@ -182,11 +182,16 @@ impl Cage {
 
     //------------------MKNOD SYSCALL------------------
 
-    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable: Option<&FilesystemMetadata>) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
-
         let truepath = normpath(convpath(path), self);
+
+        //pass the lock of the metadata to this helper. If passed table is none, then create new instance
+        let metadata = if let Some(mttb) = metatable {mttb} else {
+            &FS_METADATA
+        };
+
         match metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
             (None, None) => {
@@ -211,15 +216,15 @@ impl Cage {
                     atime: time, ctime: time, mtime: time, dev: devtuple(dev)
                 });
 
-                let newinodenum = FS_METADATA.nextinode.load(interface::RustAtomicOrdering::Relaxed);
-                FS_METADATA.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
+                let newinodenum = metadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
+                metadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
                 if let Inode::Dir(ref mut parentdir) = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap() {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                FS_METADATA.inodetable.insert(newinodenum, newinode);
-                log_metadata(&FS_METADATA, pardirinode);
-                log_metadata(&FS_METADATA, newinodenum);
+                metadata.inodetable.insert(newinodenum, newinode);
+                log_metadata(&metadata, pardirinode);
+                log_metadata(&metadata, newinodenum);
                 0 //mknod has succeeded
             }
 
