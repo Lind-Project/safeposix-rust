@@ -442,7 +442,6 @@ impl Cage {
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let filedesc_enum = wrappedfd.read().unwrap();
-            let metadata = &FS_METADATA;
 
             //Delegate populating statbuf to the relevant helper depending on the file type.
             //First we check in the file descriptor to handle sockets, streams, and pipes,
@@ -505,7 +504,6 @@ impl Cage {
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let filedesc_enum = wrappedfd.read().unwrap();
-            let metadata = &FS_METADATA;
             
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = FS_METADATA.dev_id;
