@@ -1211,7 +1211,7 @@ impl Cage {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let mut inodeobj = &FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                    match **inodeobj {
+                    match inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount -= 1;
 
