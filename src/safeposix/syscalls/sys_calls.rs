@@ -55,7 +55,7 @@ impl Cage {
             }
             let cwd_container = self.cwd.read().unwrap();
             if let Some(cwdinodenum) = metawalk(&cwd_container) {
-                if let Inode::Dir(ref mut cwddir) = FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap() {
+                if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
                     cwddir.refcount += 1;
                 } else {panic!("We changed from a directory that was not a directory in chdir!");}
             } else {panic!("We changed from a directory that was not a directory in chdir!");}

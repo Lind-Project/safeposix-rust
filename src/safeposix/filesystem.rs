@@ -351,7 +351,7 @@ pub fn incref_root() {
 
 pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
     if let Some(cwdinodenum) = metawalk(&cwd_container) {
-        if let Inode::Dir(ref mut cwddir) = FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap() {
+        if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
             cwddir.refcount -= 1;
 
             //if the directory has been removed but this cwd was the last open handle to it
