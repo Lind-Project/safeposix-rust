@@ -180,7 +180,7 @@ pub fn load_fs() {
     } else {
         create_log();
         load_fs_special_files(&utilcage, None);
-        persist_metadata(FS_METADATA);
+        persist_metadata(**FS_METADATA);
     }
 }
 
@@ -207,10 +207,10 @@ pub fn create_log() {
     logobj.replace(log_mapobj);
 }
 
-pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<FilesystemMetadata>) {
+pub fn load_fs_special_files(utilcage: &Cage, metatable: Option<FilesystemMetadata>) {
     
     //pass the lock of the metadata to this helper. If passed table is none, then create new instance
-    let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
+    let mutmetadata = if let Some(mttb) = metatable {mttb} else {
         FS_METADATA
     };
 
