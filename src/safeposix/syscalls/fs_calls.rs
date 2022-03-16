@@ -186,7 +186,7 @@ impl Cage {
 
         //pass the lock of the metadata to this helper. If passed table is none, then create new instance
         let metadata = if let Some(mttb) = metatable {mttb} else {
-            FS_METADATA
+            **FS_METADATA
         };
 
         match metawalkandparent(truepath.as_path()) {
