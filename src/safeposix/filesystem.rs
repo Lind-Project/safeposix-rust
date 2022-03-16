@@ -180,7 +180,7 @@ pub fn load_fs() {
     } else {
         create_log();
         load_fs_special_files(&utilcage, None);
-        persist_metadata(&FS_METADATA);
+        persist_metadata(FS_METADATA);
     }
 }
 
@@ -207,11 +207,11 @@ pub fn create_log() {
     logobj.replace(log_mapobj);
 }
 
-pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&FilesystemMetadata>) {
+pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<FilesystemMetadata>) {
     
     //pass the lock of the metadata to this helper. If passed table is none, then create new instance
     let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
-        &FS_METADATA
+        FS_METADATA
     };
 
     if utilcage.mkdir_syscall("/dev", S_IRWXA, Some(mutmetadata)) != 0 {
@@ -236,7 +236,7 @@ pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&Filesystem
 }
 
 // Serialize New Metadata to CBOR, write to logfile
-pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
+pub fn log_metadata(metadata: FilesystemMetadata, inodenum: usize) {
     let serialpair: (usize, Option<&Inode>);
     let entrybytes;
 
@@ -256,7 +256,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 }
 
 // Serialize Metadata Struct to CBOR, write to file
-pub fn persist_metadata(metadata: &FilesystemMetadata) {
+pub fn persist_metadata(metadata: FilesystemMetadata) {
   
     // Serialize metadata to string
     let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
