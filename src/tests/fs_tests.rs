@@ -714,7 +714,7 @@ pub mod fs_tests {
 
         //check that the setup was run first
         {
-            persist_metadata(*filesystem::FS_METADATA);
+            persist_metadata(**filesystem::FS_METADATA);
             // let path = normpath(convpath(METADATAFILENAME), &cage);
             let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
             let result = path.unwrap().metadata().unwrap().permissions();
