@@ -443,7 +443,7 @@ pub extern "C" fn lindrustfinalize() {
     }
 
     // if we get here, persist and delete log
-    persist_metadata(&FS_METADATA);
+    persist_metadata(**FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
         let mut logobj = LOGMAP.write().unwrap();
