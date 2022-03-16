@@ -382,7 +382,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.gethostname_syscall, interface::get_mutcbuf(arg1), interface::get_isize(arg2))
         }
         MKDIR_SYSCALL => {
-            check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2), Ok::<Option<FilesystemMetadata>, i32>(None))
+            check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2), Ok::<Option<&FilesystemMetadata>, i32>(None))
         }
         _ => {//unknown syscall
             -1
@@ -443,7 +443,7 @@ pub extern "C" fn lindrustfinalize() {
     }
 
     // if we get here, persist and delete log
-    persist_metadata(**FS_METADATA);
+    persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
         let mut logobj = LOGMAP.write().unwrap();

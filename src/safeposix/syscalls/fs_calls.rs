@@ -134,7 +134,7 @@ impl Cage {
 
         //pass the metadata to this helper. If passed table is none, then create new instance
         let metadata = if let Some(mttb) = metatable {mttb} else {
-            **FS_METADATA
+            &FS_METADATA
         };
 
         match metawalkandparent(truepath.as_path()) {
@@ -171,8 +171,8 @@ impl Cage {
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
                 metadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(metadata, pardirinode);
-                log_metadata(metadata, newinodenum);
+                log_metadata(&metadata, pardirinode);
+                log_metadata(&metadata, newinodenum);
                 0 //mkdir has succeeded
             }
 
