@@ -127,7 +127,7 @@ impl Cage {
 
     //------------------MKDIR SYSCALL------------------
 
-    pub fn mkdir_syscall(&self, path: &str, mode: u32, metatable: Option<FilesystemMetadata>) -> i32 {
+    pub fn mkdir_syscall(&self, path: &str, mode: u32, metatable: Option<&FilesystemMetadata>) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mkdir", "given path was null");}
         let truepath = normpath(convpath(path), self);
@@ -184,7 +184,7 @@ impl Cage {
 
     //------------------MKNOD SYSCALL------------------
 
-    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable: Option<FilesystemMetadata>) -> i32 {
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable: Option<&FilesystemMetadata>) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
         let truepath = normpath(convpath(path), self);

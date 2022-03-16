@@ -83,13 +83,13 @@ pub mod fs_tests {
         assert!(fd >= 0);
 
         assert_eq!(cage.close_syscall(fd), 0);
-        filesystem::persist_metadata(&filesystem::FS_METADATA);
+        filesystem::persist_metadata(&**filesystem::FS_METADATA);
 
-        let metadatastring1 = interface::serde_serialize_to_bytes(&filesystem::FS_METADATA).unwrap(); // before restore
+        let metadatastring1 = interface::serde_serialize_to_bytes(&**filesystem::FS_METADATA).unwrap(); // before restore
 
         // filesystem::restore_metadata(&mut metadata); // should be the same as after restore
 
-        let metadatastring2 = interface::serde_serialize_to_bytes(&filesystem::FS_METADATA).unwrap();
+        let metadatastring2 = interface::serde_serialize_to_bytes(&**filesystem::FS_METADATA).unwrap();
 
         //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
         assert_eq!(metadatastring1.len(), metadatastring2.len()); 
