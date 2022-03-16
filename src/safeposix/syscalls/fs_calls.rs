@@ -179,14 +179,14 @@ impl Cage {
 
     //------------------MKNOD SYSCALL------------------
 
-    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable: Option<&FilesystemMetadata>) -> i32 {
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable: Option<FilesystemMetadata>) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
         let truepath = normpath(convpath(path), self);
 
         //pass the lock of the metadata to this helper. If passed table is none, then create new instance
         let metadata = if let Some(mttb) = metatable {mttb} else {
-            &FS_METADATA
+            FS_METADATA
         };
 
         match metawalkandparent(truepath.as_path()) {
@@ -220,8 +220,8 @@ impl Cage {
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 metadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(&metadata, pardirinode);
-                log_metadata(&metadata, newinodenum);
+                log_metadata(metadata, pardirinode);
+                log_metadata(metadata, newinodenum);
                 0 //mknod has succeeded
             }
 
