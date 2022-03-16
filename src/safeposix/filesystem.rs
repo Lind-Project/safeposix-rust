@@ -180,7 +180,7 @@ pub fn load_fs() {
     } else {
         create_log();
         load_fs_special_files(&utilcage, None);
-        persist_metadata(&FS_METADATA);
+        persist_metadata(FS_METADATA);
     }
 }
 
@@ -256,10 +256,10 @@ pub fn log_metadata(metadata: FilesystemMetadata, inodenum: usize) {
 }
 
 // Serialize Metadata Struct to CBOR, write to file
-pub fn persist_metadata(metadata: &FilesystemMetadata) {
+pub fn persist_metadata(metadata: FilesystemMetadata) {
   
     // Serialize metadata to string
-    let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
+    let metadatabytes = interface::serde_serialize_to_bytes(metadata).unwrap();
     
     // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
