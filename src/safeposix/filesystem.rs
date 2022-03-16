@@ -211,7 +211,7 @@ pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&Filesystem
     
     //pass the lock of the metadata to this helper. If passed table is none, then create new instance
     let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
-        FS_METADATA
+        &FS_METADATA
     };
 
     if utilcage.mkdir_syscall("/dev", S_IRWXA, Some(mutmetadata)) != 0 {
