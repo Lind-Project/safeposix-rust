@@ -107,7 +107,7 @@ impl NetMetadata {
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
 
         //start from the starting location we specified in a previous attempt to get an ephemeral port
-        let next_ephemeral = if domain == AF_INET {self.next_ephemeral_port_tcpv4.load(interface::RustAtomicOrdering::Relaxed);} else if domain == AF_INET6 {self.next_ephemeral_port_tcpv6.load(interface::RustAtomicOrdering::Relaxed);} else {unreachable!()};
+        let next_ephemeral = if domain == AF_INET {self.next_ephemeral_port_tcpv4.load(interface::RustAtomicOrdering::Relaxed)} else if domain == AF_INET6 {self.next_ephemeral_port_tcpv6.load(interface::RustAtomicOrdering::Relaxed)} else {unreachable!()};
         for range in [(EPHEMERAL_PORT_RANGE_START ..= next_ephemeral), (next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
             for ne_port in range.rev() {
                 let port = ne_port.to_be(); //ports are stored in network endian order
@@ -144,7 +144,7 @@ impl NetMetadata {
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
 
         //start from the starting location we specified in a previous attempt to get an ephemeral port
-        let next_ephemeral = if domain == AF_INET {self.next_ephemeral_port_tcpv4.load(interface::RustAtomicOrdering::Relaxed);} else if domain == AF_INET6 {self.next_ephemeral_port_tcpv6.load(interface::RustAtomicOrdering::Relaxed);} else {unreachable!()};
+        let next_ephemeral = if domain == AF_INET {self.next_ephemeral_port_tcpv4.load(interface::RustAtomicOrdering::Relaxed)} else if domain == AF_INET6 {self.next_ephemeral_port_tcpv6.load(interface::RustAtomicOrdering::Relaxed)} else {unreachable!()};
         for range in [(EPHEMERAL_PORT_RANGE_START ..= next_ephemeral), (next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
             for ne_port in range.rev() {
                 let port = ne_port.to_be(); //ports are stored in network endian order
