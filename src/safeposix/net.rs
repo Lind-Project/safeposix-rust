@@ -22,10 +22,10 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(NetMetadata {
             used_port_set: interface::RustHashMap::new(),
-            next_ephemeral_port_tcpv4: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
-            next_ephemeral_port_udpv4: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
-            next_ephemeral_port_tcpv6: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
-            next_ephemeral_port_udpv6: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_tcpv4: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_udpv4: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_tcpv6: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_udpv6: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
