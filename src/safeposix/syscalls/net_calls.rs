@@ -128,13 +128,12 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
         }
 
-        let mut mutmetadata = NET_METADATA.write().unwrap();
         let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
 
         let newlocalport = if prereserved {
             localaddr.port()
         } else {
-            let localout = mutmetadata._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
+            let localout = NET_METADATA._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
             if let Err(errnum) = localout {return errnum;}
             localout.unwrap()
         };
@@ -146,11 +145,11 @@ impl Cage {
             id
         } else {
             let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-            let id = mutmetadata.insert_into_socketobjecttable(sock).unwrap();
+            let id = NET_METADATA.insert_into_socketobjecttable(sock).unwrap();
             sockfdobj.socketobjectid = Some(id);
             id
         } ;
-        let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
         let sockobj = locksock.read().unwrap();
         let bindret = sockobj.bind(&newsockaddr);
 
@@ -186,15 +185,13 @@ impl Cage {
         if let Some(addr) = &sockfdobj.localaddr {
             Ok(addr.clone())
         } else {
-            let mut mutmetadata = NET_METADATA.write().unwrap();
-
             //This is the specified behavior for the berkeley sockets API
             let retval = if isv6 {
                 let mut newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
                 let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
                 newremote.set_addr(addr);
                 newremote.set_family(AF_INET6 as u16);
-                newremote.set_port(match mutmetadata._reserve_localport(addr.clone(), 0, sockfdobj.protocol, sockfdobj.domain, rebindability) {
+                newremote.set_port(match NET_METADATA._reserve_localport(addr.clone(), 0, sockfdobj.protocol, sockfdobj.domain, rebindability) {
                     Ok(portnum) => portnum,
                     Err(errnum) => return Err(errnum),
                 });
@@ -204,7 +201,7 @@ impl Cage {
                 let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
                 newremote.set_addr(addr);
                 newremote.set_family(AF_INET as u16);
-                newremote.set_port(match mutmetadata._reserve_localport(addr.clone(), 0, sockfdobj.protocol, sockfdobj.domain, rebindability) {
+                newremote.set_port(match NET_METADATA._reserve_localport(addr.clone(), 0, sockfdobj.protocol, sockfdobj.domain, rebindability) {
                     Ok(portnum) => portnum,
                     Err(errnum) => return Err(errnum),
                 });
@@ -245,7 +242,7 @@ impl Cage {
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         //for TCP, actually create the internal socket object and connect it
                         let sid = Self::getsockobjid(&mut *sockfdobj);
-                        let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                         let sockobj = locksock.read().unwrap();
                         if let None = sockfdobj.localaddr {
                             let localaddr = match Self::assign_new_addr(sockfdobj, matches!(remoteaddr, interface::GenSockaddr::V6(_)), sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
@@ -293,7 +290,7 @@ impl Cage {
     pub fn getsockobjid(sockfdobj: &mut SocketDesc) -> i32 {
         if let None = sockfdobj.socketobjectid {
             let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-            sockfdobj.socketobjectid = Some(NET_METADATA.write().unwrap().insert_into_socketobjecttable(sock).unwrap());
+            sockfdobj.socketobjectid = Some(NET_METADATA.insert_into_socketobjecttable(sock).unwrap());
         } 
         sockfdobj.socketobjectid.unwrap()
     }
@@ -334,8 +331,7 @@ impl Cage {
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
-                            let sockobjwrapper = mutmetadata.socket_object_table.get(&sid).unwrap();
+                            let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read().unwrap();
 
                             //we don't mind if this fails for now and we will just get the error
@@ -383,8 +379,7 @@ impl Cage {
                             }
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let metadata = NET_METADATA.read().unwrap();
-                            let sockobjwrapper = metadata.socket_object_table.get(&sid).unwrap();
+                            let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read().unwrap();
 
                             let retval = sockobj.sendto(buf, buflen, None);
@@ -437,7 +432,7 @@ impl Cage {
                                 return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
                             let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
 
                             let mut newbuflen = buflen;
@@ -502,7 +497,7 @@ impl Cage {
                             }
 
                             let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
 
                             //if the remoteaddr is set and addr is not, use remoteaddr
@@ -570,12 +565,11 @@ impl Cage {
                             let mut porttuple;
                             match sockfdobj.localaddr {
                                 Some(sla) => {
-                                    let mut mutmetadata = NET_METADATA.write().unwrap();
                                     ladr = sla.clone();
                                     porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT);
 
-                                    if mutmetadata.listening_port_set.contains(&porttuple) {
-                                        match mutmetadata._get_available_tcp_port(ladr.addr().clone(), sockfdobj.domain, sockfdobj.options & (1 << SO_REUSEPORT) != 0) {
+                                    if NET_METADATA.listening_port_set.contains(&porttuple) {
+                                        match NET_METADATA._get_available_tcp_port(ladr.addr().clone(), sockfdobj.domain, sockfdobj.options & (1 << SO_REUSEPORT) != 0) {
                                             Ok(port) => ladr.set_port(port),
                                             Err(i) => return i,
                                         }
@@ -593,12 +587,10 @@ impl Cage {
                             //get or create the socket and bind it before listening
                             let sid = Self::getsockobjid(sockfdobj);
 
-                            let mutmetadata = NET_METADATA.write().unwrap();
-                            mutmetadata.listening_port_set.insert(porttuple);
-
+                            NET_METADATA.listening_port_set.insert(porttuple);
                             sockfdobj.state = ConnState::LISTEN;
 
-                            let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
                             if let None = sockfdobj.localaddr {
                                 let bindret = sockobj.bind(&ladr);
@@ -615,7 +607,7 @@ impl Cage {
                                     Ok(i) => syscall_error(i, "listen", "The libc call to listen failed!"),
                                     Err(()) => panic!("Unknown errno value from socket listen returned!"),
                                 };
-                                mutmetadata.listening_port_set.remove(&mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT));
+                                NET_METADATA.listening_port_set.remove(&mux_port(ladr.addr().clone(), ladr.port(), sockfdobj.domain, TCPPORT));
                                 sockfdobj.state = ConnState::CONNECTED;
                                 return lr;
                             };
@@ -658,16 +650,15 @@ impl Cage {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let mut filedesc = wrappedfd.write().unwrap();
             if let Socket(sockfdobj) = &mut *filedesc {
-                let mut mutmetadata = NET_METADATA.write().unwrap();
                 let objectid = &sockfdobj.socketobjectid;
 
                 if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
-                    let release_ret_val = mutmetadata._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                    let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                     if let Err(e) = release_ret_val {return e;}
                 }
                 if !partial {
                     if let None = objectid {} else {
-                        mutmetadata.socket_object_table.remove(&objectid.unwrap());
+                        NET_METADATA.socket_object_table.remove(&objectid.unwrap());
                     }
                     sockfdobj.state = ConnState::NOTCONNECTED;
                 }
@@ -710,17 +701,16 @@ impl Cage {
                                 return syscall_error(Errno::ENFILE, "accept", "no available file descriptor number could be found");
                             };
 
-                            let mut mutmetadata = NET_METADATA.write().unwrap();
-                            let (acceptedresult, remote_addr) = if let Some(mut vec) = mutmetadata.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
+                            let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
                                 let tup = vec.pop().unwrap(); //pending connection tuple recieved
                                 if vec.is_empty() {
-                                    mutmetadata.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
+                                    NET_METADATA.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
                                 }
                                 tup
                             } else {
                                 let sid = Self::getsockobjid(&mut *sockfdobj);
-                                let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+                                let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                                 let sockobj = locksock.read().unwrap();
 
                                 match sockfdobj.domain {
@@ -744,8 +734,7 @@ impl Cage {
                             newsockobj.state = ConnState::CONNECTED;
 
                             let mut newaddr = sockfdobj.localaddr.clone().unwrap();
-                            mutmetadata = NET_METADATA.write().unwrap();
-                            let newport = match mutmetadata._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain, false) {
+                            let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain, false) {
                                 Ok(portnum) => portnum,
                                 Err(errnum) => return errnum,
                             };
@@ -756,14 +745,13 @@ impl Cage {
                             newsockobj.remoteaddr = Some(remote_addr.clone());
 
                             //create socket object for new connected socket
-                            newsockobj.socketobjectid = match mutmetadata.insert_into_socketobjecttable(acceptedsock) {
+                            newsockobj.socketobjectid = match NET_METADATA.insert_into_socketobjecttable(acceptedsock) {
                                 Ok(id) => Some(id),
                                 Err(errnum) => {
-                                    mutmetadata.listening_port_set.remove(&mux_port(newipaddr.clone(), newport, sockfdobj.domain, TCPPORT));
+                                    NET_METADATA.listening_port_set.remove(&mux_port(newipaddr.clone(), newport, sockfdobj.domain, TCPPORT));
                                     return errnum;
                                 }
                             };
-                            drop(mutmetadata);
 
                             *addr = remote_addr; //populate addr with what address it connected to
                             let _domain = sockfdobj.domain;
@@ -827,11 +815,9 @@ impl Cage {
                     match &mut *filedesc_enum {
                         Socket(ref mut sockfdobj) => {
                             if sockfdobj.state == ConnState::LISTEN {
-                                let mutmetadata = NET_METADATA.write().unwrap();
-
-                                if !mutmetadata.pending_conn_table.contains_key(&sockfdobj.localaddr.unwrap().port()) {
+                                if !NET_METADATA.pending_conn_table.contains_key(&sockfdobj.localaddr.unwrap().port()) {
                                     let sid = Self::getsockobjid(&mut *sockfdobj);
-                                    let locksock = mutmetadata.socket_object_table.get(&sid).unwrap().clone();
+                                    let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                                     let sockobj = locksock.read().unwrap();
 
                                     let listeningsocket = match sockfdobj.domain {
@@ -842,7 +828,7 @@ impl Cage {
                                     drop(sockobj);
                                     if let Ok(_) = listeningsocket.0 {
                                         //save the pending connection for accept to do something with it
-                                        mutmetadata.pending_conn_table.insert(sockfdobj.localaddr.unwrap().port(), vec!(listeningsocket));
+                                        NET_METADATA.pending_conn_table.insert(sockfdobj.localaddr.unwrap().port(), vec!(listeningsocket));
                                     } else {
                                         //if it returned an error, then don't insert it into new_readfds
                                         continue;
@@ -1056,7 +1042,7 @@ impl Cage {
 
                                 if newoptions != sockfdobj.options {
                                     let sid = Self::getsockobjid(&mut *sockfdobj);
-                                    let locksock = NET_METADATA.read().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                                    let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                                     let sockobj = locksock.read().unwrap();
 
                                     let sockoptret = sockobj.setsockopt(SOL_SOCKET, optname, optval);

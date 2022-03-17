@@ -41,7 +41,7 @@ impl Cage {
                     }
                     Socket(socket_filedesc_obj) => {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                            NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
+                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
                         }
                     }
                     _ => {}
