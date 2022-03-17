@@ -133,7 +133,7 @@ impl Cage {
         let newlocalport = if prereserved {
             localaddr.port()
         } else {
-            let localout = *NET_METADATA._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
+            let localout = (*NET_METADATA)._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
             if let Err(errnum) = localout {return errnum;}
             localout.unwrap()
         };
