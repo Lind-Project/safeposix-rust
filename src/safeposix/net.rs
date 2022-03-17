@@ -18,18 +18,18 @@ const EPHEMERAL_PORT_RANGE_END: u16 = 60999;
 pub const TCPPORT: bool = true;
 pub const UDPPORT: bool = false;
 
-pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<NetMetadata>>> =
+pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadata>> =
     interface::RustLazyGlobal::new(||
-        interface::RustRfc::new(interface::RustLock::new(NetMetadata {
+        interface::RustRfc::new(NetMetadata {
             used_port_set: interface::RustHashMap::new(),
-            next_ephemeral_port_tcpv4: EPHEMERAL_PORT_RANGE_END,
-            next_ephemeral_port_udpv4: EPHEMERAL_PORT_RANGE_END,
-            next_ephemeral_port_tcpv6: EPHEMERAL_PORT_RANGE_END,
-            next_ephemeral_port_udpv6: EPHEMERAL_PORT_RANGE_END,
+            next_ephemeral_port_tcpv4: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_udpv4: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_tcpv6: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_udpv6: interface::RustAtomicUsize::new(EPHEMERAL_PORT_RANGE_END),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
-        }))
+        })
     ); //we want to check if fs exists before doing a blank init, but not for now
 
 //A list of all network devices present on the machine
@@ -52,10 +52,10 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 
 pub struct NetMetadata {
     pub used_port_set: interface::RustHashMap<(interface::GenIpaddr, u16, PortType), u32>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, postiive number means that many users, rebinding is allowed
-    next_ephemeral_port_tcpv4: u16,
-    next_ephemeral_port_udpv4: u16,
-    next_ephemeral_port_tcpv6: u16,
-    next_ephemeral_port_udpv6: u16,
+    next_ephemeral_port_tcpv4: interface::RustAtomicU16,
+    next_ephemeral_port_udpv4: interface::RustAtomicU16,
+    next_ephemeral_port_tcpv6: interface::RustAtomicU16,
+    next_ephemeral_port_udpv6: interface::RustAtomicU16,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
@@ -144,7 +144,7 @@ impl NetMetadata {
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
 
         //start from the starting location we specified in a previous attempt to get an ephemeral port
-        let next_ephemeral = if domain == AF_INET {self.next_ephemeral_port_tcpv4} else if domain == AF_INET6 {self.next_ephemeral_port_tcpv6} else {unreachable!()};
+        let next_ephemeral = if domain == AF_INET {self.next_ephemeral_port_tcpv4.load(interface::RustAtomicOrdering::Relaxed);} else if domain == AF_INET6 {self.next_ephemeral_port_tcpv6} else {unreachable!()};
         for range in [(EPHEMERAL_PORT_RANGE_START ..= next_ephemeral), (next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
             for ne_port in range.rev() {
                 let port = ne_port.to_be(); //ports are stored in network endian order
@@ -155,13 +155,13 @@ impl NetMetadata {
 
                     if ne_port == EPHEMERAL_PORT_RANGE_START {
                         if domain == AF_INET {
-                            self.next_ephemeral_port_tcpv4 = EPHEMERAL_PORT_RANGE_END;
+                            self.next_ephemeral_port_tcpv4.store(EPHEMERAL_PORT_RANGE_END, interface::RustAtomicOrdering::Relaxed);
                         } else if domain == AF_INET6 {
                             self.next_ephemeral_port_tcpv6 = EPHEMERAL_PORT_RANGE_END;
                         } else {unreachable!()};
                     } else {
                         if domain == AF_INET {
-                            self.next_ephemeral_port_tcpv4 = ne_port - 1;
+                            self.next_ephemeral_port_tcpv4.store(ne_port - 1, interface::RustAtomicOrdering::Relaxed);
                         } else if domain == AF_INET6 {
                             self.next_ephemeral_port_tcpv6 = ne_port - 1;
                         } else {unreachable!()};
