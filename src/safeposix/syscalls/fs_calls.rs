@@ -1132,11 +1132,27 @@ impl Cage {
         }    
 
         // get and clone fd, wrap and insert into table.
-        let filedesc_clone;
+        let mut filedesc_clone;
         {
             let locked_oldfiledesc = fdtable.get(&oldfd).unwrap();
             let oldfiledesc_enum = locked_oldfiledesc.read().unwrap();
             filedesc_clone = (*&oldfiledesc_enum).clone();
+            match filedesc_clone { // we don't want to pass on the CLOEXEC flag
+                File(ref mut normalfile_filedesc_obj) => {
+                    normalfile_filedesc_obj.flags = normalfile_filedesc_obj.flags & !O_CLOEXEC; 
+                }
+                Pipe(ref mut pipe_filedesc_obj) => {
+                    pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
+                }
+                Socket(ref mut socket_filedesc_obj) => {
+                    socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
+                }
+                Stream(ref mut stream_filedesc_obj) => {
+                    stream_filedesc_obj.flags = stream_filedesc_obj.flags & !O_CLOEXEC;
+                }
+                _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+            }
+
         }
 
         let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_clone));
@@ -1300,7 +1316,11 @@ impl Cage {
                 }
                 // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
-                    *flags |= arg & O_CLOEXEC;
+                    if arg & O_CLOEXEC != 0 {
+                        *flags |= O_CLOEXEC;
+                    } else {
+                        *flags &= !O_CLOEXEC;
+                    }
                     0
                 }
                 (F_GETFL, ..) => {
