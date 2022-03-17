@@ -100,7 +100,7 @@ impl NetMetadata {
             self.used_port_set.contains_key(&tupclone)
         }
     }
-    pub fn _get_available_udp_port(self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
+    pub fn _get_available_udp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         if !NET_DEVICES_LIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
@@ -137,7 +137,7 @@ impl NetMetadata {
         }
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
-    pub fn _get_available_tcp_port(self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
+    pub fn _get_available_tcp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         if !NET_DEVICES_LIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
@@ -174,7 +174,7 @@ impl NetMetadata {
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
 
-    fn get_next_socketobjectid(self) -> Option<i32> {
+    fn get_next_socketobjectid(&self) -> Option<i32> {
         for i in MINSOCKOBJID..MAXSOCKOBJID {
             if !self.socket_object_table.contains_key(&i) {
                 return Some(i);
@@ -183,7 +183,7 @@ impl NetMetadata {
         return None;
     }
 
-    pub fn _reserve_localport(self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, rebindability: bool) -> Result<u16, i32> {
+    pub fn _reserve_localport(&self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, rebindability: bool) -> Result<u16, i32> {
         if !NET_DEVICES_LIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
@@ -218,7 +218,7 @@ impl NetMetadata {
         Ok(port)
     }
 
-    pub fn _release_localport(self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
+    pub fn _release_localport(&self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
         if !NET_DEVICES_LIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
@@ -248,7 +248,7 @@ impl NetMetadata {
         return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
     }
 
-    pub fn insert_into_socketobjecttable(self, sock: interface::Socket) -> Result<i32, i32> {
+    pub fn insert_into_socketobjecttable(&self, sock: interface::Socket) -> Result<i32, i32> {
         if let Some(id) = self.get_next_socketobjectid() {
             self.socket_object_table.insert(id, interface::RustRfc::new(interface::RustLock::new(sock)));
             Ok(id)
