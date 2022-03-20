@@ -739,10 +739,21 @@ impl Cage {
                                 drop(fdtable);
                                 drop(mutmetadata);
 
-                                match sockfdobj.domain {
-                                    PF_INET => sockobj.accept(true),
-                                    PF_INET6 => sockobj.accept(false),
-                                    _ => panic!("Unknown domain in accepting socket"),
+                                match filedesc_enum.flags {
+                                    O_NONBLOCK => {
+                                        match sockfdobj.domain {
+                                            PF_INET => sockobj.nonblock_accept(true),
+                                            PF_INET6 => sockobj.non_block_accept(false),
+                                            _ => panic!("Unknown domain in accepting socket"),
+                                        }
+                                    },
+                                    _ => {
+                                        match sockfdobj.domain {
+                                            PF_INET => sockobj.accept(true),
+                                            PF_INET6 => sockobj.accept(false),
+                                            _ => panic!("Unknown domain in accepting socket"),
+                                        }
+                                    }
                                 }
                             };
 
