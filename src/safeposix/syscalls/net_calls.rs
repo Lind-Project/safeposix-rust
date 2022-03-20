@@ -739,7 +739,7 @@ impl Cage {
                                 drop(fdtable);
                                 drop(mutmetadata);
 
-                                match filedesc_enum.flags {
+                                match sockfdobj.flags {
                                     O_NONBLOCK => {
                                         match sockfdobj.domain {
                                             PF_INET => sockobj.nonblock_accept(true),
