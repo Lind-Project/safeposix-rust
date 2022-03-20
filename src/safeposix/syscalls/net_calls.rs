@@ -743,7 +743,7 @@ impl Cage {
                                     O_NONBLOCK => {
                                         match sockfdobj.domain {
                                             PF_INET => sockobj.nonblock_accept(true),
-                                            PF_INET6 => sockobj.non_block_accept(false),
+                                            PF_INET6 => sockobj.nonblock_accept(false),
                                             _ => panic!("Unknown domain in accepting socket"),
                                         }
                                     },
