@@ -365,7 +365,7 @@ pub fn copy_out_to_fd_set(union_argument: Arg, nfds: i32, hashset: interface::Ru
             unsafe{*byte_ptr |= 1 << bit_offset;}
         } else {
             //else, set the bit to 0
-            unsafe{*byte_ptr &= !1 << bit_offset;}
+            unsafe{*byte_ptr &= !(1 << bit_offset);}
         }
     }
 }
