@@ -740,14 +740,14 @@ impl Cage {
                                 drop(mutmetadata);
                                 match sockfdobj.domain {
                                     PF_INET => {
-                                        if (sockfdobj.flags & O_NONBLOCK) { 
+                                        if 0 == (sockfdobj.flags & O_NONBLOCK) { 
                                             sockobj.nonblock_accept(true);
                                         } else {
                                             sockobj.accept(true);
                                         };
                                     },
                                     PF_INET6 => {
-                                        if (sockfdobj.flags & O_NONBLOCK) { 
+                                        if 0 == (sockfdobj.flags & O_NONBLOCK) { 
                                             sockobj.nonblock_accept(false);
                                         } else {
                                             sockobj.accept(false);
