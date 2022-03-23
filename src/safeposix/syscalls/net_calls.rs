@@ -740,15 +740,16 @@ impl Cage {
                                 drop(mutmetadata);
 
                                 if 0 == (sockfdobj.flags & O_NONBLOCK) {
+                                    // O_NONBLOCK not set
                                     match sockfdobj.domain {
-                                        PF_INET => sockobj.nonblock_accept(true),
-                                        PF_INET6 => sockobj.nonblock_accept(false),
+                                        PF_INET => sockobj.accept(true),
+                                        PF_INET6 => sockobj.accept(false),
                                         _ => panic!("Unknown domain in accepting socket"),
                                     }
                                 } else {
                                     match sockfdobj.domain {
-                                        PF_INET => sockobj.accept(true),
-                                        PF_INET6 => sockobj.accept(false),
+                                        PF_INET => sockobj.nonblock_accept(true),
+                                        PF_INET6 => sockobj.nonblock_accept(false),
                                         _ => panic!("Unknown domain in accepting socket"),
                                     }
                                 }
