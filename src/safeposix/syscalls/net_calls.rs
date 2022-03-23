@@ -705,7 +705,10 @@ impl Cage {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
                                 let tup = vec.pop().unwrap(); //pending connection tuple recieved
                                 if vec.is_empty() {
+                                    drop(vec);
                                     NET_METADATA.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
+                                } else {
+                                    drop(vec);
                                 }
                                 tup
                             } else {

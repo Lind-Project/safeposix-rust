@@ -122,19 +122,69 @@ impl FilesystemMetadata {
     }
 }
 
+pub fn format_fs() {
+    let newmetadata = FilesystemMetadata::blank_fs_init();
+
+    let mut rootinode = newmetadata.inodetable.get_mut(&1).unwrap(); //get root to populate its dict
+    if let Inode::Dir(ref mut rootdir) = *rootinode {
+        rootdir.filename_to_inode_dict.insert("dev".to_string(), 2);
+    }
+    drop(rootinode);
+
+    let devchildren = interface::RustHashMap::new();
+    devchildren.insert("..".to_string(), 1); 
+    devchildren.insert(".".to_string(), 2); 
+    devchildren.insert("null".to_string(), 3); 
+    devchildren.insert("zero".to_string(), 4);
+    devchildren.insert("urandom".to_string(), 5);
+    devchildren.insert("random".to_string(), 6);
+
+    let time = interface::timestamp(); //We do a real timestamp now
+    let devdirinode = Inode::Dir(DirectoryInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+        mode: (S_IFCHR | 0755) as u32,
+        linkcount: 3 + 4, //3 for ., .., and the parent dir, 4 is one for each child we will create
+        refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        filename_to_inode_dict: devchildren,
+    }); //inode 2
+    let nullinode = Inode::CharDev(DeviceInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        dev: DevNo {major: 1, minor: 3},
+    }); //inode 3
+    let zeroinode = Inode::CharDev(DeviceInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        dev: DevNo {major: 1, minor: 5},
+    }); //inode 4
+    let urandominode = Inode::CharDev(DeviceInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        dev: DevNo {major: 1, minor: 9},
+    }); //inode 5
+    let randominode = Inode::CharDev(DeviceInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        dev: DevNo {major: 1, minor: 8},
+    }); //inode 6
+    newmetadata.nextinode.store(7, interface::RustAtomicOrdering::Relaxed);
+    newmetadata.inodetable.insert(2, devdirinode);
+    newmetadata.inodetable.insert(3, nullinode);
+    newmetadata.inodetable.insert(4, zeroinode);
+    newmetadata.inodetable.insert(5, urandominode);
+    newmetadata.inodetable.insert(6, randominode);
+
+    let _logremove = interface::removefile(LOGFILENAME.to_string());
+
+    persist_metadata(&newmetadata);
+}
+
 pub fn load_fs() {
-
-    // Create initial cage, probably will move this
-    let utilcage = Cage{cageid: 0,
-        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, 
-        filedescriptortable: interface::RustHashMap::new(),
-        getgid: interface::RustAtomicI32::new(-1), 
-        getuid: interface::RustAtomicI32::new(-1), 
-        getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1)
-    };
-
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
     if interface::pathexists(METADATAFILENAME.to_string()) {
@@ -161,9 +211,9 @@ pub fn load_fs() {
             for serialpair in logvec.drain(..) {
                 let (inodenum, inode) = serialpair;
                 match inode {
-                    Some(inode) => FS_METADATA.inodetable.insert(inodenum, inode).unwrap(),
-                    None => FS_METADATA.inodetable.remove(&inodenum).unwrap().1,
-                };
+                    Some(inode) => {FS_METADATA.inodetable.insert(inodenum, inode);}
+                    None => {FS_METADATA.inodetable.remove(&inodenum);}
+                }
             }
 
             let _logclose = log_fileobj.close();
@@ -172,16 +222,16 @@ pub fn load_fs() {
             // clean up broken links
             fsck();
         }
-
-        // then recreate the log
-        create_log();
-
-
     } else {
-        create_log();
-        load_fs_special_files(&utilcage, None);
-        persist_metadata(&FS_METADATA);
+        if interface::pathexists(LOGFILENAME.to_string()) {
+            let _logremove = interface::removefile(LOGFILENAME.to_string());
+            println!("Filesystem in very corrupted state: log existed but metadata did not! Ignoring log.");
+        }
+        format_fs();
     }
+
+    // then recreate the log
+    create_log();
 }
 
 pub fn fsck() {
@@ -205,34 +255,6 @@ pub fn create_log() {
     let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
     let mut logobj = LOGMAP.write().unwrap();
     logobj.replace(log_mapobj);
-}
-
-pub fn load_fs_special_files(utilcage: &Cage, metatable_lock: Option<&FilesystemMetadata>) {
-    
-    //pass the lock of the metadata to this helper. If passed table is none, then create new instance
-    let mutmetadata = if let Some(mttb) = metatable_lock {mttb} else {
-        &FS_METADATA
-    };
-
-    if utilcage.mkdir_syscall("/dev", S_IRWXA, Some(mutmetadata)) != 0 {
-        interface::log_to_stderr("making /dev failed. Skipping");
-    }
-
-    if utilcage.mknod_syscall("/dev/null", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 3}), Some(mutmetadata)) != 0 {
-        interface::log_to_stderr("making /dev/null failed. Skipping");
-    }
-
-    if utilcage.mknod_syscall("/dev/zero", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 5}), Some(mutmetadata)) != 0 {
-        interface::log_to_stderr("making /dev/zero failed. Skipping");
-    }
-
-    if utilcage.mknod_syscall("/dev/urandom", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 9}), Some(mutmetadata)) != 0 {
-        interface::log_to_stderr("making /dev/urandom failed. Skipping");
-    }
-
-    if utilcage.mknod_syscall("/dev/random", (S_IFCHR | 0o666) as u32, makedev(&DevNo {major: 1, minor: 8}), Some(mutmetadata)) != 0 {
-        interface::log_to_stderr("making /dev/random failed. Skipping");
-    }
 }
 
 // Serialize New Metadata to CBOR, write to logfile

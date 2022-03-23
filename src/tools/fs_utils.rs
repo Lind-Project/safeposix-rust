@@ -158,11 +158,14 @@ fn main() {
 
         "format" => {
             lind_deltree(&utilcage, "/"); //This doesn't actually fully remove all of the linddata files... TODO: debug
-            let metadata = &FilesystemMetadata::blank_fs_init();
-            persist_metadata(metadata);
-            load_fs_special_files(&utilcage, Some(metadata));
-            return; // returning because we don't want to go through lindrustfinalize
-                    // because that ends up persisting the wrong metadata
+
+            let mut logobj = LOGMAP.write().unwrap();
+            let log = logobj.take().unwrap();
+            let _close = log.close().unwrap();
+            drop(logobj);
+
+            format_fs();
+            return;
         }
 
         "deltree" => {

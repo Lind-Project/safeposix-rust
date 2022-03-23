@@ -8,11 +8,7 @@ pub mod fs_tests {
     use std::fs::OpenOptions;
 
     pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
-
-        lindrustinit(0);
-        load_fs_special_files(&CAGE_TABLE.get(&1).unwrap(), None);
-        lindrustfinalize();
+        //ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_broken_close();
         ut_lind_fs_chmod();
@@ -31,8 +27,6 @@ pub mod fs_tests {
         ut_lind_fs_load_fs();
         ut_lind_fs_mknod();
         ut_lind_fs_multiple_open();
-        ut_lind_fs_persistence_setup();
-        // ut_lind_fs_persistence_test();
         ut_lind_fs_rename();
         ut_lind_fs_rmdir();
         ut_lind_fs_stat_file_complex();
@@ -42,7 +36,6 @@ pub mod fs_tests {
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
         ut_lind_fs_dir_chdir_getcwd();
-        // persistencetest();
         rdwrtest();
         prdwrtest();
         chardevtest();
@@ -68,34 +61,6 @@ pub mod fs_tests {
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
         
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-
-
-    pub fn persistencetest() {
-        lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
-
-        cage.unlink_syscall("/testfile");
-        let fd = cage.open_syscall("/testfile", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-        assert!(fd >= 0);
-
-        assert_eq!(cage.close_syscall(fd), 0);
-        filesystem::persist_metadata(&**filesystem::FS_METADATA);
-
-        let metadatastring1 = interface::serde_serialize_to_bytes(&**filesystem::FS_METADATA).unwrap(); // before restore
-
-        // filesystem::restore_metadata(&mut metadata); // should be the same as after restore
-
-        let metadatastring2 = interface::serde_serialize_to_bytes(&**filesystem::FS_METADATA).unwrap();
-
-        //compare lengths before and after since metadata serialization isn't deterministic (hashmaps)
-        assert_eq!(metadatastring1.len(), metadatastring2.len()); 
-        incref_root();//for util cage first
-        incref_root();//then for init cage
-
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -656,85 +621,6 @@ pub mod fs_tests {
         assert_eq!(cage.stat_syscall("/dev/urandom", &mut statdata), 0);
         assert_eq!(statdata.st_rdev, makedev(&DevNo {major: 1, minor: 9}));
 
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-
-
-    pub fn ut_lind_fs_persistence_setup() {
-        lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
-
-        let path1 = "/simpleFileName";
-        let path2 = "/simpelFileName2";
-        let fd = cage.open_syscall(path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-        //testing that the read and write work as expected
-
-        //just read the first 5 bytes of the file
-        let mut read_buf = sizecbuf(5);
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Hello there!"), 12), 12);
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(fd, read_buf.as_mut_ptr(), 5), 5);
-        assert_eq!(cbuf2str(&read_buf), "Hello");
-
-        let mut read_buf2 = sizecbuf(12);
-        assert_eq!(cage.write_syscall(fd, str2cbuf(" World"), 6), 6);
-        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
-        assert_eq!(cage.read_syscall(fd, read_buf2.as_mut_ptr(), 12), 12);
-        assert_eq!(cbuf2str(&read_buf2), "Hello World!");
-
-        //close the file descriptor
-        assert_eq!(cage.close_syscall(fd), 0);
-    
-        //open another one and then remove it
-        let fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-        let message = "================================================================================================";
-        assert_eq!(cage.write_syscall(fd2, str2cbuf(message), message.len()), message.len() as i32);
-         
-        //close the file descriptor
-        assert_eq!(cage.unlink_syscall(path2), 0);
-
-        //have to retieve the metadata lock after the open syscall gets it
-        {
-            persist_metadata(&filesystem::FS_METADATA);
-            let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
-            let result = path.unwrap().metadata().unwrap().permissions();
-            assert_ne!(result.mode() & (S_IWUSR | S_IWGRP | S_IWOTH), 0);
-        }
-
-        assert_eq!(cage.close_syscall(fd2), 0);
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-
-
-    pub fn ut_lind_fs_persistence_test() {
-
-        //check that the setup was run first
-        {
-            let metadata = &FS_METADATA;
-            persist_metadata(&filesystem::FS_METADATA);
-            // let path = normpath(convpath(METADATAFILENAME), &cage);
-            let path = OpenOptions::new().read(false).write(true).open(METADATAFILENAME.clone());
-            let result = path.unwrap().metadata().unwrap().permissions();
-            assert_ne!(result.mode() & (S_IWUSR | S_IWGRP | S_IWOTH), 0);
-
-            //restore the metadata
-            // restore_metadata(&mut metadata);
-        }
-
-        lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
-        //taken from the set up call:
-        let path1 = "/simpleFileName";
-
-        //if everything works, then try to open the files from the metadata
-        //it should exist
-        let fd = cage.open_syscall(path1, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-
-        assert_ne!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }

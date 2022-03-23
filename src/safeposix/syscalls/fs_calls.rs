@@ -256,13 +256,17 @@ impl Cage {
                 match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
+                        drop(inodeobj);
+
                         match metawalkandparent(truenewpath.as_path()) {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                                    ind.filename_to_inode_dict.insert(filename, inodenum);
-                                    ind.linkcount += 1;
+                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
+                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
+                                    parentdirinodeobj.linkcount += 1;
+                                    drop(parentinodeobj);
                                     log_metadata(&FS_METADATA, pardirinode);
                                     log_metadata(&FS_METADATA, inodenum);
                                 } //insert a reference to the inode in the parent directory
@@ -275,13 +279,17 @@ impl Cage {
 
                     Inode::CharDev(ref mut chardev_inode_obj) => {
                         chardev_inode_obj.linkcount += 1; //add link to inode
+                        drop(inodeobj);
+
                         match metawalkandparent(truenewpath.as_path()) {
                             (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                             (None, Some(pardirinode)) => {
-                                if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                                    ind.filename_to_inode_dict.insert(filename, inodenum);
-                                    ind.linkcount += 1;
+                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
+                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
+                                    parentdirinodeobj.linkcount += 1;
+                                    drop(parentinodeobj);
                                     log_metadata(&FS_METADATA, pardirinode);
                                     log_metadata(&FS_METADATA, inodenum);
                                 } //insert a reference to the inode in the parent directory
@@ -335,6 +343,8 @@ impl Cage {
                 directory_parent_inode_obj.linkcount -= 1;
                 //remove reference to file in parent directory
 
+                drop(parentinodeobj);
+
                 if curlinkcount == 0 {
                     if currefcount == 0  {
 
@@ -348,7 +358,6 @@ impl Cage {
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
 
-                drop(parentinodeobj);
                 log_metadata(&FS_METADATA, parentinodenum);
                 log_metadata(&FS_METADATA, inodenum);
                 0 //unlink has succeeded
@@ -711,6 +720,7 @@ impl Cage {
                                 newposition = normalfile_filedesc_obj.position;
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
+                                    drop(inodeobj);
                                     log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
                                 } //update file size if necessary
                                 
@@ -808,6 +818,7 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               drop(inodeobj);
                                log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);                            
                             } //update file size if necessary
 
@@ -1166,11 +1177,14 @@ impl Cage {
                             if normalfile_inode_obj.refcount == 0 {
                                 FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
                                 if normalfile_inode_obj.linkcount == 0 {
+                                    drop(inodeobj);
                                     //removing the file from the entire filesystem (interface, metadata, and object table)
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
-                                } 
+                                } else {
+                                    drop(inodeobj);
+                                }
                                 log_metadata(&FS_METADATA, inodenum);
                             }
                         },
@@ -1185,6 +1199,7 @@ impl Cage {
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
                                 FS_METADATA.inodetable.remove(&inodenum);
+                                drop(inodeobj);
                                 log_metadata(&FS_METADATA, inodenum);     
                             } 
                         },
@@ -1198,9 +1213,12 @@ impl Cage {
                             }
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
                                 //removing the file from the metadata 
+                                drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
-                                log_metadata(&FS_METADATA, inodenum);
-                            } 
+                            }  else {
+                                drop(inodeobj);
+                            }
+                            log_metadata(&FS_METADATA, inodenum);
                         }
                     }
                 }
@@ -1327,6 +1345,7 @@ impl Cage {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     }
                 }
+                drop(thisinode);
                 log_metadata(&FS_METADATA, inodenum);
             }
             else {
@@ -1475,6 +1494,7 @@ impl Cage {
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
                         // remove entry of corresponding inodenum from inodetable
+                        drop(inodeobj);
                         FS_METADATA.inodetable.remove(&inodenum).unwrap();
                         
                         if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap()) {
@@ -1528,6 +1548,7 @@ impl Cage {
 
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
+                    drop(pardir_inodeobj);
                     log_metadata(&FS_METADATA, parent_inodenum);       
                 }
                 0 // success
@@ -1569,6 +1590,7 @@ impl Cage {
                                      // extra data are cut off
                                 fileobject.shrink(length as usize).unwrap();
                             } 
+                            drop(inodeobj);
                             log_metadata(&FS_METADATA, inodenum);    
                         }
                         Inode::CharDev(_) => {

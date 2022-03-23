@@ -235,6 +235,7 @@ impl NetMetadata {
         if let Some(mut portusers) = self.used_port_set.get_mut(&muxed) {
             if *portusers <= 1 {
                 //if it's rebindable and we're removing the last bound port or it's just not rebindable
+                drop(portusers);
                 if let Some(_) = self.used_port_set.remove(&muxed) {
                     return Ok(());
                 } else {

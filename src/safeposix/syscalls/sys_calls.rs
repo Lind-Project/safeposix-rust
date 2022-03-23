@@ -114,9 +114,9 @@ impl Cage {
 
         //close all remaining files in the fdtable
         {
-            for fdtablepair in self.filedescriptortable.iter_mut() {
-                let (fd, _) = fdtablepair.pair();
-                self._close_helper(*fd);
+            let fds_to_close = self.filedescriptortable.iter_mut().map(|x| *x.key()).collect::<Vec<i32>>();
+            for fd in  fds_to_close {
+                self._close_helper(fd);
             }
         }
 
