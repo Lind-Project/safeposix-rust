@@ -738,24 +738,20 @@ impl Cage {
 
                                 drop(fdtable);
                                 drop(mutmetadata);
-                                match sockfdobj.domain {
-                                    PF_INET => {
-                                        if 0 == (sockfdobj.flags & O_NONBLOCK) { 
-                                            sockobj.nonblock_accept(true)
-                                        } else {
-                                            sockobj.accept(true)
-                                        };
-                                    },
-                                    PF_INET6 => {
-                                        if 0 == (sockfdobj.flags & O_NONBLOCK) { 
-                                            sockobj.nonblock_accept(false)
-                                        } else {
-                                            sockobj.accept(false)
-                                        };
-                                    },
-                                    _ => panic!("Unknown domain in accepting socket"),
-                                }
 
+                                if 0 == (sockfdobj.flags & O_NONBLOCK) {
+                                    match sockfdobj.domain {
+                                        PF_INET => sockobj.nonblock_accept(true),
+                                        PF_INET6 => sockobj.nonblock_accept(false),
+                                        _ => panic!("Unknown domain in accepting socket"),
+                                    }
+                                } else {
+                                    match sockfdobj.domain {
+                                        PF_INET => sockobj.accept(true),
+                                        PF_INET6 => sockobj.accept(false),
+                                        _ => panic!("Unknown domain in accepting socket"),
+                                    }
+                                }
                             };
 
                             if let Err(_) = acceptedresult {
