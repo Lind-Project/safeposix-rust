@@ -741,16 +741,16 @@ impl Cage {
                                 match sockfdobj.domain {
                                     PF_INET => {
                                         if 0 == (sockfdobj.flags & O_NONBLOCK) { 
-                                            sockobj.nonblock_accept(true);
+                                            sockobj.nonblock_accept(true)
                                         } else {
-                                            sockobj.accept(true);
+                                            sockobj.accept(true)
                                         };
                                     },
                                     PF_INET6 => {
                                         if 0 == (sockfdobj.flags & O_NONBLOCK) { 
-                                            sockobj.nonblock_accept(false);
+                                            sockobj.nonblock_accept(false)
                                         } else {
-                                            sockobj.accept(false);
+                                            sockobj.accept(false)
                                         };
                                     },
                                     _ => panic!("Unknown domain in accepting socket"),
