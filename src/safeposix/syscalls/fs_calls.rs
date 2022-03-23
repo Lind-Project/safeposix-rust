@@ -1395,7 +1395,7 @@ impl Cage {
                     }
                 }
                 FIOASYNC => { //not implemented
-                    println!("ioctl(FIOASYNC) is not implemented, and just returns 0.");
+                    interface::log_verbose("ioctl(FIOASYNC) is not implemented, and just returns 0.");
                     0
                 }
                 _ => {syscall_error(Errno::EINVAL, "ioctl", "Arguments provided do not match implemented parameters")}
