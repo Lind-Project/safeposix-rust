@@ -206,7 +206,16 @@ impl Socket {
     }
 
     pub fn ioctl(&self, request: u32, argptr: *mut i32) -> i32 {
-        unsafe {libc::ioctl(self.raw_sys_fd, request as u64, argptr as *mut libc::c_void)}
+        //Restricted implementation:
+        match request {
+            FIONBIO => {
+                unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::fcntl(self.raw_sys_fd, libc::F_GETFL, 0) | libc::O_NONBLOCK)}
+            }
+            _ => {0}
+        }
+
+        //General implementation (disabled for now to avoid the ioctl call):
+        //unsafe {libc::ioctl(self.raw_sys_fd, request as u64, argptr as *mut libc::c_void)}
     }
 
     pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
