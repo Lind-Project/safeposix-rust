@@ -516,12 +516,14 @@ pub mod net_tests {
                         }
                     } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                         let mut buf = sizecbuf(4);
-                        assert_eq!(cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0), 4);
-                        if cbuf2str(&buf) == "test" {
+                        let recres = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
+                        assert_eq!(recres & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for recieving or it's closed
+                        if recres == 4 {
+                            assert_eq!(cbuf2str(&buf), "test");
                             //This socket is ready for writing, modify the socket descriptor to be in read-write mode. This socket can write data out to network 
                             for polledfile in &mut polled {
                                 if polledfile.fd == sockfd {
-                                    polledfile.events = POLLIN | POLLOUT;
+                                    polledfile.events = POLLOUT;
                                     break;
                                 }
                             }
