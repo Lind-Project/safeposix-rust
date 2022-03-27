@@ -1169,7 +1169,7 @@ impl Cage {
                     pipe.decr_ref(pipe_filedesc_obj.flags);
 
                     //Code below needs to reflect addition of pipes
-                    if pipe.get_write_ref() == 0 && pipe_filedesc_obj.flags == O_WRONLY {
+                    if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
                         // we're closing the last write end, lets set eof
                         pipe.set_eof();
                     }
