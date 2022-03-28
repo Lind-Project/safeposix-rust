@@ -16,6 +16,8 @@ impl Cage {
         //construct new cage struct with a cloned fdtable
         let newfdtable = interface::RustHashMap::new();
         {
+            //dashmap doesn't allow you to get key, value pairs directly, it only allows you to get a
+            //RefMulti struct which can be decomposed into the key and value
             for refmulti in self.filedescriptortable.iter() {
                 let (key, value) = refmulti.pair();
                 let fd = value.read().unwrap();

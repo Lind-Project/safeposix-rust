@@ -382,7 +382,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.gethostname_syscall, interface::get_mutcbuf(arg1), interface::get_isize(arg2))
         }
         MKDIR_SYSCALL => {
-            check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2), Ok::<Option<&FilesystemMetadata>, i32>(None))
+            check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
         }
         _ => {//unknown syscall
             -1
@@ -429,14 +429,19 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
-    let mut drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = vec![];
-    let iterator = CAGE_TABLE.iter();
-    for refmulti in iterator {
+    let mut remainingcages: Vec<(u64, interface::RustRfc<Cage>)> = vec![];
+
+    //dashmap doesn't allow you to get key, value pairs directly, it only allows you to get a
+    //RefMulti struct which can be decomposed into the key and value
+    for refmulti in CAGE_TABLE.iter() {
         let (key, value) = refmulti.pair();
-        drainedcages.push((*key, (*value).clone()));
+        remainingcages.push((*key, (*value).clone()));
     }
+    //Wipe the keys from the CAGE_TABLE so we only have one remaing reference to them
     CAGE_TABLE.clear();  
-    for (_cageid, cage) in drainedcages {
+
+    //actually exit the cages
+    for (_cageid, cage) in remainingcages {
         cage.exit_syscall(EXIT_SUCCESS);
     }
 

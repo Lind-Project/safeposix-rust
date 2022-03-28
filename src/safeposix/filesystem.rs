@@ -124,6 +124,11 @@ impl FilesystemMetadata {
 
 pub fn format_fs() {
     let newmetadata = FilesystemMetadata::blank_fs_init();
+    //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
+    //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and 
+    //then persist our new one. In order to create the new one, because the FS_METADATA does not
+    //point to the same metadata that we are trying to create, we need to manually insert these
+    //rather than using system calls.
 
     let mut rootinode = newmetadata.inodetable.get_mut(&1).unwrap(); //get root to populate its dict
     if let Inode::Dir(ref mut rootdir) = *rootinode {
@@ -224,8 +229,7 @@ pub fn load_fs() {
         }
     } else {
         if interface::pathexists(LOGFILENAME.to_string()) {
-            let _logremove = interface::removefile(LOGFILENAME.to_string());
-            println!("Filesystem in very corrupted state: log existed but metadata did not! Ignoring log.");
+            println!("Filesystem in very corrupted state: log existed but metadata did not!");
         }
         format_fs();
     }

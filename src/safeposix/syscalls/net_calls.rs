@@ -235,7 +235,6 @@ impl Cage {
                                     Err(e) => return e,
                                 };
 
-                                //unlock self.filedescriptortable so that we're fine to call bind_inner
                                 return self.bind_inner_socket(sockfdobj, &localaddr, true);
                             }
                         };
@@ -399,9 +398,8 @@ impl Cage {
                                 None => {return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");},
                             };
 
-                            //drop self.filedescriptortable lock so as not to deadlock, this should not introduce
-                            //any harmful race conditions
                             drop(filedesc_enum);
+
                             //send from a udp socket is just shunted off to sendto with the remote address set
                             return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
                         }
@@ -661,18 +659,16 @@ impl Cage {
                         NET_METADATA.socket_object_table.remove(&objectid.unwrap());
                     }
                     sockfdobj.state = ConnState::NOTCONNECTED;
+
+                    drop(filedesc);
+                    drop(wrappedfd);
+                    self.filedescriptortable.remove(&fd); 
                 }
             } else {return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");}
         } else {
             return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
         }
 
-        //We have to take this out of the match because the self.filedescriptortable already has a mutable borrow
-        //which means that I can't change it with a remove until after the self.filedescriptortable mutable borrow is finished from the match statement
-        //I know it is a bit confusing, but there isn't really another way to do this
-        if !partial {
-            self.filedescriptortable.remove(&fd); 
-        }
         return 0;
     }
 

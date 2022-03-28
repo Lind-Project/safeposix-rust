@@ -57,8 +57,7 @@ impl Cage {
                     atime: time, ctime: time, mtime: time,
                 });
 
-                let newinodenum = FS_METADATA.nextinode.load(interface::RustAtomicOrdering::Relaxed);
-                FS_METADATA.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
+                let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                 if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
@@ -127,15 +126,13 @@ impl Cage {
 
     //------------------MKDIR SYSCALL------------------
 
-    pub fn mkdir_syscall(&self, path: &str, mode: u32, metatable: Option<&FilesystemMetadata>) -> i32 {
+    pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mkdir", "given path was null");}
         let truepath = normpath(convpath(path), self);
 
         //pass the metadata to this helper. If passed table is none, then create new instance
-        let metadata = if let Some(mttb) = metatable {mttb} else {
-            &FS_METADATA
-        };
+        let metadata = &FS_METADATA;
 
         match metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
@@ -154,8 +151,7 @@ impl Cage {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
-                let newinodenum = metadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
-                metadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
+                let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                 let time = interface::timestamp(); //We do a real timestamp now
 
                 let newinode = Inode::Dir(DirectoryInode {
@@ -184,15 +180,13 @@ impl Cage {
 
     //------------------MKNOD SYSCALL------------------
 
-    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64, metatable: Option<&FilesystemMetadata>) -> i32 {
+    pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "mknod", "given path was null");}
         let truepath = normpath(convpath(path), self);
 
         //pass the metadata to this helper. If passed table is none, then create new instance
-        let metadata = if let Some(mttb) = metatable {mttb} else {
-            &FS_METADATA
-        };
+        let metadata = &FS_METADATA;
 
         match metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
@@ -218,8 +212,7 @@ impl Cage {
                     atime: time, ctime: time, mtime: time, dev: devtuple(dev)
                 });
 
-                let newinodenum = metadata.nextinode.load(interface::RustAtomicOrdering::Relaxed);
-                metadata.nextinode.store(newinodenum + 1 as usize, interface::RustAtomicOrdering::Relaxed);
+                let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                 if let Inode::Dir(ref mut parentdir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;

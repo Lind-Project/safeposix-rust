@@ -163,6 +163,7 @@ fn main() {
             let log = logobj.take().unwrap();
             let _close = log.close().unwrap();
             drop(logobj);
+            let _logremove = interface::removefile(LOGFILENAME.to_string());
 
             format_fs();
             return;
@@ -182,7 +183,7 @@ fn main() {
 
         "mkdir" => {
             for dir in args {
-                utilcage.mkdir_syscall(dir.as_str(), S_IRWXA, None);
+                utilcage.mkdir_syscall(dir.as_str(), S_IRWXA);
             }
         }
 

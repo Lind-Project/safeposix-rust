@@ -224,9 +224,9 @@ pub mod fs_tests {
         
         //testing the ability to make and change to directories
 
-        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA, None), 0);
-        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA, None), 0);
-        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2/subdir3", 0, None), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2/subdir3", 0), 0);
         
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
@@ -253,11 +253,11 @@ pub mod fs_tests {
         
         let mut statdata = StatData::default();
 
-        assert_eq!(cage.mkdir_syscall(filepath1, S_IRWXA, None), 0);
+        assert_eq!(cage.mkdir_syscall(filepath1, S_IRWXA), 0);
         assert_eq!(cage.stat_syscall(filepath1, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFDIR as u32);
         
-        assert_eq!(cage.mkdir_syscall(filepath2, 0, None), 0);
+        assert_eq!(cage.mkdir_syscall(filepath2, 0), 0);
         assert_eq!(cage.stat_syscall(filepath2, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFDIR as u32);
 
@@ -271,9 +271,9 @@ pub mod fs_tests {
         lindrustinit(0);
         let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
 
-        assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA, None), 0);
-        assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2", S_IRWXA, None), 0);
-        assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2/subdirMultiple3", 0, None), 0);
+        assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2/subdirMultiple3", 0), 0);
 
         let mut statdata = StatData::default();
 
@@ -636,7 +636,7 @@ pub mod fs_tests {
 
         //now we are going to mknod /dev/null with create, read and write flags and permissions
         //and then makr sure that it exists
-        assert_eq!(cage.mknod_syscall(path, S_IFCHR as u32, dev, None), 0);
+        assert_eq!(cage.mknod_syscall(path, S_IFCHR as u32, dev), 0);
         let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
 
         //checking the metadata of the file:
@@ -660,7 +660,7 @@ pub mod fs_tests {
         let path2 = "/random";
 
         //making the node and then making sure that it exists
-        assert_eq!(cage.mknod_syscall(path2, S_IFCHR as u32, dev2, None), 0);
+        assert_eq!(cage.mknod_syscall(path2, S_IFCHR as u32, dev2), 0);
         let fd2 = cage.open_syscall(path2, O_RDWR, S_IRWXA);
         
         let mut buf2 = sizecbuf(4);
@@ -718,8 +718,8 @@ pub mod fs_tests {
         let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
 
         let path = "/parent_dir/dir";
-        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA, None), 0);
-        assert_eq!(cage.mkdir_syscall(path, S_IRWXA, None), 0);
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
         assert_eq!(cage.rmdir_syscall(path), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
@@ -801,7 +801,7 @@ pub mod fs_tests {
         let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
 
         let old_path = "/test_dir";
-        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA, None), 0);
+        assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
         assert_eq!(cage.rename_syscall(old_path, "/test_dir_renamed"), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
@@ -869,7 +869,7 @@ pub mod fs_tests {
         let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
         
-        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA, None), 0);
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
         assert_eq!(cage.getdents_syscall(fd, baseptr, bufsize as u32), 48);
 
@@ -909,7 +909,7 @@ pub mod fs_tests {
         assert_eq!(cage.getcwd_syscall(bufptr, 2), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "/\0\0\0\0\0\0\0\0");
 
-        cage.mkdir_syscall("/subdir1", S_IRWXA, None);
+        cage.mkdir_syscall("/subdir1", S_IRWXA);
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
 

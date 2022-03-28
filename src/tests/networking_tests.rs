@@ -688,7 +688,7 @@ pub mod net_tests {
 
         let port: u16 = 53008;
         let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-        let mut socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0); 
 
@@ -759,7 +759,8 @@ pub mod net_tests {
             for sock in binputs {
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if sock == serversockfd {
-                    let sockfd = cage.accept_syscall(sock, &mut socket); //really can only make sure that the fd is valid
+                    let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                    let sockfd = cage.accept_syscall(sock, &mut sockgarbage); //really can only make sure that the fd is valid
                     assert!(sockfd > 0);
                     inputs.insert(sockfd);
                     outputs.insert(sockfd);
