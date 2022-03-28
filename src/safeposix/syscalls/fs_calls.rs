@@ -1380,7 +1380,7 @@ impl Cage {
                             let locksock = NET_METADATA.write().unwrap().socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
 
-                            let ioctlret: i32 = sockobj.ioctl(request, &mut arg as *mut i32);
+                            let ioctlret: i32 = sockobj.fcntl(libc::F_SETFL, sockobj.fcntl(libc::F_GETFL, 0) | libc::O_NONBLOCK);
                             
                             if ioctlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {

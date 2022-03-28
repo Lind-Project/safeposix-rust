@@ -205,6 +205,11 @@ impl Socket {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
 
+    pub fn fcntl(&self, cmd: i32, arg: i32) -> i32 {
+        unsafe {libc::fcntl(self.raw_sys_fd, request, arg)}
+    }
+
+    /*
     pub fn ioctl(&self, request: u32, argptr: *mut i32) -> i32 {
         //Restricted implementation:
         match request {
@@ -217,6 +222,7 @@ impl Socket {
         //General implementation (disabled for now to avoid the ioctl call):
         //unsafe {libc::ioctl(self.raw_sys_fd, request as u64, argptr as *mut libc::c_void)}
     }
+    */
 
     pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
         return if isv4 {
