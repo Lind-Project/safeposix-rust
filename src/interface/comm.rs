@@ -206,7 +206,7 @@ impl Socket {
     }
 
     pub fn fcntl(&self, cmd: i32, arg: i32) -> i32 {
-        unsafe {libc::fcntl(self.raw_sys_fd, request, arg)}
+        unsafe {libc::fcntl(self.raw_sys_fd, cmd, arg)}
     }
 
     /*
