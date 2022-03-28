@@ -1367,7 +1367,7 @@ impl Cage {
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
                             let flags = &mut sockfdobj.flags;
-                            let mut arg: i32 = arg_result;
+                            let arg: i32 = arg_result;
 
                             if arg == 0 { //clear non-blocking I/O
                                 *flags &= !O_NONBLOCK;
