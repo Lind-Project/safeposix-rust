@@ -1299,37 +1299,47 @@ impl Cage {
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let mut filedesc_enum = wrappedfd.write();
-            
-            let filetype: i8;
-
-            let flags = match &mut *filedesc_enum {
-                Epoll(obj) => {filetype = 0; &mut obj.flags},
-                Pipe(obj) => {filetype = 1; &mut obj.flags},
-                Stream(obj) => {filetype = 2; &mut obj.flags},
-                Socket(obj) => {filetype = 3; &mut obj.flags},
-                File(obj) => {filetype = 4; &mut obj.flags},
-            };
 
             match request {
                 FIONBIO => {
                     let arg_result = interface::get_ioctl_int(ptrunion);
-                    //matching the tuple
-                    match (arg_result, filetype) {
+                    //matching the tuple and passing in filedesc_enum
+                    match (arg_result, &mut *filedesc_enum) {
                         (Err(arg_result), ..)=> {
                             return arg_result; //syscall_error
                         }
-                        (Ok(arg_result), 3) => {
+                        (Ok(arg_result), Socket(ref mut sockfdobj)) => {
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                            let sockobj = locksock.read();
+                            let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
+                            let ioctlret;
+
                             if arg == 0 { //clear non-blocking I/O
                                 *flags &= !O_NONBLOCK;
+                                ioctlret = sockobj.set_blocking();
                             }
                             else { //set for non-blocking I/O
                                 *flags |= O_NONBLOCK;
+                                ioctlret = sockobj.set_nonblocking();
                             }
+                            
+                            if ioctlret < 0 {
+                                match Errno::from_discriminant(interface::get_errno()) {
+                                    Ok(i) => {return syscall_error(i, "ioctl", "The libc call to ioctl failed!");},
+                                    Err(()) => panic!("Unknown errno value from ioctl returned!"),
+                                };
+                            }
+
                             0
                         }
                         _ => {syscall_error(Errno::ENOTTY, "ioctl", "The specified request does not apply to the kind of object that the file descriptor fd references.")}
                     }
+                }
+                FIOASYNC => { //not implemented
+                    interface::log_verbose("ioctl(FIOASYNC) is not implemented, and just returns 0.");
+                    0
                 }
                 _ => {syscall_error(Errno::EINVAL, "ioctl", "Arguments provided do not match implemented parameters")}
             }
