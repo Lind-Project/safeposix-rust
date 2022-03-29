@@ -1304,7 +1304,30 @@ impl Cage {
                 Epoll(obj) => {&mut obj.flags},
                 Pipe(obj) => {&mut obj.flags},
                 Stream(obj) => {&mut obj.flags},
-                Socket(obj) => {&mut obj.flags},
+                Socket(ref mut sockfdobj) => {
+                    if cmd == F_SETFL && arg >= 0 {
+                        let sid = Self::getsockobjid(&mut *sockfdobj);
+                        let locksock = NET_METADATA.write().unwrap().socket_object_table.get(&sid).unwrap().clone();
+                        let sockobj = locksock.read().unwrap();
+                        let fcntlret;
+
+                        if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
+                            fcntlret = sockobj.set_nonblocking();
+                        }
+                        else { //clear non-blocking I/O
+                            fcntlret = sockobj.set_blocking();
+                        }
+
+                        if fcntlret < 0 {
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                Ok(i) => {return syscall_error(i, "fcntl", "The libc call to fcntl failed!");},
+                                Err(()) => panic!("Unknown errno value from fcntl returned!"),
+                            };
+                        }
+                    }
+                    
+                    &mut sockfdobj.flags
+                },
                 File(obj) => {&mut obj.flags},
             };
             
@@ -1371,20 +1394,20 @@ impl Cage {
                             let sockobj = locksock.read().unwrap();
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
-                            let ioctlret;
+                            let fcntlret;
 
                             if arg == 0 { //clear non-blocking I/O
                                 *flags &= !O_NONBLOCK;
-                                ioctlret = sockobj.set_blocking();
+                                fcntlret = sockobj.set_blocking();
                             }
                             else { //set for non-blocking I/O
                                 *flags |= O_NONBLOCK;
-                                ioctlret = sockobj.set_nonblocking();
+                                fcntlret = sockobj.set_nonblocking();
                             }
                             
-                            if ioctlret < 0 {
+                            if fcntlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "ioctl", "The libc call to ioctl failed!");},
+                                    Ok(i) => {return syscall_error(i, "ioctl", "The libc call to fcntl failed!");},
                                     Err(()) => panic!("Unknown errno value from ioctl returned!"),
                                 };
                             }
