@@ -159,7 +159,7 @@ fn main() {
         "format" => {
             lind_deltree(&utilcage, "/"); //This doesn't actually fully remove all of the linddata files... TODO: debug
 
-            let mut logobj = LOGMAP.write().unwrap();
+            let mut logobj = LOGMAP.write();
             let log = logobj.take().unwrap();
             let _close = log.close().unwrap();
             drop(logobj);

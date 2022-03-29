@@ -20,7 +20,7 @@ impl Cage {
             //RefMulti struct which can be decomposed into the key and value
             for refmulti in self.filedescriptortable.iter() {
                 let (key, value) = refmulti.pair();
-                let fd = value.read().unwrap();
+                let fd = value.read();
 
                 //only file inodes have real inode objects currently
                 match &*fd {
@@ -43,7 +43,7 @@ impl Cage {
                     }
                     Socket(socket_filedesc_obj) => {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
+                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().refcnt += 1;
                         }
                     }
                     _ => {}
@@ -55,7 +55,7 @@ impl Cage {
                 newfdtable.insert(*key, wrappedfd); //add deep copied fd to hashmap
 
             }
-            let cwd_container = self.cwd.read().unwrap();
+            let cwd_container = self.cwd.read();
             if let Some(cwdinodenum) = metawalk(&cwd_container) {
                 if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
                     cwddir.refcount += 1;
@@ -63,7 +63,7 @@ impl Cage {
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         }
         let cageobj = Cage {
-            cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
+            cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
@@ -82,7 +82,7 @@ impl Cage {
         let iterator = self.filedescriptortable.iter();
         for pair in iterator {
             let (&fdnum, inode) = pair.pair();
-            if match &*inode.read().unwrap() {
+            if match &*inode.read() {
                File(f) => f.flags & O_CLOEXEC,
                Stream(s) => s.flags & O_CLOEXEC,
                Socket(s) => s.flags & O_CLOEXEC,
@@ -96,7 +96,7 @@ impl Cage {
             self.close_syscall(fdnum);
         }
 
-        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
+        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
             parent: self.parent, filedescriptortable: self.filedescriptortable.clone(),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
@@ -123,7 +123,7 @@ impl Cage {
         }
 
         //get file descriptor table into a vector
-        let cwd_container = self.cwd.read().unwrap();
+        let cwd_container = self.cwd.read();
         decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result

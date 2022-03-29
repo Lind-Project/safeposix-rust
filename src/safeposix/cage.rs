@@ -118,7 +118,7 @@ impl Cage {
 
     pub fn changedir(&self, newdir: interface::RustPathBuf) {
         let newwd = interface::RustRfc::new(normpath(newdir, self));
-        let mut cwdbox = self.cwd.write().unwrap();
+        let mut cwdbox = self.cwd.write();
         *cwdbox = newwd;
     }
 

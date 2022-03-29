@@ -5,8 +5,9 @@
 #![allow(dead_code)]
 use crate::interface;
 
+use parking_lot::Mutex;
 use std::slice;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
@@ -68,7 +69,7 @@ impl EmulatedPipe {
             slice::from_raw_parts(ptr, length)
         };
 
-        let mut write_end = self.write_end.lock().unwrap();
+        let mut write_end = self.write_end.lock();
 
         while bytes_written < length {
             let bytes_to_write = min(length, bytes_written + write_end.remaining());
@@ -91,7 +92,7 @@ impl EmulatedPipe {
             slice::from_raw_parts_mut(ptr, length)
         };
 
-        let mut read_end = self.read_end.lock().unwrap();
+        let mut read_end = self.read_end.lock();
 
         while bytes_read < length {
             let pipe_space = read_end.len();
