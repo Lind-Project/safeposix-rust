@@ -1366,21 +1366,21 @@ impl Cage {
                             return arg_result; //syscall_error
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
-                            let flags = &mut sockfdobj.flags;
-                            let arg: i32 = arg_result;
-
-                            if arg == 0 { //clear non-blocking I/O
-                                *flags &= !O_NONBLOCK;
-                            }
-                            else { //set for non-blocking I/O
-                                *flags |= O_NONBLOCK;
-                            }
-
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let locksock = NET_METADATA.write().unwrap().socket_object_table.get(&sid).unwrap().clone();
                             let sockobj = locksock.read().unwrap();
+                            let flags = &mut sockfdobj.flags;
+                            let arg: i32 = arg_result;
+                            let ioctlret;
 
-                            let ioctlret: i32 = sockobj.fcntl(libc::F_SETFL, sockobj.fcntl(libc::F_GETFL, 0) | libc::O_NONBLOCK);
+                            if arg == 0 { //clear non-blocking I/O
+                                *flags &= !O_NONBLOCK;
+                                ioctlret = sockobj.set_blocking();
+                            }
+                            else { //set for non-blocking I/O
+                                *flags |= O_NONBLOCK;
+                                ioctlret = sockobj.set_nonblocking();
+                            }
                             
                             if ioctlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {

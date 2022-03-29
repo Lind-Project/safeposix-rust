@@ -205,24 +205,13 @@ impl Socket {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
 
-    pub fn fcntl(&self, cmd: i32, arg: i32) -> i32 {
-        unsafe {libc::fcntl(self.raw_sys_fd, cmd, arg)}
+    pub fn set_blocking(&self) -> i32 {
+        unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
     }
 
-    /*
-    pub fn ioctl(&self, request: u32, argptr: *mut i32) -> i32 {
-        //Restricted implementation:
-        match request {
-            FIONBIO => {
-                unsafe {libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::fcntl(self.raw_sys_fd, libc::F_GETFL, 0) | libc::O_NONBLOCK)}
-            }
-            _ => {0}
-        }
-
-        //General implementation (disabled for now to avoid the ioctl call):
-        //unsafe {libc::ioctl(self.raw_sys_fd, request as u64, argptr as *mut libc::c_void)}
+    pub fn set_nonblocking(&self) -> i32 {
+        unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
     }
-    */
 
     pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
         return if isv4 {
