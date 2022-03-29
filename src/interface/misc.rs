@@ -22,6 +22,8 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
+use crate::interface::errnos::{VERBOSE};
+
 pub fn log_from_ptr(buf: *const u8, length: usize) {
     if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
       log_to_stdout(s);
@@ -31,6 +33,12 @@ pub fn log_from_ptr(buf: *const u8, length: usize) {
 // Print text to stdout
 pub fn log_to_stdout(s: &str) {
     print!("{}", s);
+}
+
+pub fn log_verbose(s: &str) {
+    if *VERBOSE.get().unwrap() > 0 {
+        log_to_stdout(s);
+    }
 }
 
 // Print text to stderr
