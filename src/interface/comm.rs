@@ -206,11 +206,11 @@ impl Socket {
     }
 
     pub fn set_blocking(&self) -> i32 {
-        unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
+        unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0)}
     }
 
     pub fn set_nonblocking(&self) -> i32 {
-        unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
+        unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK)}
     }
 
     pub fn accept(&self, isv4: bool) -> (Result<Self, i32>, GenSockaddr) {
