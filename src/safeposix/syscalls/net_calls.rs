@@ -421,6 +421,7 @@ impl Cage {
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
             let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(ref mut sockfdobj) => {
