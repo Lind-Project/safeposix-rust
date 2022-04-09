@@ -1017,6 +1017,8 @@ impl Cage {
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
             let mut filedesc = clonedfd.write().unwrap();
             if let Socket(sockfdobj) = &mut *filedesc {
                 //checking that we recieved SOL_SOCKET\
