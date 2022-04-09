@@ -214,7 +214,9 @@ impl Cage {
 
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write().unwrap();
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if remoteaddr.get_family() != sockfdobj.domain as u16 {
@@ -680,6 +682,7 @@ impl Cage {
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let unwrapclone = wrappedfd.clone();
+            drop(wrappedfd);
             let mut filedesc_enum = unwrapclone.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -768,7 +771,6 @@ impl Cage {
                             //socket inserter code
                             let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
 
-                            drop(wrappedfd);
                             drop(filedesc_enum);
                             drop(unwrapclone);
                             self.filedescriptortable.insert(newfd, wrappedsock);
