@@ -167,7 +167,9 @@ impl Cage {
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write().unwrap();
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     self.bind_inner_socket(sockfdobj, localaddr, prereserved)
@@ -366,7 +368,9 @@ impl Cage {
     }
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write().unwrap();
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if (flags & !MSG_NOSIGNAL) != 0 {
@@ -545,8 +549,9 @@ impl Cage {
     //we currently ignore backlog
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write().unwrap();
-
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedfd.write().unwrap();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     match sockfdobj.state {
@@ -1012,7 +1017,7 @@ impl Cage {
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc = wrappedfd.write().unwrap();
+            let mut filedesc = clonedfd.write().unwrap();
             if let Socket(sockfdobj) = &mut *filedesc {
                 //checking that we recieved SOL_SOCKET\
                 match level {
