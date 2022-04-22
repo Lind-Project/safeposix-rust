@@ -7,7 +7,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 
 use super::net_constants::*;
 use super::fs_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct};
+use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct, FileDescriptor};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
@@ -36,15 +36,7 @@ impl Cage {
     }
 
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
-        let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(sockfd)));
-
-        let newfd = if let Some(fd) = self.get_next_fd(None) {
-            fd
-        } else {
-            return syscall_error(Errno::ENFILE, "socket or sockpair", "no available file descriptor number could be found");
-        };
-        self.filedescriptortable.insert(newfd, wrappedsock);
-        newfd
+        return self.get_next_fd(None, Socket(sockfd));
     }
 
     fn _implicit_bind(&self, sockfdobj: &mut SocketDesc, optaddr: &Option<&mut interface::GenSockaddr>) -> i32 {
@@ -463,7 +455,12 @@ impl Cage {
                             let buflenleft = newbuflen;
 
                             drop(fd);
-                            let retval = sockobj.recvfrom(bufleft, buflenleft, addr);
+                            let retval;
+                            if flags & O_NONBLOCK != 0 {
+                                retval = sockobj.recvfrom_nonblocking(bufleft, buflenleft, addr);
+                            } else {
+                                retval = sockobj.recvfrom(bufleft, buflenleft, addr);
+                            }
 
                             if retval < 0 {
                                 //If we have already read from a peek but have failed to read more, exit!
@@ -641,30 +638,41 @@ impl Cage {
         }
     }
 
+    pub fn _cleanup_socket_inner(&self, filedesc: &FileDescriptor) -> i32 {
+       if let Socket(sockfdobj) = filedesc {
+           if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
+               let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+               if let Err(e) = release_ret_val {return e;}
+           }
+       } else {
+           return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");
+       }
+       return 0;
+    }
+
     pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
 
         //The FdTable must always be passed.
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let mut filedesc = wrappedfd.write();
-            if let Socket(sockfdobj) = &mut *filedesc {
-                let objectid = &sockfdobj.socketobjectid;
+            let inner_result = self._cleanup_socket_inner(&*filedesc);
+            if inner_result < 0 {
+                return inner_result;
+            }
 
-                if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
-                    let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
-                    if let Err(e) = release_ret_val {return e;}
-                }
-                if !partial {
-                    if let None = objectid {} else {
-                        NET_METADATA.socket_object_table.remove(&objectid.unwrap());
-                    }
-                    sockfdobj.state = ConnState::NOTCONNECTED;
-
-                    drop(filedesc);
-                    drop(wrappedfd);
-                    self.filedescriptortable.remove(&fd); 
-                }
-            } else {return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");}
+           if let Socket(sockfdobj) = &mut *filedesc {
+               let objectid = &sockfdobj.socketobjectid;
+               if !partial {
+                   if let None = objectid {} else {
+                       NET_METADATA.socket_object_table.remove(&objectid.unwrap());
+                   }
+                   sockfdobj.state = ConnState::NOTCONNECTED;
+                   drop(filedesc);
+                   drop(wrappedfd);
+                   self.filedescriptortable.remove(&fd); 
+               }
+           }
         } else {
             return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
         }
@@ -676,6 +684,28 @@ impl Cage {
     
     //calls accept on the socket object with value depending on ipv4 or ipv6
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
+
+        //we need to reserve this fd aarly to make sure that we don't need to
+        //error out later so we perform get_next_fd manually, and populate it
+        //at the end
+
+        let mut vacantentry = None;
+        for fd in 0..MAXFD{
+            match self.filedescriptortable.entry(fd) {
+                interface::RustHashEntry::Occupied(_) => {}
+                interface::RustHashEntry::Vacant(vacant) => {
+                    vacantentry = Some(vacant);
+                    break;
+                }
+            };
+        };
+
+        if let None = vacantentry {
+            return syscall_error(Errno::ENFILE, "open_syscall", "no available file descriptor number could be found");
+        }
+
+        let entry = vacantentry.unwrap();
+        let key = *entry.key();
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let unwrapclone = wrappedfd.clone();
@@ -690,12 +720,6 @@ impl Cage {
                             if sockfdobj.state != ConnState::LISTEN {
                                 return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                             }
-
-                            let newfd = if let Some(fd) = self.get_next_fd(None) {
-                                fd
-                            } else {
-                                return syscall_error(Errno::ENFILE, "accept", "no available file descriptor number could be found");
-                            };
 
                             let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
@@ -762,7 +786,6 @@ impl Cage {
                             };
 
                             *addr = remote_addr; //populate addr with what address it connected to
-                            let _domain = sockfdobj.domain;
 
                             //socket inserter code
                             let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
@@ -770,9 +793,9 @@ impl Cage {
                             drop(wrappedfd);
                             drop(filedesc_enum);
                             drop(unwrapclone);
-                            self.filedescriptortable.insert(newfd, wrappedsock);
+                            entry.insert(wrappedsock);
                             
-                            return newfd;
+                            return key;
                         }
                         _ => {
                             return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
@@ -826,8 +849,13 @@ impl Cage {
                     match &mut *filedesc_enum {
                         Socket(ref mut sockfdobj) => {
                             if sockfdobj.state == ConnState::LISTEN {
-                                if !NET_METADATA.pending_conn_table.contains_key(&sockfdobj.localaddr.unwrap().port()) {
+                                if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockfdobj.localaddr.unwrap().port().clone()) {
                                     let sid = Self::getsockobjid(&mut *sockfdobj);
+                                    //if let None = sockfdobj.socketobjectid {
+                                    //    let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+                                    //    sockfdobj.socketobjectid = Some(NET_METADATA.insert_into_socketobjecttable(sock).unwrap());
+                                    //} 
+                                    //sockfdobj.socketobjectid.unwrap();
                                     let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                                     let sockobj = locksock.read();
 
@@ -839,7 +867,7 @@ impl Cage {
                                     drop(sockobj);
                                     if let Ok(_) = listeningsocket.0 {
                                         //save the pending connection for accept to do something with it
-                                        NET_METADATA.pending_conn_table.insert(sockfdobj.localaddr.unwrap().port(), vec!(listeningsocket));
+                                        vacant.insert(vec!(listeningsocket));
                                     } else {
                                         //if it returned an error, then don't insert it into new_readfds
                                         continue;
@@ -1224,24 +1252,15 @@ impl Cage {
 
         //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
         
+        let epollobjfd = Epoll(EpollDesc {
+            mode: 0000,
+            registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
+            advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
+            errno: 0,
+            flags: 0
+        });
         //get a file descriptor
-        if let Some(newfd) = self.get_next_fd(None) {
-            //new epoll fd
-            let epollobjfd = EpollDesc {
-                mode: 0000,
-                registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
-                advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-                errno: 0,
-                flags: 0
-            };
-            
-            //insert into the self.filedescriptortable and return the fd i32
-            let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Epoll(epollobjfd)));
-            self.filedescriptortable.insert(newfd, wrappedsock);
-            return newfd;
-        } else {
-            return syscall_error(Errno::ENFILE, "epoll create", "no available file descriptor number could be found");
-        }
+        return self.get_next_fd(None, epollobjfd);
     }
 
     pub fn epoll_create_syscall(&self, size: i32) -> i32 {

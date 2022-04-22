@@ -147,7 +147,7 @@ pub fn format_fs() {
     let time = interface::timestamp(); //We do a real timestamp now
     let devdirinode = Inode::Dir(DirectoryInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        mode: (S_IFCHR | 0755) as u32,
+        mode: (S_IFDIR | 0755) as u32,
         linkcount: 3 + 4, //3 for ., .., and the parent dir, 4 is one for each child we will create
         refcount: 0,
         atime: time, ctime: time, mtime: time,
