@@ -208,9 +208,9 @@ impl Cage {
 
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let clonedwrap = wrappedfd.clone();
+            let wrappedclone = wrappedfd.clone();
             drop(wrappedfd);
-            let mut filedesc_enum = clonedwrap.write();
+            let mut filedesc_enum = wrappedclone.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if remoteaddr.get_family() != sockfdobj.domain as u16 {
@@ -297,9 +297,9 @@ impl Cage {
         }
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let clonedwrap = wrappedfd.clone();
+            let wrappedclone = wrappedfd.clone();
             drop(wrappedfd);
-            let mut filedesc_enum = clonedwrap.write();
+            let mut filedesc_enum = wrappedclone.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if dest_addr.get_family() != sockfdobj.domain as u16 {
@@ -362,9 +362,9 @@ impl Cage {
     }
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let clonedwrap = wrappedfd.clone();
+            let wrappedclone = wrappedfd.clone();
             drop(wrappedfd);
-            let mut filedesc_enum = clonedwrap.write();
+            let mut filedesc_enum = wrappedclone.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if (flags & !MSG_NOSIGNAL) != 0 {
@@ -553,7 +553,6 @@ impl Cage {
             let clonedfd = wrappedfd.clone();
             drop(wrappedfd);
             let mut filedesc_enum = clonedfd.write();
-
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     match sockfdobj.state {
