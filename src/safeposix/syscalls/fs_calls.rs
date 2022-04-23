@@ -465,7 +465,9 @@ impl Cage {
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let filedesc_enum = wrappedfd.read();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
 
             //Delegate populating statbuf to the relevant helper depending on the file type.
             //First we check in the file descriptor to handle sockets, streams, and pipes,
@@ -527,7 +529,9 @@ impl Cage {
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let filedesc_enum = wrappedfd.read();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
             
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = FS_METADATA.dev_id;
@@ -564,7 +568,9 @@ impl Cage {
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
             match &mut *filedesc_enum {
@@ -625,7 +631,9 @@ impl Cage {
     //------------------------------------PREAD SYSCALL------------------------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             match &mut *filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
@@ -689,7 +697,9 @@ impl Cage {
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
             match &mut *filedesc_enum {
@@ -782,7 +792,9 @@ impl Cage {
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             match &mut *filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
@@ -876,7 +888,9 @@ impl Cage {
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             //confirm fd type is seekable
             match &mut *filedesc_enum {
@@ -1290,7 +1304,9 @@ impl Cage {
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             let flags = match &mut *filedesc_enum {
                 Epoll(obj) => {&mut obj.flags},
@@ -1345,7 +1361,9 @@ impl Cage {
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             match request {
                 FIONBIO => {
@@ -1442,7 +1460,9 @@ impl Cage {
         }
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&fildes) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
 
             //confirm fd type is mappable
             match &mut *filedesc_enum {
@@ -1497,7 +1517,9 @@ impl Cage {
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let filedesc_enum = wrappedfd.read();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
 
             let lock = match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {&normalfile_filedesc_obj.advlock}
@@ -1630,7 +1652,9 @@ impl Cage {
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let filedesc_enum = wrappedfd.read();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
 
             match &*filedesc_enum {
                 // only proceed when fd references a regular file
@@ -1738,7 +1762,9 @@ impl Cage {
         }
         
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) { // check if fd is valid
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
             
             match &mut *filedesc_enum {
                 // only proceed when fd represents a file

@@ -159,7 +159,9 @@ impl Cage {
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = wrappedclone.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     self.bind_inner_socket(sockfdobj, localaddr, prereserved)
@@ -206,7 +208,9 @@ impl Cage {
 
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let clonedwrap = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedwrap.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if remoteaddr.get_family() != sockfdobj.domain as u16 {
@@ -293,7 +297,9 @@ impl Cage {
         }
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let clonedwrap = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedwrap.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if dest_addr.get_family() != sockfdobj.domain as u16 {
@@ -356,7 +362,9 @@ impl Cage {
     }
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let clonedwrap = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedwrap.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
                     if (flags & !MSG_NOSIGNAL) != 0 {
@@ -413,6 +421,7 @@ impl Cage {
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
             let mut filedesc_enum = clonedfd.write();
             match &mut *filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -539,7 +548,9 @@ impl Cage {
     //we currently ignore backlog
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc_enum = wrappedfd.write();
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedfd.write();
 
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
@@ -654,8 +665,8 @@ impl Cage {
 
         //The FdTable must always be passed.
 
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc = wrappedfd.write();
+        if let interface::RustHashEntry::Occupied(mut occval) = self.filedescriptortable.entry(fd) {
+            let mut filedesc = occval.get_mut().write();
             let inner_result = self._cleanup_socket_inner(&*filedesc);
             if inner_result < 0 {
                 return inner_result;
@@ -669,8 +680,7 @@ impl Cage {
                    }
                    sockfdobj.state = ConnState::NOTCONNECTED;
                    drop(filedesc);
-                   drop(wrappedfd);
-                   self.filedescriptortable.remove(&fd); 
+                   occval.remove();
                }
            }
         } else {
@@ -845,7 +855,9 @@ impl Cage {
         loop { //we must block manually
             for fd in readfds.iter() {
                 if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-                    let mut filedesc_enum = wrappedfd.write();
+                    let wrappedclone = wrappedfd.clone();
+                    drop(wrappedfd);
+                    let mut filedesc_enum = wrappedclone.write();
 
                     match &mut *filedesc_enum {
                         Socket(ref mut sockfdobj) => {
@@ -915,7 +927,9 @@ impl Cage {
 
             for fd in writefds.iter() {
                 if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-                    let mut filedesc_enum = wrappedfd.write();
+                    let wrappedclone = wrappedfd.clone();
+                    drop(wrappedfd);
+                    let mut filedesc_enum = wrappedclone.write();
                     match &mut *filedesc_enum {
                         //we always say sockets are writable? Even though this is not true
                         Socket(_) => {
@@ -968,7 +982,9 @@ impl Cage {
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
         
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc = wrappedclone.write();
             if let Socket(sockfdobj) = &mut *filedesc {
                 //checking that we recieved SOL_SOCKET\
                 match level {
@@ -1038,7 +1054,9 @@ impl Cage {
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let mut filedesc = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc = wrappedclone.write();
             if let Socket(sockfdobj) = &mut *filedesc {
                 //checking that we recieved SOL_SOCKET\
                 match level {
@@ -1132,7 +1150,9 @@ impl Cage {
 
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let filedesc = wrappedfd.read();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc = wrappedclone.read();
             if let Socket(sockfdobj) = &*filedesc {
                 //if the socket is not connected, then we should return an error
                 if sockfdobj.remoteaddr == None {
@@ -1153,7 +1173,9 @@ impl Cage {
 
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let filedesc = wrappedfd.read();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc = wrappedclone.read();
             if let Socket(sockfdobj) = &*filedesc {
                 if sockfdobj.localaddr == None {
                     
@@ -1276,11 +1298,12 @@ impl Cage {
 
         //making sure that the epfd is really an epoll fd
         if let Some(wrappedfd) = self.filedescriptortable.get(&epfd) {
-            let mut filedesc_enum_epollfd = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum_epollfd = wrappedclone.write();
             if let Epoll(epollfdobj) = &mut *filedesc_enum_epollfd {
 
-                //check if the other fd is an epoll or not... both of these are immutable so we can
-                //be sure this will not deadlock
+                //check if the other fd is an epoll or not...
                 if let Epoll(_) = &*self.filedescriptortable.get(&fd).unwrap().read() {
                     return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
                 }
@@ -1322,7 +1345,9 @@ impl Cage {
     pub fn epoll_wait_syscall(&self, epfd: i32, events: &mut [EpollEvent], maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
 
         if let Some(wrappedfd) = self.filedescriptortable.get(&epfd) {
-            let filedesc_enum = wrappedfd.write();
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.write();
             if let Epoll(epollfdobj) = &*filedesc_enum {
                 if !maxevents > 0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
