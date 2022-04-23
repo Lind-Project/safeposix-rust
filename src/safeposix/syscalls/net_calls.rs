@@ -737,7 +737,7 @@ impl Cage {
                             //sure that we're not locking up the entire fdtable, insert takes
                             //ownership of the entry so we can connect in another thread using the
                             //fdtable
-                            let newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, false, false);
+                            let newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0);
                             let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
                             let mut sockref = arclocksock.write();
                             let mut newsockwithin = if let Socket(s) = &mut *sockref {s} else {unreachable!()};
