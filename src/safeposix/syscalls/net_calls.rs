@@ -831,7 +831,7 @@ impl Cage {
     }
 
     fn _nonblock_peek_read(&self, fd: i32) -> bool{
-        let flags = O_NONBLOCK | MSG_PEEK;
+        let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
