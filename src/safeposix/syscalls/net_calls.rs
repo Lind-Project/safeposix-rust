@@ -702,7 +702,6 @@ impl Cage {
             //we need to reserve this fd early to make sure that we don't need to
             //error out later so we perform get_next_fd manually, and populate it
             //at the end
-        
             let mut vacantentry = None;
             for possfd in 0..MAXFD{
                 match self.filedescriptortable.entry(possfd) {
@@ -733,14 +732,23 @@ impl Cage {
                                 return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                             }
 
+                            //we need to lock this socket for the duration so that nothing else can
+                            //access it before we're done populating with sane data, but we make
+                            //sure that we're not locking up the entire fdtable, insert takes
+                            //ownership of the entry so we can connect in another thread using the
+                            //fdtable
+                            let newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, false, false);
+                            let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
+                            let mut sockref = arclocksock.write();
+                            let mut newsockwithin = if let Socket(s) = &mut *sockref {s} else {unreachable!()};
+                            entry.insert(arclocksock.clone());
+
                             let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
                                 let tup = vec.pop().unwrap(); //pending connection tuple recieved
                                 if vec.is_empty() {
                                     drop(vec);
                                     NET_METADATA.pending_conn_table.remove(&sockfdobj.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
-                                } else {
-                                    drop(vec);
                                 }
                                 tup
                             } else {
@@ -749,7 +757,6 @@ impl Cage {
                                 let sockobj = locksock.read();
 
                                 if 0 == (sockfdobj.flags & O_NONBLOCK) {
-                                    // O_NONBLOCK not set
                                     match sockfdobj.domain {
                                         PF_INET => sockobj.accept(true),
                                         PF_INET6 => sockobj.accept(false),
@@ -766,7 +773,10 @@ impl Cage {
 
                             if let Err(_) = acceptedresult {
                                 match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(e) => {return syscall_error(e, "accept", "host system accept call failed");},
+                                    Ok(e) => {
+                                        self.filedescriptortable.remove(&key);
+                                        return syscall_error(e, "accept", "host system accept call failed");
+                                    },
                                     Err(()) => panic!("Unknown errno value from socket send returned!"),
                                 };
                             }
@@ -774,38 +784,34 @@ impl Cage {
                             let acceptedsock = acceptedresult.unwrap();
 
                             //create new connected socket
-                            let mut newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, false, false);
-                            newsockobj.state = ConnState::CONNECTED;
+                            newsockwithin.state = ConnState::CONNECTED;
 
                             let mut newaddr = sockfdobj.localaddr.clone().unwrap();
                             let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain, false) {
                                 Ok(portnum) => portnum,
-                                Err(errnum) => return errnum,
+                                Err(errnum) => {
+                                    self.filedescriptortable.remove(&key);
+                                    return errnum;
+                                }
                             };
                             newaddr.set_port(newport);
 
                             let newipaddr = newaddr.addr().clone();
-                            newsockobj.localaddr = Some(newaddr);
-                            newsockobj.remoteaddr = Some(remote_addr.clone());
+                            newsockwithin.localaddr = Some(newaddr);
+                            newsockwithin.remoteaddr = Some(remote_addr.clone());
 
                             //create socket object for new connected socket
-                            newsockobj.socketobjectid = match NET_METADATA.insert_into_socketobjecttable(acceptedsock) {
+                            newsockwithin.socketobjectid = match NET_METADATA.insert_into_socketobjecttable(acceptedsock) {
                                 Ok(id) => Some(id),
                                 Err(errnum) => {
                                     NET_METADATA.listening_port_set.remove(&mux_port(newipaddr.clone(), newport, sockfdobj.domain, TCPPORT));
+                                    self.filedescriptortable.remove(&key);
                                     return errnum;
                                 }
                             };
 
                             *addr = remote_addr; //populate addr with what address it connected to
 
-                            //socket inserter code
-                            let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
-
-                            drop(filedesc_enum);
-                            drop(unwrapclone);
-                            entry.insert(wrappedsock);
-                            
                             return key;
                         }
                         _ => {
