@@ -685,30 +685,32 @@ impl Cage {
     //calls accept on the socket object with value depending on ipv4 or ipv6
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
 
-        //we need to reserve this fd aarly to make sure that we don't need to
-        //error out later so we perform get_next_fd manually, and populate it
-        //at the end
-
-        let mut vacantentry = None;
-        for fd in 0..MAXFD{
-            match self.filedescriptortable.entry(fd) {
-                interface::RustHashEntry::Occupied(_) => {}
-                interface::RustHashEntry::Vacant(vacant) => {
-                    vacantentry = Some(vacant);
-                    break;
-                }
-            };
-        };
-
-        if let None = vacantentry {
-            return syscall_error(Errno::ENFILE, "open_syscall", "no available file descriptor number could be found");
-        }
-
-        let entry = vacantentry.unwrap();
-        let key = *entry.key();
-
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let unwrapclone = wrappedfd.clone();
+            drop(wrappedfd);
+
+            //we need to reserve this fd early to make sure that we don't need to
+            //error out later so we perform get_next_fd manually, and populate it
+            //at the end
+        
+            let mut vacantentry = None;
+            for possfd in 0..MAXFD{
+                match self.filedescriptortable.entry(possfd) {
+                    interface::RustHashEntry::Occupied(_) => {}
+                    interface::RustHashEntry::Vacant(vacant) => {
+                        vacantentry = Some(vacant);
+                        break;
+                    }
+                };
+            };
+
+            if let None = vacantentry {
+                return syscall_error(Errno::ENFILE, "open_syscall", "no available file descriptor number could be found");
+            }
+
+            let entry = vacantentry.unwrap();
+            let key = *entry.key();
+
             let mut filedesc_enum = unwrapclone.write();
             match &mut *filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -790,7 +792,6 @@ impl Cage {
                             //socket inserter code
                             let wrappedsock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
 
-                            drop(wrappedfd);
                             drop(filedesc_enum);
                             drop(unwrapclone);
                             entry.insert(wrappedsock);
@@ -1278,7 +1279,8 @@ impl Cage {
             let mut filedesc_enum_epollfd = wrappedfd.write();
             if let Epoll(epollfdobj) = &mut *filedesc_enum_epollfd {
 
-                //check if the other fd is an epoll or not...
+                //check if the other fd is an epoll or not... both of these are immutable so we can
+                //be sure this will not deadlock
                 if let Epoll(_) = &*self.filedescriptortable.get(&fd).unwrap().read() {
                     return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
                 }
