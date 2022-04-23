@@ -651,11 +651,16 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket_inner(&self, filedesc: &FileDescriptor) -> i32 {
+    pub fn _cleanup_socket_inner(&self, filedesc: &FileDescriptor, partial: bool) -> i32 {
        if let Socket(sockfdobj) = filedesc {
            if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
                let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                if let Err(e) = release_ret_val {return e;}
+               if !partial {
+                   if let Some(soid) = sockfdobj.socketobjectid {
+                       NET_METADATA.socket_object_table.remove(&soid);
+                   }
+               }
            }
        } else {
            return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");
@@ -669,17 +674,13 @@ impl Cage {
 
         if let interface::RustHashEntry::Occupied(mut occval) = self.filedescriptortable.entry(fd) {
             let mut filedesc = occval.get_mut().write();
-            let inner_result = self._cleanup_socket_inner(&*filedesc);
+            let inner_result = self._cleanup_socket_inner(&*filedesc, partial);
             if inner_result < 0 {
                 return inner_result;
             }
 
            if let Socket(sockfdobj) = &mut *filedesc {
-               let objectid = &sockfdobj.socketobjectid;
                if !partial {
-                   if let None = objectid {} else {
-                       NET_METADATA.socket_object_table.remove(&objectid.unwrap());
-                   }
                    sockfdobj.state = ConnState::NOTCONNECTED;
                    drop(filedesc);
                    occval.remove();
@@ -859,7 +860,7 @@ impl Cage {
 
     //TODO: handle pipes
     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
-        //sockfds and writefds are not really implemented at the current moment.
+        //exceptfds and writefds are not really implemented at the current moment.
         //They both always return success. However we have some intention of making
         //writefds work at some point for pipes? We have no such intention for exceptfds
         let new_readfds = interface::RustHashSet::<i32>::new();

@@ -1196,7 +1196,7 @@ impl Cage {
                     }
                 }
                 if cleanflag {
-                    let retval = self._cleanup_socket_inner(&*filedesc_enum);
+                    let retval = self._cleanup_socket_inner(&*filedesc_enum, false);
                     if retval < 0 {
                         return retval;
                     }
