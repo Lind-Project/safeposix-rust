@@ -418,120 +418,122 @@ impl Cage {
         }
     }
 
+    fn recv_common_inner(&self, filedesc_enum: &mut FileDescriptor, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+       match &mut *filedesc_enum {
+           Socket(ref mut sockfdobj) => {
+               match sockfdobj.protocol {
+                   IPPROTO_TCP => {
+                       if sockfdobj.state != ConnState::CONNECTED {
+                           return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
+                       }
+                       let sid = Self::getsockobjid(&mut *sockfdobj);
+                       let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                       let sockobj = locksock.read();
+
+                       let mut newbuflen = buflen;
+                       let mut newbufptr = buf;
+
+                       //if we have peeked some data before, fill our buffer with that data before moving on
+                       if !sockfdobj.last_peek.is_empty() {
+                           let bytecount = interface::rust_min(sockfdobj.last_peek.len(), newbuflen);
+                           interface::copy_fromrustdeque_sized(buf, bytecount, &sockfdobj.last_peek);
+                           newbuflen -= bytecount;
+                           newbufptr = newbufptr.wrapping_add(bytecount);
+
+                           //if we're not still peeking data, consume the data we peeked from our peek buffer
+                           //and if the bytecount is more than the length of the peeked data, then we remove the entire
+                           //buffer
+                           if flags & MSG_PEEK == 0 {
+                               sockfdobj.last_peek.drain(..(
+                                   if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} 
+                                   else {bytecount}
+                               ));
+                           }
+
+                           if newbuflen == 0 {
+                               //if we've filled all of the buffer with peeked data, return
+                               return bytecount as i32;
+                           }
+                       }
+
+                       let bufleft = newbufptr;
+                       let buflenleft = newbuflen;
+
+                       let retval;
+                       if sockfdobj.flags & O_NONBLOCK != 0 {
+                           retval = sockobj.recvfrom_nonblocking(bufleft, buflenleft, addr);
+                       } else {
+                           retval = sockobj.recvfrom(bufleft, buflenleft, addr);
+                       }
+
+                       if retval < 0 {
+                           //If we have already read from a peek but have failed to read more, exit!
+                           if buflen != buflenleft {
+                               return (buflen - buflenleft) as i32;
+                           }
+
+                           match Errno::from_discriminant(interface::get_errno()) {
+                               Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
+                               Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                           };
+
+                       }
+
+                       let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
+
+                       if flags & MSG_PEEK != 0 {
+                           //extend from the point after we read our previously peeked bytes
+                           interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockfdobj.last_peek);
+                       }
+
+                       return totalbyteswritten;
+
+                   }
+                   IPPROTO_UDP => {
+                       let ibindret = self._implicit_bind(&mut *sockfdobj, addr);
+                       if ibindret < 0 {
+                           return ibindret;
+                       }
+
+                       let sid = Self::getsockobjid(&mut *sockfdobj);
+                       let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                       let sockobj = locksock.read();
+
+                       //if the remoteaddr is set and addr is not, use remoteaddr
+                       let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
+                           sockobj.recvfrom(buf, buflen, &mut sockfdobj.remoteaddr.as_mut())
+                       } else {
+                           sockobj.recvfrom(buf, buflen, addr)
+                       };
+
+                       if retval < 0 {
+                           match Errno::from_discriminant(interface::get_errno()) {
+                               Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from libc recvfrom");},
+                               Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                           };
+                           
+                       } else {
+                           return retval;
+                       }
+                   }
+
+                   _ => {
+                       return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
+                   }
+               }
+           }
+           _ => {
+               return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
+           }
+       }
+    }
+
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let clonedfd = wrappedfd.clone();
             drop(wrappedfd);
             let mut filedesc_enum = clonedfd.write();
-            match &mut *filedesc_enum {
-                Socket(ref mut sockfdobj) => {
-                    match sockfdobj.protocol {
-                        IPPROTO_TCP => {
-                            if sockfdobj.state != ConnState::CONNECTED {
-                                return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
-                            }
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                            let sockobj = locksock.read();
-
-                            let mut newbuflen = buflen;
-                            let mut newbufptr = buf;
-
-                            //if we have peeked some data before, fill our buffer with that data before moving on
-                            if !sockfdobj.last_peek.is_empty() {
-                                let bytecount = interface::rust_min(sockfdobj.last_peek.len(), newbuflen);
-                                interface::copy_fromrustdeque_sized(buf, bytecount, &sockfdobj.last_peek);
-                                newbuflen -= bytecount;
-                                newbufptr = newbufptr.wrapping_add(bytecount);
-
-                                //if we're not still peeking data, consume the data we peeked from our peek buffer
-                                //and if the bytecount is more than the length of the peeked data, then we remove the entire
-                                //buffer
-                                if flags & MSG_PEEK == 0 {
-                                    sockfdobj.last_peek.drain(..(
-                                        if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} 
-                                        else {bytecount}
-                                    ));
-                                }
-
-                                if newbuflen == 0 {
-                                    //if we've filled all of the buffer with peeked data, return
-                                    return bytecount as i32;
-                                }
-                            }
-
-                            let bufleft = newbufptr;
-                            let buflenleft = newbuflen;
-
-                            drop(fd);
-                            let retval;
-                            if flags & O_NONBLOCK != 0 {
-                                retval = sockobj.recvfrom_nonblocking(bufleft, buflenleft, addr);
-                            } else {
-                                retval = sockobj.recvfrom(bufleft, buflenleft, addr);
-                            }
-
-                            if retval < 0 {
-                                //If we have already read from a peek but have failed to read more, exit!
-                                if buflen != buflenleft {
-                                    return (buflen - buflenleft) as i32;
-                                }
-
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
-                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                };
-
-                            }
-
-                            let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
-
-                            if flags & MSG_PEEK != 0 {
-                                //extend from the point after we read our previously peeked bytes
-                                interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockfdobj.last_peek);
-                            }
-
-                            return totalbyteswritten;
-
-                        }
-                        IPPROTO_UDP => {
-                            let ibindret = self._implicit_bind(&mut *sockfdobj, addr);
-                            if ibindret < 0 {
-                                return ibindret;
-                            }
-
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                            let sockobj = locksock.read();
-
-                            //if the remoteaddr is set and addr is not, use remoteaddr
-                            let retval = if addr.is_none() && sockfdobj.remoteaddr.is_some() {
-                                sockobj.recvfrom(buf, buflen, &mut sockfdobj.remoteaddr.as_mut())
-                            } else {
-                                sockobj.recvfrom(buf, buflen, addr)
-                            };
-
-                            if retval < 0 {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from libc recvfrom");},
-                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                };
-                                
-                            } else {
-                                return retval;
-                            }
-                        }
-
-                        _ => {
-                            return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
-                        }
-                    }
-                }
-
-                _ => {
-                    return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
-                }
-            }
+            return self.recv_common_inner(&mut *filedesc_enum, buf, buflen, flags, addr);
         } else {
             return syscall_error(Errno::EBADF, "recvfrom", "invalid file descriptor");
         }
@@ -832,8 +834,27 @@ impl Cage {
         let flags = O_NONBLOCK | MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
-        let retval = self.recv_common(fd, bufptr, 1, flags, &mut None);
-        return retval >= 0; //it it's less than 0, it failed, it it's 0 peer is dead, 1 it succeeded, in the latter 2 it's true
+        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+            let clonedfd = wrappedfd.clone();
+            drop(wrappedfd);
+            let mut filedesc_enum = clonedfd.write();
+            let oldflags;
+            if let Socket(ref mut sockfdobj) = &mut *filedesc_enum {
+                oldflags = sockfdobj.flags;
+                sockfdobj.flags |= O_NONBLOCK;
+            } else {
+                return false;
+            }
+            let retval = self.recv_common_inner(&mut *filedesc_enum, bufptr, 1, flags, &mut None);
+            if let Socket(ref mut sockfdobj) = &mut *filedesc_enum {
+                sockfdobj.flags = oldflags;
+            } else {
+                unreachable!();
+            }
+            return retval >= 0; //it it's less than 0, it failed, it it's 0 peer is dead, 1 it succeeded, in the latter 2 it's true
+        } else {
+            return false;
+        }
     }
 
     //TODO: handle pipes
