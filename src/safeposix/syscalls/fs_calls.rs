@@ -1126,7 +1126,6 @@ impl Cage {
         if fromdup2 {
             match &entry {
                 interface::RustHashEntry::Occupied(occupied) => {
-                    //hmmm deadlock here
                     let close_result = Self::_close_helper_inner(&self, (*occupied.get()).clone());
                     if close_result < 0 {
                         return close_result;
