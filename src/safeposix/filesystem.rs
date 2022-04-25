@@ -257,7 +257,7 @@ pub fn fsck() {
 pub fn create_log() {
     // reinstantiate the log file and assign it to the metadata struct
     let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
-    let mut logobj = LOGMAP.write().unwrap();
+    let mut logobj = LOGMAP.write();
     logobj.replace(log_mapobj);
 }
 
@@ -276,7 +276,7 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     }
 
     // write to file
-    let mut mapopt = LOGMAP.write().unwrap();
+    let mut mapopt = LOGMAP.write();
     let map = mapopt.as_mut().unwrap();
     map.write_to_map(&entrybytes).unwrap();
 }
@@ -352,7 +352,7 @@ pub fn metawalk(path: &interface::RustPath) -> Option<usize> {
 }
 pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPathBuf {
     //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
-    let mut newp = if origp.is_relative() {(**cage.cwd.read().unwrap()).clone()} else {interface::RustPathBuf::from("/")};
+    let mut newp = if origp.is_relative() {(**cage.cwd.read()).clone()} else {interface::RustPathBuf::from("/")};
 
     for comp in origp.components() {
         match comp {

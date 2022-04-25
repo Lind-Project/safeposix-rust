@@ -201,6 +201,18 @@ impl Socket {
         unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, 0, finalsockaddr, &mut addrlen as *mut u32) as i32}
     }
 
+    pub fn recvfrom_nonblocking(&self, buf: *mut u8, len: usize, addr: &mut Option<&mut GenSockaddr>) -> i32 {
+        let (finalsockaddr, mut addrlen) = match addr {
+            Some(GenSockaddr::V6(ref mut addrref6)) => {((addrref6 as *mut SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>() as u32)}
+            Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as u32)}
+            None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
+        };
+        self.set_nonblocking();
+        let retval = unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, 0, finalsockaddr, &mut addrlen as *mut u32) as i32};
+        self.set_blocking();
+        retval
+    }
+
     pub fn listen(&self, backlog: i32) -> i32 {
         unsafe {libc::listen(self.raw_sys_fd, backlog)}
     }
@@ -241,9 +253,9 @@ impl Socket {
         return if isv4 {
             let mut inneraddrbuf = SockaddrV4::default();
             let mut sadlen = size_of::<SockaddrV4>() as u32;
-            unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
+            self.set_nonblocking();
             let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV4).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
-            unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
+            self.set_blocking();
 
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
@@ -253,9 +265,9 @@ impl Socket {
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
             let mut sadlen = size_of::<SockaddrV6>() as u32;
-            unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, libc::O_NONBLOCK);}
+            self.set_nonblocking();
             let newfd = unsafe{libc::accept(self.raw_sys_fd, (&mut inneraddrbuf as *mut SockaddrV6).cast::<libc::sockaddr>(), &mut sadlen as *mut u32)};
-            unsafe{libc::fcntl(self.raw_sys_fd, libc::F_SETFL, 0);}
+            self.set_blocking();
 
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))

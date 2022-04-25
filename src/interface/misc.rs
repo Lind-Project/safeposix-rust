@@ -6,15 +6,15 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap};
+pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
-pub use std::sync::{RwLock as RustLock, Arc as RustRfc, RwLockReadGuard as RustReadGuard};
-use std::sync::{Mutex, Condvar};
+pub use std::sync::{Arc as RustRfc};
+pub use parking_lot::{RwLock as RustLock, Mutex, Condvar};
 
 use libc::mmap;
 use std::ffi::c_void;
@@ -112,18 +112,22 @@ impl AdvisoryLock {
     }
 
     pub fn lock_ex(&self) {
-        let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
-                                                               |guard| {*guard != 0}).unwrap();
+        let mut waitedguard = self.advisory_lock.lock();
+        while *waitedguard != 0 {
+            self.advisory_condvar.wait(&mut waitedguard);
+        }
         *waitedguard = -1;
     }
 
     pub fn lock_sh(&self) {
-        let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
-                                                               |guard| {*guard < 0}).unwrap();
+        let mut waitedguard = self.advisory_lock.lock();
+        while *waitedguard < 0 {
+            self.advisory_condvar.wait(&mut waitedguard);
+        }
         *waitedguard += 1;
     }
     pub fn try_lock_ex(&self) -> bool {
-        if let Ok(mut guard) = self.advisory_lock.try_lock() {
+        if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard == 0 {
               *guard = -1;
               return true
@@ -132,7 +136,7 @@ impl AdvisoryLock {
         false
     }
     pub fn try_lock_sh(&self) -> bool {
-        if let Ok(mut guard) = self.advisory_lock.try_lock() {
+        if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard >= 0 {
               *guard += 1;
               return true
@@ -142,7 +146,7 @@ impl AdvisoryLock {
     }
 
     pub fn unlock(&self) -> bool {
-        let mut guard = self.advisory_lock.lock().unwrap();
+        let mut guard = self.advisory_lock.lock();
 
         if *guard < 0 {
             *guard -= 1;

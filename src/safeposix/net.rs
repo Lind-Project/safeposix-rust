@@ -22,10 +22,10 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
     interface::RustLazyGlobal::new(||
         interface::RustRfc::new(NetMetadata {
             used_port_set: interface::RustHashMap::new(),
-            next_ephemeral_port_tcpv4: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
-            next_ephemeral_port_udpv4: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
-            next_ephemeral_port_tcpv6: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
-            next_ephemeral_port_udpv6: interface::RustAtomicU16::new(EPHEMERAL_PORT_RANGE_END),
+            next_ephemeral_port_tcpv4: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
+            next_ephemeral_port_udpv4: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
+            next_ephemeral_port_tcpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
+            next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
@@ -51,53 +51,51 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 }
 
 pub struct NetMetadata {
-    pub used_port_set: interface::RustHashMap<(interface::GenIpaddr, u16, PortType), u32>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, postiive number means that many users, rebinding is allowed
-    next_ephemeral_port_tcpv4: interface::RustAtomicU16,
-    next_ephemeral_port_udpv4: interface::RustAtomicU16,
-    next_ephemeral_port_tcpv6: interface::RustAtomicU16,
-    next_ephemeral_port_udpv6: interface::RustAtomicU16,
+    pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed
+    next_ephemeral_port_tcpv4: interface::RustRfc<interface::RustLock<u16>>,
+    next_ephemeral_port_udpv4: interface::RustRfc<interface::RustLock<u16>>,
+    next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
+    next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 
 impl NetMetadata {
-    fn port_in_use(&self, tup: &(interface::GenIpaddr, u16, PortType)) -> bool {
+    fn initialize_port(&self, tup: &(interface::GenIpaddr, u16, PortType), rebindability: u32) -> bool {
+        let used_port_tup = (tup.1, tup.2.clone());
         if tup.0.is_unspecified() {
-            let mut tupclone = (*tup).clone();
-            for interface_addr in &*NET_DEVICES_LIST {
-                //ipv4 and ipv6 contain separate port sets so we can rebind on 0 for one protocol if it's bound on the other
-                match tupclone.2 {
-                    PortType::IPv4UDP | PortType::IPv4TCP => {
-                        if let interface::GenIpaddr::V4(_) = interface_addr {
-                          tupclone.0 = *interface_addr;
-                        } else {
-                            continue;
-                        }
-                    }
-                    PortType::IPv6UDP | PortType::IPv6TCP => {
-                        if let interface::GenIpaddr::V6(_) = interface_addr {
-                          tupclone.0 = *interface_addr;
-                        } else {
-                            continue;
-                        }
-                    }
+            let tupclone = used_port_tup.clone();
+            let entry = self.used_port_set.entry(tupclone.clone());
+            match entry {
+                interface::RustHashEntry::Occupied(_) => {
+                    return false;
                 }
-                if self.used_port_set.contains_key(&tupclone) {return true;}
+                interface::RustHashEntry::Vacant(v) => {
+                    let mut intervec = vec!();
+                    for interface_addr in &*NET_DEVICES_LIST {
+                        intervec.push((interface_addr.clone(), rebindability));
+                    }
+                    v.insert(intervec);
+                }
             }
-            return false;
+            true
         } else {
-            if self.used_port_set.contains_key(tup) {return true;}
-            let mut tupclone = (*tup).clone();
-            match tupclone.2 {
-                PortType::IPv4UDP | PortType::IPv4TCP => {
-                    tupclone.0 = interface::GenIpaddr::V4(interface::V4Addr::default());
+            match self.used_port_set.entry(used_port_tup) {
+                interface::RustHashEntry::Occupied(mut o) => {
+                    let addrsused = o.get_mut();
+                    for addrtup in addrsused.clone() {
+                        if addrtup.0 == tup.0 {
+                            return false;
+                        }
+                    }
+                    addrsused.push((tup.0.clone(), rebindability));
                 }
-                PortType::IPv6UDP | PortType::IPv6TCP => {
-                    tupclone.0 = interface::GenIpaddr::V6(interface::V6Addr::default());
+                interface::RustHashEntry::Vacant(v) => {
+                    v.insert(vec![(tup.0.clone(), rebindability)]);
                 }
             }
-            self.used_port_set.contains_key(&tupclone)
+            true
         }
     }
     pub fn _get_available_udp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
@@ -107,34 +105,22 @@ impl NetMetadata {
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
 
         //start from the starting location we specified in a previous attempt to get an ephemeral port
-        let next_ephemeral = if domain == AF_INET {
-            &self.next_ephemeral_port_tcpv4
+        let mut next_ephemeral = if domain == AF_INET {
+            self.next_ephemeral_port_udpv4.write()
         } else if domain == AF_INET6 {
-            &self.next_ephemeral_port_tcpv6
-        } else {unreachable!()}.load(interface::RustAtomicOrdering::Relaxed);
-        for range in [(EPHEMERAL_PORT_RANGE_START ..= next_ephemeral), (next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
+            self.next_ephemeral_port_udpv6.write()
+        } else {unreachable!()};
+        for range in [(EPHEMERAL_PORT_RANGE_START ..= *next_ephemeral), (*next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
             for ne_port in range.rev() {
                 let port = ne_port.to_be(); //ports are stored in network endian order
                 porttuple.1 = port;
 
                 //if we think we can bind to this port
-                if !self.port_in_use(&porttuple) {
-                    self.used_port_set.insert(porttuple, if rebindability {1} else {0}); //rebindability of 0 means not rebindable, 1 means it's rebindable and there's 1 bound to it
-
-                    if ne_port == EPHEMERAL_PORT_RANGE_START {
-                        if domain == AF_INET {
-                            self.next_ephemeral_port_udpv4.store(EPHEMERAL_PORT_RANGE_END, interface::RustAtomicOrdering::Relaxed);
-                        } else if domain == AF_INET6 {
-                            self.next_ephemeral_port_udpv6.store(EPHEMERAL_PORT_RANGE_END, interface::RustAtomicOrdering::Relaxed);
-                        } else {unreachable!()};
-                    } else {
-                        if domain == AF_INET {
-                            self.next_ephemeral_port_udpv4.store(ne_port - 1, interface::RustAtomicOrdering::Relaxed);
-                        } else if domain == AF_INET6 {
-                            self.next_ephemeral_port_udpv6.store(ne_port - 1, interface::RustAtomicOrdering::Relaxed);
-                        } else {unreachable!()};
+                if self.initialize_port(&porttuple, if rebindability {1} else {0}) {//rebindability of 0 means not rebindable, 1 means it's rebindable and there's 1 bound to it
+                    *next_ephemeral -= 1;
+                    if *next_ephemeral < EPHEMERAL_PORT_RANGE_START {
+                        *next_ephemeral = EPHEMERAL_PORT_RANGE_END;
                     }
-
                     return Ok(port);
                 }
             }
@@ -148,31 +134,21 @@ impl NetMetadata {
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
 
         //start from the starting location we specified in a previous attempt to get an ephemeral port
-        let next_ephemeral = if domain == AF_INET {
-            &self.next_ephemeral_port_tcpv4
+        let mut next_ephemeral = if domain == AF_INET {
+            self.next_ephemeral_port_tcpv4.write()
         } else if domain == AF_INET6 {
-            &self.next_ephemeral_port_tcpv6
-        } else {unreachable!()}.load(interface::RustAtomicOrdering::Relaxed);
-        for range in [(EPHEMERAL_PORT_RANGE_START ..= next_ephemeral), (next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
+            self.next_ephemeral_port_tcpv6.write()
+        } else {unreachable!()};
+        for range in [(EPHEMERAL_PORT_RANGE_START ..= *next_ephemeral), (*next_ephemeral + 1 ..= EPHEMERAL_PORT_RANGE_END)] {
             for ne_port in range.rev() {
                 let port = ne_port.to_be(); //ports are stored in network endian order
                 porttuple.1 = port;
 
-                if !self.port_in_use(&porttuple) {
-                    self.used_port_set.insert(porttuple, if rebindability {1} else {0}); //rebindability of 0 means not rebindable, 1 means it's rebindable and there's 1 bound to it
+                if self.initialize_port(&porttuple, if rebindability {1} else {0}) { //rebindability of 0 means not rebindable, 1 means it's rebindable and there's 1 bound to it
 
-                    if ne_port == EPHEMERAL_PORT_RANGE_START {
-                        if domain == AF_INET {
-                            self.next_ephemeral_port_tcpv4.store(EPHEMERAL_PORT_RANGE_END, interface::RustAtomicOrdering::Relaxed);
-                        } else if domain == AF_INET6 {
-                            self.next_ephemeral_port_tcpv6.store(EPHEMERAL_PORT_RANGE_END, interface::RustAtomicOrdering::Relaxed);
-                        } else {unreachable!()};
-                    } else {
-                        if domain == AF_INET {
-                            self.next_ephemeral_port_tcpv4.store(ne_port - 1, interface::RustAtomicOrdering::Relaxed);
-                        } else if domain == AF_INET6 {
-                            self.next_ephemeral_port_tcpv6.store(ne_port - 1, interface::RustAtomicOrdering::Relaxed);
-                        } else {unreachable!()};
+                    *next_ephemeral -= 1;
+                    if *next_ephemeral < EPHEMERAL_PORT_RANGE_START {
+                        *next_ephemeral = EPHEMERAL_PORT_RANGE_END;
                     }
 
                     return Ok(port);
@@ -182,9 +158,10 @@ impl NetMetadata {
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
 
-    fn get_next_socketobjectid(&self) -> Option<i32> {
+    fn insert_to_next_socketobjectid(&self, sock: interface::Socket) -> Option<i32> {
         for i in MINSOCKOBJID..MAXSOCKOBJID {
-            if !self.socket_object_table.contains_key(&i) {
+            if let interface::RustHashEntry::Vacant(v) = self.socket_object_table.entry(i) {
+                v.insert(interface::RustRfc::new(interface::RustLock::new(sock)));
                 return Some(i);
             }
         }
@@ -213,15 +190,24 @@ impl NetMetadata {
             panic!("Unknown protocol was set on socket somehow");
         }
 
-        //if we didn't assign an ephemeral port we got a prespecified port, attempt to bind there
-        if let Some(mut portusers) = self.used_port_set.get_mut(&muxed) {
-            if *portusers == 0 {
-                return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
-            } else {
-                *portusers += 1;
+        let usedport_muxed = (muxed.1, muxed.2);
+        let entry = self.used_port_set.entry(usedport_muxed);
+        match entry {
+            interface::RustHashEntry::Occupied(mut userentry) => {
+                for portuser in userentry.get_mut() {
+                    if portuser.0 == muxed.0 {
+                        if portuser.1 == 0 {
+                            return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
+                        } else {
+                            portuser.1 += 1;
+                        }
+                        break;
+                    }
+                }
             }
-        } else {
-            self.used_port_set.insert(muxed, if rebindability {1} else {0});
+            interface::RustHashEntry::Vacant(v) => {
+                v.insert(vec![(muxed.0.clone(), if rebindability {1} else {0})]);
+            }
         }
         Ok(port)
     }
@@ -240,26 +226,40 @@ impl NetMetadata {
             return Err(syscall_error(Errno::EINVAL, "release", "provided port has nonsensical protocol"));
         }
 
-        if let Some(mut portusers) = self.used_port_set.get_mut(&muxed) {
-            if *portusers <= 1 {
-                //if it's rebindable and we're removing the last bound port or it's just not rebindable
-                drop(portusers);
-                if let Some(_) = self.used_port_set.remove(&muxed) {
-                    return Ok(());
-                } else {
-                    unreachable!();
+        let usedport_muxed = (muxed.1, muxed.2);
+        let entry = self.used_port_set.entry(usedport_muxed);
+        match entry {
+            interface::RustHashEntry::Occupied(mut userentry) => {
+                let mut index = 0;
+                let userarr = userentry.get_mut();
+                for portuser in userarr.clone() {
+                    if portuser.0 == muxed.0 {
+                        //if it's rebindable and we're removing the last bound port or it's just not rebindable
+                        if portuser.1 <= 1 {
+                            drop(portuser);
+                            if userarr.len() == 1 {
+                                drop(userarr);
+                                userentry.remove();
+                            } else {
+                                userarr.swap_remove(index);
+                            }
+                        } else { //if it's rebindable and there are others bound to it
+                            userarr[index].1 -= 1;
+                        }
+                        return Ok(());
+                    }
+                    index += 1;
                 }
-            } else {
-                //if it's rebindable and there are others bound to it
-                *portusers -= 1;
+                unreachable!();
+            }
+            interface::RustHashEntry::Vacant(_) => {
+                return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
             }
         }
-        return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
     }
 
     pub fn insert_into_socketobjecttable(&self, sock: interface::Socket) -> Result<i32, i32> {
-        if let Some(id) = self.get_next_socketobjectid() {
-            self.socket_object_table.insert(id, interface::RustRfc::new(interface::RustLock::new(sock)));
+        if let Some(id) = self.insert_to_next_socketobjectid(sock) {
             Ok(id)
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))

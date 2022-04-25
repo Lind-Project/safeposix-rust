@@ -92,7 +92,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>) -> Option<i32> {
+    pub fn get_next_fd(&self, startfd: Option<i32>, fdobj: FileDescriptor) -> i32 {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -101,11 +101,15 @@ impl Cage {
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
         for fd in start..MAXFD{
-            if !self.filedescriptortable.contains_key(&fd) {
-                return Some(fd);
-            }
+            match self.filedescriptortable.entry(fd) {
+                interface::RustHashEntry::Occupied(_) => {}
+                interface::RustHashEntry::Vacant(vacant) => {
+                    vacant.insert(interface::RustRfc::new(interface::RustLock::new(fdobj)));
+                    return fd;
+                }
+            };
         };
-        None
+        return syscall_error(Errno::ENFILE, "get_next_fd", "no available file descriptor number could be found");
     }
 
     pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor) {
@@ -118,7 +122,7 @@ impl Cage {
 
     pub fn changedir(&self, newdir: interface::RustPathBuf) {
         let newwd = interface::RustRfc::new(normpath(newdir, self));
-        let mut cwdbox = self.cwd.write().unwrap();
+        let mut cwdbox = self.cwd.write();
         *cwdbox = newwd;
     }
 
@@ -134,10 +138,10 @@ impl Cage {
 
 }
 
-pub fn get_next_pipe() -> Option<i32> {
-    let table = &PIPE_TABLE;
+pub fn insert_next_pipe(pipe: interface::EmulatedPipe) -> Option<i32> {
     for fd in STARTINGPIPE..MAXPIPE {
-        if !table.contains_key(&fd) {
+        if let interface::RustHashEntry::Vacant(v) = PIPE_TABLE.entry(fd) {
+            v.insert(interface::RustRfc::new(pipe));
             return Some(fd);
         }
     }
