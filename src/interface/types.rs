@@ -336,7 +336,7 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
 
 pub fn fd_set_to_hashset(union_argument: Arg, nfds: i32) -> Result<interface::RustHashSet<i32>, i32> {
     let pointer = unsafe{union_argument.dispatch_mutcbuf};
-    let mut hashset = interface::RustHashSet::new();
+    let hashset = interface::RustHashSet::new();
     if !pointer.is_null() {    
         for i in 0..nfds {
             let byte_offset = i / 8;

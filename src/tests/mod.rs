@@ -21,7 +21,7 @@ mod main_tests {
     #[test]
     pub fn tests() {
         lindrustinit(0);
-        crate::lib_fs_utils::lind_deltree(CAGE_TABLE.read().unwrap().get(&1).unwrap(), "/");
+        crate::lib_fs_utils::lind_deltree(&CAGE_TABLE.get(&1).unwrap(), "/");
         lindrustfinalize();
 
         println!("FS TESTS");

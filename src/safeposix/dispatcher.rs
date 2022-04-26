@@ -71,7 +71,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
-use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGMAP, LOGFILENAME};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
 
@@ -104,7 +104,7 @@ macro_rules! check_and_dispatch_socketpair {
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
-    let cage = { CAGE_TABLE.read().unwrap().get(&cageid).unwrap().clone() };
+    let cage = { CAGE_TABLE.get(&cageid).unwrap().clone() };
 
     match callnum {
         ACCESS_SYSCALL => {
@@ -398,11 +398,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-    let mut mutcagetable = CAGE_TABLE.write().unwrap();
+    let mutcagetable = &CAGE_TABLE;
 
     let utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        parent: 0, filedescriptortable: interface::RustHashMap::new(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -415,7 +415,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cageid: 1, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
-        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new()),
+        filedescriptortable: interface::RustHashMap::new(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -429,18 +429,27 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
     //wipe all keys from hashmap, i.e. free all cages
-    let mut cagetable = CAGE_TABLE.write().unwrap();
-    let drainedcages: Vec<(u64, interface::RustRfc<Cage>)> = cagetable.drain().collect();
-    drop(cagetable);
-    for (_cageid, cage) in drainedcages {
+    let mut remainingcages: Vec<(u64, interface::RustRfc<Cage>)> = vec![];
+
+    //dashmap doesn't allow you to get key, value pairs directly, it only allows you to get a
+    //RefMulti struct which can be decomposed into the key and value
+    for refmulti in CAGE_TABLE.iter() {
+        let (key, value) = refmulti.pair();
+        remainingcages.push((*key, (*value).clone()));
+    }
+    //Wipe the keys from the CAGE_TABLE so we only have one remaing reference to them
+    CAGE_TABLE.clear();  
+
+    //actually exit the cages
+    for (_cageid, cage) in remainingcages {
         cage.exit_syscall(EXIT_SUCCESS);
     }
 
     // if we get here, persist and delete log
-    persist_metadata(&*FS_METADATA.read().unwrap());
+    persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
-        let mut logobj = LOGMAP.write().unwrap();
+        let mut logobj = LOGMAP.write();
         let log = logobj.take().unwrap();
         let _close = log.close().unwrap();
         let _logremove = interface::removefile(LOGFILENAME.to_string());

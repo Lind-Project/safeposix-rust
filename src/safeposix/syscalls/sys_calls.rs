@@ -11,14 +11,16 @@ use super::fs_constants::*;
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        let mut mutcagetable = CAGE_TABLE.write().unwrap();
+        let mutcagetable = &CAGE_TABLE;
 
         //construct new cage struct with a cloned fdtable
-        let mut newfdtable = interface::RustHashMap::new();
+        let newfdtable = interface::RustHashMap::new();
         {
-            let mut mutmetadata = FS_METADATA.write().unwrap();
-            for (key, value) in self.filedescriptortable.read().unwrap().iter() {
-                let fd = value.read().unwrap();
+            //dashmap doesn't allow you to get key, value pairs directly, it only allows you to get a
+            //RefMulti struct which can be decomposed into the key and value
+            for refmulti in self.filedescriptortable.iter() {
+                let (key, value) = refmulti.pair();
+                let fd = value.read();
 
                 //only file inodes have real inode objects currently
                 match &*fd {
@@ -27,21 +29,21 @@ impl Cage {
 
                         if let Some(inodenum) = inodenum_option {
                             //increment the reference count on the inode
-                            let inode = mutmetadata.inodetable.get_mut(&inodenum).unwrap();
-                            match inode {
-                                Inode::File(f) => {f.refcount += 1;}
-                                Inode::CharDev(f) => {f.refcount += 1;}
-                                Inode::Dir(f) => {f.refcount += 1;}
+                            let mut inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                            match *inode {
+                                Inode::File(ref mut f) => {f.refcount += 1;}
+                                Inode::CharDev(ref mut f) => {f.refcount += 1;}
+                                Inode::Dir(ref mut f) => {f.refcount += 1;}
                             }
                         }
                     }
                     Pipe(pipe_filedesc_obj) => {
-                        let pipe = PIPE_TABLE.write().unwrap().get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                        let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                         pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                            NET_METADATA.write().unwrap().socket_object_table.get_mut(&socknum).unwrap().write().unwrap().refcnt += 1;
+                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().refcnt += 1;
                         }
                     }
                     _ => {}
@@ -53,16 +55,16 @@ impl Cage {
                 newfdtable.insert(*key, wrappedfd); //add deep copied fd to hashmap
 
             }
-            let cwd_container = self.cwd.read().unwrap();
-            if let Some(cwdinodenum) = metawalk(&cwd_container, Some(&mutmetadata)) {
-                if let Inode::Dir(ref mut cwddir) = mutmetadata.inodetable.get_mut(&cwdinodenum).unwrap() {
+            let cwd_container = self.cwd.read();
+            if let Some(cwdinodenum) = metawalk(&cwd_container) {
+                if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
                     cwddir.refcount += 1;
                 } else {panic!("We changed from a directory that was not a directory in chdir!");}
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         }
         let cageobj = Cage {
-            cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), parent: self.cageid,
-            filedescriptortable: interface::RustLock::new(newfdtable),
+            cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
+            filedescriptortable: newfdtable,
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
@@ -74,11 +76,13 @@ impl Cage {
     }
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        {CAGE_TABLE.write().unwrap().remove(&self.cageid).unwrap();}
+        {CAGE_TABLE.remove(&self.cageid).unwrap();}
         
         let mut cloexecvec = vec!();
-        for (&fdnum, inode) in self.filedescriptortable.write().unwrap().iter() {
-            if match &*inode.read().unwrap() {
+        let iterator = self.filedescriptortable.iter();
+        for pair in iterator {
+            let (&fdnum, inode) = pair.pair();
+            if match &*inode.read() {
                File(f) => f.flags & O_CLOEXEC,
                Stream(s) => s.flags & O_CLOEXEC,
                Socket(s) => s.flags & O_CLOEXEC,
@@ -92,8 +96,8 @@ impl Cage {
             self.close_syscall(fdnum);
         }
 
-        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().unwrap().clone()), 
-            parent: self.parent, filedescriptortable: interface::RustLock::new(self.filedescriptortable.read().unwrap().clone()),
+        let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
+            parent: self.parent, filedescriptortable: self.filedescriptortable.clone(),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
@@ -101,7 +105,7 @@ impl Cage {
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
-        {CAGE_TABLE.write().unwrap().insert(child_cageid, interface::RustRfc::new(newcage))};
+        {CAGE_TABLE.insert(child_cageid, interface::RustRfc::new(newcage))};
         0
     }
 
@@ -112,22 +116,18 @@ impl Cage {
 
         //close all remaining files in the fdtable
         {
-            let mut fdtable = self.filedescriptortable.write().unwrap();
-            let files2close = fdtable.keys().map(|x| *x).collect::<Vec<i32>>();
-            for fd in files2close {
-                self._close_helper(fd, Some(&mut *fdtable));
+            let fds_to_close = self.filedescriptortable.iter_mut().map(|x| *x.key()).collect::<Vec<i32>>();
+            for fd in  fds_to_close {
+                self._close_helper(fd);
             }
         }
 
         //get file descriptor table into a vector
-        let mut mutmetadata = FS_METADATA.write().unwrap();
-
-        let cwd_container = self.cwd.read().unwrap();
-
-        decref_dir(&mut mutmetadata, &*cwd_container);
+        let cwd_container = self.cwd.read();
+        decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        CAGE_TABLE.write().unwrap().remove(&self.cageid);
+        CAGE_TABLE.remove(&self.cageid);
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status

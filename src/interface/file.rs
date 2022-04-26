@@ -3,8 +3,9 @@
 // File related interface
 #![allow(dead_code)]
 
-use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
+use parking_lot::Mutex;
+use std::sync::{Arc};
+use dashmap::DashSet;
 use std::fs::{self, File, OpenOptions, canonicalize};
 use std::env;
 use std::slice;
@@ -20,7 +21,7 @@ use std::convert::TryInto;
 
 
 
-static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
+static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
 pub fn listfiles() -> Vec<String> {
     let paths = fs::read_dir(&RustPath::new(
@@ -38,7 +39,7 @@ pub fn listfiles() -> Vec<String> {
 }
 
 pub fn removefile(filename: String) -> std::io::Result<()> {
-    let openfiles = OPEN_FILES.lock().unwrap();
+    let openfiles = &OPEN_FILES;
 
     if openfiles.contains(&filename) {
         panic!("FileInUse");
@@ -104,9 +105,7 @@ impl EmulatedFile {
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
         assert_is_allowed_filename(&filename);
 
-        let mut openfiles = OPEN_FILES.lock().unwrap();
-
-        if openfiles.contains(&filename) {
+        if OPEN_FILES.contains(&filename) {
             panic!("FileInUse");
         }
 
@@ -124,7 +123,7 @@ impl EmulatedFile {
 
         let absolute_filename = fs::canonicalize(&path)?;
 
-        openfiles.insert(filename.clone());
+        OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len();
 
         Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
@@ -132,9 +131,7 @@ impl EmulatedFile {
     }
 
     pub fn close(&self) -> std::io::Result<()> {
-        let mut openfiles = OPEN_FILES.lock().unwrap();
-
-        openfiles.remove(&self.filename);
+        OPEN_FILES.remove(&self.filename);
         Ok(())
     }
 
@@ -146,7 +143,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let fobj = f.lock().unwrap();
+                let fobj = f.lock();
                 fobj.set_len(length as u64)?;
                 self.filesize = length;         
                 Ok(())
@@ -164,7 +161,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                   panic!("Seek offset extends past the EOF!");
                 }
@@ -188,7 +185,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
@@ -211,7 +208,7 @@ impl EmulatedFile {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
                 let mut stringbuf = Vec::new();
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 fobj.read_to_end(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
@@ -227,7 +224,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
@@ -250,7 +247,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
@@ -269,7 +266,7 @@ impl EmulatedFile {
     //gets the raw fd handle (integer) from a rust fileobject
     pub fn as_fd_handle_raw_int(&self) -> i32 {
         if let Some(wrapped_barefile) = &self.fobj {
-            wrapped_barefile.lock().unwrap().as_raw_fd() as i32
+            wrapped_barefile.lock().as_raw_fd() as i32
         } else {
             -1
         }
@@ -300,7 +297,7 @@ impl EmulatedFileMap {
         // create new file like a normal emulated file, but always create
         assert_is_allowed_filename(&filename);
 
-        let mut openfiles = OPEN_FILES.lock().unwrap();
+        let openfiles = &OPEN_FILES;
 
         if openfiles.contains(&filename) {
             panic!("FileInUse");
@@ -339,7 +336,7 @@ impl EmulatedFileMap {
             self.extend_map();
         }
 
-        let mut mapopt = self.map.lock().unwrap();
+        let mut mapopt = self.map.lock();
         let map = mapopt.as_deref_mut().unwrap();
 
         let mapslice = &mut map[self.count..(self.count + writelen)];
@@ -348,7 +345,7 @@ impl EmulatedFileMap {
     
 
         // update the bytes written in the map portion
-        let mut countmapopt = self.countmap.lock().unwrap();
+        let mut countmapopt = self.countmap.lock();
         let countmap = countmapopt.as_deref_mut().unwrap();
         countmap.copy_from_slice(&self.count.to_be_bytes());
 
@@ -358,11 +355,11 @@ impl EmulatedFileMap {
     fn extend_map(&mut self) {
 
         // open count and map to resize mmap, and file to increase file size
-        let mut mapopt = self.map.lock().unwrap();
+        let mut mapopt = self.map.lock();
         let map = mapopt.take().unwrap();
-        let mut countmapopt = self.countmap.lock().unwrap();
+        let mut countmapopt = self.countmap.lock();
         let countmap = countmapopt.take().unwrap();
-        let f = self.fobj.lock().unwrap();
+        let f = self.fobj.lock();
 
         // add another 1MB to mapsize
         let new_mapsize = self.mapsize + MAP_1MB;
@@ -392,12 +389,12 @@ impl EmulatedFileMap {
 
     pub fn close(&self) -> std::io::Result<()> {
         // remove file as open file and deconstruct map
-        let mut openfiles = OPEN_FILES.lock().unwrap();
+        let openfiles = &OPEN_FILES;
         openfiles.remove(&self.filename);
 
-        let mut mapopt = self.map.lock().unwrap();
+        let mut mapopt = self.map.lock();
         let map = mapopt.take().unwrap();
-        let mut countmapopt = self.countmap.lock().unwrap();
+        let mut countmapopt = self.countmap.lock();
         let countmap = countmapopt.take().unwrap();
 
         unsafe {

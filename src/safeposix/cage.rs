@@ -9,11 +9,11 @@ pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
-pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<u64, interface::RustRfc<Cage>>>> = interface::RustLazyGlobal::new(|| interface::RustLock::new(interface::new_hashmap()));
+pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
 
-pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustLock<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>>> = 
+pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>> = 
     interface::RustLazyGlobal::new(|| 
-        interface::RustLock::new(interface::new_hashmap())
+        interface::new_hashmap()
 );
 
 #[derive(Debug, Clone)]
@@ -83,7 +83,7 @@ pub struct Cage {
     pub cageid: u64,
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
-    pub filedescriptortable: interface::RustLock<FdTable>,
+    pub filedescriptortable: FdTable,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
@@ -92,7 +92,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>, fdtable_option: Option<&FdTable>) -> Option<i32> {
+    pub fn get_next_fd(&self, startfd: Option<i32>, fdobj: FileDescriptor) -> i32 {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -100,34 +100,29 @@ impl Cage {
         };
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
-        let ourreader;
-        let rdguard = if let Some(fdtable) = fdtable_option {fdtable} else {
-            ourreader = self.filedescriptortable.read().unwrap(); &ourreader
-        };
         for fd in start..MAXFD{
-            if !rdguard.contains_key(&fd) {
-                return Some(fd);
-            }
+            match self.filedescriptortable.entry(fd) {
+                interface::RustHashEntry::Occupied(_) => {}
+                interface::RustHashEntry::Vacant(vacant) => {
+                    vacant.insert(interface::RustRfc::new(interface::RustLock::new(fdobj)));
+                    return fd;
+                }
+            };
         };
-        None
+        return syscall_error(Errno::ENFILE, "get_next_fd", "no available file descriptor number could be found");
     }
 
-    pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor, fdtable_option: Option<&mut FdTable>) {
-        let mut ourwriter;
-        let writeguard = if let Some(fdtable) = fdtable_option {fdtable} else {
-            ourwriter = self.filedescriptortable.write().unwrap();
-            &mut ourwriter
-        };
-        writeguard.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
+    pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor) {
+        self.filedescriptortable.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
     }
 
     pub fn rm_from_fd_table(&self, fd: &i32) {
-        self.filedescriptortable.write().unwrap().remove(fd);
+        self.filedescriptortable.remove(fd);
     }
 
     pub fn changedir(&self, newdir: interface::RustPathBuf) {
         let newwd = interface::RustRfc::new(normpath(newdir, self));
-        let mut cwdbox = self.cwd.write().unwrap();
+        let mut cwdbox = self.cwd.write();
         *cwdbox = newwd;
     }
 
@@ -135,7 +130,7 @@ impl Cage {
         let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
         let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
         let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let mut fdtable = self.filedescriptortable.write().unwrap();
+        let fdtable = &self.filedescriptortable;
         fdtable.insert(0, stdin);
         fdtable.insert(1, stdout);
         fdtable.insert(2, stderr);
@@ -143,10 +138,10 @@ impl Cage {
 
 }
 
-pub fn get_next_pipe() -> Option<i32> {
-    let table = PIPE_TABLE.read().unwrap();
+pub fn insert_next_pipe(pipe: interface::EmulatedPipe) -> Option<i32> {
     for fd in STARTINGPIPE..MAXPIPE {
-        if !table.contains_key(&fd) {
+        if let interface::RustHashEntry::Vacant(v) = PIPE_TABLE.entry(fd) {
+            v.insert(interface::RustRfc::new(pipe));
             return Some(fd);
         }
     }
