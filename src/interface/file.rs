@@ -412,6 +412,42 @@ impl EmulatedFileMap {
     }
 }
 
+#[derive(Debug)]
+pub struct ShmFile {
+    fobj: Arc<Mutex<File>>,
+    id: usize,
+    size: usize
+}
+
+pub fn shmfilenew(id: usize, size: usize) -> std::io::Result<ShmFile> {
+    ShmFile::new(id, size)
+}
+
+impl ShmFile {
+    fn new(id: usize, size: usize) -> std::io::Result<ShmFile> {
+
+        // open file "shm-#id"
+        let filename = format!("{}{}", "shm-", id);
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        // truncate file to size
+        f.set_len(size as u64);
+        // unlink file
+        fs::remove_file(filename)?;
+        let shmfile = ShmFile {fobj: Some(Arc::new(Mutex::new(f))), id: id, size: size);
+
+        Ok(shmfile)
+    }
+
+    //gets the raw fd handle (integer) from a rust fileobject
+    pub fn as_fd_handle_raw_int(&self) -> i32 {
+        if let Some(wrapped_barefile) = &self.fobj {
+            wrapped_barefile.lock().as_raw_fd() as i32
+        } else {
+            -1
+        }
+    }
+}
+
 // convert a series of big endian bytes to a size
 pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
     let sizearray : [u8; 8] = bytes_to_write.try_into().unwrap();

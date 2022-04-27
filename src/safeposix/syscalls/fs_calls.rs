@@ -1845,3 +1845,24 @@ impl Cage {
         0 //getcwd has succeeded!;
     }
 }
+
+    //------------------SHMGET SYSCALL------------------
+
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
+        
+    }
+
+    //------------------GETDENTS SYSCALL------------------
+
+    pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
+    }
+
+    //------------------GETDENTS SYSCALL------------------
+
+    pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
+    }
+
+    //------------------GETDENTS SYSCALL------------------
+
+    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: *mut ShmidsStruct)-> i32 {
+    }
