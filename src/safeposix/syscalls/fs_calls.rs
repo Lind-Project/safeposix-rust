@@ -5,6 +5,7 @@ use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
+use crate::safeposix::shm::*;
 use super::fs_constants::*;
 
 impl Cage {
@@ -1849,20 +1850,95 @@ impl Cage {
     //------------------SHMGET SYSCALL------------------
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
-        
+        if (key == IPC_PRIVATE) {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
+        let metadata = &SHM_METADATA;
+
+        if metadata.shmkeyidtable.contains_key(&key) {
+   
+            if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
+                return syscall_error(Errno::EEXIST, "shmget", "key already exists and IPC_CREAT and IPC_EXCL were used");
+            }
+            metadata.shmkeyidtable.get(&key)
+
+        } else {
+            if 0 == (shmflg & IPC_CREAT) {
+                return syscall_error(Errno::ENOENT, "shmget", "tried to use a key did not exist, and IPC_CREAT was not specified");
+            }
+            let mode = shmflg & 9; // mode is 9 least signficant bits of shmflag
+            let time = interface::timestamp(); //We do a real timestamp now
+            let permstruct = IpcPermStruct {key: key, uid: self.getuid, gid: self.getgid, cuid: self.getuid, cgid: self.getgid, mode: mode};
+            let shminfo = ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: self.cageid as i32, shm_lpid: 0, shm_nattach: 0};
+            let shmid = metadata.new_keyid(key);
+
+            let segment = new_shm_segment(key, shmid, size, shminfo);
+            metadata.shmtable.insert(shmid, segment);
+            shmid
+        }
     }
 
-    //------------------GETDENTS SYSCALL------------------
+    //------------------SHMAT SYSCALL------------------
 
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
+        let metadata = &SHM_METADATA;
+        let prot = 0;
+        let segment = metadata.shmtable.get_mut(shmid).unwrap();
+        if shmflg & SHM_RDONLY { prot = PROT_READ}
+        else { prot = PROT_READ | PROT_WRITE; }
+
+        segment.map_shm(shmaddr, prot);
+        segment.add_mapping(self.cageid as i32, shmaddr);
+
+        0
+
     }
 
-    //------------------GETDENTS SYSCALL------------------
+    //------------------SHMDT SYSCALL------------------
 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
+        let metadata = &SHM_METADATA;
+        let shmid = metadata.get_shmid_from_addr(self.cageid as i32, shmaddr);
+        let segment = metadata.shmtable.get_mut(shmid).unwrap();
+
+        segment.unmap_shm(shmaddr);
+        segment.rm_mapping(self.cageid as i32, shmaddr);
+
+        if segment.rmid {
+            if segment.mappings.is_empty() {
+                metadata.shmtable.remove(shmid);
+            }
+        }
     }
 
-    //------------------GETDENTS SYSCALL------------------
+    //------------------SHMCTL SYSCALL------------------
 
     pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: *mut ShmidsStruct)-> i32 {
+
+        let metadata = &SHM_METADATA;
+
+        let perm = segment.shminfo.shm_perm;
+
+        if let Some(segment) = metadata.shmtable.get(&shmid) {
+    
+            match cmd {
+                IPC_STAT => {
+
+                    if perm.mode 
+
+                    *buf = segment.shminfo; 
+        
+                
+                }
+                IPC_RMID => {
+
+                    segment.rmid = true;
+                    segment.shminfo.shmp
+                }
+                _ => {syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters")}
+
+            0 // call successful
+            }
+        } else {
+            syscall_error(Errno::EINVAL, "shmctl", "Invalid identifier")
+        }
+
     }
