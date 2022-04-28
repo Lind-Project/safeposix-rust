@@ -50,13 +50,19 @@ impl ShmSegment {
         } else false
     }
 
-    pub fn map_shm(&self, shmaddr *const u8, prot: prot) {
+    pub fn map_shm(&self, shmaddr *const u8, prot: prot, cageid: i32) {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED, fobjfdno, 0);
+        self.add_mapping(cageid, shmaddr);
+        self.shminfo.shm_nattach += 1;
+        self.shminfo.shm_atime = interface::timestamp();
     }
 
-    pub fn unmap_shm(&self, shmaddr *const u8) {
+    pub fn unmap_shm(&self, shmaddr *const u8, cageid: i32) {
         interface::libc_mmap(shmaddr, self.size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+        self.rm_mapping(cageid, shmaddr);
+        self.shminfo.shm_nattach -= 1;
+        self.shminfo.shm_dtime = interface::timestamp();
     }
 }
 
@@ -81,5 +87,26 @@ impl ShmmMetadata {
     pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *const u8) -> isize {
         let cageaddrs = self.rev_shmtable.get(cageid).unwrap();
         cageaddrs.get(shmaddr).unwrap()
+    }
+
+    pub fn rev_shm_add(&self, cageid: i32, shmaddr: *const u8, shmid: isize) -> bool {
+        if self.rev_shmtable.contains_key(cageid) {
+            let cageaddrs = self.rev_shmtable.get(cageid).unwrap();
+            cageaddrs.insert(shamddr, shmid);
+        } else {
+            let cageaddrs = interface::RustHashMap::new();
+            cageaddrs.insert(shmaddr, shmid);
+            self.rev_shmtable.insert(cageid, cageaddrs);
+        }
+    }
+
+    pub fn rev_shm_add(&self, cageid: i32, shmaddr: *const u8) -> bool {
+
+        let cageaddrs = self.rev_shmtable.get(cageid).unwrap();
+        cageaddrs.remove(shamddr, shmid);
+        if cageaddrs.is_empty() {
+            self.rev_shmtable.remove(cageaddrs);
+        }
+        
     }
 }

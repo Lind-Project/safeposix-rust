@@ -122,6 +122,10 @@ pub const IPC_RMID: i32 = 0
 pub const IPC_SET: i32 = 1;
 pub const IPC_STAT: i32 = 2;
 
+pub const	SHM_DEST: i32 = 0o1000;
+pub const SHM_LOCKED: i32 = 0o2000;
+pub const SHM_HUGETLB: i32 = 0o4000;
+
 pub const SHM_R: i32 = 0o400;
 pub const SHM_W: i32 = 0o200;
 pub const SHM_RDONLY: i32 = 0o10000;
