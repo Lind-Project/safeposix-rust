@@ -385,7 +385,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
         }
         SHMGET_SYSCALL => {
-            check_and_dispatch!(cage.shmget_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_int(arg3))
+            check_and_dispatch!(cage.shmget_syscall, interface::get_int(arg1), interface::get_usize(arg2), interface::get_int(arg3))
         }
         SHMAT_SYSCALL => {
             check_and_dispatch!(cage.shmat_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_int(arg3))

@@ -118,7 +118,7 @@ pub const IPC_PRIVATE: i32 = 0o0;
 pub const IPC_CREAT: i32 = 0o1000;
 pub const IPC_EXCL: i32 = 0o2000;
 
-pub const IPC_RMID: i32 = 0
+pub const IPC_RMID: i32 = 0;
 pub const IPC_SET: i32 = 1;
 pub const IPC_STAT: i32 = 2;
 

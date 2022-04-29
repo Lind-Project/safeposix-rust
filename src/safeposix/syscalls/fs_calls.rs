@@ -94,7 +94,7 @@ impl Cage {
                             occ.get().close().unwrap();
                     }
 
-                    //pub constsize of file to 0
+                    //setsize of file to 0
                     if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} else {
                         return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
                     }
@@ -650,7 +650,7 @@ impl Cage {
                         Inode::File(_) => {
                             let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                            if let Ok(bytesread) = fileobject.readat(buf, count, offpub constas usize) {
+                            if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
                                 bytesread as i32
                             } else {
                                0 //0 bytes read, but not an error value that can/should be passed to the user
@@ -810,9 +810,9 @@ impl Cage {
                     //checking based on the type of the inode object
                     match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
-                            let position = offpub constas usize;
+                            let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
-                            let blankbytecount = offpub const- filesize as isize;
+                            let blankbytecount = offset- filesize as isize;
 
                             let mut fileobject = FILEOBJECTTABLE.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -902,7 +902,7 @@ impl Cage {
                     match &*inodeobj {
                         Inode::File(normalfile_inode_obj) => {
                             let eventualpos = match whence {
-                                SEEK_pub const=> {offset}
+                                SEEK_SET => {offset}
                                 SEEK_CUR => {normalfile_filedesc_obj.position as isize + offset}
                                 SEEK_END => {normalfile_inode_obj.size as isize + offset}
                                 _ => {return syscall_error(Errno::EINVAL, "lseek", "unknown whence");}
@@ -926,7 +926,7 @@ impl Cage {
                         Inode::Dir(dir_inode_obj) => {
                             //for directories we seek between entries, and thus our end position is the total number of entries
                             let eventualpos = match whence {
-                                SEEK_pub const=> {offset}
+                                SEEK_SET => {offset}
                                 SEEK_CUR => {normalfile_filedesc_obj.position as isize + offset}
                                 SEEK_END => {dir_inode_obj.filename_to_inode_dict.len() as isize + offset}
                                 _ => {return syscall_error(Errno::EINVAL, "lseek", "unknown whence");}
@@ -1209,7 +1209,7 @@ impl Cage {
 
                 //Code below needs to reflect addition of pipes
                 if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
-                    // we're closing the last write end, lets pub consteof
+                    // we're closing the last write end, lets seteof
                     pipe.set_eof();
                 }
 
@@ -1322,7 +1322,7 @@ impl Cage {
                 (F_GETFD, ..) => {
                     *flags & O_CLOEXEC
                 }
-                // pub constthe flags but make sure that the flags are valid
+                // setthe flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
                     if arg & O_CLOEXEC != 0 {
                         *flags |= O_CLOEXEC;
@@ -1385,7 +1385,7 @@ impl Cage {
                                 *flags &= !O_NONBLOCK;
                                 ioctlret = sockobj.set_blocking();
                             }
-                            else { //pub constfor non-blocking I/O
+                            else { //setfor non-blocking I/O
                                 *flags |= O_NONBLOCK;
                                 ioctlret = sockobj.set_nonblocking();
                             }
@@ -1580,7 +1580,7 @@ impl Cage {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
                         if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
-                        if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode pub constto S_IFDIR");}
+                        if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode setto S_IFDIR");}
 
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
@@ -1720,14 +1720,14 @@ impl Cage {
         let flagsmask = O_CLOEXEC;
         let actualflags = flags & flagsmask;
 
-        // get next available pipe number, and pub constup pipe
+        // get next available pipe number, and setup pipe
         let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY)) {
             pipeno
         } else {
             return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
         };
         
-        // get an fd for each end of the pipe and pub constflags to RD_ONLY and WR_ONLY
+        // get an fd for each end of the pipe and setflags to RD_ONLY and WR_ONLY
         // append each to pipefds list
 
         let accflags = [O_RDONLY, O_WRONLY];
@@ -1845,12 +1845,11 @@ impl Cage {
 
         0 //getcwd has succeeded!;
     }
-}
 
     //------------------SHMGET SYSCALL------------------
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
-        if (key == IPC_PRIVATE) {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
+        if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
         let metadata = &SHM_METADATA;
 
         if metadata.shmkeyidtable.contains_key(&key) {
@@ -1858,20 +1857,17 @@ impl Cage {
                 return syscall_error(Errno::EEXIST, "shmget", "key already exists and IPC_CREAT and IPC_EXCL were used");
             }
 
-            metadata.shmkeyidtable.get(&key) //return the shmid
+            *metadata.shmkeyidtable.get(&key).unwrap() //return the shmid
 
         } else {
             if 0 == (shmflg & IPC_CREAT) {
                 return syscall_error(Errno::ENOENT, "shmget", "tried to use a key did not exist, and IPC_CREAT was not specified");
             }
 
-            let mode = shmflg & 9; // mode is 9 least signficant bits of shmflag
-            let time = interface::timestamp(); //We do a real timestamp now
-            let permstruct = IpcPermStruct {key: key, uid: self.getuid, gid: self.getgid, cuid: self.getuid, cgid: self.getgid, mode: mode};
-            let shminfo = ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: self.cageid as i32, shm_lpid: 0, shm_nattach: 0};
             let shmid = metadata.new_keyid(key);
+            let mode = (shmflg & 9) as u16; // mode is 9 least signficant bits of shmflag
 
-            let segment = new_shm_segment(key, shmid, size, shminfo);
+            let segment = new_shm_segment(key, shmid, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
             metadata.shmtable.insert(shmid, segment);
 
             shmid // return the shmid
@@ -1883,10 +1879,11 @@ impl Cage {
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
         let metadata = &SHM_METADATA;
         let prot = PROT_READ | PROT_WRITE;
-        let segment = metadata.shmtable.get_mut(shmid).unwrap();
-        if shmflg & SHM_RDONLY { prot = PROT_READ; }
+        let segment = metadata.shmtable.get_mut(&shmid).unwrap();
+        if 0 == (shmflg & SHM_RDONLY) { prot = PROT_READ; }
 
         segment.map_shm(shmaddr, prot, self.cageid as i32);
+        metadata.rev_shm_add(self.cageid as i32, shmaddr, shmid);
 
         0 //shmat has succeeded!
 
@@ -1898,18 +1895,19 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let rm = false;
         let shmid = metadata.rev_shm_lookup(self.cageid as i32, shmaddr);
-        let segment = metadata.shmtable.get_mut(shmid).unwrap();
+        let segment = metadata.shmtable.get_mut(&shmid).unwrap();
 
         segment.unmap_shm(shmaddr, self.cageid as i32);
 
-        if segment.rmid && !segment.sminfo.shm_nattach { rm = true; }           
+        if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
+        metadata.rev_shm_rm(self.cageid as i32, shmaddr);
 
         if rm {
             let key = segment.key;
             drop(segment);
 
-            metadata.shmtable.remove(shmid);
-            metadata.shmkeyidtable.remove(key);
+            metadata.shmtable.remove(&shmid);
+            metadata.shmkeyidtable.remove(&key);
         }
 
         0 //shmdt has succeeded!
@@ -1922,16 +1920,13 @@ impl Cage {
 
         let metadata = &SHM_METADATA;
 
-        let perm = segment.shminfo.shm_perm;
-
         if let Some(segment) = metadata.shmtable.get(&shmid) {
-    
             match cmd {
                 IPC_STAT => {
 
-                    if segment.shminfo.shm_perm.mode & 2 
+                    if 0 == (segment.shminfo.shm_perm.mode & 2)
                     {
-                        buf = segment.shminfo; 
+                        *buf = segment.shminfo; 
                     }
                 
                 }
@@ -1940,12 +1935,12 @@ impl Cage {
                     segment.rmid = true;
                     segment.shminfo.shm_perm.mode |= 1 << SHM_DEST;
                 }
-                _ => {syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters")}
-
-            0 //shmctl has succeeded!
+                _ => { return syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters"); }
             }
         } else {
-            syscall_error(Errno::EINVAL, "shmctl", "Invalid identifier")
+            return syscall_error(Errno::EINVAL, "shmctl", "Invalid identifier");
         }
-
+        
+        0 //shmctl has succeeded!
     }
+}
