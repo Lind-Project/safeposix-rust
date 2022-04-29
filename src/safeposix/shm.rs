@@ -15,7 +15,6 @@ pub struct ShmSegment {
     pub key: i32,
     pub size: usize,
     pub filebacking: interface::ShmFile,
-    pub mappings: interface::RustHashMap<i32, interface::RustHashSet<*mut u8>>,
     pub rmid: bool
 }
 
@@ -31,42 +30,18 @@ impl ShmSegment {
         let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __seq: 0 };
         let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattach: 0};
 
-        ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, mappings: interface::RustHashMap::new(), rmid: false}
-    }
-
-    // returns false if an address is inserted into mappings more than once
-    pub fn add_mapping(&self, cageid: i32, shmaddr: *mut u8) {
-
-        if self.mappings.contains_key(&cageid) {
-            let mapset = self.mappings.get_mut(&cageid).unwrap();
-            mapset.insert(shmaddr);
-        } else {
-            let newset = interface::RustHashSet::new();
-            newset.insert(shmaddr);
-            self.mappings.insert(cageid, newset);
-        }
-    }
-
-    pub fn rm_mapping(&self, cageid: i32, shmaddr: *mut u8) {
-        if self.mappings.contains_key(&cageid) {
-            let mapset = self.mappings.get_mut(&cageid).unwrap();
-            if let Some(__entry) = mapset.remove(&shmaddr) {
-                if mapset.is_empty() { self.mappings.remove(&cageid); }
-            }
-        } 
+        ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}
     }
 
     pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: i32) {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED, fobjfdno, 0);
-        self.add_mapping(cageid, shmaddr);
         self.shminfo.shm_nattach += 1;
         self.shminfo.shm_atime = interface::timestamp() as isize;
     }
 
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: i32) {
         interface::libc_mmap(shmaddr, self.size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-        self.rm_mapping(cageid, shmaddr);
         self.shminfo.shm_nattach -= 1;
         self.shminfo.shm_dtime = interface::timestamp() as isize;
     }
@@ -76,7 +51,7 @@ pub struct ShmMetadata {
     pub nextid: interface::RustAtomicI32,
     pub shmkeyidtable: interface::RustHashMap<i32, i32>,
     pub shmtable: interface::RustHashMap<i32, ShmSegment>,
-    pub rev_shmtable: interface::RustHashMap<i32, interface::RustHashMap<i32, i32>>
+    pub rev_shmtable: interface::RustHashMap<i32, interface::RustHashMap<u32, i32>>
 }
 
 impl ShmMetadata {
@@ -91,13 +66,13 @@ impl ShmMetadata {
     }
 
     pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *mut u8) -> i32 {
-        let shmint = shmaddr as i32;
+        let shmint = shmaddr as u32;
         let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
         *cageaddrs.get(&shmint).unwrap()
     }
 
     pub fn rev_shm_add(&self, cageid: i32, shmaddr: *mut u8, shmid: i32) {
-        let shmint = shmaddr as i32;
+        let shmint = shmaddr as u32;
         if self.rev_shmtable.contains_key(&cageid) {
             let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
             cageaddrs.insert(shmint, shmid);
@@ -109,7 +84,7 @@ impl ShmMetadata {
     }
 
     pub fn rev_shm_rm(&self, cageid: i32, shmaddr: *mut u8)  {
-        let shmint = shmaddr as i32;
+        let shmint = shmaddr as u32;
         let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
         cageaddrs.remove(&shmint);
         if cageaddrs.is_empty() {
