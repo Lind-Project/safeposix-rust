@@ -398,7 +398,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SHMDT_SYSCALL => {
             check_and_dispatch!(cage.shmdt_syscall, interface::get_mutcbuf(arg1))
         }
-        SHMCTL_SYCALL => {
+        SHMCTL_SYSCALL => {
             check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_shmidstruct(arg3))
         }
         _ => {//unknown syscall

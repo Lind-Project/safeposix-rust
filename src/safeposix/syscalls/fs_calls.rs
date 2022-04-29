@@ -1920,7 +1920,7 @@ impl Cage {
 
         let metadata = &SHM_METADATA;
 
-        if let Some(segment) = metadata.shmtable.get(&shmid) {
+        if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
             match cmd {
                 IPC_STAT => {
                     *buf = segment.shminfo;              
