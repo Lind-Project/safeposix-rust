@@ -1865,7 +1865,7 @@ impl Cage {
             }
 
             let shmid = metadata.new_keyid(key);
-            let mode = (shmflg & 9) as u16; // mode is 9 least signficant bits of shmflag
+            let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag
 
             let segment = new_shm_segment(key, shmid, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
             metadata.shmtable.insert(shmid, segment);
@@ -1923,15 +1923,9 @@ impl Cage {
         if let Some(segment) = metadata.shmtable.get(&shmid) {
             match cmd {
                 IPC_STAT => {
-
-                    if 0 == (segment.shminfo.shm_perm.mode & 2)
-                    {
-                        *buf = segment.shminfo; 
-                    }
-                
+                    *buf = segment.shminfo;              
                 }
                 IPC_RMID => {
-
                     segment.rmid = true;
                     segment.shminfo.shm_perm.mode |= 1 << SHM_DEST;
                 }
