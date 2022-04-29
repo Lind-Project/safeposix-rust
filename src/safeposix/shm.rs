@@ -19,12 +19,12 @@ pub struct ShmSegment {
     pub rmid: bool
 }
 
-pub fn new_shm_segment(key: i32, shmid: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
-    ShmSegment::new(key, shmid, size, cageid, uid, gid, mode)
+pub fn new_shm_segment(key: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
+    ShmSegment::new(key, size, cageid, uid, gid, mode)
 }
 
 impl ShmSegment {
-    pub fn new(key: i32, shmid: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
+    pub fn new(key: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
@@ -35,30 +35,28 @@ impl ShmSegment {
     }
 
     // returns false if an address is inserted into mappings more than once
-    pub fn add_mapping(&self, cageid: i32, shmaddr: *mut u8) -> bool {
+    pub fn add_mapping(&self, cageid: i32, shmaddr: *mut u8) {
 
         if self.mappings.contains_key(&cageid) {
             let mapset = self.mappings.get_mut(&cageid).unwrap();
-            mapset.insert(shmaddr)
+            mapset.insert(shmaddr);
         } else {
             let newset = interface::RustHashSet::new();
             newset.insert(shmaddr);
             self.mappings.insert(cageid, newset);
-            true
         }
     }
 
-    pub fn rm_mapping(&self, cageid: i32, shmaddr: *mut u8) -> bool {
+    pub fn rm_mapping(&self, cageid: i32, shmaddr: *mut u8) {
         if self.mappings.contains_key(&cageid) {
             let mapset = self.mappings.get_mut(&cageid).unwrap();
-            if let Some(entry) = mapset.remove(&shmaddr) {
+            if let Some(__entry) = mapset.remove(&shmaddr) {
                 if mapset.is_empty() { self.mappings.remove(&cageid); }
-                true
-            } else { false }
-        } else { false }
+            }
+        } 
     }
 
-    pub fn map_shm(&self, shmaddr: *mut u8, prot: i32, cageid: i32) {
+    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: i32) {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED, fobjfdno, 0);
         self.add_mapping(cageid, shmaddr);
@@ -66,7 +64,7 @@ impl ShmSegment {
         self.shminfo.shm_atime = interface::timestamp() as isize;
     }
 
-    pub fn unmap_shm(&self, shmaddr: *mut u8, cageid: i32) {
+    pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: i32) {
         interface::libc_mmap(shmaddr, self.size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
         self.rm_mapping(cageid, shmaddr);
         self.shminfo.shm_nattach -= 1;
@@ -78,7 +76,7 @@ pub struct ShmMetadata {
     pub nextid: interface::RustAtomicI32,
     pub shmkeyidtable: interface::RustHashMap<i32, i32>,
     pub shmtable: interface::RustHashMap<i32, ShmSegment>,
-    pub rev_shmtable: interface::RustHashMap<i32, interface::RustHashMap<*mut u8, i32>>
+    pub rev_shmtable: interface::RustHashMap<i32, interface::RustHashMap<i32, i32>>
 }
 
 impl ShmMetadata {
@@ -93,24 +91,27 @@ impl ShmMetadata {
     }
 
     pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *mut u8) -> i32 {
+        let shmint = shmaddr as i32;
         let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-        *cageaddrs.get(&shmaddr).unwrap()
+        *cageaddrs.get(&shmint).unwrap()
     }
 
     pub fn rev_shm_add(&self, cageid: i32, shmaddr: *mut u8, shmid: i32) {
+        let shmint = shmaddr as i32;
         if self.rev_shmtable.contains_key(&cageid) {
             let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-            cageaddrs.insert(shmaddr, shmid);
+            cageaddrs.insert(shmint, shmid);
         } else {
             let cageaddrs = interface::RustHashMap::new();
-            cageaddrs.insert(shmaddr, shmid);
+            cageaddrs.insert(shmint, shmid);
             self.rev_shmtable.insert(cageid, cageaddrs);
         }
     }
 
     pub fn rev_shm_rm(&self, cageid: i32, shmaddr: *mut u8)  {
+        let shmint = shmaddr as i32;
         let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-        cageaddrs.remove(&shmaddr);
+        cageaddrs.remove(&shmint);
         if cageaddrs.is_empty() {
             self.rev_shmtable.remove(&cageid);
         }

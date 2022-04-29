@@ -104,6 +104,7 @@ pub union IoctlPtrUnion {
     //Right now, we do not support passing struct pointers to ioctl as the related call are not implemented
 }
 
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct IpcPermStruct {
     pub __key: i32,
@@ -115,6 +116,7 @@ pub struct IpcPermStruct {
     pub __seq: u16
 }
 
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct ShmidsStruct {
   pub shm_perm: IpcPermStruct,

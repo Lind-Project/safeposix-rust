@@ -1865,9 +1865,9 @@ impl Cage {
             }
 
             let shmid = metadata.new_keyid(key);
-            let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag
+            let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-            let segment = new_shm_segment(key, shmid, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
+            let segment = new_shm_segment(key, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
             metadata.shmtable.insert(shmid, segment);
 
             shmid // return the shmid
@@ -1878,7 +1878,7 @@ impl Cage {
 
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
         let metadata = &SHM_METADATA;
-        let prot = PROT_READ | PROT_WRITE;
+        let mut prot = PROT_READ | PROT_WRITE;
         let segment = metadata.shmtable.get_mut(&shmid).unwrap();
         if 0 == (shmflg & SHM_RDONLY) { prot = PROT_READ; }
 
@@ -1893,7 +1893,7 @@ impl Cage {
 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
-        let rm = false;
+        let mut rm = false;
         let shmid = metadata.rev_shm_lookup(self.cageid as i32, shmaddr);
         let segment = metadata.shmtable.get_mut(&shmid).unwrap();
 
