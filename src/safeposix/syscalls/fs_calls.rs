@@ -94,7 +94,7 @@ impl Cage {
                             occ.get().close().unwrap();
                     }
 
-                    //setsize of file to 0
+                    //set size of file to 0
                     if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} else {
                         return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
                     }
@@ -812,7 +812,7 @@ impl Cage {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
-                            let blankbytecount = offset- filesize as isize;
+                            let blankbytecount = offset - filesize as isize;
 
                             let mut fileobject = FILEOBJECTTABLE.get_mut(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -1209,7 +1209,7 @@ impl Cage {
 
                 //Code below needs to reflect addition of pipes
                 if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
-                    // we're closing the last write end, lets seteof
+                    // we're closing the last write end, lets set eof
                     pipe.set_eof();
                 }
 
@@ -1322,7 +1322,7 @@ impl Cage {
                 (F_GETFD, ..) => {
                     *flags & O_CLOEXEC
                 }
-                // setthe flags but make sure that the flags are valid
+                // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
                     if arg & O_CLOEXEC != 0 {
                         *flags |= O_CLOEXEC;
@@ -1385,7 +1385,7 @@ impl Cage {
                                 *flags &= !O_NONBLOCK;
                                 ioctlret = sockobj.set_blocking();
                             }
-                            else { //setfor non-blocking I/O
+                            else { //set for non-blocking I/O
                                 *flags |= O_NONBLOCK;
                                 ioctlret = sockobj.set_nonblocking();
                             }
@@ -1580,7 +1580,7 @@ impl Cage {
                     // make sure inode matches a directory
                     Inode::Dir(dir_obj) => {
                         if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
-                        if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode setto S_IFDIR");}
+                        if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode set to S_IFDIR");}
 
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
@@ -1720,14 +1720,14 @@ impl Cage {
         let flagsmask = O_CLOEXEC;
         let actualflags = flags & flagsmask;
 
-        // get next available pipe number, and setup pipe
+        // get next available pipe number, and set up pipe
         let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY)) {
             pipeno
         } else {
             return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
         };
         
-        // get an fd for each end of the pipe and setflags to RD_ONLY and WR_ONLY
+        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
         // append each to pipefds list
 
         let accflags = [O_RDONLY, O_WRONLY];
