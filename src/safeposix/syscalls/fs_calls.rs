@@ -1927,7 +1927,7 @@ impl Cage {
                 }
                 IPC_RMID => {
                     segment.rmid = true;
-                    segment.shminfo.shm_perm.mode |= 1 << SHM_DEST;
+                    segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
                 }
                 _ => { return syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters"); }
             }

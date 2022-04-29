@@ -430,7 +430,7 @@ impl ShmFile {
         let filename = format!("{}{}", "shm-", key);
         let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
         // truncate file to size
-        f.set_len(size as u64);
+        f.set_len(size as u64)?;
         // unlink file
         fs::remove_file(filename)?;
         let shmfile = ShmFile {fobj: Arc::new(Mutex::new(f)), key: key, size: size};
