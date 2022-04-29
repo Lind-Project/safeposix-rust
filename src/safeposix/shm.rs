@@ -33,14 +33,14 @@ impl ShmSegment {
         ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}
     }
 
-    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: i32) {
+    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32) {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED, fobjfdno, 0);
         self.shminfo.shm_nattach += 1;
         self.shminfo.shm_atime = interface::timestamp() as isize;
     }
 
-    pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: i32) {
+    pub fn unmap_shm(&mut self, shmaddr: *mut u8) {
         interface::libc_mmap(shmaddr, self.size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
         self.shminfo.shm_nattach -= 1;
         self.shminfo.shm_dtime = interface::timestamp() as isize;
@@ -68,7 +68,8 @@ impl ShmMetadata {
     pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *mut u8) -> i32 {
         let shmint = shmaddr as u32;
         let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-        *cageaddrs.get(&shmint).unwrap()
+        let shmid = *cageaddrs.get(&shmint).unwrap();
+        shmid
     }
 
     pub fn rev_shm_add(&self, cageid: i32, shmaddr: *mut u8, shmid: i32) {

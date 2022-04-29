@@ -1879,10 +1879,10 @@ impl Cage {
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
         let metadata = &SHM_METADATA;
         let mut prot = PROT_READ | PROT_WRITE;
-        let segment = metadata.shmtable.get_mut(&shmid).unwrap();
+        let mut segment = metadata.shmtable.get_mut(&shmid).unwrap();
         if 0 == (shmflg & SHM_RDONLY) { prot = PROT_READ; }
 
-        segment.map_shm(shmaddr, prot, self.cageid as i32);
+        segment.map_shm(shmaddr, prot);
         metadata.rev_shm_add(self.cageid as i32, shmaddr, shmid);
 
         0 //shmat has succeeded!
@@ -1895,9 +1895,9 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let mut rm = false;
         let shmid = metadata.rev_shm_lookup(self.cageid as i32, shmaddr);
-        let segment = metadata.shmtable.get_mut(&shmid).unwrap();
+        let mut segment = metadata.shmtable.get_mut(&shmid).unwrap();
 
-        segment.unmap_shm(shmaddr, self.cageid as i32);
+        segment.unmap_shm(shmaddr);
 
         if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
         metadata.rev_shm_rm(self.cageid as i32, shmaddr);
