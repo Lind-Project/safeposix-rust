@@ -65,11 +65,13 @@ impl ShmMetadata {
         shmid
     }
 
-    pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *mut u8) -> i32 {
+    pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *mut u8) -> Option<i32> {
         let shmint = shmaddr as u32;
+        if !self.rev_shmtable.contains_key(&cageid) { return None; }
         let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-        let shmid = *cageaddrs.get(&shmint).unwrap();
-        shmid
+        if let Some(shmid) = cageaddrs.get(&shmint){ 
+            Some(*shmid)
+        } else { None }
     }
 
     pub fn rev_shm_add(&self, cageid: i32, shmaddr: *mut u8, shmid: i32) {

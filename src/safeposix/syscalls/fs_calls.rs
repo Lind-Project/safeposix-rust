@@ -1850,43 +1850,45 @@ impl Cage {
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
         if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
+        if (size as i32) < SHMMIN || (size as i32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
+        let shmid: i32;
         let metadata = &SHM_METADATA;
 
         if metadata.shmkeyidtable.contains_key(&key) {
             if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
                 return syscall_error(Errno::EEXIST, "shmget", "key already exists and IPC_CREAT and IPC_EXCL were used");
             }
-
-            *metadata.shmkeyidtable.get(&key).unwrap() //return the shmid
-
+            shmid = *metadata.shmkeyidtable.get(&key).unwrap(); 
         } else {
             if 0 == (shmflg & IPC_CREAT) {
                 return syscall_error(Errno::ENOENT, "shmget", "tried to use a key did not exist, and IPC_CREAT was not specified");
             }
-
-            let shmid = metadata.new_keyid(key);
+            shmid = metadata.new_keyid(key);
             let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
             let segment = new_shm_segment(key, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
             metadata.shmtable.insert(shmid, segment);
-
-            shmid // return the shmid
         }
+
+        shmid // return the shmid
     }
 
     //------------------SHMAT SYSCALL------------------
 
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
         let metadata = &SHM_METADATA;
-        let mut prot = PROT_READ | PROT_WRITE;
-        let mut segment = metadata.shmtable.get_mut(&shmid).unwrap();
-        if 0 == (shmflg & SHM_RDONLY) { prot = PROT_READ; }
+        let prot : i32;
+        if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
 
-        segment.map_shm(shmaddr, prot);
-        metadata.rev_shm_add(self.cageid as i32, shmaddr, shmid);
+            if 0 == (shmflg & SHM_RDONLY) {
+                prot = PROT_READ;
+            }  else { prot = PROT_READ | PROT_WRITE; }
+
+            segment.map_shm(shmaddr, prot);
+            metadata.rev_shm_add(self.cageid as i32, shmaddr, shmid);
+        } else { return syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value"); }
 
         0 //shmat has succeeded!
-
     }
 
     //------------------SHMDT SYSCALL------------------
@@ -1894,24 +1896,26 @@ impl Cage {
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
-        let shmid = metadata.rev_shm_lookup(self.cageid as i32, shmaddr);
-        let mut segment = metadata.shmtable.get_mut(&shmid).unwrap();
+        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as i32, shmaddr) {
 
-        segment.unmap_shm(shmaddr);
+            let mut segment = metadata.shmtable.get_mut(&shmid).unwrap();
 
-        if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
-        metadata.rev_shm_rm(self.cageid as i32, shmaddr);
+            segment.unmap_shm(shmaddr);
+    
+            if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
+            metadata.rev_shm_rm(self.cageid as i32, shmaddr);
+    
+            if rm {
+                let key = segment.key;
+                drop(segment);
+    
+                metadata.shmtable.remove(&shmid);
+                metadata.shmkeyidtable.remove(&key);
+            }
 
-        if rm {
-            let key = segment.key;
-            drop(segment);
+        } else { return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr"); }
 
-            metadata.shmtable.remove(&shmid);
-            metadata.shmkeyidtable.remove(&key);
-        }
-
-        0 //shmdt has succeeded!
-        
+        0 //shmdt has succeeded!        
     }
 
     //------------------SHMCTL SYSCALL------------------
