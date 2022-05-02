@@ -1861,7 +1861,7 @@ impl Cage {
             shmid = *metadata.shmkeyidtable.get(&key).unwrap(); 
         } else {
             if 0 == (shmflg & IPC_CREAT) {
-                return syscall_error(Errno::ENOENT, "shmget", "tried to use a key did not exist, and IPC_CREAT was not specified");
+                return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
             }
             shmid = metadata.new_keyid(key);
             let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them

@@ -51,7 +51,7 @@ pub struct ShmMetadata {
     pub nextid: interface::RustAtomicI32,
     pub shmkeyidtable: interface::RustHashMap<i32, i32>,
     pub shmtable: interface::RustHashMap<i32, ShmSegment>,
-    pub rev_shmtable: interface::RustHashMap<i32, interface::RustHashMap<u32, i32>>
+    pub rev_shmtable: interface::RustHashMap<(i32, u32), i32>
 }
 
 impl ShmMetadata {
@@ -66,32 +66,20 @@ impl ShmMetadata {
     }
 
     pub fn rev_shm_lookup(&self, cageid: i32, shmaddr: *mut u8) -> Option<i32> {
-        let shmint = shmaddr as u32;
-        if !self.rev_shmtable.contains_key(&cageid) { return None; }
-        let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-        if let Some(shmid) = cageaddrs.get(&shmint){ 
+        let tabletup = (cageid, shmaddr as u32);
+        if let Some(shmid) = self.rev_shmtable.get(&tabletup){ 
             Some(*shmid)
         } else { None }
     }
 
     pub fn rev_shm_add(&self, cageid: i32, shmaddr: *mut u8, shmid: i32) {
-        let shmint = shmaddr as u32;
-        if self.rev_shmtable.contains_key(&cageid) {
-            let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-            cageaddrs.insert(shmint, shmid);
-        } else {
-            let cageaddrs = interface::RustHashMap::new();
-            cageaddrs.insert(shmint, shmid);
-            self.rev_shmtable.insert(cageid, cageaddrs);
+        let tabletup = (cageid, shmaddr as u32);
+        self.rev_shmtable.insert(tabletup);
         }
     }
 
     pub fn rev_shm_rm(&self, cageid: i32, shmaddr: *mut u8)  {
-        let shmint = shmaddr as u32;
-        let cageaddrs = self.rev_shmtable.get(&cageid).unwrap();
-        cageaddrs.remove(&shmint);
-        if cageaddrs.is_empty() {
-            self.rev_shmtable.remove(&cageid);
-        }
+        let tabletup = (cageid, shmaddr as u32);
+        self.rev_shmtable.remove(&tabletup).unwrap();
     }
 }
