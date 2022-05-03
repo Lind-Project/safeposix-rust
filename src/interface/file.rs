@@ -423,6 +423,9 @@ pub fn new_shm_backing(key: i32, size: usize) -> std::io::Result<ShmFile> {
     ShmFile::new(key, size)
 }
 
+// Mimic shared memory in Linux by creating a file backing and truncating it to the segment size
+// We can then safely unlink the file while still holding a descriptor to that segment,
+// which we can use to map shared across cages.
 impl ShmFile {
     fn new(key: i32, size: usize) -> std::io::Result<ShmFile> {
 
