@@ -1850,7 +1850,7 @@ impl Cage {
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
         if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
-        if (size as i32) < SHMMIN || (size as i32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
+        if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
         let shmid: i32;
         let metadata = &SHM_METADATA;
 
@@ -1900,20 +1900,22 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let mut rm = false;
         if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as i32, shmaddr) {
-
-            let Occupied(occupied) = metadata.shmtable.entry(shmid);
-            let mut segment = occupied.get_mut();
-            segment.unmap_shm(shmaddr);
-    
-            if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
-            metadata.rev_shm_rm(self.cageid as i32, shmaddr);
-    
-            if rm {
-                let key = segment.key;
-                occupied.remove_entry();
-                metadata.shmkeyidtable.remove(&key);
-            }
-
+            match metadata.shmtable.entry(shmid) {
+                interface::RustHashEntry::Occupied(mut occupied) => {
+                    let segment = occupied.get_mut();
+                    segment.unmap_shm(shmaddr);
+            
+                    if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
+                    metadata.rev_shm_rm(self.cageid as i32, shmaddr);
+            
+                    if rm {
+                        let key = segment.key;
+                        occupied.remove_entry();
+                        metadata.shmkeyidtable.remove(&key);
+                    }
+                }
+                interface::RustHashEntry::Vacant(_) => {panic!("Inode not created for some reason");}
+            };   
         } else { return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr"); }
 
         0 //shmdt has succeeded!        

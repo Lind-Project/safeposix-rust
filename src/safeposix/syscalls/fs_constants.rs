@@ -133,11 +133,11 @@ pub const SHM_RND: i32 = 0o20000;
 pub const SHM_REMAP: i32 = 0o40000;
 pub const SHM_EXEC: i32 = 0o100000;
 
-pub const SHMMIN: i32 =  1;
-pub const SHMMNI: i32 =  4096;
-pub const SHMMAX: i32 =  4278190079; // (ULONG_MAX - (1UL << 24))
-pub const SHMALL: i32 =  4278190079; // (ULONG_MAX - (1UL << 24));
-pub const SHMSEG: i32 =  SHMMNI;
+pub const SHMMIN: u32 =  1;
+pub const SHMMNI: u32 =  4096;
+pub const SHMMAX: u32 =  4278190079; // (ULONG_MAX - (1UL << 24))
+pub const SHMALL: u32 =  4278190079; // (ULONG_MAX - (1UL << 24));
+pub const SHMSEG: u32 =  SHMMNI;
 
 //device info for char files
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
