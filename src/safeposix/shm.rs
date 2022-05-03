@@ -74,8 +74,7 @@ impl ShmMetadata {
 
     pub fn rev_shm_add(&self, cageid: i32, shmaddr: *mut u8, shmid: i32) {
         let tabletup = (cageid, shmaddr as u32);
-        self.rev_shmtable.insert(tabletup);
-        }
+        self.rev_shmtable.insert(tabletup, shmid);
     }
 
     pub fn rev_shm_rm(&self, cageid: i32, shmaddr: *mut u8)  {

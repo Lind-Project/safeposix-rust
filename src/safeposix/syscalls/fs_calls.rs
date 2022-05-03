@@ -1854,22 +1854,25 @@ impl Cage {
         let shmid: i32;
         let metadata = &SHM_METADATA;
 
-        if metadata.shmkeyidtable.contains_key(&key) {
-            if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
-                return syscall_error(Errno::EEXIST, "shmget", "key already exists and IPC_CREAT and IPC_EXCL were used");
+        match metadata.shmkeyidtable.entry(key) {
+            interface::RustHashEntry::Occupied(occupied) => {
+                if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
+                    return syscall_error(Errno::EEXIST, "shmget", "key already exists and IPC_CREAT and IPC_EXCL were used");
+                }
+                shmid = *occupied.get(); 
             }
-            shmid = *metadata.shmkeyidtable.get(&key).unwrap(); 
-        } else {
-            if 0 == (shmflg & IPC_CREAT) {
-                return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
+            interface::RustHashEntry::Vacant(vacant) => {
+                if 0 == (shmflg & IPC_CREAT) {
+                    return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
+                }
+                let shmkey = *vacant.key();
+                shmid = metadata.new_keyid(shmkey);
+                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
+
+                let segment = new_shm_segment(shmkey, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
+                metadata.shmtable.insert(shmid, segment);
             }
-            shmid = metadata.new_keyid(key);
-            let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
-
-            let segment = new_shm_segment(key, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
-            metadata.shmtable.insert(shmid, segment);
-        }
-
+        };
         shmid // return the shmid
     }
 
@@ -1898,8 +1901,8 @@ impl Cage {
         let mut rm = false;
         if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as i32, shmaddr) {
 
-            let mut segment = metadata.shmtable.get_mut(&shmid).unwrap();
-
+            let Occupied(occupied) = metadata.shmtable.entry(shmid);
+            let mut segment = occupied.get_mut();
             segment.unmap_shm(shmaddr);
     
             if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
@@ -1907,9 +1910,7 @@ impl Cage {
     
             if rm {
                 let key = segment.key;
-                drop(segment);
-    
-                metadata.shmtable.remove(&shmid);
+                occupied.remove_entry();
                 metadata.shmkeyidtable.remove(&key);
             }
 
