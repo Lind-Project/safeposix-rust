@@ -398,7 +398,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-    let mutcagetable = &CAGE_TABLE;
+    let cagetable = &CAGE_TABLE;
 
     let utilcage = Cage{
         cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
@@ -408,7 +408,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1)
     };
-    mutcagetable.insert(0, interface::RustRfc::new(utilcage));
+    cagetable.insert(0, interface::RustRfc::new(utilcage));
 
     //init cage is its own parent
     let mut initcage = Cage{
@@ -422,8 +422,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         geteuid: interface::RustAtomicI32::new(-1)
     };
     initcage.load_lower_handle_stubs();
-    mutcagetable.insert(1, interface::RustRfc::new(initcage));
-
+    cagetable.insert(1, interface::RustRfc::new(initcage));
 }
 
 #[no_mangle]

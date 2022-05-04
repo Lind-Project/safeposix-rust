@@ -133,6 +133,9 @@ pub fn format_fs() {
     let mut rootinode = newmetadata.inodetable.get_mut(&1).unwrap(); //get root to populate its dict
     if let Inode::Dir(ref mut rootdir) = *rootinode {
         rootdir.filename_to_inode_dict.insert("dev".to_string(), 2);
+        rootdir.linkcount += 1;
+    } else {
+        unreachable!();
     }
     drop(rootinode);
 
