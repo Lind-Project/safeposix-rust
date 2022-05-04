@@ -8,7 +8,7 @@ pub mod fs_tests {
     use std::fs::OpenOptions;
 
     pub fn test_fs() {
-        //ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_broken_close();
         ut_lind_fs_chmod();
@@ -57,7 +57,7 @@ pub mod fs_tests {
         assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
         //ensure that there are two hard links
 
-        assert_eq!(statdata2.st_nlink, 3); //becomes six when data files are left from previous tests
+        assert_eq!(statdata2.st_nlink, 4); //2 for . and .., one for dev, and one so that it can never be removed
 
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
