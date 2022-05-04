@@ -1865,11 +1865,11 @@ impl Cage {
                 if 0 == (shmflg & IPC_CREAT) {
                     return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
                 }
-                let shmkey = *vacant.key();
-                shmid = metadata.new_keyid(shmkey);
+                drop(vacant);
+                shmid = metadata.new_keyid(key);
                 let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-                let segment = new_shm_segment(shmkey, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
+                let segment = new_shm_segment(key, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
                 metadata.shmtable.insert(shmid, segment);
             }
         };
@@ -1905,7 +1905,7 @@ impl Cage {
                     let segment = occupied.get_mut();
                     segment.unmap_shm(shmaddr);
             
-                    if segment.rmid && !segment.shminfo.shm_nattach == 0 { rm = true; }           
+                    if segment.rmid && segment.shminfo.shm_nattach == 0 { rm = true; }           
                     metadata.rev_shm_rm(self.cageid as i32, shmaddr);
             
                     if rm {

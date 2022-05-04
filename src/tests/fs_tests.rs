@@ -962,13 +962,18 @@ pub mod fs_tests {
     
         // shmat to attach to shared memory
         cage.shmat_syscall(shmid, 0 as *mut u8, 0);
+
+        // get struct info
+        cage.shmctl_syscall(shmid, IPC_STAT, &mut shmidstruct);
+
+        assert_eq!(shmidstruct.shm_nattach, 1);
+
+        // mark the shared memory to be rmoved
+        cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);
             
         //detach from shared memory 
         cage.shmdt_syscall(0 as *mut u8);
         
-        // destroy the shared memory
-        cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);
-     
         lindrustfinalize();
     }
 }
