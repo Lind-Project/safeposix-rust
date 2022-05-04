@@ -40,6 +40,7 @@ pub mod fs_tests {
         prdwrtest();
         chardevtest();
         ut_lind_fs_exec_cloexec();
+        ut_lind_fs_shm();
     }
 
 
@@ -946,6 +947,28 @@ pub mod fs_tests {
         assert_eq!(cage.unlink_syscall("/cloexekept"), 0);
 
         assert_eq!(execcage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+
+    pub fn ut_lind_fs_shm() {
+        lindrustinit(0);
+        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let key = 31337;
+        let mut shmidstruct = ShmidsStruct::default();
+
+        // shmget returns an identifier in shmid
+        let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
+    
+        // shmat to attach to shared memory
+        cage.shmat_syscall(shmid, 0 as *mut u8, 0);
+            
+        //detach from shared memory 
+        cage.shmdt_syscall(0 as *mut u8);
+        
+        // destroy the shared memory
+        cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);
+     
         lindrustfinalize();
     }
 }
