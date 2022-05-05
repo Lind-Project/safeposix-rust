@@ -115,8 +115,8 @@ pub struct IpcPermStruct {
     pub mode: u32,
     pub __seq: u16,
     pub __pad2: u16,
-    pub __reserved1: u32,
-    pub __reserved2: u32
+    pub __reserved1: usize,
+    pub __reserved2: usize
 }
 
 #[derive(Copy, Clone, Default)]
