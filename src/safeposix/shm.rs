@@ -33,11 +33,11 @@ impl ShmSegment {
         ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}
     }
 
-    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32) {
+    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32) -> i32{
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
-        interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED, fobjfdno, 0);
         self.shminfo.shm_nattach += 1;
         self.shminfo.shm_atime = interface::timestamp() as isize;
+        interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED, fobjfdno, 0)
     }
 
     pub fn unmap_shm(&mut self, shmaddr: *mut u8) {

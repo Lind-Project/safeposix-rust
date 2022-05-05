@@ -1886,12 +1886,9 @@ impl Cage {
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             }  else { prot = PROT_READ | PROT_WRITE; }
-
-            segment.map_shm(shmaddr, prot);
             metadata.rev_shm_add(self.cageid as i32, shmaddr, shmid);
+            segment.map_shm(shmaddr, prot)
         } else { return syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value"); }
-
-        0 //shmat has succeeded!
     }
 
     //------------------SHMDT SYSCALL------------------
