@@ -961,7 +961,7 @@ pub mod fs_tests {
         let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
     
         // shmat to attach to shared memory
-        cage.shmat_syscall(shmid, 0 as *mut u8, 0);
+        cage.shmat_syscall(shmid, 0xffffff60 as *mut u8, 0);
 
         // get struct info
         cage.shmctl_syscall(shmid, IPC_STAT, &mut shmidstruct);
