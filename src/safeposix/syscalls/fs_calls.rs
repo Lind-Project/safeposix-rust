@@ -1883,7 +1883,7 @@ impl Cage {
         let prot : i32;
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
 
-            if 0 == (shmflg & SHM_RDONLY) {
+            if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             }  else { prot = PROT_READ | PROT_WRITE; }
 
