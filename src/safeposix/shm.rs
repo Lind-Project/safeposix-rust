@@ -18,16 +18,16 @@ pub struct ShmSegment {
     pub rmid: bool
 }
 
-pub fn new_shm_segment(key: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
+pub fn new_shm_segment(key: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u32) -> ShmSegment {
     ShmSegment::new(key, size, cageid, uid, gid, mode)
 }
 
 impl ShmSegment {
-    pub fn new(key: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
+    pub fn new(key: i32, size: usize, cageid: i32, uid: u32, gid: u32, mode: u32) -> ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
-        let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __seq: 0 };
+        let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __seq: 0, __pad2: 0, __reserved1: 0, __reserved2:0 };
         let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattch: 0};
 
         ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}

@@ -1867,7 +1867,7 @@ impl Cage {
                 }
                 drop(vacant);
                 shmid = metadata.new_keyid(key);
-                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
+                let mode = (shmflg & 0x1FF) as u32; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
                 let segment = new_shm_segment(key, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
                 metadata.shmtable.insert(shmid, segment);
@@ -1931,7 +1931,7 @@ impl Cage {
                 }
                 IPC_RMID => {
                     segment.rmid = true;
-                    segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
+                    segment.shminfo.shm_perm.mode |= SHM_DEST as u32;
                 }
                 _ => { return syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters"); }
             }
