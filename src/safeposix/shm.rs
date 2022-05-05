@@ -28,21 +28,21 @@ impl ShmSegment {
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
         let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __seq: 0 };
-        let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattach: 0};
+        let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattch: 0};
 
         ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}
     }
 
     pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32) -> i32{
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
-        self.shminfo.shm_nattach += 1;
+        self.shminfo.shm_nattch += 1;
         self.shminfo.shm_atime = interface::timestamp() as isize;
         interface::libc_mmap(shmaddr, self.size, prot, MAP_SHARED | MAP_FIXED, fobjfdno, 0)
     }
 
     pub fn unmap_shm(&mut self, shmaddr: *mut u8) {
         interface::libc_mmap(shmaddr, self.size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-        self.shminfo.shm_nattach -= 1;
+        self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = interface::timestamp() as isize;
     }
 }

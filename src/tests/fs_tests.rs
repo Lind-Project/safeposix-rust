@@ -966,7 +966,7 @@ pub mod fs_tests {
         // get struct info
         cage.shmctl_syscall(shmid, IPC_STAT, &mut shmidstruct);
 
-        assert_eq!(shmidstruct.shm_nattach, 1);
+        assert_eq!(shmidstruct.shm_nattch, 1);
 
         // mark the shared memory to be rmoved
         cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);

@@ -126,7 +126,7 @@ pub struct ShmidsStruct {
   pub shm_ctime: isize,
   pub shm_cpid: i32,
   pub shm_lpid: i32,
-  pub shm_nattach: usize
+  pub shm_nattch: usize
 }
 
 //redefining the Arg union to maintain the flow of the program

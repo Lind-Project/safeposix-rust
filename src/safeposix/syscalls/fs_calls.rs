@@ -1902,7 +1902,7 @@ impl Cage {
                     let segment = occupied.get_mut();
                     segment.unmap_shm(shmaddr);
             
-                    if segment.rmid && segment.shminfo.shm_nattach == 0 { rm = true; }           
+                    if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
                     metadata.rev_shm_rm(self.cageid as i32, shmaddr);
             
                     if rm {
