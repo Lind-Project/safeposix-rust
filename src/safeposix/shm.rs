@@ -13,22 +13,22 @@ pub static SHM_METADATA: interface::RustLazyGlobal<interface::RustRfc<ShmMetadat
 pub struct ShmSegment {
     pub shminfo: interface::ShmidsStruct,
     pub key: i32,
-    pub size: u32,
+    pub size: usize,
     pub filebacking: interface::ShmFile,
     pub rmid: bool
 }
 
-pub fn new_shm_segment(key: i32, size: u32, cageid: u32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
+pub fn new_shm_segment(key: i32, size: usize, cageid: u32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
     ShmSegment::new(key, size, cageid, uid, gid, mode)
 }
 
 impl ShmSegment {
-    pub fn new(key: i32, size: u32, cageid: u32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
+    pub fn new(key: i32, size: usize, cageid: u32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
         let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __pad1: 0, __seq: 0, __pad2: 0, __unused1: 0, __unused2: 0 };
-        let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattch: 0};
+        let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size as u32, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattch: 0};
 
         ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}
     }

@@ -1869,7 +1869,7 @@ impl Cage {
                 shmid = metadata.new_keyid(key);
                 let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-                let segment = new_shm_segment(key, size as u32, self.cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
+                let segment = new_shm_segment(key, size, self.cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
                 metadata.shmtable.insert(shmid, segment);
             }
         };

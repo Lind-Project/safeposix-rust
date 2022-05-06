@@ -416,10 +416,10 @@ impl EmulatedFileMap {
 pub struct ShmFile {
     fobj: Arc<Mutex<File>>,
     key: i32,
-    size: u32
+    size: usize
 }
 
-pub fn new_shm_backing(key: i32, size: u32) -> std::io::Result<ShmFile> {
+pub fn new_shm_backing(key: i32, size: usize) -> std::io::Result<ShmFile> {
     ShmFile::new(key, size)
 }
 
@@ -427,7 +427,7 @@ pub fn new_shm_backing(key: i32, size: u32) -> std::io::Result<ShmFile> {
 // We can then safely unlink the file while still holding a descriptor to that segment,
 // which we can use to map shared across cages.
 impl ShmFile {
-    fn new(key: i32, size: u32) -> std::io::Result<ShmFile> {
+    fn new(key: i32, size: usize) -> std::io::Result<ShmFile> {
 
         // open file "shm-#id"
         let filename = format!("{}{}", "shm-", key);
