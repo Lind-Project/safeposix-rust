@@ -113,7 +113,7 @@ pub struct IpcPermStruct {
     pub cuid: u32,
     pub cgid: u32,
     pub mode: u16,
-    pub __pad1: u16;
+    pub __pad1: u16,
     pub __seq: u16,
     pub __pad2: u16,
     pub __unused1: u32,
