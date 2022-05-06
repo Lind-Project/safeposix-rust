@@ -27,7 +27,7 @@ impl ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
-        let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __seq: 0, __pad: 0, __reserved: 0 };
+        let permstruct = interface::IpcPermStruct { __key: key, uid: uid, gid: gid, cuid: uid, cgid: gid, mode: mode, __pad1: 0, __seq: 0, __pad2: 0, __unused1: 0, __unused2: 0 };
         let shminfo = interface::ShmidsStruct {shm_perm: permstruct, shm_segsz: size, shm_atime: 0, shm_dtime: 0, shm_ctime: time, shm_cpid: cageid, shm_lpid: 0, shm_nattch: 0};
 
         ShmSegment { shminfo: shminfo, key:key, size: size, filebacking: filebacking, rmid: false}
