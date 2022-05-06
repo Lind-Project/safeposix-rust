@@ -1867,9 +1867,9 @@ impl Cage {
                 }
                 drop(vacant);
                 shmid = metadata.new_keyid(key);
-                let mode = (shmflg & 0x1FF) as u32; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
+                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-                let segment = new_shm_segment(key, size, self.cageid as i32, DEFAULT_UID, DEFAULT_GID, mode);
+                let segment = new_shm_segment(key, size as u32, self.cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
                 metadata.shmtable.insert(shmid, segment);
             }
         };
@@ -1886,7 +1886,7 @@ impl Cage {
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             }  else { prot = PROT_READ | PROT_WRITE; }
-            metadata.rev_shm_add(self.cageid as i32, shmaddr, shmid);
+            metadata.rev_shm_add(self.cageid as u32, shmaddr, shmid);
             segment.map_shm(shmaddr, prot)
         } else { return syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value"); }
     }
@@ -1896,14 +1896,14 @@ impl Cage {
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
-        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as i32, shmaddr) {
+        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as u32, shmaddr) {
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
                     segment.unmap_shm(shmaddr);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
-                    metadata.rev_shm_rm(self.cageid as i32, shmaddr);
+                    metadata.rev_shm_rm(self.cageid as u32, shmaddr);
             
                     if rm {
                         let key = segment.key;
@@ -1931,7 +1931,7 @@ impl Cage {
                 }
                 IPC_RMID => {
                     segment.rmid = true;
-                    segment.shminfo.shm_perm.mode |= SHM_DEST as u32;
+                    segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
                 }
                 _ => { return syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters"); }
             }

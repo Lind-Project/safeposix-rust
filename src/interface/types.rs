@@ -112,24 +112,23 @@ pub struct IpcPermStruct {
     pub gid: u32,
     pub cuid: u32,
     pub cgid: u32,
-    pub mode: u32,
+    pub mode: u16,
     pub __seq: u16,
-    pub __pad2: u16,
-    pub __reserved1: usize,
-    pub __reserved2: usize
+    pub __pad: u32,
+    pub __reserved: usize,
 }
 
 #[derive(Copy, Clone, Default)]
 #[repr(C)]
 pub struct ShmidsStruct {
   pub shm_perm: IpcPermStruct,
-  pub shm_segsz: usize,
+  pub shm_segsz: u32,
   pub shm_atime: isize,
   pub shm_dtime: isize,
   pub shm_ctime: isize,
-  pub shm_cpid: i32,
-  pub shm_lpid: i32,
-  pub shm_nattch: usize
+  pub shm_cpid: u32,
+  pub shm_lpid: u32,
+  pub shm_nattch: u32
 }
 
 //redefining the Arg union to maintain the flow of the program
