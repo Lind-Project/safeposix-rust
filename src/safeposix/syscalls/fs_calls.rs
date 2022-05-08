@@ -1865,8 +1865,8 @@ impl Cage {
                 if 0 == (shmflg & IPC_CREAT) {
                     return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
                 }
-                drop(vacant);
-                shmid = metadata.new_keyid(key);
+                shmid = metadata.new_keyid();
+                vacant.insert(shmid);
                 let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
                 let segment = new_shm_segment(key, size, self.cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
@@ -1888,7 +1888,7 @@ impl Cage {
             }  else { prot = PROT_READ | PROT_WRITE; }
             metadata.rev_shm_add(self.cageid as u32, shmaddr, shmid);
             segment.map_shm(shmaddr, prot)
-        } else { return syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value"); }
+        } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
 
     //------------------SHMDT SYSCALL------------------
@@ -1932,6 +1932,12 @@ impl Cage {
                 IPC_RMID => {
                     segment.rmid = true;
                     segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
+                    if segment.shminfo.shm_nattch == 0 {
+                        let key = segment.key;
+                        drop(segment);
+                        metadata.shmtable.remove(&shmid);                  
+                        metadata.shmkeyidtable.remove(&key);
+                    }
                 }
                 _ => { return syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters"); }
             }
