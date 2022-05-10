@@ -5,6 +5,8 @@
 const ACCESS_SYSCALL: i32 = 2;
 const UNLINK_SYSCALL: i32 = 4;
 const LINK_SYSCALL: i32 = 5;
+const RENAME_SYSCALL: i32 = 6;
+
 const XSTAT_SYSCALL: i32 = 9;
 const OPEN_SYSCALL: i32 = 10;
 const CLOSE_SYSCALL: i32 = 11;
@@ -47,7 +49,6 @@ const GETEUID_SYSCALL: i32 = 51;
 const GETGID_SYSCALL: i32 = 52;
 const GETEGID_SYSCALL: i32 = 53;
 const FLOCK_SYSCALL: i32 = 54;
-const RENAME_SYSCALL: i32 = 55;
 const EPOLL_CREATE_SYSCALL: i32 = 56;
 const EPOLL_CTL_SYSCALL: i32 = 57;
 const EPOLL_WAIT_SYSCALL: i32 = 58;
@@ -68,6 +69,8 @@ const PWRITE_SYSCALL: i32 = 127;
 const CHDIR_SYSCALL: i32 = 130;
 const MKDIR_SYSCALL: i32 = 131;
 const RMDIR_SYSCALL: i32 = 132;
+const CHMOD_SYSCALL: i32 = 133;
+
 const SOCKET_SYSCALL: i32 = 136;
 
 const GETSOCKNAME_SYSCALL: i32 = 144;
@@ -347,9 +350,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         PWRITE_SYSCALL => {
             check_and_dispatch!(cage.pwrite_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_usize(arg3), interface::get_isize(arg4))
         }
-        // CHMOD_SYSCALL => { //doesn't have a number value yet
-        //     check_and_dispatch!(cage.chmod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
-        // }
+        CHMOD_SYSCALL => { 
+            check_and_dispatch!(cage.chmod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
+        }
         RMDIR_SYSCALL => {
             check_and_dispatch!(cage.rmdir_syscall, interface::get_cstr(arg1))
         }
