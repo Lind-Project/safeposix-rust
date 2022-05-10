@@ -950,7 +950,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-
+    use libc::c_void;
     pub fn ut_lind_fs_shm() {
         lindrustinit(0);
         let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
@@ -959,20 +959,28 @@ pub mod fs_tests {
 
         // shmget returns an identifier in shmid
         let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
-    
+
         // shmat to attach to shared memory
-        cage.shmat_syscall(shmid, 0xffffff60 as *mut u8, 0);
+        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+
+        assert_ne!(shmatret, -1);
 
         // get struct info
-        cage.shmctl_syscall(shmid, IPC_STAT, &mut shmidstruct);
+        let shmctlret1 = cage.shmctl_syscall(shmid, IPC_STAT, &mut shmidstruct);
+
+        assert_eq!(shmctlret1, 0);
 
         assert_eq!(shmidstruct.shm_nattch, 1);
 
         // mark the shared memory to be rmoved
-        cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);
+        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);
+
+        assert_eq!(shmctlret2, 0);
             
         //detach from shared memory 
-        cage.shmdt_syscall(0 as *mut u8);
+        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+
+        assert_eq!(shmdtret, 0);
         
         lindrustfinalize();
     }
