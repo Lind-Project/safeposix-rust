@@ -104,6 +104,35 @@ pub union IoctlPtrUnion {
     //Right now, we do not support passing struct pointers to ioctl as the related call are not implemented
 }
 
+#[derive(Copy, Clone, Default)]
+#[repr(C)]
+pub struct IpcPermStruct {
+    pub __key: i32,
+    pub uid: u32,
+    pub gid: u32,
+    pub cuid: u32,
+    pub cgid: u32,
+    pub mode: u16,
+    pub __pad1: u16,
+    pub __seq: u16,
+    pub __pad2: u16,
+    pub __unused1: u32,
+    pub __unused2: u32
+}
+
+#[derive(Copy, Clone, Default)]
+#[repr(C)]
+pub struct ShmidsStruct {
+  pub shm_perm: IpcPermStruct,
+  pub shm_segsz: u32,
+  pub shm_atime: isize,
+  pub shm_dtime: isize,
+  pub shm_ctime: isize,
+  pub shm_cpid: u32,
+  pub shm_lpid: u32,
+  pub shm_nattch: u32
+}
+
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -121,6 +150,7 @@ pub union Arg {
   pub dispatch_rlimitstruct: *mut Rlimit,
   pub dispatch_statdatastruct: *mut StatData,
   pub dispatch_fsdatastruct: *mut FSData,
+  pub dispatch_shmidstruct: *mut ShmidsStruct,
   pub dispatch_constsockaddrstruct: *const SockaddrDummy,
   pub dispatch_sockaddrstruct: *mut SockaddrDummy,
   pub dispatch_socklen_t_ptr: *mut u32,
@@ -251,6 +281,14 @@ pub fn get_statdatastruct<'a>(union_argument: Arg) -> Result<&'a mut StatData, i
 
 pub fn get_fsdatastruct<'a>(union_argument: Arg) -> Result<&'a mut FSData, i32> {
     let pointer = unsafe{union_argument.dispatch_fsdatastruct};
+    if !pointer.is_null() {    
+        return Ok(unsafe{&mut *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_shmidstruct<'a>(union_argument: Arg) -> Result<&'a mut ShmidsStruct, i32> {
+    let pointer = unsafe{union_argument.dispatch_shmidstruct};
     if !pointer.is_null() {    
         return Ok(unsafe{&mut *pointer});
     }

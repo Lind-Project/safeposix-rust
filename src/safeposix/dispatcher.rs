@@ -52,6 +52,11 @@ const EPOLL_CREATE_SYSCALL: i32 = 56;
 const EPOLL_CTL_SYSCALL: i32 = 57;
 const EPOLL_WAIT_SYSCALL: i32 = 58;
 
+const SHMGET_SYSCALL: i32 = 62;
+const SHMAT_SYSCALL: i32 = 63;
+const SHMDT_SYSCALL: i32 = 64;
+const SHMCTL_SYSCALL: i32 = 65;
+
 const PIPE_SYSCALL: i32 = 66;
 const PIPE2_SYSCALL: i32 = 67;
 const FORK_SYSCALL: i32 = 68;
@@ -383,6 +388,18 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         MKDIR_SYSCALL => {
             check_and_dispatch!(cage.mkdir_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
+        }
+        SHMGET_SYSCALL => {
+            check_and_dispatch!(cage.shmget_syscall, interface::get_int(arg1), interface::get_usize(arg2), interface::get_int(arg3))
+        }
+        SHMAT_SYSCALL => {
+            check_and_dispatch!(cage.shmat_syscall, interface::get_int(arg1), interface::get_mutcbuf(arg2), interface::get_int(arg3))
+        }
+        SHMDT_SYSCALL => {
+            check_and_dispatch!(cage.shmdt_syscall, interface::get_mutcbuf(arg1))
+        }
+        SHMCTL_SYSCALL => {
+            check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_shmidstruct(arg3))
         }
         _ => {//unknown syscall
             -1

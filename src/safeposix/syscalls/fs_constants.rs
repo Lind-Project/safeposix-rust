@@ -114,6 +114,31 @@ pub const SEEK_SET: i32 = 0;
 pub const SEEK_CUR: i32 = 1;
 pub const SEEK_END: i32 = 2;
 
+pub const IPC_PRIVATE: i32 = 0o0;
+pub const IPC_CREAT: i32 = 0o1000;
+pub const IPC_EXCL: i32 = 0o2000;
+
+pub const IPC_RMID: i32 = 0;
+pub const IPC_SET: i32 = 1;
+pub const IPC_STAT: i32 = 2;
+
+pub const SHM_DEST: i32 = 0o1000;
+pub const SHM_LOCKED: i32 = 0o2000;
+pub const SHM_HUGETLB: i32 = 0o4000;
+
+pub const SHM_R: i32 = 0o400;
+pub const SHM_W: i32 = 0o200;
+pub const SHM_RDONLY: i32 = 0o10000;
+pub const SHM_RND: i32 = 0o20000;
+pub const SHM_REMAP: i32 = 0o40000;
+pub const SHM_EXEC: i32 = 0o100000;
+
+pub const SHMMIN: u32 =  1;
+pub const SHMMNI: u32 =  4096;
+pub const SHMMAX: u32 =  4278190079; // (ULONG_MAX - (1UL << 24))
+pub const SHMALL: u32 =  4278190079; // (ULONG_MAX - (1UL << 24));
+pub const SHMSEG: u32 =  SHMMNI;
+
 //device info for char files
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
 pub struct DevNo {

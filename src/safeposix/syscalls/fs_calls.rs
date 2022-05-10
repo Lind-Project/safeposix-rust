@@ -5,6 +5,7 @@ use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
+use crate::safeposix::shm::*;
 use super::fs_constants::*;
 
 impl Cage {
@@ -1843,5 +1844,107 @@ impl Cage {
         interface::fill(buf, length, &bytes);
 
         0 //getcwd has succeeded!;
+    }
+
+    //------------------SHMGET SYSCALL------------------
+
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
+        if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
+        if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
+        let shmid: i32;
+        let metadata = &SHM_METADATA;
+
+        match metadata.shmkeyidtable.entry(key) {
+            interface::RustHashEntry::Occupied(occupied) => {
+                if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
+                    return syscall_error(Errno::EEXIST, "shmget", "key already exists and IPC_CREAT and IPC_EXCL were used");
+                }
+                shmid = *occupied.get(); 
+            }
+            interface::RustHashEntry::Vacant(vacant) => {
+                if 0 == (shmflg & IPC_CREAT) {
+                    return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
+                }
+                shmid = metadata.new_keyid();
+                vacant.insert(shmid);
+                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
+
+                let segment = new_shm_segment(key, size, self.cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
+                metadata.shmtable.insert(shmid, segment);
+            }
+        };
+        shmid // return the shmid
+    }
+
+    //------------------SHMAT SYSCALL------------------
+
+    pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32)-> i32 {
+        let metadata = &SHM_METADATA;
+        let prot : i32;
+        if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+
+            if 0 != (shmflg & SHM_RDONLY) {
+                prot = PROT_READ;
+            }  else { prot = PROT_READ | PROT_WRITE; }
+            metadata.rev_shm_add(self.cageid as u32, shmaddr, shmid);
+            segment.map_shm(shmaddr, prot)
+        } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
+    }
+
+    //------------------SHMDT SYSCALL------------------
+
+    pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
+        let metadata = &SHM_METADATA;
+        let mut rm = false;
+        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as u32, shmaddr) {
+            match metadata.shmtable.entry(shmid) {
+                interface::RustHashEntry::Occupied(mut occupied) => {
+                    let segment = occupied.get_mut();
+                    segment.unmap_shm(shmaddr);
+            
+                    if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
+                    metadata.rev_shm_rm(self.cageid as u32, shmaddr);
+            
+                    if rm {
+                        let key = segment.key;
+                        occupied.remove_entry();
+                        metadata.shmkeyidtable.remove(&key);
+                    }
+                }
+                interface::RustHashEntry::Vacant(_) => {panic!("Inode not created for some reason");}
+            };   
+        } else { return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr"); }
+
+        0 //shmdt has succeeded!        
+    }
+
+    //------------------SHMCTL SYSCALL------------------
+
+    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: &mut ShmidsStruct)-> i32 {
+
+        let metadata = &SHM_METADATA;
+
+        if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+            match cmd {
+                IPC_STAT => {
+                    *buf = segment.shminfo;              
+                }
+                IPC_RMID => {
+                    segment.rmid = true;
+                    segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
+                    if segment.shminfo.shm_nattch == 0 {
+                        let key = segment.key;
+                        drop(segment);
+                        metadata.shmtable.remove(&shmid);                  
+                        metadata.shmkeyidtable.remove(&key);
+                    }
+                }
+                _ => { return syscall_error(Errno::EINVAL, "shmctl", "Arguments provided do not match implemented parameters"); }
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "shmctl", "Invalid identifier");
+        }
+        
+        0 //shmctl has succeeded!
     }
 }
