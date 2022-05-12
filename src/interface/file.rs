@@ -197,9 +197,13 @@ impl EmulatedFile {
 
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
+        
+        let mut real_length = length;
+        if offset + length > self.filesize { real_length = self.filesize - offset }
+
         let buf = unsafe {
             assert!(!ptr.is_null());
-            slice::from_raw_parts_mut(ptr, length)
+            slice::from_raw_parts_mut(ptr, real_length)
         };
 
         let mut fobjopt = self.fobj.lock();
@@ -207,10 +211,11 @@ impl EmulatedFile {
         if offset > self.filesize {
             panic!("Seek offset extends past the EOF!");
         }
-        let fileslice = &fobj[offset..(offset + length)];
+
+        let fileslice = &fobj[offset..(offset + real_length)];
         buf.copy_from_slice(fileslice);
 
-        Ok(length)
+        Ok(real_length)
     }
 
     // Write to file from provided C-buffer
@@ -240,9 +245,9 @@ impl EmulatedFile {
 
     // Reads entire file into bytes
     pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
-        let mut stringbuf = Vec::new();
+        let mut stringbuf = vec![0; self.filesize];
         let mut realfobj = self.realfobj.lock();
-        realfobj.read_to_end(&mut stringbuf)?;
+        realfobj.read_exact(&mut stringbuf)?;
         Ok(stringbuf) // return new buf string
     }
 
