@@ -620,7 +620,9 @@ impl Cage {
 
                     // get the pipe, read from it, and return bytes read
                     let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    pipe.read_from_pipe(buf, count) as i32
+                    let blocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { blocking = true;} 
+                    pipe.read_from_pipe(buf, count, blocking) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -779,7 +781,9 @@ impl Cage {
                     }
                     // get the pipe, write to it, and return bytes written
                     let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    pipe.write_to_pipe(buf, count) as i32
+                    let blocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { blocking = true;}
+                    pipe.write_to_pipe(buf, count, blocking) as i32
   
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
