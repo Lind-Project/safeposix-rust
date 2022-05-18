@@ -1336,7 +1336,7 @@ impl Cage {
                     *flags & !O_CLOEXEC
                 }
                 (F_SETFL, arg) if arg >= 0 => {
-                    *flags = arg;
+                    *flags |= arg;
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
