@@ -95,9 +95,11 @@ impl Cage {
                     }
 
                     //set size of file to 0
-                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} else {
-                        return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
-                    }
+                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} 
+                    
+                    // else {
+                    //     return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
+                    // }
 
                     //remove the previous file and add a new one of 0 length
                     if let interface::RustHashEntry::Occupied(occ) = entry {
