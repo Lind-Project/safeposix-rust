@@ -88,24 +88,24 @@ impl Cage {
                 }
 
                 if O_TRUNC == (flags & O_TRUNC) {
-                    //close the file object if another cage has it open
-                    let entry = FILEOBJECTTABLE.entry(inodenum);
-                    if let interface::RustHashEntry::Occupied(occ) = &entry {
+                    // We only do this to regular files, otherwiese O_TRUNC is undefined
+                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
+                        //close the file object if another cage has it open
+                        let entry = FILEOBJECTTABLE.entry(inodenum);
+                        if let interface::RustHashEntry::Occupied(occ) = &entry {
                             occ.get().close().unwrap();
-                    }
+                        }
+                        // resize it to 0
+                        g.size = 0;
 
-                    //set size of file to 0
-                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} else {
-                        return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
-                    }
-
-                    //remove the previous file and add a new one of 0 length
-                    if let interface::RustHashEntry::Occupied(occ) = entry {
+                        //remove the previous file and add a new one of 0 length
+                        if let interface::RustHashEntry::Occupied(occ) = entry {
                             occ.remove_entry();
-                    }
+                        }
 
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    interface::removefile(sysfilename.clone()).unwrap();
+                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                        interface::removefile(sysfilename.clone()).unwrap();
+                    }   
                 }
             }
         }
@@ -620,7 +620,12 @@ impl Cage {
 
                     // get the pipe, read from it, and return bytes read
                     let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    pipe.read_from_pipe(buf, count) as i32
+                    let mut nonblocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                    let ret = pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                    if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
+                    else { return ret };
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -779,7 +784,11 @@ impl Cage {
                     }
                     // get the pipe, write to it, and return bytes written
                     let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    pipe.write_to_pipe(buf, count) as i32
+                    let mut nonblocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                    let ret = pipe.write_to_pipe(buf, count, nonblocking) as i32;
+                    if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
+                    else { return ret };
   
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
@@ -1299,7 +1308,7 @@ impl Cage {
         self.filedescriptortable.remove(&fd);
         0 //_close_helper has succeeded!
     }
-    
+
     //------------------------------------FCNTL SYSCALL------------------------------------
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
@@ -1312,8 +1321,31 @@ impl Cage {
                 Epoll(obj) => {&mut obj.flags},
                 Pipe(obj) => {&mut obj.flags},
                 Stream(obj) => {&mut obj.flags},
-                Socket(obj) => {&mut obj.flags},
                 File(obj) => {&mut obj.flags},
+                Socket(ref mut sockfdobj) => {
+                    if cmd == F_SETFL && arg >= 0 {
+                        let sid = Self::getsockobjid(&mut *sockfdobj);
+                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                        let sockobj = locksock.read();
+                        let fcntlret;
+
+                        if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
+                            fcntlret = sockobj.set_nonblocking();
+                        }
+                        else { //clear non-blocking I/O
+                            fcntlret = sockobj.set_blocking();
+                        }
+
+                        if fcntlret < 0 {
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                Ok(i) => {return syscall_error(i, "fcntl", "The libc call to fcntl failed!");},
+                                Err(()) => panic!("Unknown errno value from fcntl returned!"),
+                            };
+                        }
+                    }
+
+                    &mut sockfdobj.flags
+                },
             };
             
             //matching the tuple
@@ -1336,7 +1368,7 @@ impl Cage {
                     *flags & !O_CLOEXEC
                 }
                 (F_SETFL, arg) if arg >= 0 => {
-                    *flags = arg;
+                    *flags |= arg;
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
@@ -1717,7 +1749,7 @@ impl Cage {
 
     pub fn pipe2_syscall(&self, pipefd: &mut PipeArray, flags: i32) -> i32 {
 
-        let flagsmask = O_CLOEXEC;
+        let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
         // get next available pipe number, and set up pipe
