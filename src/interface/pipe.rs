@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 use crate::interface;
+use crate::interface::errnos::{Errno, syscall_error};
 
 use parking_lot::Mutex;
 use std::slice;
@@ -60,7 +61,7 @@ impl EmulatedPipe {
 
     // Write length bytes from pointer into pipe
     // BUG: This only currently works as SPSC
-    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, blocking: bool) -> usize {
+    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, blocking: bool) -> i32 {
 
         let mut bytes_written = 0;
 
@@ -72,23 +73,23 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if (blocking && (pipe_space == self.size)) {
-            syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later")
+        if blocking && (pipe_space == self.size) {
+            return -1;
         }
 
         while bytes_written < length {
-            let bytes_to_write = min(length, bytes_written + write_end.remaining());
+            let bytes_to_write = min(length, bytes_written as usize + write_end.remaining());
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
         }   
 
-        bytes_written
+        bytes_written as i32
     }
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
     // BUG: This only currently works as SPSC
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, blocking: bool) -> usize {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, blocking: bool) -> i32 {
 
         let mut bytes_read = 0;
 
@@ -98,9 +99,9 @@ impl EmulatedPipe {
         };
 
         let mut read_end = self.read_end.lock();
-        let pipe_space = read_end.len();
-        if (blocking && (pipe_space == 0)) {
-            syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later")
+        let mut pipe_space = read_end.len();
+        if blocking && (pipe_space == 0) {
+            return -1;
         }
 
         while bytes_read < length {
@@ -111,7 +112,7 @@ impl EmulatedPipe {
             bytes_read = bytes_to_read;
         }
 
-        bytes_read
+        bytes_read as i32
     }
 
 }

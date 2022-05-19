@@ -620,9 +620,12 @@ impl Cage {
 
                     // get the pipe, read from it, and return bytes read
                     let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    let blocking = false;
-                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { blocking = true;} 
-                    pipe.read_from_pipe(buf, count, blocking) as i32
+                    let mut nonblocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                    let ret = pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                    if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
+                    else { return ret };
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -781,9 +784,11 @@ impl Cage {
                     }
                     // get the pipe, write to it, and return bytes written
                     let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    let blocking = false;
-                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { blocking = true;}
-                    pipe.write_to_pipe(buf, count, blocking) as i32
+                    let mut nonblocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                    let ret = pipe.write_to_pipe(buf, count, nonblocking) as i32;
+                    if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
+                    else { return ret };
   
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
@@ -1303,7 +1308,7 @@ impl Cage {
         self.filedescriptortable.remove(&fd);
         0 //_close_helper has succeeded!
     }
-    
+
     //------------------------------------FCNTL SYSCALL------------------------------------
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
@@ -1320,8 +1325,8 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
                         let sid = Self::getsockobjid(&mut *sockfdobj);
-                        let locksock = NET_METADATA.write().unwrap().socket_object_table.get(&sid).unwrap().clone();
-                        let sockobj = locksock.read().unwrap();
+                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                        let sockobj = locksock.read();
                         let fcntlret;
 
                         if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
