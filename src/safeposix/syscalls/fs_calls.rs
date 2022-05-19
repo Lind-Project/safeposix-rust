@@ -1749,7 +1749,7 @@ impl Cage {
 
     pub fn pipe2_syscall(&self, pipefd: &mut PipeArray, flags: i32) -> i32 {
 
-        let flagsmask = O_CLOEXEC & O_NONBLOCK;
+        let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
         // get next available pipe number, and set up pipe
