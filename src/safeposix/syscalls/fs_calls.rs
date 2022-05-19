@@ -88,26 +88,24 @@ impl Cage {
                 }
 
                 if O_TRUNC == (flags & O_TRUNC) {
-                    //close the file object if another cage has it open
-                    let entry = FILEOBJECTTABLE.entry(inodenum);
-                    if let interface::RustHashEntry::Occupied(occ) = &entry {
+                    // We only do this to regular files, otherwiese O_TRUNC is undefined
+                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
+                        //close the file object if another cage has it open
+                        let entry = FILEOBJECTTABLE.entry(inodenum);
+                        if let interface::RustHashEntry::Occupied(occ) = &entry {
                             occ.get().close().unwrap();
-                    }
+                        }
+                        // resize it to 0
+                        g.size = 0;
 
-                    //set size of file to 0
-                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {g.size = 0;} 
-                    
-                    // else {
-                    //     return syscall_error(Errno::EINVAL, "open", "file is not a normal file and thus cannot be truncated");
-                    // }
-
-                    //remove the previous file and add a new one of 0 length
-                    if let interface::RustHashEntry::Occupied(occ) = entry {
+                        //remove the previous file and add a new one of 0 length
+                        if let interface::RustHashEntry::Occupied(occ) = entry {
                             occ.remove_entry();
-                    }
+                        }
 
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    interface::removefile(sysfilename.clone()).unwrap();
+                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                        interface::removefile(sysfilename.clone()).unwrap();
+                    }   
                 }
             }
         }
