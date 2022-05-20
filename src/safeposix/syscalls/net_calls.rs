@@ -77,7 +77,6 @@ impl Cage {
 
         match domain {
             PF_UNIX | PF_INET => {
-                let newdomain = PF_INET;
                 match real_socktype {
 
                     SOCK_STREAM => {
@@ -87,7 +86,7 @@ impl Cage {
                         if newprotocol != IPPROTO_TCP {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                         }
-                        let sockfdobj = self._socket_initializer(newdomain, socktype, newprotocol, nonblocking, cloexec);
+                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
                         return self._socket_inserter(sockfdobj);
 
                     }
@@ -99,7 +98,7 @@ impl Cage {
                         if newprotocol != IPPROTO_UDP {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.");
                         }
-                        let sockfdobj = self._socket_initializer(newdomain, socktype, newprotocol, nonblocking, cloexec);
+                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
                         return self._socket_inserter(sockfdobj);
                     }
 
