@@ -33,6 +33,7 @@ impl Cage {
                             match *inode {
                                 Inode::File(ref mut f) => {f.refcount += 1;}
                                 Inode::CharDev(ref mut f) => {f.refcount += 1;}
+                                Inode::Socket(ref mut f) => {f.refcount += 1;}
                                 Inode::Dir(ref mut f) => {f.refcount += 1;}
                             }
                         }

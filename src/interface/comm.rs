@@ -20,14 +20,14 @@ pub enum GenSockaddr {
 impl GenSockaddr {
     pub fn port(&self) -> u16 {
         match self {
-            GenSockaddr::Unix(unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => v4addr.sin_port,
             GenSockaddr::V6(v6addr) => v6addr.sin6_port
         }
     }
     pub fn set_port(&mut self, port: u16) {
         match self {
-            GenSockaddr::Unix(unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => v4addr.sin_port = port,
             GenSockaddr::V6(v6addr) => v6addr.sin6_port = port
         };
@@ -35,7 +35,7 @@ impl GenSockaddr {
 
     pub fn addr(&self) -> GenIpaddr {
         match self {
-            GenSockaddr::Unix(unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => GenIpaddr::V4(v4addr.sin_addr),
             GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr)
         }
@@ -43,7 +43,7 @@ impl GenSockaddr {
 
     pub fn set_addr(&mut self, ip: GenIpaddr){
         match self {
-            GenSockaddr::Unix(unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {v4ip} else {unreachable!()},
             GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()}
         };
@@ -68,8 +68,8 @@ impl GenSockaddr {
     pub fn path(&self) -> &str {
         match self {
             GenSockaddr::Unix(unixaddr) => from_utf8(&unixaddr.sun_path).unwrap(),
-            GenSockaddr::V4(v4addr) => unreachable!(),
-            GenSockaddr::V6(v6addr) => unreachable!()
+            GenSockaddr::V4(_v4addr) => unreachable!(),
+            GenSockaddr::V6(_v6addr) => unreachable!()
         }
     }
 }
@@ -194,9 +194,9 @@ impl Socket {
 
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
-            GenSockaddr::Unix(addrrefunix) => {((addrrefunix as *const SockaddrUnix).cast::<libc::sockaddr>(), size_of::<SockaddrUnix>())}
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+            _ => { unreachable!() }
         };
         unsafe {libc::bind(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
@@ -205,6 +205,8 @@ impl Socket {
         let (finalsockaddr, addrlen) = match addr {
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+            _ => { unreachable!() }
+
         };
         unsafe {libc::connect(self.raw_sys_fd, finalsockaddr, addrlen as u32)}
     }
@@ -213,6 +215,7 @@ impl Socket {
         let (finalsockaddr, addrlen) = match addr {
             Some(GenSockaddr::V6(addrref6)) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             Some(GenSockaddr::V4(addrref)) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
+            Some(_) => { unreachable!() }
             None => {(std::ptr::null::<libc::sockaddr>() as *const libc::sockaddr, 0)}
         };
         unsafe {libc::sendto(self.raw_sys_fd, buf as *const libc::c_void, len, 0, finalsockaddr, addrlen as u32) as i32}
@@ -222,6 +225,7 @@ impl Socket {
         let (finalsockaddr, mut addrlen) = match addr {
             Some(GenSockaddr::V6(ref mut addrref6)) => {((addrref6 as *mut SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>() as u32)}
             Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as u32)}
+            Some(_) => { unreachable!() }
             None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
         };
         unsafe {libc::recvfrom(self.raw_sys_fd, buf as *mut libc::c_void, len, 0, finalsockaddr, &mut addrlen as *mut u32) as i32}
@@ -231,6 +235,7 @@ impl Socket {
         let (finalsockaddr, mut addrlen) = match addr {
             Some(GenSockaddr::V6(ref mut addrref6)) => {((addrref6 as *mut SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>() as u32)}
             Some(GenSockaddr::V4(ref mut addrref)) => {((addrref as *mut SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>() as u32)}
+            Some(_) => { unreachable!() }
             None => {(std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0)}
         };
         self.set_nonblocking();

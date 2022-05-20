@@ -16,9 +16,16 @@ impl Cage {
     fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool) -> SocketDesc {
         let flags = if blocking {O_NONBLOCK} else {0} | if cloexec {O_CLOEXEC} else {0};
 
+        let mut fakedomain = domain;
+        if domain == PF_UNIX {
+            fakedomain = PF_INET;
+        }
+
         let sockfd = SocketDesc {
             mode: S_IFSOCK | 0666, //rw-rw-rw- perms, which POSIX does too
-            domain: domain,
+            domain: fakedomain,
+            realdomain: domain,
+            reallocalpath: None,
             socktype: socktype,
             protocol: protocol,
             options: 0, //start with no options set
@@ -70,6 +77,7 @@ impl Cage {
 
         match domain {
             PF_UNIX | PF_INET => {
+                let newdomain = PF_INET;
                 match real_socktype {
 
                     SOCK_STREAM => {
@@ -79,7 +87,7 @@ impl Cage {
                         if newprotocol != IPPROTO_TCP {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                         }
-                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
+                        let sockfdobj = self._socket_initializer(newdomain, socktype, newprotocol, nonblocking, cloexec);
                         return self._socket_inserter(sockfdobj);
 
                     }
@@ -91,7 +99,7 @@ impl Cage {
                         if newprotocol != IPPROTO_UDP {
                             return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.");
                         }
-                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec);
+                        let sockfdobj = self._socket_initializer(newdomain, socktype, newprotocol, nonblocking, cloexec);
                         return self._socket_inserter(sockfdobj);
                     }
 
@@ -114,7 +122,7 @@ impl Cage {
     }
 
     fn bind_inner_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
-        if localaddr.get_family() != sockfdobj.domain as u16 {
+        if localaddr.get_family() != sockfdobj.realdomain as u16 {
             return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
         }
         if sockfdobj.localaddr.is_some() {
@@ -124,13 +132,12 @@ impl Cage {
         let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
         let mut newsockaddr: interface::GenSockaddr;
 
-        match sockfdobj.domain {
+        match sockfdobj.realdomain {
             PF_UNIX => {
                 let path = localaddr.path();
                 //Check that path is not empty
                 if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
                 let truepath = normpath(convpath(path), self);
-                let mut newsockaddr = localaddr.clone();
 
                 match metawalkandparent(truepath.as_path()) {
                     //If neither the file nor parent exists
@@ -141,12 +148,12 @@ impl Cage {
                     //If the file doesn't exist but the parent does
                     (None, Some(pardirinode)) => {
                         let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
-                        let mode: u32 = pardirinode.mode & S_IRWXA;
+                        
+                        let mode;
+                        if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                            mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
+                        } else { unreachable!() }
                         let effective_mode = S_IFSOCK as u32 | mode;
-        
-                        if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
-                            return syscall_error(Errno::EPERM, "bind", "Mode bits were not sane");
-                        } //assert sane mode bits
         
                         let time = interface::timestamp(); //We do a real timestamp now
                         let newinode = Inode::Socket(SocketInode {
@@ -166,13 +173,17 @@ impl Cage {
                         let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
                         let innersockaddr = interface::SockaddrV4{sin_family: AF_INET as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
                         newsockaddr = interface::GenSockaddr::V4(innersockaddr);
-                        NET_METADATA.domain_socket_table.insert(newinodenum, newsockaddr);
+                        let pathclone = truepath.clone();
+                        NET_METADATA.domain_socket_table.insert(pathclone, newsockaddr);
+                        sockfdobj.reallocalpath = Some(truepath);
                     }
         
                     //If the file exists (we don't need to look at parent here)
-                    (Some(inodenum), ..) => {
+                    (Some(_inodenum), ..) => {
                         // we found the domain socket inode, lets get the matching address
-                        newsockaddr = NET_METADATA.domain_socket_table.get(&inodenum).unwrap().clone();
+                        let pathclone = truepath.clone();
+                        newsockaddr = NET_METADATA.domain_socket_table.get(&pathclone).unwrap().clone();
+                        sockfdobj.reallocalpath = Some(truepath);
                     }
                 }
             }

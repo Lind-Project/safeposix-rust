@@ -59,7 +59,7 @@ pub struct NetMetadata {
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
-    pub domain_socket_table: interface::RustHashMap<usize, interface::GenSockaddr>,
+    pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 
@@ -266,5 +266,15 @@ impl NetMetadata {
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
         }
+    }
+
+    pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
+        let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
+    
+        for domainsocks in self.domain_socket_table.iter() {
+            let (key, _value) = domainsocks.pair();
+            domainsock_paths.push(key.clone()); 
+        }
+        domainsock_paths
     }
 }

@@ -875,8 +875,8 @@ pub mod net_tests {
         assert!(sockfd4 > 0);
 
         //let's check an illegal operation...
-        let sockfdillegal = cage.socket_syscall(AF_UNIX, SOCK_DGRAM, 0);
-        assert_eq!(sockfdillegal, -(Errno::EOPNOTSUPP as i32));
+        let sockfddomain = cage.socket_syscall(AF_UNIX, SOCK_DGRAM, 0);
+        assert!(sockfddomain > 0);
 
         sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         assert!(sockfd > 0);

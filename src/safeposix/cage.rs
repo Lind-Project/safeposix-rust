@@ -45,6 +45,8 @@ pub struct StreamDesc {
 pub struct SocketDesc {
     pub mode: i32,
     pub domain: i32,
+    pub realdomain: i32,
+    pub reallocalpath: Option<interface::RustPathBuf>,
     pub socktype: i32,
     pub protocol: i32,
     pub options: i32,
