@@ -28,6 +28,7 @@ pub static FILEOBJECTTABLE: interface::RustLazyGlobal<FileObjectTable> =
 pub enum Inode {
     File(GenericInode),
     CharDev(DeviceInode),
+    Socket(SocketInode),
     Dir(DirectoryInode),
 }
 
@@ -44,6 +45,7 @@ pub struct GenericInode {
     pub ctime: u64,
     pub mtime: u64
 }
+
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
 pub struct DeviceInode {
     pub size: usize,
@@ -57,6 +59,20 @@ pub struct DeviceInode {
     pub ctime: u64,
     pub mtime: u64,
     pub dev: DevNo,
+}
+
+#[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+pub struct SocketInode {
+    pub size: usize,
+    pub uid: u32,
+    pub gid: u32,
+    pub mode: u32,
+    pub linkcount: u32,
+    #[serde(skip)]
+    pub refcount: u32,
+    pub atime: u64,
+    pub ctime: u64,
+    pub mtime: u64
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]

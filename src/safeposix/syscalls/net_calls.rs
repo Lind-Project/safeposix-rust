@@ -7,6 +7,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 
 use super::net_constants::*;
 use super::fs_constants::*;
+use super::sys_constants::*;
 use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct, FileDescriptor};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
@@ -68,7 +69,7 @@ impl Cage {
         }
 
         match domain {
-            PF_INET => {
+            PF_UNIX | PF_INET => {
                 match real_socktype {
 
                     SOCK_STREAM => {
@@ -121,17 +122,77 @@ impl Cage {
         }
 
         let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
+        let mut newsockaddr: interface::GenSockaddr;
 
-        let newlocalport = if prereserved {
-            localaddr.port()
-        } else {
-            let localout = NET_METADATA._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
-            if let Err(errnum) = localout {return errnum;}
-            localout.unwrap()
-        };
+        match sockfdobj.domain {
+            PF_UNIX => {
+                let path = localaddr.path();
+                //Check that path is not empty
+                if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+                let truepath = normpath(convpath(path), self);
+                let mut newsockaddr = localaddr.clone();
 
-        let mut newsockaddr = localaddr.clone();
-        newsockaddr.set_port(newlocalport);
+                match metawalkandparent(truepath.as_path()) {
+                    //If neither the file nor parent exists
+                    (None, None) => {
+                        return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link");
+                    }
+        
+                    //If the file doesn't exist but the parent does
+                    (None, Some(pardirinode)) => {
+                        let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+                        let mode: u32 = pardirinode.mode & S_IRWXA;
+                        let effective_mode = S_IFSOCK as u32 | mode;
+        
+                        if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                            return syscall_error(Errno::EPERM, "bind", "Mode bits were not sane");
+                        } //assert sane mode bits
+        
+                        let time = interface::timestamp(); //We do a real timestamp now
+                        let newinode = Inode::Socket(SocketInode {
+                            size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                            mode: effective_mode, linkcount: 1, refcount: 0,
+                            atime: time, ctime: time, mtime: time,
+                        });
+        
+                        let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                        if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                            ind.filename_to_inode_dict.insert(filename, newinodenum);
+                            ind.linkcount += 1;
+                        } //insert a reference to the file in the parent directory
+                        FS_METADATA.inodetable.insert(newinodenum, newinode);
+
+                        // create fake IPV4 addr
+                        let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
+                        let innersockaddr = interface::SockaddrV4{sin_family: AF_INET as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
+                        newsockaddr = interface::GenSockaddr::V4(innersockaddr);
+                        NET_METADATA.domain_socket_table.insert(newinodenum, newsockaddr);
+                    }
+        
+                    //If the file exists (we don't need to look at parent here)
+                    (Some(inodenum), ..) => {
+                        // we found the domain socket inode, lets get the matching address
+                        newsockaddr = NET_METADATA.domain_socket_table.get(&inodenum).unwrap().clone();
+                    }
+                }
+            }
+
+            PF_INET => {
+                let newlocalport = if prereserved {
+                    localaddr.port()
+                } else {
+                    let localout = NET_METADATA._reserve_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain, intent_to_rebind);
+                    if let Err(errnum) = localout {return errnum;}
+                    localout.unwrap()
+                };
+        
+                newsockaddr = localaddr.clone();
+                newsockaddr.set_port(newlocalport);
+            }
+            _ => {
+                return syscall_error(Errno::EOPNOTSUPP, "bind", "trying to use an unimplemented domain");
+            }
+        }
 
         let sid = if let Some(id) = sockfdobj.socketobjectid {
             id
@@ -153,7 +214,7 @@ impl Cage {
         }
 
         sockfdobj.localaddr = Some(newsockaddr);
- 
+
         0
     }
 

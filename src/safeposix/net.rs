@@ -28,6 +28,7 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
+            domain_socket_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
         })
     ); //we want to check if fs exists before doing a blank init, but not for now
@@ -58,6 +59,7 @@ pub struct NetMetadata {
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
+    pub domain_socket_table: interface::RustHashMap<usize, interface::GenSockaddr>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 

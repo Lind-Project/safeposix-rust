@@ -5,24 +5,29 @@
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::read_to_string;
+use std::str::from_utf8;
+
 extern crate libc;
 
 static NET_DEV_FILENAME: &str = "net_devices";
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GenSockaddr {
+    Unix(SockaddrUnix),
     V4(SockaddrV4),
     V6(SockaddrV6)
 }
 impl GenSockaddr {
     pub fn port(&self) -> u16 {
         match self {
+            GenSockaddr::Unix(unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => v4addr.sin_port,
             GenSockaddr::V6(v6addr) => v6addr.sin6_port
         }
     }
     pub fn set_port(&mut self, port: u16) {
         match self {
+            GenSockaddr::Unix(unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => v4addr.sin_port = port,
             GenSockaddr::V6(v6addr) => v6addr.sin6_port = port
         };
@@ -30,12 +35,15 @@ impl GenSockaddr {
 
     pub fn addr(&self) -> GenIpaddr {
         match self {
+            GenSockaddr::Unix(unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => GenIpaddr::V4(v4addr.sin_addr),
             GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr)
         }
     }
+
     pub fn set_addr(&mut self, ip: GenIpaddr){
         match self {
+            GenSockaddr::Unix(unixaddr) => unreachable!(),
             GenSockaddr::V4(v4addr) => v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {v4ip} else {unreachable!()},
             GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()}
         };
@@ -43,6 +51,7 @@ impl GenSockaddr {
     
     pub fn set_family(&mut self, family: u16){
         match self {
+            GenSockaddr::Unix(unixaddr) => unixaddr.sun_family = family,
             GenSockaddr::V4(v4addr) => v4addr.sin_family = family,
             GenSockaddr::V6(v6addr) => v6addr.sin6_family = family
         };
@@ -50,8 +59,17 @@ impl GenSockaddr {
 
     pub fn get_family(&self) -> u16 {
         match self {
+            GenSockaddr::Unix(unixaddr) => unixaddr.sun_family,
             GenSockaddr::V4(v4addr) => v4addr.sin_family,
             GenSockaddr::V6(v6addr) => v6addr.sin6_family
+        }
+    }
+
+    pub fn path(&self) -> &str {
+        match self {
+            GenSockaddr::Unix(unixaddr) => from_utf8(&unixaddr.sun_path).unwrap(),
+            GenSockaddr::V4(v4addr) => unreachable!(),
+            GenSockaddr::V6(v6addr) => unreachable!()
         }
     }
 }
@@ -126,6 +144,13 @@ impl GenIpaddr {
 }
 
 #[repr(C)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub struct SockaddrUnix {
+    pub sun_family: u16,
+    pub sun_path: [u8; 108]
+}
+
+#[repr(C)]
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
 pub struct V4Addr {
     pub s_addr: u32
@@ -169,6 +194,7 @@ impl Socket {
 
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
         let (finalsockaddr, addrlen) = match addr {
+            GenSockaddr::Unix(addrrefunix) => {((addrrefunix as *const SockaddrUnix).cast::<libc::sockaddr>(), size_of::<SockaddrUnix>())}
             GenSockaddr::V6(addrref6) => {((addrref6 as *const SockaddrV6).cast::<libc::sockaddr>(), size_of::<SockaddrV6>())}
             GenSockaddr::V4(addrref) => {((addrref as *const SockaddrV4).cast::<libc::sockaddr>(), size_of::<SockaddrV4>())}
         };

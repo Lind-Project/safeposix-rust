@@ -78,7 +78,6 @@ impl Cage {
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
-
             }
 
             //If the file exists (we don't need to look at parent here)

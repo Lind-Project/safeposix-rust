@@ -413,6 +413,13 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
     if !pointer.is_null() {    
         let tmpsock = unsafe{&*pointer};
         match tmpsock.sa_family {
+            /*AF_UNIX*/ 1 => {
+                if addrlen < size_of::<interface::SockaddrUnix>() as u32 {
+                    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
+                }
+                let unix_ptr = pointer as *const interface::SockaddrUnix;
+                return Ok(interface::GenSockaddr::Unix(unsafe{*unix_ptr}));
+            }
             /*AF_INET*/ 2 => {
                 if addrlen < size_of::<interface::SockaddrV4>() as u32 {
                     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
