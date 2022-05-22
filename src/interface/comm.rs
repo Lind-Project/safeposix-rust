@@ -67,7 +67,7 @@ impl GenSockaddr {
 
     pub fn path(&self) -> &str {
         match self {
-            GenSockaddr::Unix(unixaddr) => CStr::from_bytes_with_nul(&unixaddr.sun_path).unwrap().to_str().unwrap(),
+            GenSockaddr::Unix(unixaddr) => CStr::from_bytes_until_nul(&unixaddr.sun_path).unwrap().to_str().unwrap(),
             GenSockaddr::V4(_v4addr) => unreachable!(),
             GenSockaddr::V6(_v6addr) => unreachable!()
         }
