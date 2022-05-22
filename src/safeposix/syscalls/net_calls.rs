@@ -178,7 +178,7 @@ impl Cage {
 
 
                         if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                            let testnode = ind.filename_to_inode_dict.get(filename, newinodenum).unwrap();
+                            let testnode = ind.filename_to_inode_dict.get(&filename).unwrap();
                             println!("{:?}", testnode);
                         } //insert a reference
                     }
