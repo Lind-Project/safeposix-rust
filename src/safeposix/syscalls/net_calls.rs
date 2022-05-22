@@ -160,6 +160,8 @@ impl Cage {
                             mode: effective_mode, linkcount: 1, refcount: 1,
                             atime: time, ctime: time, mtime: time,
                         });
+
+                        let nameclone = filename.clone();
         
                         let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                         if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
@@ -178,7 +180,7 @@ impl Cage {
 
 
                         if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                            let testnode = ind.filename_to_inode_dict.get(&filename.clone()).unwrap();
+                            let testnode = ind.filename_to_inode_dict.get(&nameclone).unwrap();
                             println!("{:?}", testnode);
                         } //insert a reference
                     }
