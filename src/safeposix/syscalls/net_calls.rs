@@ -190,7 +190,7 @@ impl Cage {
                         if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
                             sock.refcount += 1;
                         } else { unreachable!() }
-                        newsockaddr = NET_METADATA.domain_socket_table.get(&pathclone).unwrap().clone();
+                        newsockaddr = NET_METADATA.domain_socket_table.get(&pathclone.clone()).unwrap().clone();
                         sockfdobj.reallocalpath = Some(truepath);
                     }
                 }
