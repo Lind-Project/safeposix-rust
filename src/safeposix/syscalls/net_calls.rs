@@ -147,7 +147,7 @@ impl Cage {
                     //If the file doesn't exist but the parent does
                     (None, Some(pardirinode)) => {
                         let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
-                        
+                        println!("{:?}", filename);
                         let mode;
                         if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                             mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
@@ -160,8 +160,6 @@ impl Cage {
                             mode: effective_mode, linkcount: 1, refcount: 1,
                             atime: time, ctime: time, mtime: time,
                         });
-
-                        let nameclone = filename.clone();
         
                         let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                         if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
@@ -177,12 +175,6 @@ impl Cage {
                         let pathclone = truepath.clone();
                         NET_METADATA.domain_socket_table.insert(pathclone, newsockaddr);
                         sockfdobj.reallocalpath = Some(truepath);
-
-
-                        if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                            let testnode = ind.filename_to_inode_dict.get(&nameclone).unwrap();
-                            println!("{:?}", testnode);
-                        } //insert a reference
                     }
         
                     //If the file exists (we don't need to look at parent here)
