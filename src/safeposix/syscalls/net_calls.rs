@@ -157,7 +157,7 @@ impl Cage {
                         let time = interface::timestamp(); //We do a real timestamp now
                         let newinode = Inode::Socket(SocketInode {
                             size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                            mode: effective_mode, linkcount: 1, refcount: 0,
+                            mode: effective_mode, linkcount: 1, refcount: 1,
                             atime: time, ctime: time, mtime: time,
                         });
         
@@ -178,9 +178,12 @@ impl Cage {
                     }
         
                     //If the file exists (we don't need to look at parent here)
-                    (Some(_inodenum), ..) => {
+                    (Some(inodenum), ..) => {
                         // we found the domain socket inode, lets get the matching address
                         let pathclone = truepath.clone();
+                        if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
+                            sock.refcount += 1;
+                        } else { unreachable!() }
                         newsockaddr = NET_METADATA.domain_socket_table.get(&pathclone).unwrap().clone();
                         sockfdobj.reallocalpath = Some(truepath);
                     }
