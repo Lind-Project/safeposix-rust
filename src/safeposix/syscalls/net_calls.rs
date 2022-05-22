@@ -178,7 +178,7 @@ impl Cage {
 
 
                         if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                            let testnode = ind.filename_to_inode_dict.get(&filename).unwrap();
+                            let testnode = ind.filename_to_inode_dict.get(&filename.clone()).unwrap();
                             println!("{:?}", testnode);
                         } //insert a reference
                     }
@@ -190,7 +190,7 @@ impl Cage {
                         if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
                             sock.refcount += 1;
                         } else { unreachable!() }
-                        newsockaddr = NET_METADATA.domain_socket_table.get(&pathclone.clone()).unwrap().clone();
+                        newsockaddr = NET_METADATA.domain_socket_table.get(&pathclone).unwrap().clone();
                         sockfdobj.reallocalpath = Some(truepath);
                     }
                 }
