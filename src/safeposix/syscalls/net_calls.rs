@@ -175,6 +175,12 @@ impl Cage {
                         let pathclone = truepath.clone();
                         NET_METADATA.domain_socket_table.insert(pathclone, newsockaddr);
                         sockfdobj.reallocalpath = Some(truepath);
+
+
+                        if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                            let testnode = ind.filename_to_inode_dict.get(filename, newinodenum).unwrap();
+                            println!("{:?}", testnode);
+                        } //insert a reference
                     }
         
                     //If the file exists (we don't need to look at parent here)
