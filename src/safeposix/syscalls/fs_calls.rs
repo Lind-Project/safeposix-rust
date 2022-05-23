@@ -1289,6 +1289,7 @@ impl Cage {
                             Inode::Socket(ref mut socket_inode_obj) => {
                                 socket_inode_obj.refcount -= 1;
                                 if socket_inode_obj.refcount == 0 {
+                                    drop(inodeobj);
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     NET_METADATA.domain_socket_table.remove(&truepath.clone());
                                 }
