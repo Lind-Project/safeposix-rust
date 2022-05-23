@@ -147,7 +147,7 @@ impl Cage {
                     //If the file doesn't exist but the parent does
                     (None, Some(pardirinode)) => {
                         let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
-                        println!("{:?}", filename);
+
                         let mode;
                         if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                             mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
