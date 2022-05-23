@@ -4,7 +4,6 @@
 #![feature(result_into_ok_or_err)]
 #![feature(duration_constants)]
 #![allow(unused_imports)]
-#![feature(cstr_from_bytes_until_nul)]
 
 mod interface;
 mod safeposix;

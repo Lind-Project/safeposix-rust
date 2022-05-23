@@ -5,7 +5,7 @@
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::read_to_string;
-use std::ffi::CStr;
+use std::str::from_utf8;
 
 extern crate libc;
 
@@ -67,7 +67,12 @@ impl GenSockaddr {
 
     pub fn path(&self) -> &str {
         match self {
-            GenSockaddr::Unix(unixaddr) => CStr::from_bytes_until_nul(&unixaddr.sun_path).unwrap().to_str().unwrap(),
+            GenSockaddr::Unix(unixaddr) => {
+                let bytepath = from_utf8(&unixaddr.sun_path).unwrap();
+                let nullidx = bytepath.find('\0').unwrap();
+                let (path, _remaining) = bytepath.split_at(nullidx);
+                path
+            }
             GenSockaddr::V4(_v4addr) => unreachable!(),
             GenSockaddr::V6(_v6addr) => unreachable!()
         }
