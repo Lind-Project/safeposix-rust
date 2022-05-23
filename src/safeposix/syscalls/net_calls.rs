@@ -650,7 +650,7 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket_inner(&self, filedesc: &FileDescriptor, partial: bool) -> i32 {
+    pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, partial: bool) -> i32 {
        if let Socket(sockfdobj) = filedesc {
            if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
                let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
@@ -659,6 +659,7 @@ impl Cage {
                    if let Some(soid) = sockfdobj.socketobjectid {
                        NET_METADATA.socket_object_table.remove(&soid);
                    }
+                   sockfdobj.localaddr = None;
                }
            }
        } else {
@@ -673,7 +674,7 @@ impl Cage {
 
         if let interface::RustHashEntry::Occupied(mut occval) = self.filedescriptortable.entry(fd) {
             let mut filedesc = occval.get_mut().write();
-            let inner_result = self._cleanup_socket_inner(&*filedesc, partial);
+            let inner_result = self._cleanup_socket_inner(&mut *filedesc, partial);
             if inner_result < 0 {
                 return inner_result;
             }

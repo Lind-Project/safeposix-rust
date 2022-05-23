@@ -1183,7 +1183,7 @@ impl Cage {
     }
 
     pub fn _close_helper_inner(&self, locked_filedesc: interface::RustRfc<interface::RustLock<FileDescriptor>>) -> i32 {
-        let filedesc_enum = locked_filedesc.read();
+        let mut filedesc_enum = locked_filedesc.write();
 
         //Decide how to proceed depending on the fd type.
         //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
@@ -1205,7 +1205,7 @@ impl Cage {
                     }
                 }
                 if cleanflag {
-                    let retval = self._cleanup_socket_inner(&*filedesc_enum, false);
+                    let retval = self._cleanup_socket_inner(&mut *filedesc_enum, false);
                     if retval < 0 {
                         return retval;
                     }
