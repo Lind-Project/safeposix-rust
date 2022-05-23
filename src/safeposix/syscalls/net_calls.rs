@@ -287,7 +287,7 @@ impl Cage {
             let mut filedesc_enum = wrappedclone.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
-                    if remoteaddr.get_family() != sockfdobj.domain as u16 {
+                    if remoteaddr.get_family() != sockfdobj.realdomain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
                     if sockfdobj.state != ConnState::NOTCONNECTED {
@@ -376,7 +376,7 @@ impl Cage {
             let mut filedesc_enum = wrappedclone.write();
             match &mut *filedesc_enum {
                 Socket(sockfdobj) => {
-                    if dest_addr.get_family() != sockfdobj.domain as u16 {
+                    if dest_addr.get_family() != sockfdobj.realdomain as u16 {
                         return syscall_error(Errno::EINVAL, "sendto", "An address with an invalid family for the given domain was specified");
                     }
                     if (flags & !MSG_NOSIGNAL) != 0 {
