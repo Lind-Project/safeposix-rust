@@ -6,6 +6,7 @@ use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::read_to_string;
 use std::str::from_utf8;
+use std::convert::TryInto;
 
 extern crate libc;
 
@@ -153,6 +154,11 @@ impl GenIpaddr {
 pub struct SockaddrUnix {
     pub sun_family: u16,
     pub sun_path: [u8; 108]
+}
+
+pub fn newSockaddrUnix(family: u16, path: &[u8]) -> SockaddrUnix {
+    let array_path : [u8; 108] = path.try_into().unwrap();
+    SockaddrUnix{ sun_family: family, sun_path: array_path }
 }
 
 #[repr(C)]
