@@ -327,7 +327,7 @@ impl Cage {
                         if let interface::GenSockaddr::Unix(_) = remoteaddr {
                             let path = remoteaddr.path().clone();
                             let truepath = normpath(convpath(path), self);
-                            while !NET_METADATA.domain_socket_table.contains_key(&truepath) { };
+                            if !NET_METADATA.domain_socket_table.contains_key(&truepath) {return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");}
                             remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
                         };
 
