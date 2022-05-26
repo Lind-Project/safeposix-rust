@@ -3,13 +3,15 @@
 // //
 
 use std::mem::size_of;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::fs::read_to_string;
 use std::str::from_utf8;
 
 extern crate libc;
 
 static NET_DEV_FILENAME: &str = "net_devices";
+
+static mut UD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GenSockaddr {
@@ -160,6 +162,15 @@ pub fn new_sockaddr_unix(family: u16, path: &[u8]) -> SockaddrUnix {
     let mut array_path : [u8; 108] = [0; 108];
     array_path[0..pathlen].copy_from_slice(path);
     SockaddrUnix{ sun_family: family, sun_path: array_path }
+}
+
+pub fn gen_ud_path() -> String {
+    let mut owned_path: String = "/tmp/sock".to_owned();
+    unsafe {
+        let id = UD_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+        owned_path.push_str(&id.to_string());
+    }
+    owned_path.clone()
 }
 
 #[repr(C)]

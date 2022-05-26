@@ -242,6 +242,10 @@ impl Cage {
             let mut newremote: interface::GenSockaddr;
             //This is the specified behavior for the berkeley sockets API
             match domain {
+                AF_UNIX => {
+                    let path = interface::gen_ud_path();
+                    newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
+                }
                 AF_INET => {
                     newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
                     let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
@@ -303,12 +307,6 @@ impl Cage {
                         let sockobj = locksock.read();
                         let mut remoteclone = remoteaddr.clone();
                         
-                        if let interface::GenSockaddr::Unix(_) = remoteaddr {
-                            let path = remoteaddr.path().clone();
-                            let truepath = normpath(convpath(path), self);
-                            remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
-                        };
-
                         if let None = sockfdobj.localaddr {
                             let localaddr = match Self::assign_new_addr(sockfdobj, sockfdobj.realdomain, sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
                                 Ok(a) => a,
@@ -324,7 +322,13 @@ impl Cage {
                             }
 
                             sockfdobj.localaddr = Some(localaddr);
-                        };
+                        } else {
+                            if let interface::GenSockaddr::Unix(_) = remoteaddr {
+                                let path = remoteaddr.path().clone();
+                                let truepath = normpath(convpath(path), self);
+                                remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
+                            };
+                        }
 
                         let connectret = sockobj.connect(&remoteclone);
                         if connectret < 0 {
