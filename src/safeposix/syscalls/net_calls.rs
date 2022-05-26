@@ -325,13 +325,13 @@ impl Cage {
                                 }
                                 sockfdobj.localaddr = Some(localaddr);
                             }
-                        } else {
-                            if let interface::GenSockaddr::Unix(_) = remoteaddr {
-                                let path = remoteaddr.path().clone();
-                                let truepath = normpath(convpath(path), self);
-                                remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
-                            };
-                        }
+                        } 
+                        
+                        if let interface::GenSockaddr::Unix(_) = remoteaddr {
+                            let path = remoteaddr.path().clone();
+                            let truepath = normpath(convpath(path), self);
+                            remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
+                        };
 
                         let connectret = sockobj.connect(&remoteclone);
                         if connectret < 0 {
