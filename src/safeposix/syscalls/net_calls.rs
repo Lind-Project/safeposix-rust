@@ -131,65 +131,14 @@ impl Cage {
 
         let intent_to_rebind = sockfdobj.options & (1 << SO_REUSEPORT) != 0;
         let mut newsockaddr = localaddr.clone();
-        let mut pathopt = None;
-        let mut optinodenum = None;
-        let mut newinode = None;
-        let mut unixentry = None;
 
         if sockfdobj.realdomain == AF_UNIX {
-            let path = localaddr.path();
-            //Check that path is not empty
-            if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
-            let truepath = normpath(convpath(path), self);
-
-            match metawalkandparent(truepath.as_path()) {
-                //If neither the file nor parent exists
-                (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
-                //If the file doesn't exist but the parent does
-                (None, Some(pardirinode)) => {
-                    let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
-
-                    let mode;
-                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                        mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
-                    } else { unreachable!() }
-                    let effective_mode = S_IFSOCK as u32 | mode;
-    
-                    let time = interface::timestamp(); //We do a real timestamp now
-                    newinode = Some(Inode::Socket(SocketInode {
-                        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                        mode: effective_mode, linkcount: 1, refcount: 1,
-                        atime: time, ctime: time, mtime: time,
-                    }));
-    
-                    let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-                    println!("bind: found socket inode {:?} refcount = 1", newinodenum);
-
-                    if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                        ind.filename_to_inode_dict.insert(filename, newinodenum);
-                        ind.linkcount += 1;
-                    } //insert a reference to the file in the parent directory
-
-                    match FS_METADATA.inodetable.entry(newinodenum) {
-                        interface::RustHashEntry::Occupied(_) => {}
-                        interface::RustHashEntry::Vacant(vacant) => {
-                            unixentry = Some(vacant);
-                        }
-                    };
-
-                    pathopt = Some(truepath.clone());
-                    sockfdobj.reallocalpath = Some(truepath);
-                    optinodenum = Some(newinodenum.clone());
-
-                    // create fake IPV4 addr
-                    let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
-                    let innersockaddr = interface::SockaddrV4{sin_family: AF_INET as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
-                    newsockaddr = interface::GenSockaddr::V4(innersockaddr);
-                }
-                (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
-            }
+            // create fake IPV4 addr
+            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
+            let innersockaddr = interface::SockaddrV4{sin_family: AF_INET as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
+            newsockaddr = interface::GenSockaddr::V4(innersockaddr);
         }
-  
+
         let newlocalport = if prereserved {
             localaddr.port()
         } else {
@@ -219,11 +168,47 @@ impl Cage {
         }
 
         sockfdobj.localaddr = Some(newsockaddr);
-        if let Some(localpath) = pathopt {
-            unixentry.unwrap().insert(newinode.unwrap());
-            sockfdobj.optinode = optinodenum;
-            NET_METADATA.domain_socket_table.insert(localpath, newsockaddr.clone());
-            NET_METADATA.revds_table.insert(newsockaddr, localaddr.clone());
+        if sockfdobj.realdomain == AF_UNIX {
+            let path = localaddr.path();
+            //Check that path is not empty
+            if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+            let truepath = normpath(convpath(path), self);
+
+            match metawalkandparent(truepath.as_path()) {
+                //If neither the file nor parent exists
+                (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
+                //If the file doesn't exist but the parent does
+                (None, Some(pardirinode)) => {
+                    let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+
+                    let mode;
+                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                        mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
+                    } else { unreachable!() }
+                    let effective_mode = S_IFSOCK as u32 | mode;
+    
+                    let time = interface::timestamp(); //We do a real timestamp now
+                    let newinode = Inode::Socket(SocketInode {
+                        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                        mode: effective_mode, linkcount: 1, refcount: 1,
+                        atime: time, ctime: time, mtime: time,
+                    });
+    
+                    let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                    println!("bind: found socket inode {:?} refcount = 1", newinodenum);
+
+                    if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                        ind.filename_to_inode_dict.insert(filename, newinodenum);
+                        ind.linkcount += 1;
+                    } //insert a reference to the file in the parent directory
+                    sockfdobj.optinode = Some(newinodenum.clone());
+                    FS_METADATA.inodetable.insert(newinodenum, newinode);
+                    NET_METADATA.domain_socket_table.insert(truepath.clone(), newsockaddr.clone());
+                    NET_METADATA.revds_table.insert(newsockaddr, localaddr.clone());
+                    sockfdobj.reallocalpath = Some(truepath);  
+                }
+                (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
+            }
         }
 
         0
