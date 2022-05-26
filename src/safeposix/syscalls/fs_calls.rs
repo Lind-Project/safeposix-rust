@@ -1123,7 +1123,7 @@ impl Cage {
             }
             Socket(socket_filedesc_obj) => {
                 if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                    NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().refcnt += 1;
+                    NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
                 }
             }
             Stream(_normalfile_filedesc_obj) => {
@@ -1200,12 +1200,12 @@ impl Cage {
                     //in case shutdown?
                     if let Some(ref mut sockobj) = sockobjopt {
                         let mut so_tmp = sockobj.write();
-                        so_tmp.refcnt -= 1;
-                        cleanflag = so_tmp.refcnt == 0;
+                        so_tmp.0.refcnt -= 1;
+                        cleanflag = so_tmp.0.refcnt == 0;
                     }
                 }
                 if cleanflag {
-                    let retval = self._cleanup_socket_inner(&mut *filedesc_enum, false);
+                    let retval = self._cleanup_socket_inner(&mut *filedesc_enum, false, false);
                     if retval < 0 {
                         return retval;
                     }
@@ -1330,10 +1330,10 @@ impl Cage {
                         let fcntlret;
 
                         if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
-                            fcntlret = sockobj.set_nonblocking();
+                            fcntlret = sockobj.0.set_nonblocking();
                         }
                         else { //clear non-blocking I/O
-                            fcntlret = sockobj.set_blocking();
+                            fcntlret = sockobj.0.set_blocking();
                         }
 
                         if fcntlret < 0 {
@@ -1415,11 +1415,11 @@ impl Cage {
 
                             if arg == 0 { //clear non-blocking I/O
                                 *flags &= !O_NONBLOCK;
-                                ioctlret = sockobj.set_blocking();
+                                ioctlret = sockobj.0.set_blocking();
                             }
                             else { //set for non-blocking I/O
                                 *flags |= O_NONBLOCK;
-                                ioctlret = sockobj.set_nonblocking();
+                                ioctlret = sockobj.0.set_nonblocking();
                             }
                             
                             if ioctlret < 0 {
