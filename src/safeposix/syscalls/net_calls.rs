@@ -327,6 +327,7 @@ impl Cage {
                         if let interface::GenSockaddr::Unix(_) = remoteaddr {
                             let path = remoteaddr.path().clone();
                             let truepath = normpath(convpath(path), self);
+                            while !NET_METADATA.domain_socket_table.contains_key(&truepath) { };
                             remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
                         };
 
