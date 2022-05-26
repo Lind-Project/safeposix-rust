@@ -312,16 +312,19 @@ impl Cage {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
-                        
-                            let bindret = sockobj.bind(&localaddr);
-                            if bindret < 0 {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
-                                    Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
-                                };
-                            }
 
-                            sockfdobj.localaddr = Some(localaddr);
+                            if let interface::GenSockaddr::Unix(_) = localaddr {
+                                self.bind_inner_socket(sockfdobj, &localaddr, false);
+                            } else {
+                                let bindret = sockobj.bind(&localaddr);
+                                if bindret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                                    };
+                                }
+                                sockfdobj.localaddr = Some(localaddr);
+                            }
                         } else {
                             if let interface::GenSockaddr::Unix(_) = remoteaddr {
                                 let path = remoteaddr.path().clone();
