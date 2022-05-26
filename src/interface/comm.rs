@@ -6,7 +6,6 @@ use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::read_to_string;
 use std::str::from_utf8;
-use std::convert::TryInto;
 
 extern crate libc;
 
@@ -156,8 +155,10 @@ pub struct SockaddrUnix {
     pub sun_path: [u8; 108]
 }
 
-pub fn newSockaddrUnix(family: u16, path: &[u8]) -> SockaddrUnix {
-    let array_path : [u8; 108] = path.try_into().unwrap();
+pub fn new_sockaddr_unix(family: u16, path: &[u8]) -> SockaddrUnix {
+    let pathlen = path.len();    
+    let mut array_path : [u8; 108] = [0; 108];
+    array_path[0..pathlen].copy_from_slice(path);
     SockaddrUnix{ sun_family: family, sun_path: array_path }
 }
 

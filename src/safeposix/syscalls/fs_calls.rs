@@ -1280,24 +1280,25 @@ impl Cage {
                         return retval;
                     }
                 }
-                if socket_filedesc_obj.realdomain == PF_UNIX {
-                    if let Some(truepath) = &socket_filedesc_obj.reallocalpath {
-                        let inodenum = metawalk(&truepath).unwrap();
-                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-
-                        match *inodeobj {
-                            Inode::Socket(ref mut socket_inode_obj) => {
-                                socket_inode_obj.refcount -= 1;
-                                if socket_inode_obj.refcount == 0 {
-                                    drop(inodeobj);
-                                    FS_METADATA.inodetable.remove(&inodenum);
-                                    NET_METADATA.domain_socket_table.remove(&truepath.clone());
+                if let Some(inodenum) = socket_filedesc_obj.optinode {
+                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                    if let Inode::Socket(ref mut sock) = *inodeobj { 
+                        println!("close: found socket inode {:?} refcount = {:?}", inodenum, sock.refcount);
+                        sock.refcount -= 1; 
+                        if sock.refcount == 0 {
+                            if sock.linkcount == 0 {
+                                drop(inodeobj);
+                                FS_METADATA.inodetable.remove(&inodenum);
+                                if let Some(truepath) = socket_filedesc_obj.reallocalpath.clone() {
+                                    NET_METADATA.domain_socket_table.remove(&truepath);
                                 }
                             }
-                            _ => { panic!("close: fd and inodes do not match") }
                         }
-                    }
+                    
+                    } 
                 }
+
+
             }
             Pipe(pipe_filedesc_obj) => {
                 let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
