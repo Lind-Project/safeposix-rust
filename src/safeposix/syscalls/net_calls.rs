@@ -304,7 +304,7 @@ impl Cage {
                         let mut remoteclone = remoteaddr.clone();
                         
                         if let interface::GenSockaddr::Unix(_) = remoteaddr {
-                            let pathclone = interface::RustPathBuf::from(remoteaddr.path().clone());
+                            let pathclone = normpath(convpath(remoteaddr.path().clone()), self);
                             remoteclone = NET_METADATA.domain_socket_table.get(&pathclone).unwrap().clone();
                         };
 
@@ -889,7 +889,7 @@ impl Cage {
                             if unix {
                                 let unixaddr = NET_METADATA.revds_table.get(&remote_addr.clone()).unwrap().clone();
                                 if let interface::GenSockaddr::Unix(_) = unixaddr {
-                                    let pathclone = interface::RustPathBuf::from(unixaddr.path().clone());
+                                    let pathclone = normpath(convpath(unixaddr.path().clone()), self);
                                     if let Some(inodenum) = metawalk(pathclone.as_path()) {                
                                         newsockwithin.realdomain = AF_UNIX;
                                         newsockwithin.reallocalpath = Some(pathclone);   
