@@ -68,9 +68,9 @@ impl GenSockaddr {
     pub fn path(&self) -> &str {
         match self {
             GenSockaddr::Unix(unixaddr) => {
-                let bytepath = from_utf8(&unixaddr.sun_path).unwrap();
-                let nullidx = bytepath.find('\0').unwrap();
-                let (path, _remaining) = bytepath.split_at(nullidx);
+                let pathiter = &mut unixaddr.sun_path.split_inclusive(|idx| *idx == 0);
+                let pathslice = pathiter.next().unwrap().clone();
+                let path = from_utf8(pathslice).unwrap();
                 path
             }
             GenSockaddr::V4(_v4addr) => unreachable!(),
