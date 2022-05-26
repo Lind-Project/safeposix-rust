@@ -70,7 +70,7 @@ impl GenSockaddr {
     pub fn path(&self) -> &str {
         match self {
             GenSockaddr::Unix(unixaddr) => {
-                let pathiter = &mut unixaddr.sun_path.split_inclusive(|idx| *idx == 0);
+                let pathiter = &mut unixaddr.sun_path.split(|idx| *idx == 0);
                 let pathslice = pathiter.next().unwrap().clone();
                 let path = from_utf8(pathslice).unwrap();
                 path
