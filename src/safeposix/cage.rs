@@ -50,7 +50,6 @@ pub struct SocketDesc {
     pub options: i32,
     pub sndbuf: i32,
     pub rcvbuf: i32,
-    pub state: ConnState,
     pub flags: i32,
     pub errno: i32,
     pub localaddr: Option<interface::GenSockaddr>,
