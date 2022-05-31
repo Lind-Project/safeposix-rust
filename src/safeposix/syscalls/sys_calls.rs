@@ -48,7 +48,6 @@ impl Cage {
                         }
                         if let Some(inodenum) = socket_filedesc_obj.optinode {
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                println!("fork: found socket inode {:?} refcount = {:?}", inodenum, sock.refcount);
                                 sock.refcount += 1; } 
                         }
                     }

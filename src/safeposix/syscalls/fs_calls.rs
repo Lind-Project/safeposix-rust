@@ -1283,7 +1283,6 @@ impl Cage {
                 if let Some(inodenum) = socket_filedesc_obj.optinode {
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                     if let Inode::Socket(ref mut sock) = *inodeobj { 
-                        println!("close: found socket inode {:?} refcount = {:?}", inodenum, sock.refcount);
                         sock.refcount -= 1; 
                         if sock.refcount == 0 {
                             if sock.linkcount == 0 {

@@ -195,8 +195,6 @@ impl Cage {
                     });
     
                     let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-                    println!("bind: found socket inode {:?} refcount = 1", newinodenum);
-
                     if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                         ind.filename_to_inode_dict.insert(filename, newinodenum);
                         ind.linkcount += 1;
@@ -901,8 +899,8 @@ impl Cage {
                                         newsockwithin.reallocalpath = Some(pathclone);   
                                         newsockwithin.optinode = Some(inodenum.clone());   
                                         if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                            println!("accept: found socket inode {:?} refcount = {:?}", inodenum, sock.refcount);
-                                            sock.refcount += 1; } 
+                                            sock.refcount += 1; 
+                                        } 
                                     };
                                 };
                             }
