@@ -345,7 +345,7 @@ impl Cage {
                             let truepath = normpath(convpath(path), self);
                             if !NET_METADATA.domain_socket_table.contains_key(&truepath) {return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");}
                             remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
-                            sockobj.set_blocking(); // unix domain sockets block on connect evne if nb, for now we fake them so set blocking and then unset after
+                            sockobj.0.set_blocking(); // unix domain sockets block on connect evne if nb, for now we fake them so set blocking and then unset after
                         };
 
                         let mut inprogress = false;
@@ -361,7 +361,7 @@ impl Cage {
 
                         }
 
-                        if let interface::GenSockaddr::Unix(_) = remoteaddr { sockobj.set_blocking(); };
+                        if let interface::GenSockaddr::Unix(_) = remoteaddr { sockobj.0.set_blocking(); };
 
                         sockobj.1 = ConnState::CONNECTED;
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
