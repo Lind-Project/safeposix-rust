@@ -59,9 +59,9 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<interface::Socket>>>,
     pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
     pub revds_table: interface::RustHashMap<interface::GenSockaddr, interface::GenSockaddr>,
+    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 
@@ -162,10 +162,10 @@ impl NetMetadata {
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
 
-    fn insert_to_next_socketobjectid(&self, sock: interface::Socket) -> Option<i32> {
+    fn insert_to_next_socketobjectid(&self, val: (interface::Socket, ConnState)) -> Option<i32> {
         for i in MINSOCKOBJID..MAXSOCKOBJID {
             if let interface::RustHashEntry::Vacant(v) = self.socket_object_table.entry(i) {
-                v.insert(interface::RustRfc::new(interface::RustLock::new(sock)));
+                v.insert(interface::RustRfc::new(interface::RustLock::new(val)));
                 return Some(i);
             }
         }
@@ -196,21 +196,32 @@ impl NetMetadata {
 
         let usedport_muxed = (muxed.1, muxed.2);
         let entry = self.used_port_set.entry(usedport_muxed);
-        match entry {
-            interface::RustHashEntry::Occupied(mut userentry) => {
-                for portuser in userentry.get_mut() {
-                    if portuser.0 == muxed.0 {
-                        if portuser.1 == 0 {
-                            return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
-                        } else {
-                            portuser.1 += 1;
-                        }
-                        break;
-                    }
+        if addr.is_unspecified() {
+            match entry {
+                interface::RustHashEntry::Occupied(_) => {
+                    return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
+                }
+                interface::RustHashEntry::Vacant(v) => {
+                    v.insert(NET_DEVICES_LIST.iter().map(|x| (x.clone(), if rebindability {1} else {0})).collect());
                 }
             }
-            interface::RustHashEntry::Vacant(v) => {
-                v.insert(vec![(muxed.0.clone(), if rebindability {1} else {0})]);
+        } else {
+            match entry {
+                interface::RustHashEntry::Occupied(mut userentry) => {
+                    for portuser in userentry.get_mut() {
+                        if portuser.0 == muxed.0 {
+                            if portuser.1 == 0 {
+                                return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
+                            } else {
+                                portuser.1 += 1;
+                            }
+                            break;
+                        }
+                    }
+                }
+                interface::RustHashEntry::Vacant(v) => {
+                    v.insert(vec![(muxed.0.clone(), if rebindability {1} else {0})]);
+                }
             }
         }
         Ok(port)
@@ -236,25 +247,41 @@ impl NetMetadata {
             interface::RustHashEntry::Occupied(mut userentry) => {
                 let mut index = 0;
                 let userarr = userentry.get_mut();
-                for portuser in userarr.clone() {
-                    if portuser.0 == muxed.0 {
-                        //if it's rebindable and we're removing the last bound port or it's just not rebindable
+                if addr.is_unspecified() {
+                    for portuser in userarr.clone() {
                         if portuser.1 <= 1 {
                             drop(portuser);
-                            if userarr.len() == 1 {
-                                drop(userarr);
-                                userentry.remove();
-                            } else {
-                                userarr.swap_remove(index);
-                            }
+                            userarr.swap_remove(index);
                         } else { //if it's rebindable and there are others bound to it
                             userarr[index].1 -= 1;
                         }
-                        return Ok(());
                     }
-                    index += 1;
+                    if userarr.len() == 0 {
+                        drop(userarr);
+                        userentry.remove();
+                    }
+                    return Ok(());
+                } else {
+                    for portuser in userarr.clone() {
+                        if portuser.0 == muxed.0 {
+                            //if it's rebindable and we're removing the last bound port or it's just not rebindable
+                            if portuser.1 <= 1 {
+                                drop(portuser);
+                                if userarr.len() == 1 {
+                                    drop(userarr);
+                                    userentry.remove();
+                                } else {
+                                    userarr.swap_remove(index);
+                                }
+                            } else { //if it's rebindable and there are others bound to it
+                                userarr[index].1 -= 1;
+                            }
+                            return Ok(());
+                        }
+                        index += 1;
+                    }
+                    unreachable!();
                 }
-                unreachable!();
             }
             interface::RustHashEntry::Vacant(_) => {
                 return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
@@ -262,8 +289,8 @@ impl NetMetadata {
         }
     }
 
-    pub fn insert_into_socketobjecttable(&self, sock: interface::Socket) -> Result<i32, i32> {
-        if let Some(id) = self.insert_to_next_socketobjectid(sock) {
+    pub fn insert_into_socketobjecttable(&self, sock: interface::Socket, connstate: ConnState) -> Result<i32, i32> {
+        if let Some(id) = self.insert_to_next_socketobjectid((sock, connstate)) {
             Ok(id)
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
