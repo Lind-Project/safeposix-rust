@@ -1110,7 +1110,6 @@ impl Cage {
                             let mut sockobj = locksock.write();
                             if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
                                 sockobj.1 = ConnState::CONNECTED;
-
                             } 
                             
                             //we always say sockets are writable? Even though this is not true
