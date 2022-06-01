@@ -1057,8 +1057,7 @@ impl Cage {
                                 //if we reach here there is a pending connection
                                 new_readfds.insert(*fd);
                                 retval += 1;
-                            } else if sockobj.1 == ConnState::INPROGRESS { 
-                                //&& sockobj.0.check_rawconnection() {
+                            } else if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
                                     sockobj.1 = ConnState::CONNECTED;
                                     new_readfds.insert(*fd);
                                     retval += 1;
@@ -1109,9 +1108,7 @@ impl Cage {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                             let mut sockobj = locksock.write();
-                            if sockobj.1 == ConnState::INPROGRESS {
-                            
-                           // } && sockobj.0.check_rawconnection() {
+                            if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
                                 sockobj.1 = ConnState::CONNECTED;
 
                             } 
