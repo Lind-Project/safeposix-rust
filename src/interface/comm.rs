@@ -336,6 +336,13 @@ impl Socket {
         let sor =  unsafe{libc::setsockopt(self.raw_sys_fd, level, optname, (&valbuf as *const i32).cast::<libc::c_void>(), size_of::<i32>() as u32)};
         sor
     }
+
+    pub fn check_rawconnection(&self) -> bool {
+        let mut valbuf = 0;
+        let mut len = size_of::<i32>() as u32;
+        let ret =  unsafe{libc::getsockopt(self.raw_sys_fd, libc::SOL_SOCKET, libc::SO_ERROR, (&mut valbuf as *mut i32).cast::<libc::c_void>(), &mut len as *mut u32)};
+        (ret == 0) && (valbuf == 0) // if return val is 0 and error is 0 it's connected
+    }
 }
 
 impl Drop for Socket {

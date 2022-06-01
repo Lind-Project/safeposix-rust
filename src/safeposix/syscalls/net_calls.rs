@@ -337,10 +337,14 @@ impl Cage {
                             remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
                         };
 
+                        let mut inprogress = false;
                         let connectret = sockobj.0.connect(&remoteclone);
                         if connectret < 0 {
                             match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {return syscall_error(i, "connect", "The libc call to connect failed!");},
+                                Ok(i) => {
+                                    if i == Errno::EINPROGRESS { inprogress = true; }
+                                    else { return syscall_error(i, "connect", "The libc call to connect failed!") };
+                                },
                                 Err(()) => panic!("Unknown errno value from socket connect returned!"),
                             };
 
@@ -349,6 +353,10 @@ impl Cage {
                         sockobj.1 = ConnState::CONNECTED;
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
                         sockfdobj.errno = 0;
+                        if inprogress {
+                            sockobj.1 = ConnState::INPROGRESS;
+                            return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
+                        }
                         return 0;
                     } else {
                         return syscall_error(Errno::EOPNOTSUPP, "connect", "Unkown protocol in connect");
@@ -652,7 +660,7 @@ impl Cage {
                             return 0; //Already done!
                         }
 
-                        ConnState::CONNECTED => {
+                        ConnState::CONNECTED | ConnState::INPROGRESS => {
                             return syscall_error(Errno::EOPNOTSUPP, "listen", "We don't support closing a prior socket connection on listen");
                         }
 
@@ -1026,7 +1034,7 @@ impl Cage {
                         Socket(ref mut sockfdobj) => {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                            let sockobj = locksock.read();
+                            let mut sockobj = locksock.write();
 
                             if sockobj.1 == ConnState::LISTEN {
                                 if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockfdobj.localaddr.unwrap().port().clone()) {
@@ -1049,6 +1057,10 @@ impl Cage {
                                 //if we reach here there is a pending connection
                                 new_readfds.insert(*fd);
                                 retval += 1;
+                            } else if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
+                                    sockobj.1 = ConnState::CONNECTED;
+                                    new_readfds.insert(*fd);
+                                    retval += 1;
                             } else {
                                 if sockfdobj.protocol == IPPROTO_UDP {
                                     new_readfds.insert(*fd);
@@ -1056,6 +1068,7 @@ impl Cage {
                                 } else {
                                     drop(sockfdobj);
                                     drop(filedesc_enum);
+                                    drop(sockobj);
                                     if self._nonblock_peek_read(*fd) {
                                         new_readfds.insert(*fd);
                                         retval += 1;
@@ -1090,8 +1103,17 @@ impl Cage {
                     drop(wrappedfd);
                     let mut filedesc_enum = wrappedclone.write();
                     match &mut *filedesc_enum {
-                        //we always say sockets are writable? Even though this is not true
-                        Socket(_) => {
+                        Socket(ref mut sockfdobj) => {
+                            // check if we've made an in progress connection first
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                            let mut sockobj = locksock.write();
+                            if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
+                                sockobj.1 = ConnState::CONNECTED;
+
+                            } 
+                            
+                            //we always say sockets are writable? Even though this is not true
                             new_writefds.insert(*fd);
                             retval += 1;
                         }
