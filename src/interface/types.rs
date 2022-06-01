@@ -448,6 +448,15 @@ pub fn copy_out_sockaddr(union_argument: Arg, len_argument: Arg, gensock: interf
     let initaddrlen = unsafe{*addrlen};
     let mut mutgensock = gensock;
     match mutgensock {
+
+        interface::GenSockaddr::Unix(ref mut unixa) => {
+            let unixlen = size_of::<interface::SockaddrUnix>() as u32;
+
+            let fullcopylen = interface::rust_min(initaddrlen, unixlen);
+            unsafe{std::ptr::copy((unixa) as *mut interface::SockaddrUnix as *mut u8, copyoutaddr, fullcopylen as usize)};
+            unsafe{*addrlen = interface::rust_max(unixlen, fullcopylen);}
+        }
+
         interface::GenSockaddr::V4(ref mut v4a) => {
             let v4len = size_of::<interface::SockaddrV4>() as u32;
 
