@@ -1057,7 +1057,8 @@ impl Cage {
                                 //if we reach here there is a pending connection
                                 new_readfds.insert(*fd);
                                 retval += 1;
-                            } else if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
+                            } else if sockobj.1 == ConnState::INPROGRESS { 
+                                //&& sockobj.0.check_rawconnection() {
                                     sockobj.1 = ConnState::CONNECTED;
                                     new_readfds.insert(*fd);
                                     retval += 1;
