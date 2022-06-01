@@ -66,6 +66,16 @@ impl Cage {
         0
     }
 
+    pub fn swap_unixaddr(remoteaddr: &interface::GenSockaddr) -> interface::GenSockaddr {
+        let mut unix = false;
+        let mut swapaddr = remoteaddr.clone();
+        if NET_METADATA.revds_table.contains_key(&remoteaddr) { unix = true };
+        if unix {
+            swapaddr = NET_METADATA.revds_table.get(&remoteaddr.clone()).unwrap().clone();
+        }
+        swapaddr
+    }
+
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
@@ -939,22 +949,19 @@ impl Cage {
                                     return errnum;
                                 }
                             };
-                            let mut unix = false;
-                            if NET_METADATA.revds_table.contains_key(&remote_addr) { unix = true };
-                            if unix {
-                                let unixaddr = NET_METADATA.revds_table.get(&remote_addr.clone()).unwrap().clone();
-                                if let interface::GenSockaddr::Unix(_) = unixaddr {
-                                    let pathclone = normpath(convpath(unixaddr.path().clone()), self);
-                                    if let Some(inodenum) = metawalk(pathclone.as_path()) {                
-                                        newsockwithin.realdomain = AF_UNIX;
-                                        newsockwithin.reallocalpath = Some(pathclone);   
-                                        newsockwithin.optinode = Some(inodenum.clone());   
-                                        if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                            sock.refcount += 1; 
-                                        } 
-                                    };
+                            let possibleunixaddr = Self::swap_unixaddr(&remote_addr.clone());
+                            if let interface::GenSockaddr::Unix(_) = possibleunixaddr {
+                                let pathclone = normpath(convpath(possibleunixaddr.path().clone()), self);
+                                if let Some(inodenum) = metawalk(pathclone.as_path()) {                
+                                    newsockwithin.realdomain = AF_UNIX;
+                                    newsockwithin.reallocalpath = Some(pathclone);   
+                                    newsockwithin.optinode = Some(inodenum.clone());   
+                                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
+                                        sock.refcount += 1; 
+                                    } 
                                 };
-                            }
+                            };
+                            
 
                             *addr = remote_addr; //populate addr with what address it connected to
 
@@ -1344,9 +1351,10 @@ impl Cage {
                 if sockfdobj.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
-                
+                // will swap if unix
+                let remoteaddr = Self::swap_unixaddr(&sockfdobj.remoteaddr.unwrap().clone());
                 //all of the checks that we had have passed if we are here
-                *ret_addr = sockfdobj.remoteaddr.unwrap();
+                *ret_addr = remoteaddr;
                 return 0;
 
             } else {
