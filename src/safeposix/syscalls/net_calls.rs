@@ -1109,7 +1109,9 @@ impl Cage {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                             let mut sockobj = locksock.write();
-                            if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
+                            if sockobj.1 == ConnState::INPROGRESS {
+                            
+                           // } && sockobj.0.check_rawconnection() {
                                 sockobj.1 = ConnState::CONNECTED;
 
                             } 
