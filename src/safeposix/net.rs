@@ -35,7 +35,23 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
 //A list of all network devices present on the machine
 //It is populated from a file that should be present prior to running rustposix, see
 //the implementation of read_netdevs for specifics
-pub static NET_DEVICES_LIST: interface::RustLazyGlobal<Vec<interface::GenIpaddr>> = interface::RustLazyGlobal::new(|| interface::read_netdevs());
+pub static NET_IFADDRS_STR interface::RustLazyGlobal<&str> = interface::RustLazyGlobal::new(|| interface::getifaddrs_from_file());
+
+pub static NET_DEVICE_IPLIST: interface::RustLazyGlobal<Vec<interface::GenIpaddr>> = interface::RustLazyGlobal::new(|| ips_from_ifaddrs());
+
+fn ips_from_ifaddrs() -> Vec<interface::GenIpaddr> {
+    ips = vec!();
+    for net_device in NET_DEVICE_STR.split('\n') {
+        if net_device == "" {continue;}
+        let ifaddrstr: Vec<&str> = string.split(',').collect();
+        let genipopt = GenIpaddr::from_string(ifaddrstr);
+        ips.push(genipopt.expect("Could not parse device ip address from net_devices file"));
+    }
+
+    let genipopt0 = GenIpaddr::from_string("0.0.0.0");
+    ips.push(genipopt0.expect("Could not parse device ip address from net_devices file"));
+    return ips;
+}
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum PortType {

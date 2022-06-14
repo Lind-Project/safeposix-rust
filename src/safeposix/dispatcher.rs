@@ -75,6 +75,7 @@ const SOCKET_SYSCALL: i32 = 136;
 
 const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
+const GETIFADDRS_SYSCALL: i32 = 146;
 
 
 use crate::interface;
@@ -264,6 +265,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
                 interface::copy_out_sockaddr(arg2, arg3, addr);
             }
             rv
+        }
+        GETIFADDRS_SYSCALL => {
+            check_and_dispatch!(cage.getifaddrs_syscall, interface::get_mutcbuf(arg2))
         }
         GETSOCKOPT_SYSCALL => {
             let mut sockval = 0;
