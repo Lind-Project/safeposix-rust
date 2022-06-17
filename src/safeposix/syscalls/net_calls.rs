@@ -1592,7 +1592,8 @@ impl Cage {
     // alloc into getifaddrs structs
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
         if NET_IFADDRS_STR.len() < count {
-            interface::fill(buf, NET_IFADDRS_STR.len(), &NET_IFADDRS_STR.as_bytes().to_vec())
+            interface::fill(buf, NET_IFADDRS_STR.len(), &NET_IFADDRS_STR.as_bytes().to_vec());
+            0 // return success
         }
         else {
             return syscall_error(Errno::EOPNOTSUPP, "getifaddrs", "invalid ifaddrs length");
