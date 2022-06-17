@@ -43,7 +43,7 @@ fn ips_from_ifaddrs() -> Vec<interface::GenIpaddr> {
     let mut ips = vec![];
     for net_device in NET_IFADDRS_STR.as_str().split('\n') {
         if net_device == "" {continue;}
-        let ifaddrstr: Vec<&str> = net_device.split(',').collect();
+        let ifaddrstr: Vec<&str> = net_device.split(' ').collect();
         let genipopt = interface::GenIpaddr::from_string(ifaddrstr[2]);
         ips.push(genipopt.expect("Could not parse device ip address from net_devices file"));
     }
