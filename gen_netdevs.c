@@ -28,7 +28,7 @@ int main ()
             printf("%s", naddr);
             if (ifa->ifa_flags & IFF_BROADCAST) printf(" %s\n", baddr);
             else if (ifa->ifa_flags & IFF_POINTOPOINT) printf(" %s\n", daddr);
-            else printf(",none\n");
+            else printf(" none\n");
         }
     }
 
