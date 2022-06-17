@@ -35,20 +35,20 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
 //A list of all network devices present on the machine
 //It is populated from a file that should be present prior to running rustposix, see
 //the implementation of read_netdevs for specifics
-pub static NET_IFADDRS_STR interface::RustLazyGlobal<&str> = interface::RustLazyGlobal::new(|| interface::getifaddrs_from_file());
+pub static NET_IFADDRS_STR: interface::RustLazyGlobal<String> = interface::RustLazyGlobal::new(|| interface::getifaddrs_from_file());
 
 pub static NET_DEVICE_IPLIST: interface::RustLazyGlobal<Vec<interface::GenIpaddr>> = interface::RustLazyGlobal::new(|| ips_from_ifaddrs());
 
 fn ips_from_ifaddrs() -> Vec<interface::GenIpaddr> {
-    ips = vec!();
-    for net_device in NET_DEVICE_STR.split('\n') {
+    let mut ips = vec![];
+    for net_device in NET_IFADDRS_STR.as_str().split('\n') {
         if net_device == "" {continue;}
-        let ifaddrstr: Vec<&str> = string.split(',').collect();
-        let genipopt = GenIpaddr::from_string(ifaddrstr);
+        let ifaddrstr: Vec<&str> = net_device.split(',').collect();
+        let genipopt = interface::GenIpaddr::from_string(ifaddrstr[2]);
         ips.push(genipopt.expect("Could not parse device ip address from net_devices file"));
     }
 
-    let genipopt0 = GenIpaddr::from_string("0.0.0.0");
+    let genipopt0 = interface::GenIpaddr::from_string("0.0.0.0");
     ips.push(genipopt0.expect("Could not parse device ip address from net_devices file"));
     return ips;
 }
@@ -89,7 +89,7 @@ impl NetMetadata {
                 }
                 interface::RustHashEntry::Vacant(v) => {
                     let mut intervec = vec!();
-                    for interface_addr in &*NET_DEVICES_LIST {
+                    for interface_addr in &*NET_DEVICE_IPLIST {
                         intervec.push((interface_addr.clone(), rebindability));
                     }
                     v.insert(intervec);
@@ -115,7 +115,7 @@ impl NetMetadata {
         }
     }
     pub fn _get_available_udp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
-        if !NET_DEVICES_LIST.contains(&addr) {
+        if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
@@ -144,7 +144,7 @@ impl NetMetadata {
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
     pub fn _get_available_tcp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
-        if !NET_DEVICES_LIST.contains(&addr) {
+        if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
@@ -185,7 +185,7 @@ impl NetMetadata {
     }
 
     pub fn _reserve_localport(&self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, rebindability: bool) -> Result<u16, i32> {
-        if !NET_DEVICES_LIST.contains(&addr) {
+        if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
 
@@ -214,7 +214,7 @@ impl NetMetadata {
                     return Err(syscall_error(Errno::EADDRINUSE, "reserve port", "port is already in use"));
                 }
                 interface::RustHashEntry::Vacant(v) => {
-                    v.insert(NET_DEVICES_LIST.iter().map(|x| (x.clone(), if rebindability {1} else {0})).collect());
+                    v.insert(NET_DEVICE_IPLIST.iter().map(|x| (x.clone(), if rebindability {1} else {0})).collect());
                 }
             }
         } else {
@@ -240,7 +240,7 @@ impl NetMetadata {
     }
 
     pub fn _release_localport(&self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32) -> Result<(), i32> {
-        if !NET_DEVICES_LIST.contains(&addr) {
+        if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
         }
 

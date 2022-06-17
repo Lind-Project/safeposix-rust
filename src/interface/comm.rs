@@ -9,36 +9,6 @@ extern crate libc;
 
 static NET_DEV_FILENAME: &str = "net_devices";
 
-<<<<<<< Updated upstream
-=======
-static mut UD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-pub struct IfaddrsStruct {
-    pub ifa_name: *mut u8,
-    pub ifa_flags: u32,
-    pub ifa_addr: GenSockaddr,
-    pub ifa_netmask: GenSockaddr,
-    pub ifa_bdaddr: GenSockaddr,
-}
-
-#[repr(C)]
-impl IfaddrsStruct {
-    pub fn new(namestr: &str, flagstr: &str, addrstr: &str, naddrstr: &str, baddrstr: &str) -> IfaddrsStruct {
-        let nameptr = namestr.as_ptr();
-        let flags = flagstr.to_u32();
-        let ipa = GenIpaddr::from_string(addrstr);
-        let ipn = GenIpaddr::from_string(naddrstr);
-        let ipb = GenIpaddr::from_string(baddrstr);
-
-        let addrsock = GenSockaddr::V4::SockaddrV4{ sa_family: AF_INET, sin_port: 0, sin_addr: ipa, padding: 0 }
-        let netsock = GenSockaddr::V4::SockaddrV4{ sa_family: AF_INET, sin_port: 0, sin_addr: ipn, padding: 0 }
-        let bsock = GenSockaddr::V4::SockaddrV4{ sa_family: AF_INET, sin_port: 0, sin_addr: ipb, padding: 0 }
-
-        IfaddrsStruct { ifa_name: nameptr, ifa_flags: flags, ifa_addr: addrsock, ifa_netmask: netsock, ifa_bdaddr: bsock}
-    }
-}
-
->>>>>>> Stashed changes
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GenSockaddr {
     V4(SockaddrV4),
@@ -320,6 +290,6 @@ impl Drop for Socket {
     }
 }
 
-pub fn getifaddrs_from_file() -> &str {
-    read_to_string(NET_DEV_FILENAME).expect("No net_devices file present!").to_str()
+pub fn getifaddrs_from_file() -> String {
+    read_to_string(NET_DEV_FILENAME).expect("No net_devices file present!").to_owned()
 }

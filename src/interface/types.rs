@@ -153,7 +153,6 @@ pub union Arg {
   pub dispatch_shmidstruct: *mut ShmidsStruct,
   pub dispatch_constsockaddrstruct: *const SockaddrDummy,
   pub dispatch_sockaddrstruct: *mut SockaddrDummy,
-  pub dispatch_ifaddrsstruct: *mut IfaddrsStruct,
   pub dispatch_socklen_t_ptr: *mut u32,
   pub dispatch_intptr: *mut i32,
   pub dispatch_pollstructarray: *mut PollStruct,

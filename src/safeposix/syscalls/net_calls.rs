@@ -1,4 +1,4 @@
-interface::get_usize(arg3)#![allow(dead_code)]
+#![allow(dead_code)]
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
@@ -1592,10 +1592,10 @@ impl Cage {
     // alloc into getifaddrs structs
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
         if NET_IFADDRS_STR.len() < count {
-            fill(buf, NET_IFADDRS_STR.len(), NET_IFADDRS_STR)
+            interface::fill(buf, NET_IFADDRS_STR.len(), &NET_IFADDRS_STR.as_bytes().to_vec())
         }
         else {
-            return Err( syscall_error(Errno::EOPNOTSUPP, "getifaddrs", "invalid ifaddrs length") );
+            return syscall_error(Errno::EOPNOTSUPP, "getifaddrs", "invalid ifaddrs length");
         }
     }
 }

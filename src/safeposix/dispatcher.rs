@@ -267,7 +267,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             rv
         }
         GETIFADDRS_SYSCALL => {
-            check_and_dispatch!(cage.getifaddrs_syscall, interface::get_mutcbuf(arg2))
+            check_and_dispatch!(cage.getifaddrs_syscall, interface::get_mutcbuf(arg1), interface::get_usize(arg2))
         }
         GETSOCKOPT_SYSCALL => {
             let mut sockval = 0;

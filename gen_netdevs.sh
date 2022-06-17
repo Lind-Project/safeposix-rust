@@ -1,4 +1,12 @@
 #!/bin/bash
-shopt -u expand_aliases
-ip a | grep 'inet ' | awk '{print $2}' | sed 's/\/.*$//g' > net_devices
-echo '0.0.0.0' >> net_devices
+FILE=gen_netdevs
+if [ -f "$FILE" ]; then
+    echo "$FILE exists."
+else 
+    echo "$FILE does not exist. Compiling."
+    gcc gen_netdevs.c -o gen_netdevs
+fi
+
+echo "Generating netdevs"
+
+./gen_netdevs > net_devices
