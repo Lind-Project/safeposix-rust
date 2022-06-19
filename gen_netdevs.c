@@ -20,15 +20,12 @@ int main ()
             naddr = inet_ntoa(na->sin_addr);
             ba = (struct sockaddr_in *) ifa->ifa_broadaddr;
             baddr = inet_ntoa(ba->sin_addr);
-            da = (struct sockaddr_in *) ifa->ifa_dstaddr;
-            daddr = inet_ntoa(da->sin_addr);
+
             printf("%s ", ifa->ifa_name);
             printf("%d ", ifa->ifa_flags);
             printf("%s ", addr);
-            printf("%s", naddr);
-            if (ifa->ifa_flags & IFF_BROADCAST) printf(" %s\n", baddr);
-            else if (ifa->ifa_flags & IFF_POINTOPOINT) printf(" %s\n", daddr);
-            else printf(" none\n");
+            printf("%s ", naddr);
+            printf("%s\n", baddr);
         }
     }
 
