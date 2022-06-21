@@ -67,12 +67,8 @@ impl Cage {
     }
 
     pub fn swap_unixaddr(remoteaddr: &interface::GenSockaddr) -> interface::GenSockaddr {
-        let mut unix = false;
         let mut swapaddr = remoteaddr.clone();
-        if NET_METADATA.revds_table.contains_key(&remoteaddr) { unix = true };
-        if unix {
-            swapaddr = NET_METADATA.revds_table.get(&remoteaddr.clone()).unwrap().clone();
-        }
+        if let Some(addr) = NET_METADATA.revds_table.get(&remoteaddr.clone()) { swapaddr = *addr; }
         swapaddr
     }
 

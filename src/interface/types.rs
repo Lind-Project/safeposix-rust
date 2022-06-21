@@ -472,8 +472,6 @@ pub fn copy_out_sockaddr(union_argument: Arg, len_argument: Arg, gensock: interf
             unsafe{std::ptr::copy((v6a) as *mut interface::SockaddrV6 as *mut u8, copyoutaddr, fullcopylen as usize)};
             unsafe{*addrlen = interface::rust_max(v6len, fullcopylen);}
         }
-
-        _ => { unreachable!() }
     }
 }
 

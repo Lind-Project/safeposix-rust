@@ -299,11 +299,7 @@ impl NetMetadata {
 
     pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
         let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
-    
-        for domainsocks in self.domain_socket_table.iter() {
-            let (key, _value) = domainsocks.pair();
-            domainsock_paths.push(key.clone()); 
-        }
+        for domainsocks in self.domain_socket_table.iter() { domainsock_paths.push(domainsocks.pair().0.clone()); } // get vector of domain sock table keys
         domainsock_paths
     }
 }

@@ -651,7 +651,7 @@ impl Cage {
                         }
 
                         Inode::Socket(_) => {
-                            panic!("read: socket fd and inode don't match types")
+                            panic!("read(): Socket inode found on a filedesc fd.")
                         }
 
                         Inode::Dir(_) => {
@@ -718,7 +718,7 @@ impl Cage {
                         }
 
                         Inode::Socket(_) => {
-                            panic!("pread: socket fd and inode don't match types")
+                            panic!("pread(): Socket inode found on a filedesc fd")
                         }
 
                         Inode::Dir(_) => {
@@ -816,7 +816,7 @@ impl Cage {
                         }
 
                         Inode::Socket(_) => {
-                            panic!("write: socket fd and inode don't match types")
+                            panic!("write(): Socket inode found on a filedesc fd")
                         }
 
                         Inode::Dir(_) => {
@@ -1373,7 +1373,7 @@ impl Cage {
                         }
                         log_metadata(&FS_METADATA, inodenum);
                     },
-                    Inode::Socket(_) => { panic!("Close: Inode and fd do not match.") }
+                    Inode::Socket(_) => { panic!("close(): Socket inode found on a filedesc fd.") }
                 }
             }
         }

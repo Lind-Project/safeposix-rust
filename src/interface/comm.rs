@@ -22,14 +22,14 @@ pub enum GenSockaddr {
 impl GenSockaddr {
     pub fn port(&self) -> u16 {
         match self {
-            GenSockaddr::Unix(_unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_) => panic!("Invalid function called for this type of Sockaddr."),
             GenSockaddr::V4(v4addr) => v4addr.sin_port,
             GenSockaddr::V6(v6addr) => v6addr.sin6_port
         }
     }
     pub fn set_port(&mut self, port: u16) {
         match self {
-            GenSockaddr::Unix(_unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_) => panic!("Invalid function called for this type of Sockaddr."),
             GenSockaddr::V4(v4addr) => v4addr.sin_port = port,
             GenSockaddr::V6(v6addr) => v6addr.sin6_port = port
         };
@@ -37,7 +37,7 @@ impl GenSockaddr {
 
     pub fn addr(&self) -> GenIpaddr {
         match self {
-            GenSockaddr::Unix(_unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_) => panic!("Invalid function called for this type of Sockaddr."),
             GenSockaddr::V4(v4addr) => GenIpaddr::V4(v4addr.sin_addr),
             GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr)
         }
@@ -45,7 +45,7 @@ impl GenSockaddr {
 
     pub fn set_addr(&mut self, ip: GenIpaddr){
         match self {
-            GenSockaddr::Unix(_unixaddr) => unreachable!(),
+            GenSockaddr::Unix(_unixaddr) => panic!("Invalid function called for this type of Sockaddr."),
             GenSockaddr::V4(v4addr) => v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {v4ip} else {unreachable!()},
             GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()}
         };
@@ -75,8 +75,8 @@ impl GenSockaddr {
                 let path = from_utf8(pathslice).unwrap();
                 path
             }
-            GenSockaddr::V4(_v4addr) => unreachable!(),
-            GenSockaddr::V6(_v6addr) => unreachable!()
+            GenSockaddr::V4(_) => panic!("Invalid function called for this type of Sockaddr."),
+            GenSockaddr::V6(_) => panic!("Invalid function called for this type of Sockaddr.")
         }
     }
 }
@@ -159,6 +159,7 @@ pub struct SockaddrUnix {
 
 pub fn new_sockaddr_unix(family: u16, path: &[u8]) -> SockaddrUnix {
     let pathlen = path.len();    
+    if pathlen > 108 { panic!("Unix domain paths cannot exceed 108 bytes.")}
     let mut array_path : [u8; 108] = [0; 108];
     array_path[0..pathlen].copy_from_slice(path);
     SockaddrUnix{ sun_family: family, sun_path: array_path }
