@@ -78,7 +78,6 @@ impl Cage {
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
-
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -121,6 +120,7 @@ impl Cage {
                 Inode::File(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::Dir(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
                 Inode::CharDev(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
+                Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
             }
 
             //If the file is a regular file, open the file object
@@ -311,6 +311,30 @@ impl Cage {
                         }
                     }
 
+
+                    Inode::Socket(ref mut socket_inode_obj) => {
+                        socket_inode_obj.linkcount += 1; //add link to inode
+                        drop(inodeobj);
+
+                        match metawalkandparent(truenewpath.as_path()) {
+                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                            (None, Some(pardirinode)) => {
+                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
+                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
+                                    parentdirinodeobj.linkcount += 1;
+                                    drop(parentinodeobj);
+                                    let newsockaddr = NET_METADATA.domain_socket_table.get(&trueoldpath).unwrap().clone();
+                                    NET_METADATA.domain_socket_table.insert(truenewpath, newsockaddr);
+                                } //insert a reference to the inode in the parent directory
+                                0 //link has succeeded
+                            }
+
+                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                        }
+                    }
+
                     Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
                 }
             }
@@ -338,9 +362,10 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj) = match *inodeobj {
-                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true)},
-                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false)},
+                let (currefcount, curlinkcount, has_fobj, has_domsock) = match *inodeobj {
+                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, false)},
+                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
+                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
@@ -365,12 +390,17 @@ impl Cage {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename).unwrap();
                         }
+                        if has_domsock {
+                            NET_METADATA.domain_socket_table.remove(&truepath);
+                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
-
-                log_metadata(&FS_METADATA, parentinodenum);
-                log_metadata(&FS_METADATA, inodenum);
+                // we don't log domain sockets
+                if !has_domsock {
+                    log_metadata(&FS_METADATA, parentinodenum);
+                    log_metadata(&FS_METADATA, inodenum);
+                }
                 0 //unlink has succeeded
             }
 
@@ -404,6 +434,9 @@ impl Cage {
                 Inode::CharDev(f) => {
                     Self::_istat_helper_chr_file(&f, statbuf);
                 },
+                Inode::Socket(f) => {
+                    Self::_istat_helper_sock(&f, statbuf);
+                },
                 Inode::Dir(f) => {
                     Self::_istat_helper_dir(&f, statbuf);
                 },
@@ -415,6 +448,17 @@ impl Cage {
     }
 
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
+        statbuf.st_mode = inodeobj.mode;
+        statbuf.st_nlink = inodeobj.linkcount;
+        statbuf.st_uid = inodeobj.uid;
+        statbuf.st_gid = inodeobj.gid;
+        statbuf.st_rdev = 0;
+        statbuf.st_size = inodeobj.size;
+        statbuf.st_blksize = 0;
+        statbuf.st_blocks = 0;
+    }
+
+    fn _istat_helper_sock(inodeobj: &SocketInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
         statbuf.st_uid = inodeobj.uid;
@@ -488,6 +532,9 @@ impl Cage {
                         }
                         Inode::CharDev(f) => {
                             Self::_istat_helper_chr_file(&f, statbuf);
+                        }
+                        Inode::Socket(f) => {
+                            Self::_istat_helper_sock(&f, statbuf);
                         }
                         Inode::Dir(f) => {
                             Self::_istat_helper_dir(&f, statbuf);
@@ -603,6 +650,10 @@ impl Cage {
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
 
+                        Inode::Socket(_) => {
+                            panic!("read(): Socket inode found on a filedesc fd.")
+                        }
+
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "read", "attempted to read from a directory")
                         }
@@ -664,6 +715,10 @@ impl Cage {
 
                         Inode::CharDev(char_inode_obj) => {
                             self._read_chr_file(&char_inode_obj, buf, count)
+                        }
+
+                        Inode::Socket(_) => {
+                            panic!("pread(): Socket inode found on a filedesc fd")
                         }
 
                         Inode::Dir(_) => {
@@ -758,6 +813,10 @@ impl Cage {
 
                         Inode::CharDev(ref char_inode_obj) => {
                             self._write_chr_file(&char_inode_obj, buf, count)
+                        }
+
+                        Inode::Socket(_) => {
+                            panic!("write(): Socket inode found on a filedesc fd")
                         }
 
                         Inode::Dir(_) => {
@@ -861,6 +920,11 @@ impl Cage {
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
+                        Inode::Socket(_) => {
+                            panic!("pwrite: socket fd and inode don't match types")
+                        }
+
+
                         Inode::Dir(_) => {
                             syscall_error(Errno::EISDIR, "pwrite", "attempted to write to a directory")
                         }
@@ -932,6 +996,10 @@ impl Cage {
                             0 //for character files, rather than seeking, we transparently do nothing
                         }
 
+                        Inode::Socket(_) => {
+                            panic!("lseek: socket fd and inode don't match types")
+                        }
+
                         Inode::Dir(dir_inode_obj) => {
                             //for directories we seek between entries, and thus our end position is the total number of entries
                             let eventualpos = match whence {
@@ -988,6 +1056,7 @@ impl Cage {
             let mode = match &*inodeobj {
                 Inode::File(f) => {f.mode},
                 Inode::CharDev(f) => {f.mode},
+                Inode::Socket(f) => {f.mode},
                 Inode::Dir(f) => {f.mode},
             };
 
@@ -1115,6 +1184,7 @@ impl Cage {
                     Inode::CharDev(ref mut chardev_inode_obj) => {
                         chardev_inode_obj.refcount += 1;
                     },
+                    Inode::Socket(_) => panic!("dup: fd and inode do not match.")
                 }
             }
             Pipe(pipe_filedesc_obj) => {
@@ -1183,7 +1253,7 @@ impl Cage {
     }
 
     pub fn _close_helper_inner(&self, locked_filedesc: interface::RustRfc<interface::RustLock<FileDescriptor>>) -> i32 {
-        let mut filedesc_enum = locked_filedesc.write();
+        let filedesc_enum = locked_filedesc.write();
 
         //Decide how to proceed depending on the fd type.
         //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
@@ -1205,11 +1275,30 @@ impl Cage {
                     }
                 }
                 if cleanflag {
-                    let retval = self._cleanup_socket_inner(&mut *filedesc_enum, false, false);
+                    let mut fdclone = filedesc_enum.clone();
+                    let retval = self._cleanup_socket_inner(&mut fdclone, false, false);
                     if retval < 0 {
                         return retval;
                     }
                 }
+                if let Some(inodenum) = socket_filedesc_obj.optinode {
+                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                    if let Inode::Socket(ref mut sock) = *inodeobj { 
+                        sock.refcount -= 1; 
+                        if sock.refcount == 0 {
+                            if sock.linkcount == 0 {
+                                drop(inodeobj);
+                                FS_METADATA.inodetable.remove(&inodenum);
+                                if let Some(truepath) = socket_filedesc_obj.reallocalpath.clone() {
+                                    NET_METADATA.domain_socket_table.remove(&truepath);
+                                }
+                            }
+                        }
+                    
+                    } 
+                }
+
+
             }
             Pipe(pipe_filedesc_obj) => {
                 let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
@@ -1283,7 +1372,8 @@ impl Cage {
                             drop(inodeobj);
                         }
                         log_metadata(&FS_METADATA, inodenum);
-                    }
+                    },
+                    Inode::Socket(_) => { panic!("close(): Socket inode found on a filedesc fd.") }
                 }
             }
         }
@@ -1453,6 +1543,7 @@ impl Cage {
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path()) {
             let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+            let mut log = true;
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
                 match *thisinode {
                     Inode::File(ref mut general_inode) => {
@@ -1461,12 +1552,16 @@ impl Cage {
                     Inode::CharDev(ref mut dev_inode) => {
                         dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
                     }
+                    Inode::Socket(ref mut sock_inode) => {
+                        sock_inode.mode = (sock_inode.mode &!S_IRWXA) | mode;
+                        log = false;
+                    }
                     Inode::Dir(ref mut dir_inode) => {
                         dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
                     }
                 }
                 drop(thisinode);
-                log_metadata(&FS_METADATA, inodenum);
+                if log { log_metadata(&FS_METADATA, inodenum) };
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1526,7 +1621,7 @@ impl Cage {
                             syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
                         }
 
-                        Inode::Dir(_) => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
+                        _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
                     }
                 }
                 _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
@@ -1721,6 +1816,9 @@ impl Cage {
                         }
                         Inode::CharDev(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
+                        }
+                        Inode::Socket(_) => {
+                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a domain socket");
                         }
                         Inode::Dir(_) => {
                             return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");

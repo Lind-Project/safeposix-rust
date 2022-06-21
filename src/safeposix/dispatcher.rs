@@ -80,7 +80,8 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
-use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
 
@@ -466,6 +467,11 @@ pub extern "C" fn lindrustfinalize() {
     //actually exit the cages
     for (_cageid, cage) in remainingcages {
         cage.exit_syscall(EXIT_SUCCESS);
+    }
+
+    // remove any open domain socket inodes
+    for truepath in NET_METADATA.get_domainsock_paths() {
+        remove_domain_sock(truepath);
     }
 
     // if we get here, persist and delete log

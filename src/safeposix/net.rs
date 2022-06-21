@@ -28,6 +28,8 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
+            domain_socket_table: interface::RustHashMap::new(),
+            revds_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
         })
     ); //we want to check if fs exists before doing a blank init, but not for now
@@ -73,6 +75,8 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
+    pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
+    pub revds_table: interface::RustHashMap<interface::GenSockaddr, interface::GenSockaddr>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
@@ -307,5 +311,11 @@ impl NetMetadata {
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
         }
+    }
+
+    pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
+        let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
+        for domainsocks in self.domain_socket_table.iter() { domainsock_paths.push(domainsocks.pair().0.clone()); } // get vector of domain sock table keys
+        domainsock_paths
     }
 }
