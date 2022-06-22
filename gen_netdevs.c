@@ -21,11 +21,7 @@ int main ()
             ba = (struct sockaddr_in *) ifa->ifa_broadaddr;
             baddr = inet_ntoa(ba->sin_addr);
 
-            printf("%s ", ifa->ifa_name);
-            printf("%d ", ifa->ifa_flags);
-            printf("%s ", addr);
-            printf("%s ", naddr);
-            printf("%s\n", baddr);
+            printf("%s %d %s %s %s\n", ifa->ifa_name, ifa->ifa_flags, addr), naddr, baddr;
         }
     }
 
