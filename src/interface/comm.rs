@@ -352,12 +352,6 @@ impl Drop for Socket {
     }
 }
 
-pub fn read_netdevs() -> Vec<GenIpaddr> {
-    let mut ips = vec!();
-    for net_device in read_to_string(NET_DEV_FILENAME).expect("No net_devices file present!").split('\n') {
-        if net_device == "" {continue;}
-        let genipopt = GenIpaddr::from_string(net_device);
-        ips.push(genipopt.expect("Could not parse device ip address from net_devices file"));
-    }
-    return ips;
+pub fn getifaddrs_from_file() -> String {
+    read_to_string(NET_DEV_FILENAME).expect("No net_devices file present!").to_owned()
 }
