@@ -5,8 +5,8 @@ use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
-
 use super::sys_constants::*;
+use super::net_constants::*;
 use super::fs_constants::*;
 
 impl Cage {
@@ -33,6 +33,7 @@ impl Cage {
                             match *inode {
                                 Inode::File(ref mut f) => {f.refcount += 1;}
                                 Inode::CharDev(ref mut f) => {f.refcount += 1;}
+                                Inode::Socket(ref mut f) => {f.refcount += 1;}
                                 Inode::Dir(ref mut f) => {f.refcount += 1;}
                             }
                         }
@@ -43,7 +44,11 @@ impl Cage {
                     }
                     Socket(socket_filedesc_obj) => {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().refcnt += 1;
+                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
+                        }
+                        if let Some(inodenum) = socket_filedesc_obj.optinode {
+                            if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
+                                sock.refcount += 1; } 
                         }
                     }
                     _ => {}
