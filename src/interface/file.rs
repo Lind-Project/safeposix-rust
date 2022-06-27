@@ -84,8 +84,8 @@ fn assert_is_allowed_filename(filename: &String) {
     }
 }
 
-pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-    EmulatedFile::new(filename, create)
+pub fn openfile(filename: String, create: bool, largefile: bool) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new(filename, create, largefile)
 }
 
 #[derive(Debug)]
@@ -96,7 +96,8 @@ pub struct EmulatedFile {
     realfobj: Arc<Mutex<File>>,
     filesize: usize,
     rawfd: i32,
-    mapsize: usize
+    mapsize: usize,
+    largefile: bool
 }
 
 pub fn pathexists(filename: String) -> bool {
@@ -107,7 +108,7 @@ pub fn pathexists(filename: String) -> bool {
 
 impl EmulatedFile {
 
-    fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+    fn new(filename: String, create: bool, largefile: bool) -> std::io::Result<EmulatedFile> {
         assert_is_allowed_filename(&filename);
 
         if OPEN_FILES.contains(&filename) {
@@ -132,7 +133,10 @@ impl EmulatedFile {
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len() as usize; 
 
-        let mapsize = ((filesize / MAP_1MB) + 1) * MAP_1MB;
+        let mut granularity = MAP_1MB;
+        if largefile { granularity = MAP_1GB };
+
+        let mapsize = ((filesize / granularity) + 1) * granularity;
 
         f.set_len(mapsize as u64)?;
 
@@ -142,7 +146,7 @@ impl EmulatedFile {
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
-        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(Some(emfile))), realfobj: Arc::new(Mutex::new(f)), filesize: filesize, rawfd: rawfd, mapsize: mapsize})
+        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(Some(emfile))), realfobj: Arc::new(Mutex::new(f)), filesize: filesize, rawfd: rawfd, mapsize: mapsize, largefile: largefile})
     }
 
     pub fn close(&self) -> std::io::Result<()> {
@@ -165,7 +169,10 @@ impl EmulatedFile {
     fn remap_file(&mut self) {
         let emfile: Vec<u8>;
 
-        self.mapsize = ((self.filesize / MAP_1MB) + 1) * MAP_1MB;
+        let mut granularity = MAP_1MB;
+        if self.largefile { granularity = MAP_1GB };
+
+        self.mapsize = ((self.filesize / granularity) + 1) * granularity;
 
         let realfobj = self.realfobj.lock();
         let _lenres = realfobj.set_len(self.mapsize as u64);
@@ -242,9 +249,9 @@ impl EmulatedFile {
         let fileslice = &mut fobj[offset..(offset + length)];
         fileslice.copy_from_slice(buf);
 
-        // unsafe {
-        //     let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
-        // }
+        unsafe {
+            let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
+        }
 
         Ok(length)
     }
