@@ -123,7 +123,11 @@ impl Cage {
                 Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
             }
 
-            let largefile = !(flags & O_RDONLY);
+            let mut largefile = 
+            if 0 != (flags & O_RDONLY) {
+                largefile = false;
+                println!("turning off largefile, rdonly");
+            }
 
             //If the file is a regular file, open the file object
             if is_reg(mode) {
