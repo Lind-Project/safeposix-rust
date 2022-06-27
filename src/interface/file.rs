@@ -11,7 +11,7 @@ use std::env;
 use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 pub use std::ffi::CStr as RustCStr;
-use std::io::{SeekFrom, Seek, Read, Write, Cursor};
+use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::{SyncLazy as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -132,7 +132,7 @@ impl EmulatedFile {
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len() as usize; 
 
-        let mapsize = ((filesize / MAP_1GB) + 1) * MAP_1GB;
+        let mapsize = ((filesize / MAP_1MB) + 1) * MAP_1MB;
 
         f.set_len(mapsize as u64)?;
 
@@ -166,7 +166,7 @@ impl EmulatedFile {
     fn remap_file(&mut self) {
         let emfile: Vec<u8>;
 
-        self.mapsize = ((self.filesize / MAP_1GB) + 1) * MAP_1GB;
+        self.mapsize = ((self.filesize / MAP_1MB) + 1) * MAP_1MB;
 
         let realfobj = self.realfobj.lock();
         let _lenres = realfobj.set_len(self.mapsize as u64);
@@ -242,6 +242,10 @@ impl EmulatedFile {
 
         let fileslice = &mut fobj[offset..(offset + length)];
         fileslice.copy_from_slice(buf);
+
+        unsafe {}
+            let _syncret = msync(fileslice.as_ptr(), mapsize, MS_ASYNC);
+        }
 
         Ok(length)
     }
