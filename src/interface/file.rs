@@ -139,7 +139,6 @@ impl EmulatedFile {
         let emfile: Vec<u8>;
         unsafe {
             let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
-            let _syncret = msync(filemap_addr, mapsize, MS_ASYNC);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
@@ -243,7 +242,7 @@ impl EmulatedFile {
         let fileslice = &mut fobj[offset..(offset + length)];
         fileslice.copy_from_slice(buf);
 
-        unsafe {}
+        unsafe {
             let _syncret = msync(fileslice.as_ptr(), mapsize, MS_ASYNC);
         }
 
