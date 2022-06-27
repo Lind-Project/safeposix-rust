@@ -243,7 +243,7 @@ impl EmulatedFile {
         fileslice.copy_from_slice(buf);
 
         unsafe {
-            let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, mapsize, MS_ASYNC);
+            let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
         }
 
         Ok(length)
