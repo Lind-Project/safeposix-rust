@@ -124,11 +124,10 @@ impl Cage {
             }
 
             println!("setting largefile");
-
-            let mut largefile = false;
-            if 0 == (flags & O_RDONLY) {
-                largefile = true;
-                println!("turning on largefile");
+            let mut largefile = true;
+            if (flags & O_RDWRFLAGS) == O_RDONLY {
+                largefile = false;
+                println!("turning off largefile");
             }
 
             //If the file is a regular file, open the file object
