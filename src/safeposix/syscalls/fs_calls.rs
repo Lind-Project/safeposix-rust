@@ -125,7 +125,7 @@ impl Cage {
 
             println!("setting largefile");
 
-            let mut largefile = flase;
+            let mut largefile = false;
             if 0 == (flags & O_RDONLY) {
                 largefile = true;
                 println!("turning on largefile");
