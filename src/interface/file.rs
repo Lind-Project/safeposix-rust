@@ -21,8 +21,6 @@ use std::convert::TryInto;
 
 pub const COUNTMAPSIZE : usize = 8;
 pub const MAP_1MB : usize = usize::pow(2, 20);
-pub const MAP_1GB : usize = usize::pow(2, 30);
-pub const MAP_16MB : usize = usize::pow(2, 23);
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -85,8 +83,8 @@ fn assert_is_allowed_filename(filename: &String) {
     }
 }
 
-pub fn openfile(filename: String, create: bool, largefile: bool) -> std::io::Result<EmulatedFile> {
-    EmulatedFile::new(filename, create, largefile)
+pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new(filename, create)
 }
 
 #[derive(Debug)]
@@ -98,7 +96,6 @@ pub struct EmulatedFile {
     filesize: usize,
     rawfd: i32,
     mapsize: usize,
-    largefile: bool
 }
 
 pub fn pathexists(filename: String) -> bool {
@@ -109,7 +106,7 @@ pub fn pathexists(filename: String) -> bool {
 
 impl EmulatedFile {
 
-    fn new(filename: String, create: bool, largefile: bool) -> std::io::Result<EmulatedFile> {
+    fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
         assert_is_allowed_filename(&filename);
 
         if OPEN_FILES.contains(&filename) {
@@ -134,21 +131,17 @@ impl EmulatedFile {
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len() as usize; 
 
-        let mut granularity = MAP_1MB;
-        if largefile { granularity = MAP_1MB };
-
-        let mapsize = ((filesize / granularity) + 1) * granularity;
+        let mapsize = ((filesize / MAP_1MB) + 1) * MAP_1MB;
 
         f.set_len(mapsize as u64)?;
 
         let emfile: Vec<u8>;
         unsafe {
             let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
-            // let _syncret = msync(filemap_addr, mapsize, MS_ASYNC);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
-        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(Some(emfile))), realfobj: Arc::new(Mutex::new(f)), filesize: filesize, rawfd: rawfd, mapsize: mapsize, largefile: largefile})
+        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(Some(emfile))), realfobj: Arc::new(Mutex::new(f)), filesize: filesize, rawfd: rawfd, mapsize: mapsize})
     }
 
     pub fn close(&self) -> std::io::Result<()> {
@@ -161,7 +154,6 @@ impl EmulatedFile {
             munmap(oldmap_addr as *mut c_void, self.mapsize);
         }
 
-
         let realfobj = self.realfobj.lock();
         realfobj.set_len(self.filesize as u64)?;
 
@@ -171,10 +163,7 @@ impl EmulatedFile {
     fn remap_file(&mut self) {
         let emfile: Vec<u8>;
 
-        let mut granularity = MAP_1MB;
-        if self.largefile { granularity = MAP_1MB };
-
-        self.mapsize = ((self.filesize / granularity) + 1) * granularity;
+        self.mapsize = ((self.filesize / MAP_1MB) + 1) * MAP_1MB;
 
         let realfobj = self.realfobj.lock();
         let _lenres = realfobj.set_len(self.mapsize as u64);
@@ -185,7 +174,6 @@ impl EmulatedFile {
 
             let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
             let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
-            // let _syncret = msync(newmap_addr, self.mapsize, MS_ASYNC);
 
             emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
         }
@@ -199,7 +187,6 @@ impl EmulatedFile {
             panic!("Something is wrong. {} is already smaller than length.", self.filename);
         }
         let realfobj = self.realfobj.lock();
-        // realfobj.set_len(length as u64)?;
         self.filesize = length;   
         drop(realfobj);
         if self.filesize > self.mapsize { self.remap_file() }
@@ -250,10 +237,6 @@ impl EmulatedFile {
 
         let fileslice = &mut fobj[offset..(offset + length)];
         fileslice.copy_from_slice(buf);
-
-        // unsafe {
-        //     let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
-        // }
 
         Ok(length)
     }

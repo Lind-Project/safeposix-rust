@@ -123,18 +123,11 @@ impl Cage {
                 Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
             }
 
-            // println!("setting largefile");
-            let mut largefile = true;
-            if (flags & O_RDWRFLAGS) == O_RDONLY {
-                largefile = false;
-                // println!("turning off largefile");
-            }
-
             //If the file is a regular file, open the file object
             if is_reg(mode) {
                 if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    vac.insert(interface::openfile(sysfilename, true, largefile).unwrap());
+                    vac.insert(interface::openfile(sysfilename, true).unwrap());
                 }
             }
 
