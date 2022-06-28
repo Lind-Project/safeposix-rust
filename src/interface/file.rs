@@ -250,9 +250,9 @@ impl EmulatedFile {
         let fileslice = &mut fobj[offset..(offset + length)];
         fileslice.copy_from_slice(buf);
 
-        // unsafe {
-        //     let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
-        // }
+        unsafe {
+            let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
+        }
 
         Ok(length)
     }
