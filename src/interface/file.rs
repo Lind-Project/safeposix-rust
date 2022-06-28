@@ -22,6 +22,7 @@ use std::convert::TryInto;
 pub const COUNTMAPSIZE : usize = 8;
 pub const MAP_1MB : usize = usize::pow(2, 20);
 pub const MAP_1GB : usize = usize::pow(2, 30);
+pub const MAP_16MB : usize = usize::pow(2, 23);
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -134,7 +135,7 @@ impl EmulatedFile {
         let filesize = f.metadata()?.len() as usize; 
 
         let mut granularity = MAP_1MB;
-        if largefile { granularity = MAP_1GB };
+        if largefile { granularity = MAP_16MB };
 
         let mapsize = ((filesize / granularity) + 1) * granularity;
 
@@ -171,7 +172,7 @@ impl EmulatedFile {
         let emfile: Vec<u8>;
 
         let mut granularity = MAP_1MB;
-        if self.largefile { granularity = MAP_1GB };
+        if self.largefile { granularity = MAP_16MB };
 
         self.mapsize = ((self.filesize / granularity) + 1) * granularity;
 
@@ -250,9 +251,9 @@ impl EmulatedFile {
         let fileslice = &mut fobj[offset..(offset + length)];
         fileslice.copy_from_slice(buf);
 
-        unsafe {
-            let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
-        }
+        // unsafe {
+        //     let _syncret = msync(fileslice.as_mut_ptr() as *mut c_void, length, MS_ASYNC);
+        // }
 
         Ok(length)
     }
