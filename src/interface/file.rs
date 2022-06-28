@@ -15,7 +15,7 @@ use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::lazy::{SyncLazy as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, msync, MS_ASYNC, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
 use std::ffi::c_void;
 use std::convert::TryInto;
 
