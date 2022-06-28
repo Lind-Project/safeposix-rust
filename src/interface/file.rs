@@ -144,7 +144,7 @@ impl EmulatedFile {
         let emfile: Vec<u8>;
         unsafe {
             let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
-            let _syncret = msync(filemap_addr, mapsize, MS_ASYNC);
+            // let _syncret = msync(filemap_addr, mapsize, MS_ASYNC);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
@@ -185,7 +185,7 @@ impl EmulatedFile {
 
             let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
             let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
-            let _syncret = msync(newmap_addr, self.mapsize, MS_ASYNC);
+            // let _syncret = msync(newmap_addr, self.mapsize, MS_ASYNC);
 
             emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
         }
