@@ -135,7 +135,7 @@ impl EmulatedFile {
         let filesize = f.metadata()?.len() as usize; 
 
         let mut granularity = MAP_1MB;
-        if largefile { granularity = MAP_16MB };
+        if largefile { granularity = MAP_1MB };
 
         let mapsize = ((filesize / granularity) + 1) * granularity;
 
@@ -172,7 +172,7 @@ impl EmulatedFile {
         let emfile: Vec<u8>;
 
         let mut granularity = MAP_1MB;
-        if self.largefile { granularity = MAP_16MB };
+        if self.largefile { granularity = MAP_1MB };
 
         self.mapsize = ((self.filesize / granularity) + 1) * granularity;
 
