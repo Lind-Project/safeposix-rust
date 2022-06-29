@@ -260,7 +260,7 @@ impl EmulatedFile {
 
         if length > self.filesize {
             self.filesize = length;
-            if self.filesize > self.mapsize { self.remap_file() }
+            while self.filesize > self.mapsize { self.remap_file() }
         }
     
         let mut fobjopt = self.fobj.lock();
