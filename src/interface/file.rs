@@ -244,8 +244,12 @@ impl EmulatedFile {
     // Reads entire file into bytes
     pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
         let mut stringbuf = vec![0; self.filesize];
-        let mut realfobj = self.realfobj.lock();
-        realfobj.read_exact(&mut stringbuf)?;
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
+
+        let fileslice = &fobj[0..self.filesize];
+        stringbuf.copy_from_slice(fileslice);
+
         Ok(stringbuf) // return new buf string
     }
 
@@ -253,24 +257,22 @@ impl EmulatedFile {
     pub fn writefile_from_bytes(&mut self, buf: &[u8]) -> std::io::Result<()> {
 
         let length = buf.len();
-        let offset = self.filesize;
 
-        if offset + length > self.filesize {
-            self.filesize = offset + length;
+        if length > self.filesize {
+            self.filesize = length;
             if self.filesize > self.mapsize { self.remap_file() }
         }
     
-        let mut realfobj = self.realfobj.lock();
-        if offset > self.filesize {
-            panic!("Seek offset extends past the EOF!");
-        }
-        realfobj.write(buf)?;
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
+
+        let fileslice = &mut fobj[0..length];
+        fileslice.copy_from_slice(buf);
 
         Ok(())
     }
 
     pub fn zerofill_at(&mut self, offset: usize, count: usize) -> std::io::Result<usize> {
-        let buf = vec![0; count];
 
         if offset + count > self.filesize {
             self.filesize = offset + count;
@@ -283,7 +285,7 @@ impl EmulatedFile {
             panic!("Seek offset extends past the EOF!");
         }
         let fileslice = &mut fobj[offset..(offset + count)];
-        fileslice.copy_from_slice(buf.as_slice());
+        fileslice.fill(0);
 
         Ok(count)
     }
