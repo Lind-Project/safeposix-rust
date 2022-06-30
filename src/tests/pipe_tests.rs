@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod pipe_tests {
+pub mod pipe_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, filesystem, dispatcher::*};
     use super::super::*;
@@ -19,22 +19,22 @@ mod pipe_tests {
         let byte_chunk: usize = 131072;
         let num_writes: usize = 8192;
 
-        lindrustinit();
+        lindrustinit(0);
 
-        let cage = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
 
 
         let filefd = cage.open_syscall("test1gb.txt", O_CREAT | O_WRONLY, S_IRWXA);
         
         let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
-        let mut bufptr = buf.as_mut_ptr();
+        let bufptr = buf.as_mut_ptr();
 
-        for i in 0..num_writes {
+        for _i in 0..num_writes {
             cage.write_syscall(filefd, bufptr, byte_chunk);
         }
 
         assert_eq!(cage.close_syscall(filefd), 0);
-        assert_eq!(cage.exit_syscall(), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -44,9 +44,9 @@ mod pipe_tests {
         let byte_chunk: usize = 131072;
         let num_writes: usize = 8192;
         
-        lindrustinit();
+        lindrustinit(0);
 
-        let cage1 = {CAGE_TABLE.read().unwrap().get(&1).unwrap().clone()};
+        let cage1 = {CAGE_TABLE.get(&1).unwrap().clone()};
 
         let mut pipefds = PipeArray {readfd: -1, writefd: -1};
         assert_eq!(cage1.pipe_syscall(&mut pipefds), 0);
@@ -54,7 +54,7 @@ mod pipe_tests {
 
         let sender = std::thread::spawn(move || {
 
-            let cage2 = {CAGE_TABLE.read().unwrap().get(&2).unwrap().clone()};
+            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
 
             assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
             assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
@@ -77,7 +77,7 @@ mod pipe_tests {
             }
             assert_eq!(cage2.close_syscall(0), 0);
 
-            assert_eq!(cage2.exit_syscall(), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
 
         });
         
@@ -87,10 +87,10 @@ mod pipe_tests {
 
         let filefd = cage1.open_syscall("test1gb.txt", O_RDONLY, S_IRWXA);
         
-        for i in 0..num_writes {
+        for _i in 0..num_writes {
 
             let mut buf: Vec<u8> = Vec::with_capacity(byte_chunk);
-            let mut bufptr = buf.as_mut_ptr();
+            let bufptr = buf.as_mut_ptr();
             unsafe { buf.set_len(byte_chunk); }
 
             cage1.read_syscall(filefd, bufptr, byte_chunk);
@@ -102,7 +102,7 @@ mod pipe_tests {
 
         sender.join().unwrap();
 
-        assert_eq!(cage1.exit_syscall(), 0);
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
 
         lindrustfinalize();
     }

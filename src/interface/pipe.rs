@@ -4,9 +4,11 @@
 
 #![allow(dead_code)]
 use crate::interface;
+use crate::interface::errnos::{Errno, syscall_error};
 
+use parking_lot::Mutex;
 use std::slice;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
@@ -59,7 +61,7 @@ impl EmulatedPipe {
 
     // Write length bytes from pointer into pipe
     // BUG: This only currently works as SPSC
-    pub fn write_to_pipe(&self, ptr: *const u8, length: usize) -> usize {
+    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, blocking: bool) -> i32 {
 
         let mut bytes_written = 0;
 
@@ -68,21 +70,26 @@ impl EmulatedPipe {
             slice::from_raw_parts(ptr, length)
         };
 
-        let mut write_end = self.write_end.lock().unwrap();
+        let mut write_end = self.write_end.lock();
+
+        let pipe_space = write_end.remaining();
+        if blocking && (pipe_space == self.size) {
+            return -1;
+        }
 
         while bytes_written < length {
-            let bytes_to_write = min(length, bytes_written + write_end.remaining());
+            let bytes_to_write = min(length, bytes_written as usize + write_end.remaining());
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
         }   
 
-        bytes_written
+        bytes_written as i32
     }
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
     // BUG: This only currently works as SPSC
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize) -> usize {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, blocking: bool) -> i32 {
 
         let mut bytes_read = 0;
 
@@ -91,16 +98,21 @@ impl EmulatedPipe {
             slice::from_raw_parts_mut(ptr, length)
         };
 
-        let mut read_end = self.read_end.lock().unwrap();
+        let mut read_end = self.read_end.lock();
+        let mut pipe_space = read_end.len();
+        if blocking && (pipe_space == 0) {
+            return -1;
+        }
 
         while bytes_read < length {
-            if (read_end.len() == 0) & self.eof.load(Ordering::Relaxed) { break; }
-            let bytes_to_read = min(length, bytes_read + read_end.len());
+            pipe_space = read_end.len();
+            if (pipe_space == 0) & self.eof.load(Ordering::Relaxed) { break; }
+            let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
         }
 
-        bytes_read
+        bytes_read as i32
     }
 
 }

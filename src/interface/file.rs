@@ -3,19 +3,25 @@
 // File related interface
 #![allow(dead_code)]
 
-use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+use parking_lot::Mutex;
+use std::sync::{Arc};
+use dashmap::DashSet;
+use std::fs::{self, File, OpenOptions, canonicalize};
 use std::env;
 use std::slice;
 pub use std::path::{PathBuf as RustPathBuf, Path as RustPath, Component as RustPathComponent};
 pub use std::ffi::CStr as RustCStr;
 use std::io::{SeekFrom, Seek, Read, Write};
-pub use std::lazy::SyncLazy as RustLazyGlobal;
+pub use std::sync::{LazyLock as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use std::ffi::c_void;
+use std::convert::TryInto;
 
-static OPEN_FILES: RustLazyGlobal<Arc<Mutex<HashSet<String>>>> = RustLazyGlobal::new(|| Arc::new(Mutex::new(HashSet::new())));
+
+
+static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
 pub fn listfiles() -> Vec<String> {
     let paths = fs::read_dir(&RustPath::new(
@@ -33,7 +39,7 @@ pub fn listfiles() -> Vec<String> {
 }
 
 pub fn removefile(filename: String) -> std::io::Result<()> {
-    let openfiles = OPEN_FILES.lock().unwrap();
+    let openfiles = &OPEN_FILES;
 
     if openfiles.contains(&filename) {
         panic!("FileInUse");
@@ -41,7 +47,7 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
-    let absolute_filename = fs::canonicalize(&path)?; //will return an error if the file does not exist
+    let absolute_filename = canonicalize(&path)?; //will return an error if the file does not exist
 
     fs::remove_file(absolute_filename)?;
 
@@ -80,6 +86,7 @@ pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile>
     EmulatedFile::new(filename, create)
 }
 
+#[derive(Debug)]
 pub struct EmulatedFile {
     filename: String,
     abs_filename: RustPathBuf,
@@ -98,9 +105,7 @@ impl EmulatedFile {
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
         assert_is_allowed_filename(&filename);
 
-        let mut openfiles = OPEN_FILES.lock().unwrap();
-
-        if openfiles.contains(&filename) {
+        if OPEN_FILES.contains(&filename) {
             panic!("FileInUse");
         }
 
@@ -118,7 +123,7 @@ impl EmulatedFile {
 
         let absolute_filename = fs::canonicalize(&path)?;
 
-        openfiles.insert(filename.clone());
+        OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len();
 
         Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
@@ -126,9 +131,7 @@ impl EmulatedFile {
     }
 
     pub fn close(&self) -> std::io::Result<()> {
-        let mut openfiles = OPEN_FILES.lock().unwrap();
-
-        openfiles.remove(&self.filename);
+        OPEN_FILES.remove(&self.filename);
         Ok(())
     }
 
@@ -140,7 +143,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let fobj = f.lock().unwrap();
+                let fobj = f.lock();
                 fobj.set_len(length as u64)?;
                 self.filesize = length;         
                 Ok(())
@@ -158,7 +161,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                   panic!("Seek offset extends past the EOF!");
                 }
@@ -182,7 +185,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
@@ -198,39 +201,35 @@ impl EmulatedFile {
         Ok(bytes_written)
     }
 
-    // Reads entire file into provided C-buffer
-    pub fn readfile_to_new_string(&self, offset: usize) -> std::io::Result<String> {
-
+    // Reads entire file into bytes
+    pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
 
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut stringbuf = String::new();
-                let mut fobj = f.lock().unwrap();
-                if offset > self.filesize {
-                    panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                fobj.read_to_string(&mut stringbuf)?;
+                let mut stringbuf = Vec::new();
+                let mut fobj = f.lock();
+                fobj.read_to_end(&mut stringbuf)?;
                 Ok(stringbuf) // return new buf string
             }
         }
     }
 
-    // Write to entire file from provided C-buffer
-    pub fn writefile_from_string(&mut self, buf: String, offset: usize) -> std::io::Result<()> {
+    // Write to entire file from provided bytes
+    pub fn writefile_from_bytes(&mut self, buf: &[u8]) -> std::io::Result<()> {
 
         let length = buf.len();
-
+        let offset = self.filesize;
+    
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
                 fobj.seek(SeekFrom::Start(offset as u64))?;
-                fobj.write(buf.as_bytes())?;
+                fobj.write(buf)?;
             }
         }
 
@@ -248,7 +247,7 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => { 
-                let mut fobj = f.lock().unwrap();
+                let mut fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
@@ -267,11 +266,191 @@ impl EmulatedFile {
     //gets the raw fd handle (integer) from a rust fileobject
     pub fn as_fd_handle_raw_int(&self) -> i32 {
         if let Some(wrapped_barefile) = &self.fobj {
-            wrapped_barefile.lock().unwrap().as_raw_fd() as i32
+            wrapped_barefile.lock().as_raw_fd() as i32
         } else {
             -1
         }
     }
+}
+
+pub const COUNTMAPSIZE : usize = 8;
+pub const MAP_1MB : usize = usize::pow(2, 20);
+
+#[derive(Debug)]
+pub struct EmulatedFileMap {
+    filename: String,
+    abs_filename: RustPathBuf,
+    fobj: Arc<Mutex<File>>,
+    map: Arc<Mutex<Option<Vec<u8>>>>,
+    count: usize,
+    countmap:  Arc<Mutex<Option<Vec<u8>>>>,
+    mapsize: usize
+}
+
+pub fn mapfilenew(filename: String) -> std::io::Result<EmulatedFileMap> {
+    EmulatedFileMap::new(filename)
+}
+
+impl EmulatedFileMap {
+
+    fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
+        // create new file like a normal emulated file, but always create
+        assert_is_allowed_filename(&filename);
+
+        let openfiles = &OPEN_FILES;
+
+        if openfiles.contains(&filename) {
+            panic!("FileInUse");
+        }
+
+        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        let absolute_filename = canonicalize(&path)?;
+        openfiles.insert(filename.clone());
+
+        let mapsize = MAP_1MB - COUNTMAPSIZE;   
+        // set the file equal to where were mapping the count and the actual map
+        let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
+
+        let map : Vec::<u8>;
+        let countmap : Vec::<u8>;
+
+        // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
+        unsafe {
+            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
+            let map_ptr = map_addr as *mut u8;
+            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
+        }
+        
+        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
+
+    }
+
+    pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
+
+        let writelen = bytes_to_write.len();
+        
+        // if we're writing past the current map, increase the map another 1MB
+        if writelen + self.count > self.mapsize {
+            self.extend_map();
+        }
+
+        let mut mapopt = self.map.lock();
+        let map = mapopt.as_deref_mut().unwrap();
+
+        let mapslice = &mut map[self.count..(self.count + writelen)];
+        mapslice.copy_from_slice(bytes_to_write);
+        self.count += writelen;
+    
+
+        // update the bytes written in the map portion
+        let mut countmapopt = self.countmap.lock();
+        let countmap = countmapopt.as_deref_mut().unwrap();
+        countmap.copy_from_slice(&self.count.to_be_bytes());
+
+        Ok(())
+    }
+
+    fn extend_map(&mut self) {
+
+        // open count and map to resize mmap, and file to increase file size
+        let mut mapopt = self.map.lock();
+        let map = mapopt.take().unwrap();
+        let mut countmapopt = self.countmap.lock();
+        let countmap = countmapopt.take().unwrap();
+        let f = self.fobj.lock();
+
+        // add another 1MB to mapsize
+        let new_mapsize = self.mapsize + MAP_1MB;
+        let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
+
+        let newmap : Vec::<u8>;
+        let newcountmap : Vec::<u8>;
+
+        // destruct count and map and re-map
+        unsafe {
+            let (old_count_map_addr, countlen, _countcap) = countmap.into_raw_parts();
+            assert_eq!(COUNTMAPSIZE, countlen);
+            let (_old_map_addr, len, _cap) = map.into_raw_parts();
+            assert_eq!(self.mapsize, len);
+            let map_addr = mremap(old_count_map_addr as *mut c_void, COUNTMAPSIZE + self.mapsize, COUNTMAPSIZE + new_mapsize, MREMAP_MAYMOVE);
+
+            newcountmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
+            let map_ptr = map_addr as *mut u8;
+            newmap =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), new_mapsize, new_mapsize);
+        }
+
+        // replace maps
+        mapopt.replace(newmap);
+        countmapopt.replace(newcountmap);
+        self.mapsize = new_mapsize;
+    }
+
+    pub fn close(&self) -> std::io::Result<()> {
+        // remove file as open file and deconstruct map
+        let openfiles = &OPEN_FILES;
+        openfiles.remove(&self.filename);
+
+        let mut mapopt = self.map.lock();
+        let map = mapopt.take().unwrap();
+        let mut countmapopt = self.countmap.lock();
+        let countmap = countmapopt.take().unwrap();
+
+        unsafe {
+
+            let (countmap_addr, countlen, _countcap) = countmap.into_raw_parts();
+            assert_eq!(COUNTMAPSIZE, countlen);
+            munmap(countmap_addr as *mut c_void, COUNTMAPSIZE);
+
+            let (map_addr, len, _cap) = map.into_raw_parts();
+            assert_eq!(self.mapsize, len);
+            munmap(map_addr as *mut c_void, self.mapsize);
+        }
+    
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct ShmFile {
+    fobj: Arc<Mutex<File>>,
+    key: i32,
+    size: usize
+}
+
+pub fn new_shm_backing(key: i32, size: usize) -> std::io::Result<ShmFile> {
+    ShmFile::new(key, size)
+}
+
+// Mimic shared memory in Linux by creating a file backing and truncating it to the segment size
+// We can then safely unlink the file while still holding a descriptor to that segment,
+// which we can use to map shared across cages.
+impl ShmFile {
+    fn new(key: i32, size: usize) -> std::io::Result<ShmFile> {
+
+        // open file "shm-#id"
+        let filename = format!("{}{}", "shm-", key);
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        // truncate file to size
+        f.set_len(size as u64)?;
+        // unlink file
+        fs::remove_file(filename)?;
+        let shmfile = ShmFile {fobj: Arc::new(Mutex::new(f)), key: key, size: size};
+
+        Ok(shmfile)
+    }
+
+    //gets the raw fd handle (integer) from a rust fileobject
+    pub fn as_fd_handle_raw_int(&self) -> i32 {
+        self.fobj.lock().as_raw_fd() as i32
+    }
+}
+
+// convert a series of big endian bytes to a size
+pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
+    let sizearray : [u8; 8] = bytes_to_write.try_into().unwrap();
+    usize::from_be_bytes(sizearray)
 }
 
 #[cfg(test)]

@@ -6,19 +6,24 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-pub use std::collections::HashMap as RustHashMap;
+pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
+pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize};
+pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
-pub use std::sync::{RwLock as RustLock, Arc as RustRfc};
-use std::sync::{Mutex, Condvar};
+pub use std::sync::{Arc as RustRfc};
+pub use parking_lot::{RwLock as RustLock, Mutex, Condvar};
 
 use libc::mmap;
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 
-pub use serde_json::{to_string as serde_serialize_to_string, from_str as serde_deserialize_from_string};
+pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
+
+use crate::interface::errnos::{VERBOSE};
 
 pub fn log_from_ptr(buf: *const u8, length: usize) {
     if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
@@ -31,6 +36,12 @@ pub fn log_to_stdout(s: &str) {
     print!("{}", s);
 }
 
+pub fn log_verbose(s: &str) {
+    if *VERBOSE.get().unwrap() > 0 {
+        log_to_stdout(s);
+    }
+}
+
 // Print text to stderr
 pub fn log_to_stderr(s: &str) {
     eprintln!("{}", s);
@@ -39,6 +50,10 @@ pub fn log_to_stderr(s: &str) {
 // Flush contents of stdout
 pub fn flush_stdout() {
     io::stdout().flush().unwrap();
+}
+
+pub fn get_errno() -> i32 {
+    (unsafe{*libc::__errno_location()}) as i32
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
@@ -52,8 +67,29 @@ pub fn fillzero(bufptr: *mut u8, count: usize) -> i32 {
     count as i32
 }
 
+pub fn fill(bufptr: *mut u8, count: usize, values:&Vec<u8>) -> i32 {
+    let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
+    slice.copy_from_slice(&values[..count]);
+    count as i32
+}
+
+pub fn copy_fromrustdeque_sized(bufptr: *mut u8, count: usize, vecdeq: &RustDeque<u8>) {
+    let (slice1, slice2) = vecdeq.as_slices();
+    if slice1.len() >= count {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, count);}
+    } else {
+        unsafe {std::ptr::copy(slice1.as_ptr(), bufptr, slice1.len());}
+        unsafe {std::ptr::copy(slice2.as_ptr(), bufptr.wrapping_offset(slice1.len() as isize), count - slice1.len());}
+    }
+}
+
+pub fn extend_fromptr_sized(bufptr: *const u8, count: usize, vecdeq: &mut RustDeque<u8>) {
+    let byteslice = unsafe {std::slice::from_raw_parts(bufptr, count)};
+    vecdeq.extend(byteslice.iter());
+}
+
 // Wrapper to return a dictionary (hashmap)
-pub fn new_hashmap<K, V>() -> RustHashMap<K, V> {
+pub fn new_hashmap<K: std::cmp::Eq + std::hash::Hash, V>() -> RustHashMap<K, V> {
     RustHashMap::new()
 }
 
@@ -71,24 +107,29 @@ pub struct AdvisoryLock {
     advisory_lock: RustRfc<Mutex<i32>>,
     advisory_condvar: Condvar
 }
+
 impl AdvisoryLock {
     pub fn new() -> Self {
         Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
     }
 
     pub fn lock_ex(&self) {
-        let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
-                                                               |guard| {*guard != 0}).unwrap();
+        let mut waitedguard = self.advisory_lock.lock();
+        while *waitedguard != 0 {
+            self.advisory_condvar.wait(&mut waitedguard);
+        }
         *waitedguard = -1;
     }
 
     pub fn lock_sh(&self) {
-        let mut waitedguard = self.advisory_condvar.wait_while(self.advisory_lock.lock().unwrap(), 
-                                                               |guard| {*guard < 0}).unwrap();
+        let mut waitedguard = self.advisory_lock.lock();
+        while *waitedguard < 0 {
+            self.advisory_condvar.wait(&mut waitedguard);
+        }
         *waitedguard += 1;
     }
     pub fn try_lock_ex(&self) -> bool {
-        if let Ok(mut guard) = self.advisory_lock.try_lock() {
+        if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard == 0 {
               *guard = -1;
               return true
@@ -97,7 +138,7 @@ impl AdvisoryLock {
         false
     }
     pub fn try_lock_sh(&self) -> bool {
-        if let Ok(mut guard) = self.advisory_lock.try_lock() {
+        if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard >= 0 {
               *guard += 1;
               return true
@@ -107,7 +148,7 @@ impl AdvisoryLock {
     }
 
     pub fn unlock(&self) -> bool {
-        let mut guard = self.advisory_lock.lock().unwrap();
+        let mut guard = self.advisory_lock.lock();
 
         if *guard < 0 {
             *guard -= 1;

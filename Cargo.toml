@@ -1,20 +1,23 @@
 [package]
 name = "rustposix"
 version = "0.1.0"
-authors = ["Nicholas Smith Renner <nrenner@nyu.edu>"]
+authors = ["Nicholas Smith Renner <nrenner@nyu.edu>", "Jonathan Eli Singer <jes965@nyu.edu>", "Tristan J. Brigham <tristanbrigham22@gmail.com>"]
 edition = "2018"
 
 [lib]
 path = "src/lib.rs"
 crate-type = ["cdylib"]
+test = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_cbor = "0.10"
 libc = "0.2"
 ringbuf = "0.2.6"
+dashmap = { version = "5.1", features=["serde"] }
+parking_lot = "0.12"
 
 [[bin]]
 name = "lind_fs_utils"

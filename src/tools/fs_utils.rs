@@ -2,6 +2,7 @@
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
 #![feature(result_into_ok_or_err)]
+#![feature(duration_constants)]
 #![allow(unused)]
 
 /// Author: Jonathan Singer
@@ -103,12 +104,16 @@ update [hostsource] [linddest]  : Copies files from the host file system into th
 }
 
 fn main() {
-    lindrustinit();
+    lindrustinit(0); // no verbosity
     let mut args = env::args();
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
-                        filedescriptortable: interface::RustLock::new(interface::RustHashMap::new())};
+                        filedescriptortable: interface::RustHashMap::new(),
+                        getgid: interface::RustAtomicI32::new(-1), 
+                        getuid: interface::RustAtomicI32::new(-1), 
+                        getegid: interface::RustAtomicI32::new(-1), 
+                        geteuid: interface::RustAtomicI32::new(-1)};
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {
@@ -152,13 +157,15 @@ fn main() {
         }
 
         "format" => {
-            let mut metadata = FS_METADATA.write().unwrap();
-            *metadata = FilesystemMetadata::blank_fs_init();
-            drop(metadata);
-            load_fs_special_files(&utilcage);
+            lind_deltree(&utilcage, "/"); //This doesn't actually fully remove all of the linddata files... TODO: debug
 
-            let metadata2 = FS_METADATA.read().unwrap();
-            persist_metadata(&*metadata2);
+            let mut logobj = LOGMAP.write();
+            let log = logobj.take().unwrap();
+            let _close = log.close().unwrap();
+            drop(logobj);
+            let _logremove = interface::removefile(LOGFILENAME.to_string());
+
+            format_fs();
             return;
         }
 

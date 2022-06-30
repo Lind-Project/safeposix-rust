@@ -1,3 +1,5 @@
+#![allow(dead_code)] //suppress warning for these functions not being used in main library target
+
 use std::fs::File;
 use std::io::{Read, prelude};
 use std::ffi::CStr;
@@ -7,6 +9,8 @@ use crate::safeposix::{cage::*, filesystem::*};
 use crate::interface::errnos::{Errno, syscall_error};
 use crate::interface::types::{ClippedDirent, CLIPPED_DIRENT_SIZE};
 use crate::interface;
+
+//we currently handle symlinks as normal files
 
 pub fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
     if hostfilepath.exists() {
@@ -93,9 +97,8 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
 pub fn cp_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str, create_missing_dirs: bool) {
     if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
-            println!("Ignore broken symlink at {:?} on host fs", hostfilepath);
-            return;
-        } //if read_link succeeds it's a symlink
+            println!("following symlink at {:?} on host fs", hostfilepath);
+        } //if read_link succeeds it's a symlink, whose destination must exist because of the nature of the .exists function
     } else {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
         return
