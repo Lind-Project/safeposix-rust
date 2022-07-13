@@ -2,9 +2,9 @@
 // Error handling for SafePOSIX
 use crate::interface;
 
-use std::lazy::SyncOnceCell;
+use std::sync::OnceLock;
 
-pub static VERBOSE: SyncOnceCell<isize> = SyncOnceCell::new();
+pub static VERBOSE: OnceLock<isize> = OnceLock::new();
 
 
 //A macro which takes the enum and adds to it a try_from trait which can convert values back to
