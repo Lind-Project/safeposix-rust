@@ -469,11 +469,6 @@ pub extern "C" fn lindrustfinalize() {
         cage.exit_syscall(EXIT_SUCCESS);
     }
 
-    // remove any open domain socket inodes
-    for truepath in NET_METADATA.get_domainsock_paths() {
-        remove_domain_sock(truepath);
-    }
-
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {

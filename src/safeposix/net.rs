@@ -28,9 +28,8 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
-            domain_socket_table: interface::RustHashMap::new(),
-            revds_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
+            domain_conn_table: interface::RustHashMap::new()
         })
     ); //we want to check if fs exists before doing a blank init, but not for now
 
@@ -68,6 +67,32 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
     }
 }
 
+#[derive(Debug)]
+pub struct ConnCondVar {
+    lock: interface::RustRfc<interface::RustMutex<i32>>,
+    cv: interface::RustCondvar
+}
+
+impl ConnCondVar {
+    pub fn new() -> Self {
+        Self {lock: interface::RustRfc::new(interface::RustMutex::new(0)), cv: interface::RustCondvar::new()}
+    }
+
+    pub fn wait(&self) {
+        let mut guard = self.lock.lock();
+        *guard +=1;
+        self.cv.wait(&mut guard);
+    }
+
+    pub fn signal(&self) -> bool {
+        let guard = self.lock.lock();
+        if *guard == 1 {
+            self.cv.notify_all();
+            return true;
+        } else { return false; }
+    }
+}
+
 pub struct NetMetadata {
     pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed
     next_ephemeral_port_tcpv4: interface::RustRfc<interface::RustLock<u16>>,
@@ -75,10 +100,9 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
-    pub revds_table: interface::RustHashMap<interface::GenSockaddr, interface::GenSockaddr>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
-    pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
+    pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
+    pub domain_conn_table: interface::RustHashMap<interface::RustPathBuf, (interface::GenSockaddr, interface::RustRfc<ConnCondVar>)>
 }
 
 impl NetMetadata {
@@ -311,11 +335,5 @@ impl NetMetadata {
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
         }
-    }
-
-    pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
-        let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
-        for domainsocks in self.domain_socket_table.iter() { domainsock_paths.push(domainsocks.pair().0.clone()); } // get vector of domain sock table keys
-        domainsock_paths
     }
 }

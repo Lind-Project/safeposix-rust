@@ -72,7 +72,9 @@ pub struct SocketInode {
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
-    pub mtime: u64
+    pub mtime: u64,
+    #[serde(skip)]
+    pub pipe: i32
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]

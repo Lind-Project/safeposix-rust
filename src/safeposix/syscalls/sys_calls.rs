@@ -46,7 +46,9 @@ impl Cage {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
                             NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
                         }
-                        if let Some(inodenum) = socket_filedesc_obj.optinode {
+                    }
+                    DomainSocket(udsocket_filedesc_obj) => {
+                        if let Some(inodenum) = udsocket_filedesc_obj.inode {
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
                                 sock.refcount += 1; } 
                         }
@@ -91,6 +93,7 @@ impl Cage {
                File(f) => f.flags & O_CLOEXEC,
                Stream(s) => s.flags & O_CLOEXEC,
                Socket(s) => s.flags & O_CLOEXEC,
+               DomainSocket(s) => s.flags & O_CLOEXEC,
                Pipe(p) => p.flags & O_CLOEXEC,
                Epoll(p) => p.flags & O_CLOEXEC,
             } != 0 {

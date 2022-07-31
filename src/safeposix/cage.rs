@@ -21,6 +21,7 @@ pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
+    DomainSocket(DomainSocketDesc),
     Pipe(PipeDesc),
     Epoll(EpollDesc)
 }
@@ -45,9 +46,6 @@ pub struct StreamDesc {
 pub struct SocketDesc {
     pub mode: i32,
     pub domain: i32,
-    pub realdomain: i32,
-    pub reallocalpath: Option<interface::RustPathBuf>,
-    pub optinode: Option<usize>,
     pub socktype: i32,
     pub protocol: i32,
     pub options: i32,
@@ -59,6 +57,28 @@ pub struct SocketDesc {
     pub remoteaddr: Option<interface::GenSockaddr>,
     pub last_peek: interface::RustDeque<u8>,
     pub socketobjectid: Option<i32>,
+    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+}
+
+#[derive(Debug, Clone)]
+pub struct DomainSocketDesc {
+    pub mode: i32,
+    pub domain: i32,
+    pub localpath: Option<interface::RustPathBuf>,
+    pub inode: Option<usize>,
+    pub socktype: i32,
+    pub protocol: i32,
+    pub options: i32,
+    pub sndbuf: i32,
+    pub rcvbuf: i32,
+    pub pipe: i32,
+    pub remotepipe: i32,
+    pub flags: i32,
+    pub errno: i32,
+    pub localaddr: Option<interface::GenSockaddr>,
+    pub remoteaddr: Option<interface::GenSockaddr>,
+    pub state: ConnState,
+    pub last_peek: interface::RustDeque<u8>,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>
 }
 

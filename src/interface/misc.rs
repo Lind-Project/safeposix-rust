@@ -14,7 +14,7 @@ pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{Arc as RustRfc};
-pub use parking_lot::{RwLock as RustLock, Mutex, Condvar};
+pub use parking_lot::{RwLock as RustLock, Mutex as RustMutex, Condvar as RustCondvar};
 
 use libc::mmap;
 use std::ffi::c_void;
@@ -104,13 +104,13 @@ pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, 
 #[derive(Debug)]
 pub struct AdvisoryLock {
     //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
-    advisory_lock: RustRfc<Mutex<i32>>,
-    advisory_condvar: Condvar
+    advisory_lock: RustRfc<RustMutex<i32>>,
+    advisory_condvar: RustCondvar
 }
 
 impl AdvisoryLock {
     pub fn new() -> Self {
-        Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
+        Self {advisory_lock: RustRfc::new(RustMutex::new(0)), advisory_condvar: RustCondvar::new()}
     }
 
     pub fn lock_ex(&self) {
