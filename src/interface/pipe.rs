@@ -107,7 +107,8 @@ impl EmulatedPipe {
 
         while bytes_read < length {
             pipe_space = read_end.len();
-            if (pipe_space == 0) && (self.socket || self.eof.load(Ordering::Relaxed)){ break; }
+            if (pipe_space == 0) && self.eof.load(Ordering::Relaxed) { break; }
+            if (pipe_space == 0) && self.socket { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
