@@ -164,7 +164,7 @@ impl Cage {
         }
 
         // get next available pipe number, and set up pipe
-        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(UDSOCK_CAPACITY)) {
+        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(UDSOCK_CAPACITY, true)) {
             pipeno
         } else {
             return syscall_error(Errno::ENFILE, "bind", "no available pipe number could be found");

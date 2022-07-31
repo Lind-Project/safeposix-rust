@@ -17,8 +17,8 @@ const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 
-pub fn new_pipe(size: usize) -> EmulatedPipe {
-    EmulatedPipe::new_with_capacity(size)
+pub fn new_pipe(size: usize, socket: bool) -> EmulatedPipe {
+    EmulatedPipe::new_with_capacity(size, socket)
 }
 
 pub struct EmulatedPipe {
@@ -28,13 +28,14 @@ pub struct EmulatedPipe {
     pub refcount_read: AtomicU32,
     size: usize,
     eof: AtomicBool,
+    socket: bool
 }
 
 impl EmulatedPipe {
-    pub fn new_with_capacity(size: usize) -> EmulatedPipe {
+    pub fn new_with_capacity(size: usize, socket: bool) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: AtomicU32::new(1), refcount_read: AtomicU32::new(1), size: size, eof: AtomicBool::new(false)}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: AtomicU32::new(1), refcount_read: AtomicU32::new(1), size: size, eof: AtomicBool::new(false), socket: socket}
     }
 
     pub fn set_eof(&self) {
@@ -106,7 +107,7 @@ impl EmulatedPipe {
 
         while bytes_read < length {
             pipe_space = read_end.len();
-            if (pipe_space == 0) & self.eof.load(Ordering::Relaxed) { break; }
+            if (pipe_space == 0) && (self.socket || self.eof.load(Ordering::Relaxed)){ break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;

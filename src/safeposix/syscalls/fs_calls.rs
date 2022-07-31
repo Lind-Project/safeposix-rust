@@ -1847,7 +1847,7 @@ impl Cage {
         let actualflags = flags & flagsmask;
 
         // get next available pipe number, and set up pipe
-        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY)) {
+        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY, false)) {
             pipeno
         } else {
             return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
