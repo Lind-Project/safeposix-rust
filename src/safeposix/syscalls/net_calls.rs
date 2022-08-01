@@ -1196,6 +1196,10 @@ impl Cage {
                                     sock.refcount += 1; 
                                 } 
                             }; 
+
+                            newsockwithin.pipe = sockfdobj.pipe;
+                            let pipe = PIPE_TABLE.get(&newsockwithin.pipe).unwrap().clone();
+                            pipe.incr_ref(O_WRONLY);
                             
                             newsockwithin.state = ConnState::CONNECTED;
                             newsockwithin.remoteaddr = Some(remote_addr.clone());
