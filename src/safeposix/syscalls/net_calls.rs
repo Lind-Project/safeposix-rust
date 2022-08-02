@@ -421,21 +421,31 @@ impl Cage {
                             };
                             self.bind_inner_domain_socket(sockfdobj, &localaddr);
                         }
-                        let connvar = interface::RustRfc::new(ConnCondVar::new());
-                        let remotepathbuf = convpath(remoteaddr.path().clone());
-                        NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), connvar.clone()));
-                        connvar.wait();
 
-                        sockfdobj.state = ConnState::CONNECTED;
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
-
                         let pathclone = normpath(convpath(remoteaddr.path().clone()), self);
                         if let Some(inodenum) = metawalk(pathclone.as_path()) {                 
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
                                 sockfdobj.remotepipe = sock.pipe;
                             } 
                         }; 
-                        return 0;                        
+
+                        if sockfdobj.flags & O_NONBLOCK != 0 {
+                            //non-block connect
+                            let remotepathbuf = convpath(remoteaddr.path().clone());
+                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), None));
+                            sockfdobj.state = ConnState::INPROGRESS;
+                            return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
+                        } else {
+                            let connvar = interface::RustRfc::new(ConnCondVar::new());
+                            let remotepathbuf = convpath(remoteaddr.path().clone());
+                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), Some(connvar.clone())));
+                            connvar.wait();
+    
+                            sockfdobj.state = ConnState::CONNECTED;
+
+                            return 0;                        
+                        }
                     } else {
                         return syscall_error(Errno::EOPNOTSUPP, "connect", "Unkown protocol in connect");
                     }
@@ -727,7 +737,8 @@ impl Cage {
             DomainSocket(ref mut sockfdobj) => {
                 match sockfdobj.protocol {
                     IPPROTO_TCP => {
-                        if (sockfdobj.state != ConnState::CONNECTED) || (sockfdobj.remotepipe < 0) {
+
+                        if sockfdobj.state != ConnState::CONNECTED || sockfdobj.remotepipe < 0 {
                             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                         }
 
@@ -1170,9 +1181,12 @@ impl Cage {
                                 let dsconnobj = NET_METADATA.domain_conn_table.get(&localpathbuf);
 
                                 if let Some(ds) = dsconnobj {
-                                    if !ds.1.signal() { 
-                                        drop(ds);
-                                        continue;
+                                    // if its blocking it will have a connvar, signal it
+                                    if let Some(connvar) = &ds.1 {
+                                        if !connvar.signal() { 
+                                            drop(ds);
+                                            continue;
+                                        }
                                     }
                                     remote_addr = ds.0.clone();
                                     drop(ds);
@@ -1233,11 +1247,16 @@ impl Cage {
             if let Socket(ref mut sockfdobj) = &mut *filedesc_enum {
                 oldflags = sockfdobj.flags;
                 sockfdobj.flags |= O_NONBLOCK;
+            } else if let DomainSocket(ref mut sockfdobj) = &mut *filedesc_enum {
+                oldflags = sockfdobj.flags;
+                sockfdobj.flags |= O_NONBLOCK;
             } else {
                 return false;
             }
             let retval = self.recv_common_inner(&mut *filedesc_enum, bufptr, 1, flags, &mut None);
             if let Socket(ref mut sockfdobj) = &mut *filedesc_enum {
+                sockfdobj.flags = oldflags;
+            } else if let DomainSocket(ref mut sockfdobj) = &mut *filedesc_enum {
                 sockfdobj.flags = oldflags;
             } else {
                 unreachable!();
@@ -1324,6 +1343,24 @@ impl Cage {
                             }
                         }
 
+                        DomainSocket(ref mut sockfdobj) => {
+
+                            let remotepathbuf = convpath(sockfdobj.remoteaddr.unwrap().path().clone());
+                            let dsconnobj = NET_METADATA.domain_conn_table.get(&remotepathbuf);
+                            if sockfdobj.state == ConnState::INPROGRESS && dsconnobj.is_none() {
+                                    sockfdobj.state = ConnState::CONNECTED;
+                                    new_readfds.insert(*fd);
+                                    retval += 1;
+                            } else {
+                                drop(sockfdobj);
+                                drop(filedesc_enum);
+                                if self._nonblock_peek_read(*fd) {
+                                    new_readfds.insert(*fd);
+                                    retval += 1;
+                                }
+                            }
+                        }
+
                         //we don't support selecting streams
                         Stream(_) => {continue;}
 
@@ -1357,6 +1394,20 @@ impl Cage {
                             let mut sockobj = locksock.write();
                             if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
                                 sockobj.1 = ConnState::CONNECTED;
+                            } 
+                            
+                            //we always say sockets are writable? Even though this is not true
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        DomainSocket(ref mut sockfdobj) => {
+                            // check if we've made an in progress connection first
+
+                            let remotepathbuf = convpath(sockfdobj.remoteaddr.unwrap().path().clone());
+                            let dsconnobj = NET_METADATA.domain_conn_table.get(&remotepathbuf);
+                            if sockfdobj.state == ConnState::INPROGRESS && dsconnobj.is_none() {                                
+                                sockfdobj.state = ConnState::CONNECTED;
                             } 
                             
                             //we always say sockets are writable? Even though this is not true

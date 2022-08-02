@@ -102,7 +102,7 @@ pub struct NetMetadata {
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
-    pub domain_conn_table: interface::RustHashMap<interface::RustPathBuf, (interface::GenSockaddr, interface::RustRfc<ConnCondVar>)>
+    pub domain_conn_table: interface::RustHashMap<interface::RustPathBuf, (interface::GenSockaddr, Option<interface::RustRfc<ConnCondVar>>)>
 }
 
 impl NetMetadata {
