@@ -1286,6 +1286,7 @@ impl Cage {
                         sock.refcount -= 1; 
                         if sock.refcount == 0 {
                             if sock.linkcount == 0 {
+                                PIPE_TABLE.remove(&sock.pipe);
                                 drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
                             }
