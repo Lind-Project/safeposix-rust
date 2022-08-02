@@ -1410,9 +1410,11 @@ impl Cage {
                                 sockfdobj.state = ConnState::CONNECTED;
                             } 
                             
+                            if sockfdobj.state == ConnState::CONNECTED {
+                                new_writefds.insert(*fd);
+                                retval += 1;
+                            }
                             //we always say sockets are writable? Even though this is not true
-                            new_writefds.insert(*fd);
-                            retval += 1;
                         }
 
                         //we always say streams are writable?
