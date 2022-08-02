@@ -364,7 +364,6 @@ impl Cage {
                         sockfdobj.errno = 0;
                         if inprogress {
                             sockobj.1 = ConnState::INPROGRESS;
-                            println!("INPROGRESS\n");
                             return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
                         }
                         return 0;
@@ -1056,12 +1055,11 @@ impl Cage {
                                         vacant.insert(vec!(listeningsocket));
                                     } else {
                                         //if it returned an error, then don't insert it into new_readfds
-                                       continue;
-                                   }
+                                      continue;
+                                    }
                                 } //if it's already got a pending connection, add it!
 
                                 //if we reach here there is a pending connection
-                                println!("pending connection\n");
                                 new_readfds.insert(*fd);
                                 retval += 1;
                             } else if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
@@ -1072,8 +1070,7 @@ impl Cage {
                                 if sockfdobj.protocol == IPPROTO_UDP {
                                     new_readfds.insert(*fd);
                                     retval += 1;
-                                }
-                                else {
+                                } else {
                                     drop(sockfdobj);
                                     drop(filedesc_enum);
                                     drop(sockobj);
@@ -1440,25 +1437,20 @@ impl Cage {
 
                 //read
                 if events & POLLIN > 0 {reads.insert(fd);}
-                //if reads.is_empty(){println!("empty\n")} else {println!("not empty\n")};
                 //write
                 if events & POLLOUT > 0 {writes.insert(fd);}
                 //err
                 if events & POLLERR > 0 {errors.insert(fd);}
 
                 let mut mask: i16 = 0;
-                //if reads.is_empty(){println!("empty2\n")} else {println!("not empty2\n")};
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
                 if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO)) > 0 {
                     mask += if !reads.is_empty() {POLLIN} else {0};
-                   // if reads.is_empty(){println!("empty4\n")} else {println!("not empty4\n")};
                     mask += if !writes.is_empty() {POLLOUT} else {0};
                     mask += if !errors.is_empty() {POLLERR} else {0};
                     return_code += 1;
-                  // if reads.is_empty(){println!("hello\n")} else {println!("not empty\n")}; 
                 }
-                //if reads.is_empty(){println!("empty3\n")} else {println!("not empty3\n")};
                 structpoll.revents = mask;
             }
 
@@ -1576,8 +1568,6 @@ impl Cage {
                     poll_fds_vec.push(structpoll);
                   num_events += 1;
                 }
-                //pub use std::cmp::{max as rust_max, min as rust_min}; 
-                //let end_idx: i32 = rust_max(maxevents, poll_fds_vec.len() as i32);
                 
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, poll_fds_slice, timeout);
