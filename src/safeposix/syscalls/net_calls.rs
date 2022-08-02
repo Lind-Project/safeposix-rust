@@ -1346,16 +1346,18 @@ impl Cage {
 
                         DomainSocket(ref mut sockfdobj) => {
 
-                            let remotepathbuf = convpath(sockfdobj.remoteaddr.unwrap().path().clone());
-                            let dsconnobj = NET_METADATA.domain_conn_table.get(&remotepathbuf);
-                            if sockfdobj.state == ConnState::INPROGRESS && dsconnobj.is_none() {
-                                    sockfdobj.state = ConnState::CONNECTED;
-                                    new_readfds.insert(*fd);
-                                    retval += 1;
-                            } else {
+                            if sockfdobj.state == ConnState::INPROGRESS {
+                                let remotepathbuf = convpath(sockfdobj.remoteaddr.unwrap().path().clone());
+                                let dsconnobj = NET_METADATA.domain_conn_table.get(&remotepathbuf);
+                                if dsconnobj.is_none() { sockfdobj.state = ConnState::CONNECTED; }
+                            } 
+
+                            if sockfdobj.state == ConnState::CONNECTED {
+                                let mut nonblocking = false;
+                                if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                                 drop(sockfdobj);
                                 drop(filedesc_enum);
-                                if self._nonblock_peek_read(*fd) {
+                                if self._nonblock_peek_read(*fd) || nonblocking {
                                     new_readfds.insert(*fd);
                                     retval += 1;
                                 }
