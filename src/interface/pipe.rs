@@ -74,7 +74,7 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if blocking && (pipe_space == self.size) {
+        if blocking && (pipe_space == 0) {
             return -1;
         }
 
