@@ -1280,13 +1280,30 @@ impl Cage {
                 }
             }
             DomainSocket(socket_filedesc_obj) => {
+                let pipe = PIPE_TABLE.get(&socket_filedesc_obj.pipe).unwrap().clone();
+                pipe.decr_ref(O_WRONLY);
+                if pipe.get_write_ref() == 0 {
+                    // we're closing the last write end, lets set eof
+                    pipe.set_eof();
+                }
+                if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                    // last reference, lets remove it
+                    PIPE_TABLE.remove(&socket_filedesc_obj.pipe).unwrap();
+                }
+
                 if let Some(inodenum) = socket_filedesc_obj.inode {
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                     if let Inode::Socket(ref mut sock) = *inodeobj { 
                         sock.refcount -= 1; 
                         if sock.refcount == 0 {
                             if sock.linkcount == 0 {
-                                PIPE_TABLE.remove(&sock.pipe);
+                                let pipe = PIPE_TABLE.get(&sock.pipe).unwrap().clone();
+                                pipe.decr_ref(O_RDONLY);
+                                if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                                    // last reference, lets remove it
+                                    PIPE_TABLE.remove(&sock.pipe).unwrap();
+                                }
+
                                 drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
                             }

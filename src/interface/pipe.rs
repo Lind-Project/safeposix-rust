@@ -62,7 +62,7 @@ impl EmulatedPipe {
 
     // Write length bytes from pointer into pipe
     // BUG: This only currently works as SPSC
-    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, blocking: bool) -> i32 {
+    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_written = 0;
 
@@ -74,7 +74,7 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if blocking && (pipe_space == 0) {
+        if nonblocking && (pipe_space == 0) {
             return -1;
         }
 
@@ -90,7 +90,7 @@ impl EmulatedPipe {
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
     // BUG: This only currently works as SPSC
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, blocking: bool) -> i32 {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_read = 0;
 
@@ -101,7 +101,7 @@ impl EmulatedPipe {
 
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
-        if blocking && (pipe_space == 0) {
+        if nonblocking && (pipe_space == 0) {
             return -1;
         }
 
@@ -110,7 +110,6 @@ impl EmulatedPipe {
             if (pipe_space == 0) && self.eof.load(Ordering::Relaxed) { break; }
             if (pipe_space == 0) && self.socket && bytes_read > 0 { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
-            if bytes_to_read == 0 { continue; }
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
         }

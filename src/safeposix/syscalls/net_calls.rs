@@ -770,15 +770,13 @@ impl Cage {
 
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
-                        let mut retval = 0;
 
                         // get the remote socket pipe, read from it, and return bytes read
-                        let pipeopt = PIPE_TABLE.get(&sockfdobj.remotepipe);
-                        if let Some(pipe) = pipeopt {
-                            let mut nonblocking = false;
-                            if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                            retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
-                        } 
+                        let pipe = PIPE_TABLE.get(&sockfdobj.remotepipe).unwrap().clone();
+                        let mut nonblocking = false;
+                        if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                        let retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
+                        
 
                         if retval < 0 {
                             //If we have already read from a peek but have failed to read more, exit!
