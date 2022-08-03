@@ -110,6 +110,7 @@ impl EmulatedPipe {
             if (pipe_space == 0) && self.eof.load(Ordering::Relaxed) { break; }
             if (pipe_space == 0) && self.socket && bytes_read > 0 { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
+            if bytes_to_read == 0 { continue; }
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
         }
