@@ -1351,11 +1351,9 @@ impl Cage {
                             } 
 
                             if sockfdobj.state == ConnState::CONNECTED {
-                                let mut nonblocking = false;
-                                if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                                 drop(sockfdobj);
                                 drop(filedesc_enum);
-                                if self._nonblock_peek_read(*fd) || nonblocking {
+                                if self._nonblock_peek_read(*fd) {
                                     new_readfds.insert(*fd);
                                     retval += 1;
                                 }
