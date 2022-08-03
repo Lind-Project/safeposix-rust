@@ -102,6 +102,7 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
         if nonblocking && (pipe_space == 0) {
+            if self.socket && self.eof.load(Ordering::Relaxed) { return 0; }
             return -1;
         }
 
