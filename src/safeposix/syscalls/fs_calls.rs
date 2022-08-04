@@ -1193,6 +1193,16 @@ impl Cage {
                     NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
                 }
             }
+            DomainSocket(udsocket_filedesc_obj) => {
+                if udsocket_filedesc_obj.pipe > 0 {
+                    let pipe = PIPE_TABLE.get(&udsocket_filedesc_obj.pipe).unwrap().clone();
+                    pipe.incr_ref(O_WRONLY);
+                }
+                if udsocket_filedesc_obj.remotepipe > 0 {
+                    let remotepipe = PIPE_TABLE.get(&udsocket_filedesc_obj.remotepipe).unwrap().clone();
+                    remotepipe.incr_ref(O_RDONLY);
+                }
+            }
             Stream(_normalfile_filedesc_obj) => {
                 // no stream refs
             }
@@ -1222,6 +1232,9 @@ impl Cage {
             }
             Socket(ref mut socket_filedesc_obj) => {
                 socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
+            }
+            DomainSocket(ref mut udsocket_filedesc_obj) => {
+                udsocket_filedesc_obj.flags = udsocket_filedesc_obj.flags & !O_CLOEXEC;
             }
             Stream(ref mut stream_filedesc_obj) => {
                 stream_filedesc_obj.flags = stream_filedesc_obj.flags & !O_CLOEXEC;
