@@ -163,15 +163,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
         }
 
-        // get next available pipe number, and set up pipe
-        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(UDSOCK_CAPACITY, true)) {
-            pipeno
-        } else {
-            return syscall_error(Errno::ENFILE, "bind", "no available pipe number could be found");
-        };
-
         sockfdobj.localaddr = Some(localaddr.clone());
-        sockfdobj.pipe = pipenumber;
 
         let path = localaddr.path();
         //Check that path is not empty
@@ -195,7 +187,7 @@ impl Cage {
                 let newinode = Inode::Socket(SocketInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                     mode: effective_mode, linkcount: 1, refcount: 1,
-                    atime: time, ctime: time, mtime: time, pipe: pipenumber
+                    atime: time, ctime: time, mtime: time
                 });
 
                 let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
@@ -422,24 +414,23 @@ impl Cage {
                             self.bind_inner_domain_socket(sockfdobj, &localaddr);
                         }
 
+                        let (localpipenumber, remotepipenumber) = create_unix_sockpipes();
+                        if localpipenumber == -1 { return syscall_error(Errno::ENFILE, "connect", "no available pipe number could be found"); }
+
                         sockfdobj.remoteaddr = Some(remoteaddr.clone());
-                        let pathclone = normpath(convpath(remoteaddr.path().clone()), self);
-                        if let Some(inodenum) = metawalk(pathclone.as_path()) {                 
-                            if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                sockfdobj.remotepipe = sock.pipe;
-                            } 
-                        }; 
+                        sockfdobj.pipe = localpipenumber;
+                        sockfdobj.remotepipe = remotepipenumber;
 
                         if sockfdobj.flags & O_NONBLOCK != 0 {
                             //non-block connect
                             let remotepathbuf = convpath(remoteaddr.path().clone());
-                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), None));
+                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), localpipenumber, remotepipenumber, None));
                             sockfdobj.state = ConnState::INPROGRESS;
                             return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
                         } else {
                             let connvar = interface::RustRfc::new(ConnCondVar::new());
                             let remotepathbuf = convpath(remoteaddr.path().clone());
-                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), Some(connvar.clone())));
+                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), localpipenumber, remotepipenumber, Some(connvar.clone())));
                             connvar.wait();
     
                             sockfdobj.state = ConnState::CONNECTED;
@@ -1174,6 +1165,8 @@ impl Cage {
                             entry.insert(arclocksock.clone());
 
                             let remote_addr : interface::GenSockaddr;
+                            let localpipenumber;
+                            let remotepipenumber;
 
                             loop {
                                 let localpathbuf = convpath(sockfdobj.localaddr.unwrap().path().clone());
@@ -1181,13 +1174,15 @@ impl Cage {
 
                                 if let Some(ds) = dsconnobj {
                                     // if its blocking it will have a connvar, signal it
-                                    if let Some(connvar) = &ds.1 {
+                                    if let Some(connvar) = &ds.3 {
                                         if !connvar.signal() { 
                                             drop(ds);
                                             continue;
                                         }
                                     }
                                     remote_addr = ds.0.clone();
+                                    remotepipenumber = ds.1;
+                                    localpipenumber = ds.2;
                                     drop(ds);
                                     NET_METADATA.domain_conn_table.remove(&localpathbuf);
                                     break;
@@ -1205,15 +1200,12 @@ impl Cage {
                                 newsockwithin.localpath = Some(pathclone);   
                                 newsockwithin.inode = Some(inodenum.clone());   
                                 if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                    newsockwithin.remotepipe = sock.pipe;
                                     sock.refcount += 1; 
                                 } 
                             }; 
 
-                            newsockwithin.pipe = sockfdobj.pipe;
-                            let pipe = PIPE_TABLE.get(&newsockwithin.pipe).unwrap().clone();
-                            pipe.incr_ref(O_WRONLY);
-                            
+                            newsockwithin.pipe = localpipenumber;
+                            newsockwithin.remotepipe = remotepipenumber;
                             newsockwithin.state = ConnState::CONNECTED;
                             newsockwithin.remoteaddr = Some(remote_addr.clone());
                             *addr = remote_addr; //populate addr with what address it connected to

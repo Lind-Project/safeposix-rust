@@ -48,13 +48,17 @@ impl Cage {
                         }
                     }
                     DomainSocket(udsocket_filedesc_obj) => {
-                        let pipe = PIPE_TABLE.get(&udsocket_filedesc_obj.pipe).unwrap().clone();
-                        pipe.incr_ref(O_WRONLY);
+                        if udsocket_filedesc_obj.pipe > 0 {
+                            let pipe = PIPE_TABLE.get(&udsocket_filedesc_obj.pipe).unwrap().clone();
+                            pipe.incr_ref(O_WRONLY);
+                        }
+                        if udsocket_filedesc_obj.remotepipe > 0 {
+                            let remotepipe = PIPE_TABLE.get(&udsocket_filedesc_obj.remotepipe).unwrap().clone();
+                            remotepipe.incr_ref(O_RDONLY);
+                        }
                         if let Some(inodenum) = udsocket_filedesc_obj.inode {
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
                                 sock.refcount += 1; 
-                                let pipe = PIPE_TABLE.get(&sock.pipe).unwrap().clone();
-                                pipe.incr_ref(O_RDONLY);
                             } 
                         }
                     }

@@ -1250,17 +1250,17 @@ impl Cage {
     }
 
     pub fn _close_helper_inner(&self, locked_filedesc: interface::RustRfc<interface::RustLock<FileDescriptor>>) -> i32 {
-        let filedesc_enum = locked_filedesc.write();
+        let mut filedesc_enum = locked_filedesc.write();
 
         //Decide how to proceed depending on the fd type.
         //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
         //and if it is a normal file descriptor we decrement the refcount to reflect
         //one less reference to the file.
-        match &*filedesc_enum {
+        match *filedesc_enum {
             //if we are a socket, we dont change disk metadata
             Stream(_) => {}
             Epoll(_) => {} //Epoll closing not implemented yet
-            Socket(socket_filedesc_obj) => {
+            Socket(ref socket_filedesc_obj) => {
                 let mut cleanflag = false;
                 if let Some(socknum) = socket_filedesc_obj.socketobjectid {
                     let mut sockobjopt = NET_METADATA.socket_object_table.get_mut(&socknum);
@@ -1279,16 +1279,28 @@ impl Cage {
                     }
                 }
             }
-            DomainSocket(socket_filedesc_obj) => {
-                let pipe = PIPE_TABLE.get(&socket_filedesc_obj.pipe).unwrap().clone();
-                pipe.decr_ref(O_WRONLY);
-                if pipe.get_write_ref() == 0 {
-                    // we're closing the last write end, lets set eof
-                    pipe.set_eof();
+            DomainSocket(ref mut socket_filedesc_obj) => {
+                if socket_filedesc_obj.pipe > 0 {
+                    let pipe = PIPE_TABLE.get(&socket_filedesc_obj.pipe).unwrap().clone();
+                    pipe.decr_ref(O_WRONLY);
+                    if pipe.get_write_ref() == 0 {
+                        // we're closing the last write end, lets set eof
+                        pipe.set_eof();
+                    }
+                    if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                        // last reference, lets remove it
+                        PIPE_TABLE.remove(&socket_filedesc_obj.pipe).unwrap();
+                        socket_filedesc_obj.pipe = -1;
+                    }
                 }
-                if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
-                    // last reference, lets remove it
-                    PIPE_TABLE.remove(&socket_filedesc_obj.pipe).unwrap();
+                if socket_filedesc_obj.remotepipe > 0 {
+                    let remotepipe = PIPE_TABLE.get(&socket_filedesc_obj.remotepipe).unwrap().clone();
+                    remotepipe.decr_ref(O_RDONLY);
+                    if remotepipe.get_write_ref() + remotepipe.get_read_ref() == 0 {
+                        // last reference, lets remove it
+                        PIPE_TABLE.remove(&socket_filedesc_obj.remotepipe).unwrap();
+                        socket_filedesc_obj.remotepipe = -1;
+                    }
                 }
 
                 if let Some(inodenum) = socket_filedesc_obj.inode {
@@ -1297,22 +1309,14 @@ impl Cage {
                         sock.refcount -= 1; 
                         if sock.refcount == 0 {
                             if sock.linkcount == 0 {
-                                let pipe = PIPE_TABLE.get(&sock.pipe).unwrap().clone();
-                                pipe.decr_ref(O_RDONLY);
-                                if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
-                                    // last reference, lets remove it
-                                    PIPE_TABLE.remove(&sock.pipe).unwrap();
-                                }
-
                                 drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
                             }
                         }
-                    
                     } 
                 }
             }
-            Pipe(pipe_filedesc_obj) => {
+            Pipe(ref pipe_filedesc_obj) => {
                 let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
            
                 pipe.decr_ref(pipe_filedesc_obj.flags);
@@ -1329,7 +1333,7 @@ impl Cage {
                 }
 
             }
-            File(normalfile_filedesc_obj) => {
+            File(ref normalfile_filedesc_obj) => {
                 let inodenum = normalfile_filedesc_obj.inode;
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 

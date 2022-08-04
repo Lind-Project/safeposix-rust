@@ -170,3 +170,21 @@ pub fn insert_next_pipe(pipe: interface::EmulatedPipe) -> Option<i32> {
 
     return None;
 }
+
+pub fn create_unix_sockpipes() -> (i32, i32) {
+
+    // get next available pipe number, and set up pipe for remote
+    let pipenumber1 = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(UDSOCK_CAPACITY, true)) {
+        pipeno
+    } else { return (-1, -1); }; // return on error
+
+    // get next available pipe number, and set up pipe for remote
+    let pipenumber2 = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(UDSOCK_CAPACITY, true)) {
+        pipeno
+    } else {
+        PIPE_TABLE.remove(&pipenumber1);
+        return (-1, -1);
+    };
+
+    (pipenumber1, pipenumber2)
+}
