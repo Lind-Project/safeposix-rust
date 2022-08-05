@@ -1570,7 +1570,7 @@ impl Cage {
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, poll_fds_slice, timeout);
                 let mut count = 0;
-                let end_idx: usize = core::cmp::min(num_events as usize, maxevents as usize);
+                let end_idx: usize = interface::rust_min(num_events, maxevents as usize);
                 for result in poll_fds_slice[..end_idx].iter() {
                     let mut poll_event = false;
                     let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
