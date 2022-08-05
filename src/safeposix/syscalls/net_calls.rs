@@ -1541,12 +1541,11 @@ impl Cage {
             drop(wrappedfd);
             let filedesc_enum = wrappedclone.write();
             if let Epoll(epollfdobj) = &*filedesc_enum {
-                if !maxevents > 0 {
+                if  maxevents <  0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
                 }
-
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
-                let mut num_events: i32 = 0;
+                let mut num_events: usize = 0;
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
 
@@ -1567,17 +1566,12 @@ impl Cage {
                     }
                     poll_fds_vec.push(structpoll);
                   num_events += 1;
-                }
-                
+                } 
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, poll_fds_slice, timeout);
                 let mut count = 0;
-                let mut end_idx: i32 = maxevents;
-                if num_events < maxevents {
-                    end_idx = num_events;
-                }
-
-                for result in poll_fds_slice[..end_idx as usize].iter() {
+                let end_idx: usize = core::cmp::min(num_events as usize, maxevents as usize);
+                for result in poll_fds_slice[..end_idx].iter() {
                     let mut poll_event = false;
                     let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
                     if result.revents & POLLIN > 0 {
