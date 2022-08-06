@@ -10,8 +10,8 @@ pub mod ipc_tests {
     //#[test]
     pub fn test_ipc() {
         // These can't really run until we figure out a better testing system/fsutils
-        // ut_lind_ipc_pipefile();
-        // ut_lind_ipc_pipe();
+        ut_lind_ipc_pipefile();
+        ut_lind_ipc_pipe();
         ut_lind_ipc_domain_socket();
     }
 

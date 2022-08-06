@@ -28,8 +28,9 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             socket_object_table: interface::RustHashMap::new(),
+            domsock_object_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
-            domain_conn_table: interface::RustHashMap::new()
+            domsock_accept_table: interface::RustHashMap::new()
         })
     ); //we want to check if fs exists before doing a blank init, but not for now
 
@@ -101,8 +102,9 @@ pub struct NetMetadata {
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
+    pub domsock_object_table: interface::RustHashMap<i32, ConnState>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
-    pub domain_conn_table: interface::RustHashMap<interface::RustPathBuf, (interface::GenSockaddr, i32, i32, Option<interface::RustRfc<ConnCondVar>>)>
+    pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, (interface::GenSockaddr, i32, i32, Option<interface::RustRfc<ConnCondVar>>)>
 }
 
 impl NetMetadata {
@@ -331,6 +333,24 @@ impl NetMetadata {
 
     pub fn insert_into_socketobjecttable(&self, sock: interface::Socket, connstate: ConnState) -> Result<i32, i32> {
         if let Some(id) = self.insert_to_next_socketobjectid((sock, connstate)) {
+            Ok(id)
+        } else {
+            Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
+        }
+    }
+
+    fn insert_to_next_domsockobjectid(&self, val: ConnState) -> Option<i32> {
+        for i in MINSOCKOBJID..MAXSOCKOBJID {
+            if let interface::RustHashEntry::Vacant(v) = self.domsock_object_table.entry(i) {
+                v.insert(val);
+                return Some(i);
+            }
+        }
+        return None;
+    }
+    
+    pub fn insert_into_domsockobjecttable(&self, connstate: ConnState) -> Result<i32, i32> {
+        if let Some(id) = self.insert_to_next_domsockobjectid(connstate) {
             Ok(id)
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))

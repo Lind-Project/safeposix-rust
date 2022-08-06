@@ -57,8 +57,8 @@ impl Cage {
             errno: 0,
             localaddr: None,
             remoteaddr: None,
-            state: ConnState::NOTCONNECTED,
             last_peek: interface::RustDeque::new(),
+            socketobjectid: None
         };
         return sockfd;
     }
@@ -162,6 +162,14 @@ impl Cage {
         if sockfdobj.localaddr.is_some() {
             return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
         }
+
+        if let Some(id) = sockfdobj.socketobjectid {
+            id
+        } else {
+            let id = NET_METADATA.insert_into_domsockobjecttable(ConnState::NOTCONNECTED).unwrap();
+            sockfdobj.socketobjectid = Some(id);
+            id
+        };
 
         sockfdobj.localaddr = Some(localaddr.clone());
 
@@ -401,6 +409,7 @@ impl Cage {
                 }
                 DomainSocket(sockfdobj) => {
                     if sockfdobj.protocol == IPPROTO_TCP {
+                        let sockobjstate = 
 
                         if sockfdobj.state != ConnState::NOTCONNECTED {
                             return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
@@ -424,13 +433,13 @@ impl Cage {
                         if sockfdobj.flags & O_NONBLOCK != 0 {
                             //non-block connect
                             let remotepathbuf = convpath(remoteaddr.path().clone());
-                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), localpipenumber, remotepipenumber, None));
+                            NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), localpipenumber, remotepipenumber, None));
                             sockfdobj.state = ConnState::INPROGRESS;
                             return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
                         } else {
                             let connvar = interface::RustRfc::new(ConnCondVar::new());
                             let remotepathbuf = convpath(remoteaddr.path().clone());
-                            NET_METADATA.domain_conn_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), localpipenumber, remotepipenumber, Some(connvar.clone())));
+                            NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockfdobj.localaddr.unwrap().clone(), localpipenumber, remotepipenumber, Some(connvar.clone())));
                             connvar.wait();
     
                             sockfdobj.state = ConnState::CONNECTED;
@@ -454,6 +463,13 @@ impl Cage {
         if let None = sockfdobj.socketobjectid {
             let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
             sockfdobj.socketobjectid = Some(NET_METADATA.insert_into_socketobjecttable(sock, ConnState::NOTCONNECTED).unwrap());
+        } 
+        sockfdobj.socketobjectid.unwrap()
+    }
+
+    pub fn getdomsockobjid(sockfdobj: &mut DomainSocketDesc) -> i32 {
+        if let None = sockfdobj.socketobjectid {
+            sockfdobj.socketobjectid = Some(NET_METADATA.insert_into_domsocktobjecttable(ConnState::NOTCONNECTED).unwrap());
         } 
         sockfdobj.socketobjectid.unwrap()
     }
@@ -531,6 +547,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
         }
     }
+
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
             let wrappedclone = wrappedfd.clone();
@@ -1170,7 +1187,7 @@ impl Cage {
 
                             loop {
                                 let localpathbuf = convpath(sockfdobj.localaddr.unwrap().path().clone());
-                                let dsconnobj = NET_METADATA.domain_conn_table.get(&localpathbuf);
+                                let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
 
                                 if let Some(ds) = dsconnobj {
                                     // if its blocking it will have a connvar, signal it
@@ -1184,7 +1201,7 @@ impl Cage {
                                     remotepipenumber = ds.1;
                                     localpipenumber = ds.2;
                                     drop(ds);
-                                    NET_METADATA.domain_conn_table.remove(&localpathbuf);
+                                    NET_METADATA.domsock_accept_table.remove(&localpathbuf);
                                     break;
                                 } else {
                                     if 0 != (sockfdobj.flags & O_NONBLOCK) {
@@ -1338,7 +1355,7 @@ impl Cage {
 
                             if sockfdobj.state == ConnState::INPROGRESS {
                                 let remotepathbuf = convpath(sockfdobj.remoteaddr.unwrap().path().clone());
-                                let dsconnobj = NET_METADATA.domain_conn_table.get(&remotepathbuf);
+                                let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                 if dsconnobj.is_none() { sockfdobj.state = ConnState::CONNECTED; }
                             } 
 
@@ -1396,7 +1413,7 @@ impl Cage {
                             // check if we've made an in progress connection first
 
                             let remotepathbuf = convpath(sockfdobj.remoteaddr.unwrap().path().clone());
-                            let dsconnobj = NET_METADATA.domain_conn_table.get(&remotepathbuf);
+                            let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                             if sockfdobj.state == ConnState::INPROGRESS && dsconnobj.is_none() {                                
                                 sockfdobj.state = ConnState::CONNECTED;
                             } 
@@ -1681,6 +1698,17 @@ impl Cage {
                 *ret_addr = sockfdobj.localaddr.unwrap();
                 return 0;
 
+            } else if let DomainSocket(sockfdobj) = &*filedesc {
+                if sockfdobj.localaddr == None {
+                    ret_addr.set_path_null();
+                    ret_addr.set_family(sockfdobj.domain as u16);
+                    return 0;
+                }
+ 
+                //if the socket is not none, then return the socket
+                *ret_addr = sockfdobj.localaddr.unwrap();
+                return 0;
+
             } else {
                 return syscall_error(Errno::ENOTSOCK, "getsockname", "the provided file is not a socket");
             }
@@ -1893,23 +1921,31 @@ impl Cage {
     // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
     // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
     pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
-        let newdomain = if domain == AF_UNIX {AF_INET} else {domain};
-        let sock1fd = this.socket_syscall(newdomain, socktype, protocol);
+
+        if domain == AF_UNIX && socktype != SOCK_STREAM && protocol != IPPROTO_TCP {
+            return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Unix domain sockets are only supported for TCP")
+        }
+
+
+        let sock1fd = this.socket_syscall(domain, socktype, protocol);
         if sock1fd < 0 {return sock1fd;}
-        let sock2fd = this.socket_syscall(newdomain, socktype, protocol);
+        let sock2fd = this.socket_syscall(domain, socktype, protocol);
         if sock2fd < 0 {
             this.close_syscall(sock1fd);
             return sock2fd;
         }
-    
-        let portlessaddr = if newdomain == AF_INET {
+
+        let portlessaddr = if domain == AF_INET {
             let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
-            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
+            let innersockaddr = interface::SockaddrV4{sin_family: domain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
             interface::GenSockaddr::V4(innersockaddr)
         } else if domain == AF_INET6 {
             let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
-            let innersockaddr = interface::SockaddrV6{sin6_family: newdomain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
+            let innersockaddr = interface::SockaddrV6{sin6_family: domain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
             interface::GenSockaddr::V6(innersockaddr)
+        } else if domain == AF_UNIX {
+            let path = interface::gen_ud_path();
+            interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()))
         } else {
             unreachable!();
         };

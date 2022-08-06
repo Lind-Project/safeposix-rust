@@ -77,8 +77,8 @@ pub struct DomainSocketDesc {
     pub errno: i32,
     pub localaddr: Option<interface::GenSockaddr>,
     pub remoteaddr: Option<interface::GenSockaddr>,
-    pub state: ConnState,
     pub last_peek: interface::RustDeque<u8>,
+    pub socketobjectid: Option<i32>,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>
 }
 
