@@ -476,7 +476,7 @@ impl Cage {
                             let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read();
 
-                            if sockobj.1 != ConnState::CONNECTED {
+                            if sockobj.1 != (ConnState::CONNECTED | ConnState::CONNWRONLY) {
                                 return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
                             }
 
@@ -526,7 +526,7 @@ impl Cage {
                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                        let sockobj = locksock.read();
 
-                       if sockobj.1 != ConnState::CONNECTED {
+                       if sockobj.1 != (ConnState::CONNECTED | ConnState::CONNRDONLY) {
                            return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                        }
 
@@ -750,47 +750,55 @@ impl Cage {
     }
 
     pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
+        let releaseflag = false;
         if let Socket(sockfdobj) = filedesc {
+            if let Some(soid) = sockfdobj.socketobjectid {
+                if shutdown {
+
+                    let sockobjtherelock = NET_METADATA.socket_object_table.get(&soid).unwrap().clone();
+                    let mut sockobjthere = sockobjtherelock.write();
+                    let shutresult = sockobjthere.0.shutdown(how);
+
+                    if shutresult < 0 {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
+                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                        };
+                    }
+
+                    match how {
+                        SHUT_RD => {
+                            if sockfdobjthere.1 == ConnState::CONNRDONLY { releaseflag = true; }
+                            sockobjthere.1 = ConnState::CONNWRONLY;
+                        }
+                        SHUT_WR => {
+                            if sockfdobjthere.1 == ConnState::CONNWRONLY { releaseflag = true; }
+                            sockobjthere.1 = ConnState::CONNRDONLY;
+                        }
+                        SHUT_RDWR => {
+                            releaseflag = true;
+                            sockobjthere.1 = ConnState::NOTCONNECTED;
+                        }
+                        _ => {
+                            //See http://linux.die.net/man/2/shutdown for nuance to this error
+                            return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+                        }
+                    }
+                } else {
+                    //Reaching this means that the socket is closed. Removing the sockobj
+                    //indicates that the sockobj will drop, and therefore close
+                    releaseflag = true;
+                    NET_METADATA.socket_object_table.remove(&soid).unwrap();
+                }
+            }
+
             if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
+                //move to end
                 let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                 sockfdobj.localaddr = None;
                 if let Err(e) = release_ret_val {return e;}
-                if let Some(soid) = sockfdobj.socketobjectid {
-                    if shutdown {
-
-                        let sockobjtherelock = NET_METADATA.socket_object_table.get(&soid).unwrap().clone();
-                        let mut sockobjthere = sockobjtherelock.write();
-                        let shutresult = sockobjthere.0.shutdown(how);
-
-                        if shutresult < 0 {
-                            match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
-                                Err(()) => panic!("Unknown errno value from setsockopt returned!"),
-                            };
-                        }
-
-                        match how {
-                            SHUT_RD => {
-                                sockobjthere.1 = ConnState::NOTCONNECTED;
-                            }
-                            SHUT_WR => {
-                                sockobjthere.1 = ConnState::NOTCONNECTED;
-                            }
-                            SHUT_RDWR => {
-                                sockobjthere.1 = ConnState::NOTCONNECTED;
-                            }
-                            _ => {
-                                //See http://linux.die.net/man/2/shutdown for nuance to this error
-                                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
-                            }
-                        }
-                    } else {
-                        //Reaching this means that the socket is closed. Removing the sockobj
-                        //indicates that the sockobj will drop, and therefore close
-                        NET_METADATA.socket_object_table.remove(&soid).unwrap();
-                    }
-                }
             }
+
         } else {
             return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");
         }
