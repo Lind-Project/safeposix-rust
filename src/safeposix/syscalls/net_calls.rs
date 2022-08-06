@@ -739,14 +739,8 @@ impl Cage {
 
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
         match how {
-            SHUT_RD => {
-                return syscall_error(Errno::EOPNOTSUPP, "netshutdown", "partial shutdown read is not implemented");
-            }
-            SHUT_WR => {
-                return Self::_cleanup_socket(self, fd, true);
-            }
-            SHUT_RDWR => {
-                return Self::_cleanup_socket(self, fd, false);
+            SHUT_RDWR | SHUT_RD | SHUT_WR => {
+                return Self::_cleanup_socket(self, fd, how);
             }
             _ => {
                 //See http://linux.die.net/man/2/shutdown for nuance to this error
@@ -755,53 +749,45 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, partial: bool, shutdown: bool) -> i32 {
+    pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
         if let Socket(sockfdobj) = filedesc {
             if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
                 let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
                 sockfdobj.localaddr = None;
                 if let Err(e) = release_ret_val {return e;}
-                if !partial {
-                    if let Some(soid) = sockfdobj.socketobjectid {
-                        if shutdown {
-                            //we need to close the socket in order to send an EOF down it, but we
-                            //also need to have a valid socket object present and pointed to
-                            //otherwise table state gets corrupted/wonky
-                            let sockobjtherelock = NET_METADATA.socket_object_table.get(&soid).unwrap().clone();
-                            let mut sockobjthere = sockobjtherelock.write();
+                if let Some(soid) = sockfdobj.socketobjectid {
+                    if shutdown {
 
-                            //dropping the old socket closes it
-                            sockobjthere.0 = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
-                            sockobjthere.1 = ConnState::NOTCONNECTED;
+                        let sockobjtherelock = NET_METADATA.socket_object_table.get(&soid).unwrap().clone();
+                        let mut sockobjthere = sockobjtherelock.write();
+                        let shutresult = sockobjthere.0.shutdown(how);
 
-                            if let Some(localaddr) = sockfdobj.localaddr {
-                                if sockobjthere.0.bind(&localaddr) != 0 {
-                                    panic!("Bind on known ok address failed within shutdown!");
-                                }
-                            }
-
-                            //check reuseaddr/port
-                            for optname in [sockfdobj.options & SO_REUSEPORT, sockfdobj.options & SO_REUSEADDR] {
-                                if optname != 0 {
-                                    if sockobjthere.0.setsockopt(SOL_SOCKET, optname, 1) < 0 {
-                                        panic!("Setsockopt within known ok conditions failed within shutdown!");
-                                    }
-                                }
-                            }
-
-                            //check nonblock
-                            if sockfdobj.flags & O_NONBLOCK != 0 {
-                                if sockobjthere.0.set_nonblocking() < 0 {
-                                    panic!("Setting nonblock using fcntl on known ok fd failed within shutdown!");
-                                }
-                            }
-
-                            //now we have completely recreated the socket but unconnected
-                        } else {
-                            //Reaching this means that the socket is closed. Removing the sockobj
-                            //indicates that the sockobj will drop, and therefore close
-                            NET_METADATA.socket_object_table.remove(&soid).unwrap();
+                        if shutresult < 0 {
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
+                                Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            };
                         }
+
+                        match how {
+                            SHUT_RD => {
+                                sockobjthere.1 = ConnState::NOTCONNECTED;
+                            }
+                            SHUT_WR => {
+                                sockobjthere.1 = ConnState::NOTCONNECTED;
+                            }
+                            SHUT_RDWR => {
+                                sockobjthere.1 = ConnState::NOTCONNECTED;
+                            }
+                            _ => {
+                                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+                            }
+                        }
+                    } else {
+                        //Reaching this means that the socket is closed. Removing the sockobj
+                        //indicates that the sockobj will drop, and therefore close
+                        NET_METADATA.socket_object_table.remove(&soid).unwrap();
                     }
                 }
             }
@@ -811,17 +797,17 @@ impl Cage {
         return 0;
     }
 
-    pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
+    pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
 
         //The FdTable must always be passed.
 
         if let interface::RustHashEntry::Occupied(mut occval) = self.filedescriptortable.entry(fd) {
-            let inner_result = self._cleanup_socket_inner(&mut *occval.get_mut().write(), partial, true);
+            let inner_result = self._cleanup_socket_inner(&mut *occval.get_mut().write(), how, true);
             if inner_result < 0 {
                 return inner_result;
             }
 
-            if !partial {
+            if how == SHUT_RDWR {
                 occval.remove();
             }
         } else {

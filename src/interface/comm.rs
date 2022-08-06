@@ -338,6 +338,11 @@ impl Socket {
         sor
     }
 
+    pub fn shutdown(&self, how: i32) -> i32 {
+        let ret = unsafe {libc::shutdown(self.raw_sys_fd, how)};
+        ret
+    }
+
     pub fn check_rawconnection(&self) -> bool {
         let mut valbuf = 0;
         let mut len = size_of::<i32>() as u32;

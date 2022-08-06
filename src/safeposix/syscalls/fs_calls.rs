@@ -1276,7 +1276,7 @@ impl Cage {
                 }
                 if cleanflag {
                     let mut fdclone = filedesc_enum.clone();
-                    let retval = self._cleanup_socket_inner(&mut fdclone, false, false);
+                    let retval = self._cleanup_socket_inner(&mut fdclone, -1, false);
                     if retval < 0 {
                         return retval;
                     }
