@@ -835,6 +835,7 @@ pub mod net_tests {
             let fd = cage2.accept_syscall(serversockfd, &mut socket2); 
             assert!(fd > 0);
             
+            assert_eq!(cage2.netshutdown_syscall(fd, SHUT_RD), 0);
             assert_eq!(cage2.send_syscall(fd, str2cbuf("random string"), 13, 0), 13);
             assert_eq!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0);
             assert_ne!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0); //should fail

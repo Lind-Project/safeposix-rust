@@ -476,7 +476,7 @@ impl Cage {
                             let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read();
 
-                            if (sockobj.1 != ConnState::CONNECTED) && (sockobj.1 != ConnState::CONNRDONLY) {
+                            if (sockobj.1 != ConnState::CONNECTED) && (sockobj.1 != ConnState::CONNWRONLY) {
                                 return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
                             }
 
