@@ -476,7 +476,7 @@ impl Cage {
                             let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read();
 
-                            if sockobj.1 != (ConnState::CONNECTED | ConnState::CONNWRONLY) {
+                            if (sockobj.1 != ConnState::CONNECTED) && (sockobj.1 != ConnState::CONNRDONLY) {
                                 return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
                             }
 
@@ -526,7 +526,7 @@ impl Cage {
                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                        let sockobj = locksock.read();
 
-                       if sockobj.1 != (ConnState::CONNECTED | ConnState::CONNRDONLY) {
+                       if (sockobj.1 != ConnState::CONNECTED) && (sockobj.1 != ConnState::CONNRDONLY) {
                            return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                        }
 
@@ -669,7 +669,7 @@ impl Cage {
                             return 0; //Already done!
                         }
 
-                        ConnState::CONNECTED | ConnState::INPROGRESS => {
+                        ConnState::CONNECTED | ConnState::CONNRDONLY | ConnState::CONNWRONLY | ConnState::INPROGRESS => {
                             return syscall_error(Errno::EOPNOTSUPP, "listen", "We don't support closing a prior socket connection on listen");
                         }
 
@@ -750,7 +750,7 @@ impl Cage {
     }
 
     pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
-        let releaseflag = false;
+        let mut releaseflag = false;
         if let Socket(sockfdobj) = filedesc {
             if let Some(soid) = sockfdobj.socketobjectid {
                 if shutdown {
@@ -768,11 +768,11 @@ impl Cage {
 
                     match how {
                         SHUT_RD => {
-                            if sockfdobjthere.1 == ConnState::CONNRDONLY { releaseflag = true; }
+                            if sockobjthere.1 == ConnState::CONNRDONLY { releaseflag = true; }
                             sockobjthere.1 = ConnState::CONNWRONLY;
                         }
                         SHUT_WR => {
-                            if sockfdobjthere.1 == ConnState::CONNWRONLY { releaseflag = true; }
+                            if sockobjthere.1 == ConnState::CONNWRONLY { releaseflag = true; }
                             sockobjthere.1 = ConnState::CONNRDONLY;
                         }
                         SHUT_RDWR => {
@@ -792,11 +792,13 @@ impl Cage {
                 }
             }
 
-            if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
-                //move to end
-                let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
-                sockfdobj.localaddr = None;
-                if let Err(e) = release_ret_val {return e;}
+            if releaseflag {
+                if let Some(localaddr) = sockfdobj.localaddr.as_ref().clone() {
+                    //move to end
+                    let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockfdobj.protocol, sockfdobj.domain);
+                    sockfdobj.localaddr = None;
+                    if let Err(e) = release_ret_val {return e;}
+                }
             }
 
         } else {
