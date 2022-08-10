@@ -10,7 +10,7 @@ pub mod pipe_tests {
     // #[test]
     pub fn test_pipe() {
         // These can't really run until we figure out a better testing system/fsutils
-        // ut_lind_write_pipefile();
+        ut_lind_write_pipefile();
         print!("{{");
         for n in 2..17 {
             print!("\"{:?}\": [", n);
@@ -105,6 +105,7 @@ pub mod pipe_tests {
 
             let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
             let bufptr = buf.as_mut_ptr();
+            unsafe { buf.set_len(byte_chunk); }
 
             cage1.write_syscall(1, bufptr, byte_chunk);
         }
