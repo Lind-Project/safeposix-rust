@@ -10,6 +10,9 @@ mod safeposix;
 mod tests;
 mod lib_fs_utils;
 
+use crate::tests::pipe_tests::pipe_tests::test_pipe;
+
 fn main() {
     println!("Hello, world!");
+    test_pipe();
 }

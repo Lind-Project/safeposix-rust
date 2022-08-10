@@ -7,15 +7,26 @@ pub mod pipe_tests {
     use std::fs::OpenOptions;
     use std::time::Instant;
 
-    //#[test]
+    #[test]
     pub fn test_pipe() {
         // These can't really run until we figure out a better testing system/fsutils
-        // ut_lind_write_pipefile();
-        // ut_lind_fs_pipe();
+        ut_lind_write_pipefile();
+        print!("{{");
+        for n in 4..17 {
+            print!("\"{:?}\": [", n);
+            for i in 1..11 {
+                ut_lind_fs_pipe(n);
+                if i != 10 { print!(", ") };
+            }
+            print!("]");
+            if n != 16 {print!(", ")};
+        }
+        println!("}}");
     }
 
 
     pub fn ut_lind_write_pipefile() {
+
         let byte_chunk: usize = 131072;
         let num_writes: usize = 8192;
 
@@ -39,11 +50,14 @@ pub mod pipe_tests {
     }
 
 
-    pub fn ut_lind_fs_pipe() {
+    pub fn ut_lind_fs_pipe(n: u32) {
 
-        let byte_chunk: usize = 131072;
-        let num_writes: usize = 8192;
-        
+
+        let gig = usize::pow(2, 30);
+        let byte_chunk = usize::pow(2, n);
+        let num_writes = gig/byte_chunk;
+
+        let now = Instant::now();
         lindrustinit(0);
 
         let cage1 = {CAGE_TABLE.get(&1).unwrap().clone()};
@@ -63,12 +77,13 @@ pub mod pipe_tests {
 
             let mut bytes_read: usize = 1;
 
-            let mut buf: Vec<u8> = Vec::with_capacity(byte_chunk * num_writes);
+            let mut buf: Vec<u8> = Vec::with_capacity(gig);
             let mut bufptr = buf.as_mut_ptr();
             let mut buflen: usize = 0;
+            let readchunk = usize::pow(2, 17);
 
             while bytes_read != 0 {
-                bytes_read = cage2.read_syscall(0, bufptr, byte_chunk) as usize;
+                bytes_read = cage2.read_syscall(0, bufptr, readchunk) as usize;
                 unsafe {
                     bufptr = bufptr.add(bytes_read);
                     buf.set_len(buflen + bytes_read);
@@ -105,5 +120,6 @@ pub mod pipe_tests {
         assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
 
         lindrustfinalize();
+        print!("{}", now.elapsed().as_millis());
     }
 }
