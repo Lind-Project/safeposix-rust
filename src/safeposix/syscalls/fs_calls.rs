@@ -1573,6 +1573,59 @@ impl Cage {
         0 //success!
     }
 
+    
+     //------------------------------------FCHMOD SYSCALL------------------------------------
+
+    pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
+        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
+            //Delegate populating statbuf to the relevant helper depending on the file type.
+            //First we check in the file descriptor to handle sockets, streams, and pipes,
+            //and if it is a normal file descriptor we handle regular files, dirs, and char 
+            //files based on the information in the inode.
+            match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+            let mut log = true;
+            if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                match *thisinode {
+                    Inode::File(ref mut general_inode) => {
+                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                    }
+                    Inode::CharDev(ref mut dev_inode) => {
+                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
+                    }
+                    Inode::Socket(ref mut sock_inode) => {
+                        sock_inode.mode = (sock_inode.mode &!S_IRWXA) | mode;
+                        log = false;
+                    }
+                    Inode::Dir(ref mut dir_inode) => {
+                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
+                    }
+                }
+                drop(thisinode);
+                if log { log_metadata(&FS_METADATA, inodenum) };
+            } else {
+                //there doesn't seem to be a good syscall error errno for this
+                return syscall_error(Errno::EACCES, "fchmod", "provided file mode is not valid");
+              }
+                }
+                Socket(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+                Stream(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");} 
+                Pipe(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+                Epoll(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+
+        }
+        } else {
+            return syscall_error(Errno::ENOENT, "fchmod", "the provided file descriptor  does not exist");
+        }
+        0 //success!
+    }
+
+
     //------------------------------------MMAP SYSCALL------------------------------------
     
     pub fn mmap_syscall(&self, addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
