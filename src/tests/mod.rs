@@ -8,7 +8,7 @@ use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
 
-#[cfg(test)]
+// #[cfg(test)]
 pub mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
     use crate::tests::fs_tests::fs_tests::test_fs;
@@ -18,7 +18,7 @@ pub mod main_tests {
 
     use std::process::Command;
 
-    #[test]
+    // #[test]
     pub fn tests() {
         lindrustinit(0);
         {

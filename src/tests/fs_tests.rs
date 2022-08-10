@@ -1,5 +1,5 @@
 #[allow(unused_parens)]
-#[cfg(test)]
+// #[cfg(test)]
 pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
