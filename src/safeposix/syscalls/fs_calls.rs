@@ -1581,10 +1581,6 @@ impl Cage {
             let wrappedclone = wrappedfd.clone();
             drop(wrappedfd);
             let filedesc_enum = wrappedclone.read();
-            //Delegate populating statbuf to the relevant helper depending on the file type.
-            //First we check in the file descriptor to handle sockets, streams, and pipes,
-            //and if it is a normal file descriptor we handle regular files, dirs, and char 
-            //files based on the information in the inode.
             match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -1609,7 +1605,6 @@ impl Cage {
                 drop(thisinode);
                 if log { log_metadata(&FS_METADATA, inodenum) };
             } else {
-                //there doesn't seem to be a good syscall error errno for this
                 return syscall_error(Errno::EACCES, "fchmod", "provided file mode is not valid");
               }
                 }
