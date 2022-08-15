@@ -1022,9 +1022,8 @@ impl Cage {
             Some(time) => time,
             None => interface::RustDuration::MAX
         };
-    
-        let mut retval = 0;
-    
+ 
+        let mut retval = 0; 
         loop { //we must block manually
             for fd in readfds.iter() {
                 if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
@@ -1052,7 +1051,7 @@ impl Cage {
                                         vacant.insert(vec!(listeningsocket));
                                     } else {
                                         //if it returned an error, then don't insert it into new_readfds
-                                        continue;
+                                      continue;
                                     }
                                 } //if it's already got a pending connection, add it!
 
@@ -1538,12 +1537,11 @@ impl Cage {
             drop(wrappedfd);
             let filedesc_enum = wrappedclone.write();
             if let Epoll(epollfdobj) = &*filedesc_enum {
-                if !maxevents > 0 {
+                if  maxevents <  0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
                 }
-
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
-
+                let mut num_events: usize = 0;
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
 
@@ -1563,27 +1561,34 @@ impl Cage {
                         structpoll.events |= POLLERR;
                     }
                     poll_fds_vec.push(structpoll);
-                }
-
+                  num_events += 1;
+                } 
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 Self::poll_syscall(&self, poll_fds_slice, timeout);
-                let mut count_changed: i32 = 0;
-
-                for (count, result) in poll_fds_slice[..maxevents as usize].iter().enumerate() {
+                let mut count = 0;
+                let end_idx: usize = interface::rust_min(num_events, maxevents as usize);
+                for result in poll_fds_slice[..end_idx].iter() {
+                    let mut poll_event = false;
                     let mut event = EpollEvent{ events: 0, fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd};
                     if result.revents & POLLIN > 0 {
                         event.events |= EPOLLIN as u32;
+                        poll_event = true;
                     }
                     if result.revents & POLLOUT > 0 {
                         event.events |= EPOLLOUT as u32;
+                        poll_event = true;
                     }
                     if result.revents & POLLERR > 0 {
                         event.events |= EPOLLERR as u32;
+                        poll_event = true;
                     }
-                    events[count] = event;
-                    count_changed += 1;
+
+                    if poll_event {
+                        events[count] = event;
+                        count += 1;
+                    }
                 }
-                return count_changed;
+                return count as i32;
             } else {
                 return syscall_error(Errno::EINVAL, "epoll wait", "provided fd is not an epoll file descriptor");
             }
