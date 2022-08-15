@@ -1534,6 +1534,33 @@ impl Cage {
             syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor")
         }
     }
+   
+     //------------------------------------CHMOD HELPER FUNCTION------------------------------------
+    
+    pub fn _chmod_helper(inodenum: usize, mode: u32) {
+         let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+         let mut log = true;
+         if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+            match *thisinode {
+                Inode::File(ref mut general_inode) => {
+                    general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                }
+                Inode::CharDev(ref mut dev_inode) => {
+                    dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
+                }   
+                Inode::Socket(ref mut sock_inode) => {
+                    sock_inode.mode = (sock_inode.mode &!S_IRWXA) | mode;
+                    log = false;
+                }
+                Inode::Dir(ref mut dir_inode) => {
+                    dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
+                }
+            }
+            drop(thisinode);
+            if log { log_metadata(&FS_METADATA, inodenum) }; 
+         }
+    }
+
 
     //------------------------------------CHMOD SYSCALL------------------------------------
 
@@ -1542,26 +1569,8 @@ impl Cage {
 
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            let mut log = true;
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                match *thisinode {
-                    Inode::File(ref mut general_inode) => {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
-                    }
-                    Inode::CharDev(ref mut dev_inode) => {
-                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
-                    }
-                    Inode::Socket(ref mut sock_inode) => {
-                        sock_inode.mode = (sock_inode.mode &!S_IRWXA) | mode;
-                        log = false;
-                    }
-                    Inode::Dir(ref mut dir_inode) => {
-                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
-                    }
-                }
-                drop(thisinode);
-                if log { log_metadata(&FS_METADATA, inodenum) };
+               Self:: _chmod_helper(inodenum, mode);
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1572,6 +1581,36 @@ impl Cage {
         }
         0 //success!
     }
+
+    
+     //------------------------------------FCHMOD SYSCALL------------------------------------
+
+    pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
+        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
+            match &*filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                       Self:: _chmod_helper(inodenum, mode);
+                    }
+                    else {
+                        return syscall_error(Errno::EACCES, "fchmod", "provided file mode is not valid");
+                    }
+                }
+                Socket(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+                Stream(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");} 
+                Pipe(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+                Epoll(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+            }
+        } else {
+            return syscall_error(Errno::ENOENT, "fchmod", "the provided file descriptor  does not exist");
+        }
+        0 //success!
+    }
+    
 
     //------------------------------------MMAP SYSCALL------------------------------------
     

@@ -12,6 +12,7 @@ pub mod fs_tests {
 
         ut_lind_fs_broken_close();
         ut_lind_fs_chmod();
+        ut_lind_fs_fchmod();
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dir_mode();
         ut_lind_fs_dir_multiple();
@@ -210,6 +211,32 @@ pub mod fs_tests {
 
         assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0);
         assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+   pub fn ut_lind_fs_fchmod() {
+        lindrustinit(0);
+        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/fchmodTestFile";
+
+        let mut statdata = StatData::default();
+
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+
+        assert_eq!(cage.fchmod_syscall(fd, S_IRUSR | S_IRGRP), 0);
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
+
+        assert_eq!(cage.fchmod_syscall(fd, S_IRWXA), 0);
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
         assert_eq!(cage.close_syscall(fd), 0);
