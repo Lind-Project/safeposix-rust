@@ -1087,8 +1087,11 @@ impl Cage {
 
                         //not supported yet
                         Pipe(_) => {
-                            new_readfds.insert(*fd);
-                            retval += 1;
+                            let pipe = PIPE_TABLE.get(&pipefdobj.pipe).unwrap().clone();
+                            if (pipe.check_select_read()) {
+                                new_readfs.insert(*fd);
+                                retval += 1;
+                            }
                         }
 
                         //these file reads never block
@@ -1130,8 +1133,11 @@ impl Cage {
 
                         //not supported yet
                         Pipe(_) => {
-                            new_writefds.insert(*fd);
-                            retval += 1;
+                            let pipe = PIPE_TABLE.get(&pipefdobj.pipe).unwrap().clone();
+                            if (pipe.check_select_write()) {
+                                new_writefds.insert(*fd);
+                                retval += 1;
+                            }
                         }
 
                         //these file writes never block
