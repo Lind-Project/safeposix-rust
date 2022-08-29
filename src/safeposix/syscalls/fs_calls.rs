@@ -2062,19 +2062,21 @@ impl Cage {
         } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
 
+    pub fn rev_shm_find(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+        for (index, val) in rev_shm.iter().enumerate() {
+            if val.0 == shmaddr as u32 {
+                return Some(index);
+            }
+        }
+        None
+    }
     //------------------SHMDT SYSCALL------------------
 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
-        let mut rev_shm_index = None;
         let mut rev_shm = self.rev_shm.lock();
-        for (index, val) in rev_shm.iter().enumerate() {
-            if val.0 == shmaddr as u32 {
-                rev_shm_index = Some(index);
-                break;
-            }
-        }
+        let rev_shm_index = Self::rev_shm_find(&rev_shm, shmaddr as u32);
 
         if let Some(index) = rev_shm_index {
             let shmid = rev_shm[index].1;
