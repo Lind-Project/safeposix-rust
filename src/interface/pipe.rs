@@ -58,6 +58,20 @@ impl EmulatedPipe {
         if (flags & O_RDWRFLAGS) == O_RDONLY {self.refcount_read.fetch_sub(1, Ordering::Relaxed);}
         if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
+    pub fn check_select_read(&self) -> bool {
+        let pipe_space = read_end.len();
+        if !self.eof.load(Ordering::SeqCst) && (pipe_space == self.size)
+            return true;
+        else
+            return false;
+    }
+    pub fn check_select_write(&self) -> bool {
+        let pipe_space = write_end.remaining();
+        if (pipe_space == self.size)
+            return false;
+        else
+            return true;
+    }
 
     // Write length bytes from pointer into pipe
     // BUG: This only currently works as SPSC
