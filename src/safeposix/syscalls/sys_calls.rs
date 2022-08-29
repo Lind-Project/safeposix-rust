@@ -70,11 +70,12 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
+            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
-            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed))
-            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
+            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
+            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone())
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
@@ -106,7 +107,8 @@ impl Cage {
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
-            geteuid: interface::RustAtomicI32::new(-1)
+            geteuid: interface::RustAtomicI32::new(-1),
+            rev_shm: interface::Mutex::new(vec!())
         };
         //wasteful clone of fdtable, but mutability constraints exist
 

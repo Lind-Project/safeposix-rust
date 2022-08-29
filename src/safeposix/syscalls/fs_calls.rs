@@ -2055,7 +2055,9 @@ impl Cage {
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             }  else { prot = PROT_READ | PROT_WRITE; }
-            metadata.rev_shm_add(self.cageid as u32, shmaddr, shmid);
+            let mut rev_shm = self.rev_shm.lock();
+            rev_shm.push((shmaddr as u32, shmid));
+            drop(rev_shm);
             segment.map_shm(shmaddr, prot)
         } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
@@ -2065,14 +2067,24 @@ impl Cage {
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
-        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as u32, shmaddr) {
+        let mut rev_shm_index = None;
+        let mut rev_shm = self.rev_shm.lock();
+        for (index, val) in rev_shm.iter().enumerate() {
+            if val.0 == shmaddr as u32 {
+                rev_shm_index = Some(index);
+                break;
+            }
+        }
+
+        if let Some(index) = rev_shm_index {
+            let shmid = rev_shm[index].1;
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
                     segment.unmap_shm(shmaddr);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
-                    metadata.rev_shm_rm(self.cageid as u32, shmaddr);
+                    rev_shm.swap_remove(index);
             
                     if rm {
                         let key = segment.key;

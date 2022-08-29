@@ -435,7 +435,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1)
+        geteuid: interface::RustAtomicI32::new(-1),
+        rev_shm: interface::Mutex::new(vec!())
     };
     cagetable.insert(0, interface::RustRfc::new(utilcage));
 
@@ -448,7 +449,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1)
+        geteuid: interface::RustAtomicI32::new(-1),
+        rev_shm: interface::Mutex::new(vec!())
     };
     initcage.load_lower_handle_stubs();
     cagetable.insert(1, interface::RustRfc::new(initcage));
