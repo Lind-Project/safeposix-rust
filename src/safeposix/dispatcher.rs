@@ -82,6 +82,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
 use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
@@ -416,6 +417,20 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         _ => {//unknown syscall
             -1
         }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn copy_shared_mapping(src_cageid: u64, dest_addr: *mut u8, length: usize, prot: i32, src_addr: *const u8) -> i32 {
+    let cage = { CAGE_TABLE.get(&src_cageid).unwrap().clone() };
+    
+    let rev_shm = cage.rev_shm.lock();
+    if let Some(shm_index) = Cage::rev_shm_find(&rev_shm, src_addr as u32) {
+        SHM_METADATA.shmtable.get_mut(&rev_shm[shm_index].1).unwrap().map_shm(dest_addr, prot);
+        EXIT_SUCCESS
+    } else {
+        //we don't handle mmap shared mappings from safeposix, rather from NaCl
+        -1
     }
 }
 

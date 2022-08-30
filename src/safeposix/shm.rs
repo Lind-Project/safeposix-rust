@@ -50,7 +50,7 @@ impl ShmSegment {
 pub struct ShmMetadata {
     pub nextid: interface::RustAtomicI32,
     pub shmkeyidtable: interface::RustHashMap<i32, i32>,
-    pub shmtable: interface::RustHashMap<i32, ShmSegment>,
+    pub shmtable: interface::RustHashMap<i32, ShmSegment>
 }
 
 impl ShmMetadata {
