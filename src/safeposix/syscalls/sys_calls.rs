@@ -5,6 +5,7 @@ use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
+use crate::safeposix::shm::{SHM_METADATA};
 use super::sys_constants::*;
 use super::net_constants::*;
 use super::fs_constants::*;
@@ -77,6 +78,15 @@ impl Cage {
             geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone())
         };
+
+        let shmtable = &SHM_METADATA.shmtable;
+        //update fields for shared mappings in cage
+        for rev_mapping in cageobj.rev_shm.lock().iter() {
+            let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
+            shment.shminfo.shm_nattch += 1;
+        }
+        drop(shmtable);
+
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
     }

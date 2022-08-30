@@ -421,20 +421,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 }
 
 #[no_mangle]
-pub extern "C" fn copy_shared_mapping(src_cageid: u64, dest_addr: *mut u8, length: usize, prot: i32, src_addr: *const u8) -> i32 {
-    let cage = { CAGE_TABLE.get(&src_cageid).unwrap().clone() };
-    
-    let rev_shm = cage.rev_shm.lock();
-    if let Some(shm_index) = Cage::rev_shm_find(&rev_shm, src_addr as u32) {
-        SHM_METADATA.shmtable.get_mut(&rev_shm[shm_index].1).unwrap().map_shm(dest_addr, prot);
-        EXIT_SUCCESS
-    } else {
-        //we don't handle mmap shared mappings from safeposix, rather from NaCl
-        -1
-    }
-}
-
-#[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
