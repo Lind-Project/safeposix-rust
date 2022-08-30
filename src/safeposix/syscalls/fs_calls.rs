@@ -1462,7 +1462,8 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    Self::dup_syscall(self, fd, Some(arg))
+                    drop(filedesc_enum);
+                    self._dup2_helper(fd, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {

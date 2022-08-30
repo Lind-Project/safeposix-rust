@@ -131,6 +131,26 @@ impl Cage {
         //flush anything left in stdout
         interface::flush_stdout();
 
+        //unmap shm mappings
+        for rev_mapping in self.rev_shm.lock().iter() {
+            let shmid = rev_mapping.1;
+            let metadata = &SHM_METADATA;
+            match metadata.shmtable.entry(shmid) {
+                interface::RustHashEntry::Occupied(mut occupied) => {
+                    let segment = occupied.get_mut();
+                    segment.shminfo.shm_nattch -= 1;
+                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
+            
+                    if segment.rmid && segment.shminfo.shm_nattch == 0 {
+                        let key = segment.key;
+                        occupied.remove_entry();
+                        metadata.shmkeyidtable.remove(&key);
+                    }
+                }
+                interface::RustHashEntry::Vacant(_) => {panic!("Shm entry not created for some reason");}
+            };   
+        }
+
         //close all remaining files in the fdtable
         {
             let fds_to_close = self.filedescriptortable.iter_mut().map(|x| *x.key()).collect::<Vec<i32>>();
