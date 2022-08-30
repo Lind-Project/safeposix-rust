@@ -2093,12 +2093,12 @@ impl Cage {
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
+
+                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
                 }
                 interface::RustHashEntry::Vacant(_) => {panic!("Inode not created for some reason");}
             };   
         } else { return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr"); }
-
-        0 //shmdt has succeeded!        
     }
 
     //------------------SHMCTL SYSCALL------------------
