@@ -59,8 +59,9 @@ impl EmulatedPipe {
         if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
     pub fn check_select_read(&self) -> bool {
-        let mut read_end = self.read_end.lock();
-        let mut pipe_space = read_end.len();
+        let read_end = self.read_end.lock();
+        let pipe_space = read_end.len();
+
         if (pipe_space > 0) && !self.eof.load(Ordering::SeqCst){
             return true;
         }
@@ -70,7 +71,7 @@ impl EmulatedPipe {
     }
     pub fn check_select_write(&self) -> bool {
 
-        let mut write_end = self.write_end.lock();
+        let write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
         if pipe_space == self.size {
