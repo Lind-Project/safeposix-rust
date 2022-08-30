@@ -2103,14 +2103,14 @@ impl Cage {
 
     //------------------SHMCTL SYSCALL------------------
 
-    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: &mut ShmidsStruct)-> i32 {
+    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: Option<&mut ShmidsStruct>)-> i32 {
 
         let metadata = &SHM_METADATA;
 
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
             match cmd {
                 IPC_STAT => {
-                    *buf = segment.shminfo;              
+                    *buf.unwrap() = segment.shminfo;              
                 }
                 IPC_RMID => {
                     segment.rmid = true;

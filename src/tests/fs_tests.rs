@@ -993,21 +993,21 @@ pub mod fs_tests {
         assert_ne!(shmatret, -1);
 
         // get struct info
-        let shmctlret1 = cage.shmctl_syscall(shmid, IPC_STAT, &mut shmidstruct);
+        let shmctlret1 = cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct));
 
         assert_eq!(shmctlret1, 0);
 
         assert_eq!(shmidstruct.shm_nattch, 1);
 
         // mark the shared memory to be rmoved
-        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, &mut shmidstruct);
+        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
 
         assert_eq!(shmctlret2, 0);
             
         //detach from shared memory 
-        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+        let _shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
 
-        assert_eq!(shmdtret, 0);
+        //assert_eq!(shmdtret, 0); we need this to be non-posixy for NaCl
         
         lindrustfinalize();
     }

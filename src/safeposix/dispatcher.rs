@@ -86,6 +86,7 @@ use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
+use super::syscalls::fs_constants::IPC_STAT;
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -412,7 +413,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.shmdt_syscall, interface::get_mutcbuf(arg1))
         }
         SHMCTL_SYSCALL => {
-            check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_shmidstruct(arg3))
+            let cmd = get_onearg!(interface::get_int(arg2));
+            let buf = if cmd == IPC_STAT {Some(get_onearg!(interface::get_shmidstruct(arg3)))} else {None};
+            check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), Ok::<i32, i32>(cmd), Ok::<Option<&mut interface::ShmidsStruct>, i32>(buf))
         }
         _ => {//unknown syscall
             -1
