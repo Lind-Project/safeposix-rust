@@ -11,6 +11,28 @@ use super::net_constants::*;
 use super::fs_constants::*;
 
 impl Cage {
+    fn unmap_shm_mappings(&self) {
+        //unmap shm mappings on exit or exec
+        for rev_mapping in self.rev_shm.lock().iter() {
+            let shmid = rev_mapping.1;
+            let metadata = &SHM_METADATA;
+            match metadata.shmtable.entry(shmid) {
+                interface::RustHashEntry::Occupied(mut occupied) => {
+                    let segment = occupied.get_mut();
+                    segment.shminfo.shm_nattch -= 1;
+                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
+            
+                    if segment.rmid && segment.shminfo.shm_nattch == 0 {
+                        let key = segment.key;
+                        occupied.remove_entry();
+                        metadata.shmkeyidtable.remove(&key);
+                    }
+                }
+                interface::RustHashEntry::Vacant(_) => {panic!("Shm entry not created for some reason");}
+            };   
+        }
+    }
+
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         let mutcagetable = &CAGE_TABLE;
 
@@ -96,6 +118,9 @@ impl Cage {
         
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
+
+        self.unmap_shm_mappings();
+
         for pair in iterator {
             let (&fdnum, inode) = pair.pair();
             if match &*inode.read() {
@@ -131,25 +156,7 @@ impl Cage {
         //flush anything left in stdout
         interface::flush_stdout();
 
-        //unmap shm mappings
-        for rev_mapping in self.rev_shm.lock().iter() {
-            let shmid = rev_mapping.1;
-            let metadata = &SHM_METADATA;
-            match metadata.shmtable.entry(shmid) {
-                interface::RustHashEntry::Occupied(mut occupied) => {
-                    let segment = occupied.get_mut();
-                    segment.shminfo.shm_nattch -= 1;
-                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
-            
-                    if segment.rmid && segment.shminfo.shm_nattch == 0 {
-                        let key = segment.key;
-                        occupied.remove_entry();
-                        metadata.shmkeyidtable.remove(&key);
-                    }
-                }
-                interface::RustHashEntry::Vacant(_) => {panic!("Shm entry not created for some reason");}
-            };   
-        }
+        self.unmap_shm_mappings();
 
         //close all remaining files in the fdtable
         {
