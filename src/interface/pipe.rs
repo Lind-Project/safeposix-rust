@@ -61,7 +61,7 @@ impl EmulatedPipe {
     pub fn check_select_read(&self) -> bool {
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
-        if !self.eof.load(Ordering::SeqCst) && (pipe_space == self.size) {
+        if (pipe_space > 0) && !self.eof.load(Ordering::SeqCst){
             return true;
         }
         else {
