@@ -62,4 +62,3 @@ impl ShmMetadata {
         self.nextid.fetch_add(1, interface::RustAtomicOrdering::Relaxed)
     }
 }
-
