@@ -1007,7 +1007,7 @@ pub mod fs_tests {
         //detach from shared memory 
         let _shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
 
-        //assert_eq!(shmdtret, 0); we need this to be non-posixy for NaCl
+        assert_eq!(shmdtret, shmid); //NaCl requires shmdt to return the shmid, so this is non-posixy
         
         lindrustfinalize();
     }
