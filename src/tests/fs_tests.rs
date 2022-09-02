@@ -1005,7 +1005,7 @@ pub mod fs_tests {
         assert_eq!(shmctlret2, 0);
             
         //detach from shared memory 
-        let _shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
 
         assert_eq!(shmdtret, shmid); //NaCl requires shmdt to return the shmid, so this is non-posixy
         
