@@ -162,16 +162,7 @@ impl Cage {
             sockfdobj.socketobjectid = Some(id);
             id
         };
-        let bindret = sockobj.0.bind(&newsockaddr);
 
-        if bindret < 0 {
-            match Errno::from_discriminant(interface::get_errno()) {
-                Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
-                Err(()) => panic!("Unknown errno value from socket bind returned!"),
-            };
-        }
-
-        sockfdobj.localaddr = Some(newsockaddr);
         if sockfdobj.realdomain == AF_UNIX {
             let path = localaddr.path();
             //Check that path is not empty
@@ -185,24 +176,38 @@ impl Cage {
                 (None, Some(pardirinode)) => {
                     let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                    let mode;
-                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                        mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
-                    } else { unreachable!() }
-                    let effective_mode = S_IFSOCK as u32 | mode;
-    
-                    let time = interface::timestamp(); //We do a real timestamp now
-                    let newinode = Inode::Socket(SocketInode {
-                        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                        mode: effective_mode, linkcount: 1, refcount: 1,
-                        atime: time, ctime: time, mtime: time,
-                    });
-    
+                    //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
                     let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-                    if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                        ind.filename_to_inode_dict.insert(filename, newinodenum);
-                        ind.linkcount += 1;
-                    } //insert a reference to the file in the parent directory
+                    let newinode;
+
+                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                        let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
+                        let effective_mode = S_IFSOCK as u32 | mode;
+    
+                        let time = interface::timestamp(); //We do a real timestamp now
+                        newinode = Inode::Socket(SocketInode {
+                            size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                            mode: effective_mode, linkcount: 1, refcount: 1,
+                            atime: time, ctime: time, mtime: time,
+                        });
+    
+                        dir.filename_to_inode_dict.insert(filename, newinodenum);
+                        dir.linkcount += 1;
+                    } else {
+                       return syscall_error(Errno::ENOTDIR, "socket", "unix domain socket path made socket address child of non-directory file");
+                    }
+
+                    //we bind at this point in order that all errors that could have happened already did, but before we add any metadata, so as to minimize cleanup necessary
+
+                    let bindret = sockobj.0.bind(&newsockaddr);
+
+                    if bindret < 0 {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
+                            Err(()) => panic!("Unknown errno value from socket bind returned!"),
+                        };
+                    }
+
                     sockfdobj.optinode = Some(newinodenum.clone());
                     FS_METADATA.inodetable.insert(newinodenum, newinode);
                     NET_METADATA.domain_socket_table.insert(truepath.clone(), newsockaddr.clone());
@@ -211,7 +216,18 @@ impl Cage {
                 }
                 (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
             }
+        } else {
+            let bindret = sockobj.0.bind(&newsockaddr);
+
+            if bindret < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
+                    Err(()) => panic!("Unknown errno value from socket bind returned!"),
+                };
+            }
         }
+
+        sockfdobj.localaddr = Some(newsockaddr);
 
         0
     }
