@@ -5,11 +5,34 @@ use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
+use crate::safeposix::shm::{SHM_METADATA};
 use super::sys_constants::*;
 use super::net_constants::*;
 use super::fs_constants::*;
 
 impl Cage {
+    fn unmap_shm_mappings(&self) {
+        //unmap shm mappings on exit or exec
+        for rev_mapping in self.rev_shm.lock().iter() {
+            let shmid = rev_mapping.1;
+            let metadata = &SHM_METADATA;
+            match metadata.shmtable.entry(shmid) {
+                interface::RustHashEntry::Occupied(mut occupied) => {
+                    let segment = occupied.get_mut();
+                    segment.shminfo.shm_nattch -= 1;
+                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
+            
+                    if segment.rmid && segment.shminfo.shm_nattch == 0 {
+                        let key = segment.key;
+                        occupied.remove_entry();
+                        metadata.shmkeyidtable.remove(&key);
+                    }
+                }
+                interface::RustHashEntry::Vacant(_) => {panic!("Shm entry not created for some reason");}
+            };   
+        }
+    }
+
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         let mutcagetable = &CAGE_TABLE;
 
@@ -70,12 +93,22 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
+            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
-            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed))
-            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
+            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
+            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone())
         };
+
+        let shmtable = &SHM_METADATA.shmtable;
+        //update fields for shared mappings in cage
+        for rev_mapping in cageobj.rev_shm.lock().iter() {
+            let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
+            shment.shminfo.shm_nattch += 1;
+        }
+        drop(shmtable);
+
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
     }
@@ -85,6 +118,9 @@ impl Cage {
         
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
+
+        self.unmap_shm_mappings();
+
         for pair in iterator {
             let (&fdnum, inode) = pair.pair();
             if match &*inode.read() {
@@ -106,7 +142,8 @@ impl Cage {
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
-            geteuid: interface::RustAtomicI32::new(-1)
+            geteuid: interface::RustAtomicI32::new(-1),
+            rev_shm: interface::Mutex::new(vec!())
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -118,6 +155,8 @@ impl Cage {
 
         //flush anything left in stdout
         interface::flush_stdout();
+
+        self.unmap_shm_mappings();
 
         //close all remaining files in the fdtable
         {

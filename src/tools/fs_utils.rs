@@ -113,7 +113,8 @@ fn main() {
                         getgid: interface::RustAtomicI32::new(-1), 
                         getuid: interface::RustAtomicI32::new(-1), 
                         getegid: interface::RustAtomicI32::new(-1), 
-                        geteuid: interface::RustAtomicI32::new(-1)};
+                        geteuid: interface::RustAtomicI32::new(-1),
+                        rev_shm: interface::Mutex::new(vec!())};
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {
