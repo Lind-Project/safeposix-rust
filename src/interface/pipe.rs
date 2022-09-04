@@ -62,7 +62,7 @@ impl EmulatedPipe {
         let read_end = self.read_end.lock();
         let pipe_space = read_end.len();
 
-        if (pipe_space > 0) && !self.eof.load(Ordering::SeqCst){
+        if (pipe_space > 0) || self.eof.load(Ordering::SeqCst){
             return true;
         }
         else {
@@ -74,7 +74,7 @@ impl EmulatedPipe {
         let write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if pipe_space == self.size {
+        if pipe_space == 0 {
             return false;
         }
         else {
@@ -96,7 +96,7 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if nonblocking && (pipe_space == self.size) {
+        if nonblocking && (pipe_space == 0) {
             return -1;
         }
 
