@@ -72,14 +72,9 @@ impl EmulatedPipe {
     pub fn check_select_write(&self) -> bool {
 
         let write_end = self.write_end.lock();
-
         let pipe_space = write_end.remaining();
-        if pipe_space == 0 {
-            return false;
-        }
-        else {
-            return true;
-        }
+
+        return pipe_space != 0;
     }
 
     // Write length bytes from pointer into pipe
