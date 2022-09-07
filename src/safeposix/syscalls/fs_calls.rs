@@ -1462,7 +1462,8 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    Self::dup_syscall(self, fd, Some(arg))
+                    drop(filedesc_enum);
+                    self._dup2_helper(fd, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
@@ -2055,48 +2056,62 @@ impl Cage {
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             }  else { prot = PROT_READ | PROT_WRITE; }
-            metadata.rev_shm_add(self.cageid as u32, shmaddr, shmid);
+            let mut rev_shm = self.rev_shm.lock();
+            rev_shm.push((shmaddr as u32, shmid));
+            drop(rev_shm);
             segment.map_shm(shmaddr, prot)
         } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
 
+    pub fn rev_shm_find(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+        for (index, val) in rev_shm.iter().enumerate() {
+            if val.0 == shmaddr as u32 {
+                return Some(index);
+            }
+        }
+        None
+    }
     //------------------SHMDT SYSCALL------------------
 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
-        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as u32, shmaddr) {
+        let mut rev_shm = self.rev_shm.lock();
+        let rev_shm_index = Self::rev_shm_find(&rev_shm, shmaddr as u32);
+
+        if let Some(index) = rev_shm_index {
+            let shmid = rev_shm[index].1;
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
                     segment.unmap_shm(shmaddr);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
-                    metadata.rev_shm_rm(self.cageid as u32, shmaddr);
+                    rev_shm.swap_remove(index);
             
                     if rm {
                         let key = segment.key;
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
+
+                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
                 }
                 interface::RustHashEntry::Vacant(_) => {panic!("Inode not created for some reason");}
             };   
         } else { return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr"); }
-
-        0 //shmdt has succeeded!        
     }
 
     //------------------SHMCTL SYSCALL------------------
 
-    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: &mut ShmidsStruct)-> i32 {
+    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: Option<&mut ShmidsStruct>)-> i32 {
 
         let metadata = &SHM_METADATA;
 
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
             match cmd {
                 IPC_STAT => {
-                    *buf = segment.shminfo;              
+                    *buf.unwrap() = segment.shminfo;              
                 }
                 IPC_RMID => {
                     segment.rmid = true;

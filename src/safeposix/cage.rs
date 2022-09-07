@@ -89,7 +89,8 @@ pub struct Cage {
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
-    pub geteuid: interface::RustAtomicI32
+    pub geteuid: interface::RustAtomicI32,
+    pub rev_shm: interface::Mutex<Vec<(u32, i32)>> //maps addr within cage to shmid
 }
 
 impl Cage {

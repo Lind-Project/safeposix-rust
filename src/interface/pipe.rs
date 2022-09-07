@@ -58,10 +58,28 @@ impl EmulatedPipe {
         if (flags & O_RDWRFLAGS) == O_RDONLY {self.refcount_read.fetch_sub(1, Ordering::Relaxed);}
         if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
+    pub fn check_select_read(&self) -> bool {
+        let read_end = self.read_end.lock();
+        let pipe_space = read_end.len();
+
+        if (pipe_space > 0) || self.eof.load(Ordering::SeqCst){
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    pub fn check_select_write(&self) -> bool {
+
+        let write_end = self.write_end.lock();
+        let pipe_space = write_end.remaining();
+
+        return pipe_space != 0;
+    }
 
     // Write length bytes from pointer into pipe
     // BUG: This only currently works as SPSC
-    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, blocking: bool) -> i32 {
+    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_written = 0;
 
@@ -73,7 +91,7 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if blocking && (pipe_space == self.size) {
+        if nonblocking && (pipe_space == 0) {
             return -1;
         }
 
@@ -89,7 +107,7 @@ impl EmulatedPipe {
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
     // BUG: This only currently works as SPSC
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, blocking: bool) -> i32 {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_read = 0;
 
@@ -100,13 +118,13 @@ impl EmulatedPipe {
 
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
-        if blocking && (pipe_space == 0) {
+        if nonblocking && (pipe_space == 0) {
             return -1;
         }
 
         while bytes_read < length {
             pipe_space = read_end.len();
-            if (pipe_space == 0) & self.eof.load(Ordering::Relaxed) { break; }
+            if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
