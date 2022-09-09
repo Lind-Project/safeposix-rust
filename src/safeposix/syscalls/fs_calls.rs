@@ -286,7 +286,7 @@ impl Cage {
 
                 drop(inodeobj);
 
-                match metawalkandparent(truenewpath.as_path()) {
+                let retval = match metawalkandparent(truenewpath.as_path()) {
                     (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                     (None, Some(pardirinode)) => {
@@ -305,7 +305,31 @@ impl Cage {
                     }
 
                     (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                };
+
+                if retval != 0 {
+                    //reduce the linkcount to its previous value if linking failed
+                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::CharDev(ref mut chardev_inode_obj) => {
+                            chardev_inode_obj.linkcount -= 1;
+                        }
+
+
+                        Inode::Socket(ref mut socket_inode_obj) => {
+                            socket_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::Dir(_) => {panic!("Known non-directory file has been replaced with a directory!");}
+                    }
                 }
+
+                return retval;
             }
         }
     }
@@ -1728,6 +1752,9 @@ impl Cage {
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
+                        let removal_result = Self::remove_from_parent_dir(parent_inodenum, &truepath);
+                        if removal_result != 0 {return removal_result;}
+
                         // remove entry of corresponding inodenum from inodetable
                         if dir_obj.refcount == 0 {
                           drop(inodeobj);
@@ -1735,9 +1762,6 @@ impl Cage {
                         } else {
                           dir_obj.linkcount = 2;
                         }
-
-                        let removal_result = Self::remove_from_parent_dir(parent_inodenum, &truepath);
-                        if removal_result != 0 {return removal_result;}
 
                         log_metadata(&FS_METADATA, parent_inodenum);
                         log_metadata(&FS_METADATA, inodenum);       

@@ -154,13 +154,10 @@ impl Cage {
         };
         newsockaddr.set_port(newlocalport);
 
-        if let Some(id) = sockfdobj.socketobjectid {
-            id
-        } else {
+        if let None = sockfdobj.socketobjectid {
             let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
             let id = NET_METADATA.insert_into_socketobjecttable(sock, ConnState::NOTCONNECTED).unwrap();
             sockfdobj.socketobjectid = Some(id);
-            id
         };
 
         if sockfdobj.realdomain == AF_UNIX {
@@ -191,7 +188,7 @@ impl Cage {
                             atime: time, ctime: time, mtime: time,
                         });
     
-                        dir.filename_to_inode_dict.insert(filename, newinodenum);
+                        dir.filename_to_inode_dict.insert(filename.clone(), newinodenum);
                         dir.linkcount += 1;
                     } else {
                        return syscall_error(Errno::ENOTDIR, "socket", "unix domain socket path made socket address child of non-directory file");
@@ -202,6 +199,14 @@ impl Cage {
                     let bindret = sockobj.0.bind(&newsockaddr);
 
                     if bindret < 0 {
+                        //undo the insertion if the bind failed
+                        if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                            dir.filename_to_inode_dict.remove(&filename);
+                            dir.linkcount -= 1;
+                        } else {
+                            panic!("Known directory is somehow not a directory?");
+                        }
+
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
                             Err(()) => panic!("Unknown errno value from socket bind returned!"),
@@ -355,8 +360,12 @@ impl Cage {
                         if let interface::GenSockaddr::Unix(_) = remoteaddr {
                             let path = remoteaddr.path().clone();
                             let truepath = normpath(convpath(path), self);
-                            if !NET_METADATA.domain_socket_table.contains_key(&truepath) {return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");}
-                            remoteclone = NET_METADATA.domain_socket_table.get(&truepath).unwrap().clone();
+                            let maybe_remote = NET_METADATA.domain_socket_table.get(&truepath);
+                            remoteclone = if let Some(remote) = maybe_remote {
+                                remote.clone()
+                            } else {
+                                return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");
+                            };
                             sockobj.0.set_blocking(); // unix domain sockets block on connect evne if nb, for now we fake them so set blocking and then unset after
                         };
 
