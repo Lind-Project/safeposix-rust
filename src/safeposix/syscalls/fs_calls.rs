@@ -320,7 +320,6 @@ impl Cage {
                             chardev_inode_obj.linkcount -= 1;
                         }
 
-
                         Inode::Socket(ref mut socket_inode_obj) => {
                             socket_inode_obj.linkcount -= 1;
                         }
