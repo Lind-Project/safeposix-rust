@@ -4,6 +4,7 @@
 use crate::interface;
 use super::syscalls::fs_constants::*;
 use super::syscalls::sys_constants::*;
+use super::net::NET_METADATA;
 
 use super::cage::Cage;
 
@@ -264,7 +265,8 @@ pub fn fsck() {
                 normalfile_inode.linkcount != 0
             },
             Inode::Dir(ref mut dir_inode) => {
-                dir_inode.linkcount != 0
+                //2 because . and .. always contribute to the linkcount of a directory
+                dir_inode.linkcount > 2
             },
             Inode::CharDev(ref mut char_inodej) => {
                 char_inodej.linkcount != 0
@@ -303,7 +305,6 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
 // Serialize Metadata Struct to CBOR, write to file
 pub fn persist_metadata(metadata: &FilesystemMetadata) {
-  
     // Serialize metadata to string
     let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
     
@@ -398,15 +399,7 @@ pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
 
         //If both the file and the parent directory exists
         (Some(inodenum), Some(parentinodenum)) => {
-
-            let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&parentinodenum).unwrap();
-            let mut directory_parent_inode_obj = if let Inode::Dir(ref mut x) = *parentinodeobj {x} else {
-                panic!("File was a child of something other than a directory????");
-            };
-            directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
-            directory_parent_inode_obj.linkcount -= 1;
-            //remove reference to file in parent directory
-            drop(parentinodeobj);
+            Cage::remove_from_parent_dir(parentinodenum, &truepath);
 
             FS_METADATA.inodetable.remove(&inodenum);
         }

@@ -74,7 +74,10 @@ impl Cage {
                 if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
-                } //insert a reference to the file in the parent directory
+                    //insert a reference to the file in the parent directory
+                } else {
+                    return syscall_error(Errno::ENOTDIR, "open", "tried to create a file as a child of something that isn't a directory");
+                }
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
@@ -267,76 +270,65 @@ impl Cage {
                 match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
-                        drop(inodeobj);
-
-                        match metawalkandparent(truenewpath.as_path()) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
-
-                            (None, Some(pardirinode)) => {
-                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
-                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
-                                    parentdirinodeobj.linkcount += 1;
-                                    drop(parentinodeobj);
-                                    log_metadata(&FS_METADATA, pardirinode);
-                                    log_metadata(&FS_METADATA, inodenum);
-                                } //insert a reference to the inode in the parent directory
-                                0 //link has succeeded
-                            }
-
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
-                        }
                     }
 
                     Inode::CharDev(ref mut chardev_inode_obj) => {
                         chardev_inode_obj.linkcount += 1; //add link to inode
-                        drop(inodeobj);
-
-                        match metawalkandparent(truenewpath.as_path()) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
-
-                            (None, Some(pardirinode)) => {
-                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
-                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
-                                    parentdirinodeobj.linkcount += 1;
-                                    drop(parentinodeobj);
-                                    log_metadata(&FS_METADATA, pardirinode);
-                                    log_metadata(&FS_METADATA, inodenum);
-                                } //insert a reference to the inode in the parent directory
-                                0 //link has succeeded
-                            }
-
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
-                        }
                     }
 
 
                     Inode::Socket(ref mut socket_inode_obj) => {
                         socket_inode_obj.linkcount += 1; //add link to inode
-                        drop(inodeobj);
-
-                        match metawalkandparent(truenewpath.as_path()) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
-
-                            (None, Some(pardirinode)) => {
-                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
-                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
-                                    parentdirinodeobj.linkcount += 1;
-                                    drop(parentinodeobj);
-                                    let newsockaddr = NET_METADATA.domain_socket_table.get(&trueoldpath).unwrap().clone();
-                                    NET_METADATA.domain_socket_table.insert(truenewpath, newsockaddr);
-                                } //insert a reference to the inode in the parent directory
-                                0 //link has succeeded
-                            }
-
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
-                        }
                     }
 
-                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
+                    Inode::Dir(_) => {return syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
                 }
+
+                drop(inodeobj);
+
+                let retval = match metawalkandparent(truenewpath.as_path()) {
+                    (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                    (None, Some(pardirinode)) => {
+                        let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                        //insert a reference to the inode in the parent directory
+                        if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
+                            parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
+                            parentdirinodeobj.linkcount += 1;
+                            drop(parentinodeobj);
+                            log_metadata(&FS_METADATA, pardirinode);
+                            log_metadata(&FS_METADATA, inodenum);
+                        } else {
+                            panic!("Parent directory was not a directory!");
+                        }
+                        0 //link has succeeded
+                    }
+
+                    (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                };
+
+                if retval != 0 {
+                    //reduce the linkcount to its previous value if linking failed
+                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::CharDev(ref mut chardev_inode_obj) => {
+                            chardev_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::Socket(ref mut socket_inode_obj) => {
+                            socket_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::Dir(_) => {panic!("Known non-directory file has been replaced with a directory!");}
+                    }
+                }
+
+                return retval;
             }
         }
     }
@@ -371,15 +363,8 @@ impl Cage {
 
                 drop(inodeobj);
 
-                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&parentinodenum).unwrap();
-                let mut directory_parent_inode_obj = if let Inode::Dir(ref mut x) = *parentinodeobj {x} else {
-                    panic!("File was a child of something other than a directory????");
-                };
-                directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
-                directory_parent_inode_obj.linkcount -= 1;
-                //remove reference to file in parent directory
-
-                drop(parentinodeobj);
+                let removal_result = Self::remove_from_parent_dir(parentinodenum, &truepath);
+                if removal_result != 0 {return removal_result;}
 
                 if curlinkcount == 0 {
                     if currefcount == 0  {
@@ -1726,6 +1711,20 @@ impl Cage {
         }
     }
 
+    pub fn remove_from_parent_dir(parent_inodenum: usize, truepath: &interface::RustPathBuf) -> i32 {
+      if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap()) {
+          // check if parent dir has write permission
+          if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
+          
+          // remove entry of corresponding filename from filename-inode dict
+          parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
+          parent_dir.linkcount -= 1; // decrement linkcount of parent dir
+      } else {
+          panic!("Non directory file was parent!");
+      }
+      0
+    }
+
     //------------------RMDIR SYSCALL------------------
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
@@ -1741,29 +1740,28 @@ impl Cage {
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
-                let inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                match &*inodeobj {
+                match &mut *inodeobj {
                     // make sure inode matches a directory
-                    Inode::Dir(dir_obj) => {
+                    Inode::Dir(ref mut dir_obj) => {
                         if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode set to S_IFDIR");}
 
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
+                        let removal_result = Self::remove_from_parent_dir(parent_inodenum, &truepath);
+                        if removal_result != 0 {return removal_result;}
+
                         // remove entry of corresponding inodenum from inodetable
-                        drop(inodeobj);
-                        FS_METADATA.inodetable.remove(&inodenum).unwrap();
-                        
-                        if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap()) {
-                            // check if parent dir has write permission
-                            if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
-                            
-                            // remove entry of corresponding filename from filename-inode dict
-                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
-                            parent_dir.linkcount -= 1; // decrement linkcount of parent dir
+                        if dir_obj.refcount == 0 {
+                          drop(inodeobj);
+                          FS_METADATA.inodetable.remove(&inodenum).unwrap();
+                        } else {
+                          dir_obj.linkcount = 2;
                         }
+
                         log_metadata(&FS_METADATA, parent_inodenum);
                         log_metadata(&FS_METADATA, inodenum);       
                         0 // success
