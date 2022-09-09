@@ -265,6 +265,7 @@ pub fn fsck() {
                 normalfile_inode.linkcount != 0
             },
             Inode::Dir(ref mut dir_inode) => {
+                //2 because . and .. always contribute to the linkcount of a directory
                 dir_inode.linkcount > 2
             },
             Inode::CharDev(ref mut char_inodej) => {

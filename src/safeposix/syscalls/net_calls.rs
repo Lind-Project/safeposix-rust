@@ -180,14 +180,14 @@ impl Cage {
                     if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                         let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
                         let effective_mode = S_IFSOCK as u32 | mode;
-    
+
                         let time = interface::timestamp(); //We do a real timestamp now
                         newinode = Inode::Socket(SocketInode {
                             size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                             mode: effective_mode, linkcount: 1, refcount: 1,
                             atime: time, ctime: time, mtime: time,
                         });
-    
+
                         dir.filename_to_inode_dict.insert(filename.clone(), newinodenum);
                         dir.linkcount += 1;
                     } else {
