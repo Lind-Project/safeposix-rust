@@ -2129,4 +2129,267 @@ impl Cage {
         
         0 //shmctl has succeeded!
     }
+
+    //------------------MUTEX SYSCALLS------------------
+    
+    pub fn mutex_create_syscall(&self) -> i32 {
+        let mut mutextable = self.mutex_table.write();
+        let mut index_option = None;
+        for i in 0..mutextable.len() {
+            if mutextable[i].is_none() {
+                index_option = Some(i);
+                break;
+            }
+        }
+
+        let index = if let Some(ind) = index_option {
+            ind
+        } else {
+            mutextable.push(None);
+            mutextable.len() - 1
+        };
+
+        let mutex_result = interface::RawMutex::create();
+        match mutex_result {
+            Ok(mutex) => {
+                mutextable[index] = Some(interface::RustRfc::new(mutex));
+                index as i32
+            }
+            Err(_) => {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {syscall_error(i, "mutex_create", "The libc call to pthread_mutex_init failed!")},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
+                }
+            }
+        }
+    }
+
+    pub fn mutex_destroy_syscall(&self, mutex_handle: i32) -> i32 {
+        let mut mutextable = self.mutex_table.write();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            mutextable[mutex_handle  as usize] = None;
+            0
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_destroy", "Mutex handle does not refer to a valid mutex!")
+        }
+        //the RawMutex is destroyed on Drop
+
+        //this is currently assumed to always succeed, as the man page does not list possible
+        //errors for pthread_mutex_destroy
+    }
+
+    pub fn mutex_lock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.lock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_lock", "The libc call to pthread_mutex_lock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_lock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_lock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    pub fn mutex_trylock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.trylock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_trylock", "The libc call to pthread_mutex_trylock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_trylock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_trylock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    pub fn mutex_unlock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.unlock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_unlock", "The libc call to pthread_mutex_unlock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_unlock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_unlock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    //------------------CONDVAR SYSCALLS------------------
+
+    pub fn cond_create_syscall(&self) -> i32 {
+        let mut cvtable = self.cv_table.write();
+        let mut index_option = None;
+        for i in 0..cvtable.len() {
+            if cvtable[i].is_none() {
+                index_option = Some(i);
+                break;
+            }
+        }
+
+        let index = if let Some(ind) = index_option {
+            ind
+        } else {
+            cvtable.push(None);
+            cvtable.len() - 1
+        };
+
+        let cv_result = interface::RawCondvar::create();
+        match cv_result {
+            Ok(cv) => {
+                cvtable[index] = Some(interface::RustRfc::new(cv));
+                index as i32
+            }
+            Err(_) => {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {syscall_error(i, "cond_create", "The libc call to pthread_cond_init failed!")},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
+                }
+            }
+        }
+    }
+
+    pub fn cond_destroy_syscall(&self, cv_handle: i32) -> i32 {
+        let mut cvtable = self.cv_table.write();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            cvtable[cv_handle  as usize] = None;
+            0
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_destroy", "Condvar handle does not refer to a valid condvar!")
+        }
+        //the RawCondvar is destroyed on Drop
+
+        //this is currently assumed to always succeed, as the man page does not list possible
+        //errors for pthread_cv_destroy
+    }
+
+    pub fn cond_signal_syscall(&self, cv_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+            let retval = clonedcv.signal();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "cond_signal", "The libc call to pthread_cond_signal failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_signal returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_signal", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_broadcast_syscall(&self, cv_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+            let retval = clonedcv.broadcast();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "cond_broadcast", "The libc call to pthread_cond_broadcast failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_broadcast returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_broadcast", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_wait_syscall(&self, cv_handle: i32, mutex_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+
+            let mutextable = self.mutex_table.read();
+            if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+                let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+                drop(mutextable);
+                let retval = clonedcv.wait(&*clonedmutex);
+                if retval < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
+                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
+                    };
+                }
+
+                retval
+            } else {
+                //undefined behavior
+                syscall_error(Errno::EBADF, "cond_wait", "Mutex handle does not refer to a valid mutex!")
+            }
+
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_timedwait_syscall(&self, cv_handle: i32, mutex_handle: i32, time: interface::RustDuration) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+
+            let mutextable = self.mutex_table.read();
+            if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+                let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+                drop(mutextable);
+                let retval = clonedcv.timedwait(&*clonedmutex, time);
+                if retval < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
+                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
+                    };
+                }
+
+                retval
+            } else {
+                //undefined behavior
+                syscall_error(Errno::EBADF, "cond_wait", "Mutex handle does not refer to a valid mutex!")
+            }
+
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
 }
