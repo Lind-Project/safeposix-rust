@@ -1813,7 +1813,7 @@ impl Cage {
         }
     }
 
-    fn truncate_helper(&self, inodenum: usize, length: isize, file_opened: bool) -> i32 {
+    fn _truncate_helper(&self, inodenum: usize, length: isize, file_opened: bool) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "truncate", "length specified as less than 0");
         }
@@ -1829,6 +1829,18 @@ impl Cage {
                 let mut maybe_fileobject = FILEOBJECTTABLE.entry(inodenum);
                 let mut tempbind;
                 let close_on_exit;
+
+                //Because in truncate we may have a case
+                //In which a fileobject is open
+                //We check if the fileobject exists
+                //If it is not we check which call's invoked
+                //And if file_opened is set to true
+                //That's truncate so an fd is opened
+                //And thus if the inode does not exist
+                //We should panic, however if instead
+                //file_opened is set to false we then
+                //Create a new file_object to use
+                //Which we remove once we are done with it
                 let fileobject = if let interface::RustHashEntry::Occupied(ref mut occ) = maybe_fileobject {
                     close_on_exit = false;
                     occ.get_mut()
@@ -1897,7 +1909,7 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "ftruncate", "specified file not open for writing");
                     }
                     let inodenum = normalfile_filedesc_obj.inode;
-                    self.truncate_helper(inodenum, length, true)
+                    self._truncate_helper(inodenum, length, true)
                 }
                 _ => {
                     syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file")
@@ -1914,7 +1926,7 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            self.truncate_helper(inodenum, length, false)
+            self._truncate_helper(inodenum, length, false)
         } else {
             syscall_error(Errno::ENOENT, "truncate", "path does not refer to an existing file")
         }
