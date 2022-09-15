@@ -1813,7 +1813,7 @@ impl Cage {
         }
     }
 
-    fn _truncate_helper(&self, inodenum: usize, length: isize, file_opened: bool) -> i32 {
+    fn _truncate_helper(&self, inodenum: usize, length: isize, file_must_exist: bool) -> i32 {
         if length < 0 {
             return syscall_error(Errno::EINVAL, "truncate", "length specified as less than 0");
         }
@@ -1830,21 +1830,14 @@ impl Cage {
                 let mut tempbind;
                 let close_on_exit;
 
-                //Because in truncate we may have a case
-                //In which a fileobject is open
-                //We check if the fileobject exists
-                //If it is not we check which call's invoked
-                //And if file_opened is set to true
-                //That's truncate so an fd is opened
-                //And thus if the inode does not exist
-                //We should panic, however if instead
-                //file_opened is set to false we then
-                //Create a new file_object to use
-                //Which we remove once we are done with it
+                //We check if the fileobject exists. If file_must_exist is true (i.e. we called the helper from
+                //ftruncate) then we know that an fd must exist and thus we panic if the fileobject does not
+                //exist. If file_must_exist is false (i.e. we called the helper from truncate), if the file does
+                //not exist,  we create a new fileobject to use which we remove once we are done with it
                 let fileobject = if let interface::RustHashEntry::Occupied(ref mut occ) = maybe_fileobject {
                     close_on_exit = false;
                     occ.get_mut()
-                } else if file_opened {
+                } else if file_must_exist {
                     panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
                 } else {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
