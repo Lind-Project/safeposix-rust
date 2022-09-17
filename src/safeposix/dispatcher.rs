@@ -14,7 +14,9 @@ const READ_SYSCALL: i32 = 12;
 const WRITE_SYSCALL: i32 = 13;
 const LSEEK_SYSCALL: i32 = 14;
 const IOCTL_SYSCALL: i32 = 15;
+const TRUNCATE_SYSCALL: i32 = 16;
 const FXSTAT_SYSCALL: i32 = 17;
+const FTRUNCATE_SYSCALL: i32 = 18;
 const FSTATFS_SYSCALL: i32 = 19;
 const MMAP_SYSCALL: i32 = 21;
 const MUNMAP_SYSCALL: i32 = 22;
@@ -462,6 +464,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         COND_TIMEDWAIT_SYSCALL => {
             check_and_dispatch!(cage.cond_timedwait_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::duration_fromtimespec(arg3))
+        }
+        TRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_isize(arg2))
+        }
+        FTRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
         }
 
         _ => {//unknown syscall

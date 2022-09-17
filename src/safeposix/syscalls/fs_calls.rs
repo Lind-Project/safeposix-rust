@@ -1813,6 +1813,80 @@ impl Cage {
         }
     }
 
+    fn _truncate_helper(&self, inodenum: usize, length: isize, file_must_exist: bool) -> i32 {
+        if length < 0 {
+            return syscall_error(Errno::EINVAL, "truncate", "length specified as less than 0");
+        }
+        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+
+        match *inodeobj {
+            // only proceed when inode matches with a file
+            Inode::File(ref mut normalfile_inode_obj) => {
+                let ulength = length as usize;
+                let filesize = normalfile_inode_obj.size as usize;
+
+                // get file object table with write lock
+                let mut maybe_fileobject = FILEOBJECTTABLE.entry(inodenum);
+                let mut tempbind;
+                let close_on_exit;
+
+                //We check if the fileobject exists. If file_must_exist is true (i.e. we called the helper from
+                //ftruncate) then we know that an fd must exist and thus we panic if the fileobject does not
+                //exist. If file_must_exist is false (i.e. we called the helper from truncate), if the file does
+                //not exist,  we create a new fileobject to use which we remove once we are done with it
+                let fileobject = if let interface::RustHashEntry::Occupied(ref mut occ) = maybe_fileobject {
+                    close_on_exit = false;
+                    occ.get_mut()
+                } else if file_must_exist {
+                    panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
+                } else {
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                    tempbind = interface::openfile(sysfilename, true).unwrap();
+                    close_on_exit = true;
+                    &mut tempbind
+                };
+
+                // if length is greater than original filesize,
+                // file is extented with null bytes
+                if filesize < ulength {
+                    let blankbytecount = ulength - filesize;
+                    if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount) {
+                        if byteswritten != blankbytecount {
+                            panic!("zerofill_at() has failed");
+                        }
+                    } else {
+                        panic!("zerofill_at() has failed");
+                    }
+                } else { // if length is smaller than original filesize,
+                        // extra data are cut off
+                    fileobject.shrink(ulength).unwrap();
+                } 
+
+                if close_on_exit {
+                    fileobject.close().unwrap();
+                }
+
+                drop(fileobject);
+                drop(maybe_fileobject);
+
+                normalfile_inode_obj.size = ulength;
+
+                drop(inodeobj);
+                log_metadata(&FS_METADATA, inodenum);
+                0 // truncating has succeeded!
+            }
+            Inode::CharDev(_) => {
+                syscall_error(Errno::EINVAL, "truncate", "The named file is a character driver")
+            }
+            Inode::Socket(_) => {
+                syscall_error(Errno::EINVAL, "truncate", "The named file is a domain socket")
+            }
+            Inode::Dir(_) => {
+                syscall_error(Errno::EISDIR, "truncate", "The named file is a directory")
+            }
+        }
+    }
+
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
@@ -1824,50 +1898,16 @@ impl Cage {
             match &*filedesc_enum {
                 // only proceed when fd references a regular file
                 File(normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "ftruncate", "specified file not open for writing");
+                    }
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-
-                    match *inodeobj {
-                        // only proceed when inode matches with a file
-                        Inode::File(ref mut normalfile_inode_obj) => {
-                            // get file object table with write lock
-                            let mut fileobject = FILEOBJECTTABLE.get_mut(&inodenum).unwrap();
-                            let filesize = normalfile_inode_obj.size as isize;
-                            
-                            // if length is greater than original filesize,
-                            // file is extented with null bytes
-                            if filesize < length {
-                                let blankbytecount = length - filesize;
-                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize as usize, blankbytecount as usize) {
-                                    if byteswritten != blankbytecount as usize {
-                                        panic!("zerofill_at() has failed");
-                                    }
-                                } else {
-                                    panic!("zerofill_at() has failed");
-                                }
-                            } else { // if length is smaller than original filesize,
-                                     // extra data are cut off
-                                fileobject.shrink(length as usize).unwrap();
-                            } 
-                            drop(inodeobj);
-                            log_metadata(&FS_METADATA, inodenum);    
-                        }
-                        Inode::CharDev(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
-                        }
-                        Inode::Socket(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a domain socket");
-                        }
-                        Inode::Dir(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
-                        }
-                    };
+                    self._truncate_helper(inodenum, length, true)
                 }
                 _ => {
-                    return syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file");
+                    syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file")
                 }
-            };
-            0 // ftruncate() has succeeded!
+            }
         } else { 
             syscall_error(Errno::EBADF, "ftruncate", "fd is not a valid file descriptor")
         }
@@ -1875,7 +1915,14 @@ impl Cage {
 
     //------------------TRUNCATE SYSCALL------------------
     pub fn truncate_syscall(&self, path: &str, length: isize) -> i32 {
-        self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
+        let truepath = normpath(convpath(path), self);
+
+        //Walk the file tree to get inode from path
+        if let Some(inodenum) = metawalk(truepath.as_path()) {
+            self._truncate_helper(inodenum, length, false)
+        } else {
+            syscall_error(Errno::ENOENT, "truncate", "path does not refer to an existing file")
+        }
     }
 
     //------------------PIPE SYSCALL------------------
