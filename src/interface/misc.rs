@@ -24,6 +24,7 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
+use std::time::Duration;
 
 pub fn log_from_ptr(buf: *const u8, length: usize) {
     if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
@@ -163,5 +164,100 @@ impl AdvisoryLock {
             self.advisory_condvar.notify_all(); //in case readers are waiting
             true
         } else {false}
+    }
+}
+
+pub struct RawMutex {
+    inner: libc::pthread_mutex_t
+}
+
+impl RawMutex {
+    pub fn create() -> Result<Self, i32> {
+        let inner;
+        let libcret;
+        unsafe {
+            inner = std::mem::MaybeUninit::uninit();
+            libcret = libc::pthread_mutex_init((&mut inner.assume_init()) as *mut libc::pthread_mutex_t, std::ptr::null());
+        }
+        if libcret < 0 { Err(libcret) } else { Ok(Self {inner: unsafe{inner.assume_init()}}) }
+    }
+
+    pub fn lock(&self) -> i32 {
+        unsafe {libc::pthread_mutex_lock((&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)}
+    }
+
+    pub fn trylock(&self) -> i32 {
+        unsafe {libc::pthread_mutex_trylock((&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)}
+    }
+
+    pub fn unlock(&self) -> i32 {
+        unsafe {libc::pthread_mutex_unlock((&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)}
+    }
+}
+
+impl std::fmt::Debug for RawMutex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<mutex>")
+    }
+}
+
+impl Drop for RawMutex {
+    fn drop(&mut self) {
+        unsafe{ libc::pthread_mutex_destroy((&mut self.inner) as *mut libc::pthread_mutex_t); }
+    }
+}
+
+pub struct RawCondvar {
+    inner: libc::pthread_cond_t
+}
+
+impl RawCondvar {
+    pub fn create() -> Result<Self, i32> {
+        let inner;
+        let libcret;
+        unsafe {
+            inner = std::mem::MaybeUninit::uninit();
+            libcret = libc::pthread_cond_init((&mut inner.assume_init()) as *mut libc::pthread_cond_t, std::ptr::null());
+        }
+        if libcret < 0 { Err(libcret) } else { Ok(Self {inner: unsafe{ inner.assume_init() }}) }
+    }
+
+    pub fn signal(&self) -> i32 {
+        unsafe {libc::pthread_cond_signal((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t)}
+    }
+
+    pub fn broadcast(&self) -> i32 {
+        unsafe {libc::pthread_cond_broadcast((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t)}
+    }
+
+    pub fn wait(&self, mutex: &RawMutex) -> i32 {
+        unsafe {
+            libc::pthread_cond_wait((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
+                                    (&mutex.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)
+        }
+    }
+
+    pub fn timedwait(&self, mutex: &RawMutex, abs_duration: Duration) -> i32 {
+        let abstime = libc::timespec {
+            tv_sec: abs_duration.as_secs() as i64,
+            tv_nsec: (abs_duration.as_nanos() % 1000000000) as i64
+        };
+        unsafe {
+            libc::pthread_cond_timedwait((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
+                                        (&mutex.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
+                                        (&abstime) as *const libc::timespec)
+        }
+    }
+}
+
+impl Drop for RawCondvar {
+    fn drop(&mut self) {
+        unsafe { libc::pthread_cond_destroy((&mut self.inner) as *mut libc::pthread_cond_t); }
+    }
+}
+
+impl std::fmt::Debug for RawCondvar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<condvar>")
     }
 }

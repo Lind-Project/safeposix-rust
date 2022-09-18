@@ -2,7 +2,7 @@
 
 // System related system calls
 use crate::interface;
-use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
+use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, syscall_error, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
@@ -35,6 +35,48 @@ impl Cage {
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         let mutcagetable = &CAGE_TABLE;
+
+        //construct a new mutex in the child cage where each initialized mutex is in the parent cage
+        let mutextable = self.mutex_table.read();
+        let mut new_mutex_table = vec!();
+        for elem in mutextable.iter() {
+            if elem.is_some() {
+                let new_mutex_result = interface::RawMutex::create();
+                match new_mutex_result {
+                    Ok(new_mutex) => {new_mutex_table.push(Some(interface::RustRfc::new(new_mutex)))}
+                        Err(_) => {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_mutex_init failed!");},
+                            Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
+                        };
+                    }
+                }
+            } else {
+                new_mutex_table.push(None);
+            }
+        }
+        drop(mutextable);
+
+        //construct a new condvar in the child cage where each initialized condvar is in the parent cage
+        let cvtable = self.cv_table.read();
+        let mut new_cv_table = vec!();
+        for elem in cvtable.iter() {
+            if elem.is_some() {
+                let new_cv_result = interface::RawCondvar::create();
+                match new_cv_result {
+                    Ok(new_cv) => {new_cv_table.push(Some(interface::RustRfc::new(new_cv)))}
+                        Err(_) => {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_cond_init failed!");},
+                            Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
+                        };
+                    }
+                }
+            } else {
+                new_cv_table.push(None);
+            }
+        }
+        drop(cvtable);
 
         //construct new cage struct with a cloned fdtable
         let newfdtable = interface::RustHashMap::new();
@@ -90,6 +132,7 @@ impl Cage {
                 } else {panic!("We changed from a directory that was not a directory in chdir!");}
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         }
+
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
@@ -98,7 +141,9 @@ impl Cage {
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
             geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
-            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone())
+            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
+            mutex_table: interface::RustLock::new(new_mutex_table),
+            cv_table: interface::RustLock::new(new_cv_table),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -143,7 +188,9 @@ impl Cage {
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
             geteuid: interface::RustAtomicI32::new(-1),
-            rev_shm: interface::Mutex::new(vec!())
+            rev_shm: interface::Mutex::new(vec!()),
+            mutex_table: interface::RustLock::new(vec!()),
+            cv_table: interface::RustLock::new(vec!()),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 

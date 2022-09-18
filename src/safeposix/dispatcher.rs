@@ -14,7 +14,9 @@ const READ_SYSCALL: i32 = 12;
 const WRITE_SYSCALL: i32 = 13;
 const LSEEK_SYSCALL: i32 = 14;
 const IOCTL_SYSCALL: i32 = 15;
+const TRUNCATE_SYSCALL: i32 = 16;
 const FXSTAT_SYSCALL: i32 = 17;
+const FTRUNCATE_SYSCALL: i32 = 18;
 const FSTATFS_SYSCALL: i32 = 19;
 const MMAP_SYSCALL: i32 = 21;
 const MUNMAP_SYSCALL: i32 = 22;
@@ -62,6 +64,18 @@ const PIPE_SYSCALL: i32 = 66;
 const PIPE2_SYSCALL: i32 = 67;
 const FORK_SYSCALL: i32 = 68;
 const EXEC_SYSCALL: i32 = 69;
+
+const MUTEX_CREATE_SYSCALL: i32 = 70;
+const MUTEX_DESTROY_SYSCALL: i32 = 71;
+const MUTEX_LOCK_SYSCALL: i32 = 72;
+const MUTEX_TRYLOCK_SYSCALL: i32 = 73;
+const MUTEX_UNLOCK_SYSCALL: i32 = 74;
+const COND_CREATE_SYSCALL: i32 = 75;
+const COND_DESTROY_SYSCALL: i32 = 76;
+const COND_WAIT_SYSCALL: i32 = 77;
+const COND_BROADCAST_SYSCALL: i32 = 78;
+const COND_SIGNAL_SYSCALL: i32 = 79;
+const COND_TIMEDWAIT_SYSCALL: i32 = 80;
 
 const GETHOSTNAME_SYSCALL: i32 = 125;
 const PREAD_SYSCALL: i32 = 126;
@@ -417,6 +431,47 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let buf = if cmd == IPC_STAT {Some(get_onearg!(interface::get_shmidstruct(arg3)))} else {None};
             check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), Ok::<i32, i32>(cmd), Ok::<Option<&mut interface::ShmidsStruct>, i32>(buf))
         }
+
+        MUTEX_CREATE_SYSCALL => {
+            check_and_dispatch!(cage.mutex_create_syscall, )
+        }
+        MUTEX_DESTROY_SYSCALL => {
+            check_and_dispatch!(cage.mutex_destroy_syscall, interface::get_int(arg1))
+        }
+        MUTEX_LOCK_SYSCALL => {
+            check_and_dispatch!(cage.mutex_lock_syscall, interface::get_int(arg1))
+        }
+        MUTEX_TRYLOCK_SYSCALL => {
+            check_and_dispatch!(cage.mutex_trylock_syscall, interface::get_int(arg1))
+        }
+        MUTEX_UNLOCK_SYSCALL => {
+            check_and_dispatch!(cage.mutex_unlock_syscall, interface::get_int(arg1))
+        }
+        COND_CREATE_SYSCALL => {
+            check_and_dispatch!(cage.cond_create_syscall, )
+        }
+        COND_DESTROY_SYSCALL => {
+            check_and_dispatch!(cage.cond_destroy_syscall, interface::get_int(arg1))
+        }
+        COND_WAIT_SYSCALL => {
+            check_and_dispatch!(cage.cond_wait_syscall, interface::get_int(arg1), interface::get_int(arg2))
+        }
+        COND_BROADCAST_SYSCALL => {
+            check_and_dispatch!(cage.cond_broadcast_syscall, interface::get_int(arg1))
+        }
+        COND_SIGNAL_SYSCALL => {
+            check_and_dispatch!(cage.cond_signal_syscall, interface::get_int(arg1))
+        }
+        COND_TIMEDWAIT_SYSCALL => {
+            check_and_dispatch!(cage.cond_timedwait_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::duration_fromtimespec(arg3))
+        }
+        TRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_isize(arg2))
+        }
+        FTRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
+        }
+
         _ => {//unknown syscall
             -1
         }
@@ -440,7 +495,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!())
+        rev_shm: interface::Mutex::new(vec!()),
+        mutex_table: interface::RustLock::new(vec!()),
+        cv_table: interface::RustLock::new(vec!()),
     };
     cagetable.insert(0, interface::RustRfc::new(utilcage));
 
@@ -454,7 +511,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!())
+        rev_shm: interface::Mutex::new(vec!()),
+        mutex_table: interface::RustLock::new(vec!()),
+        cv_table: interface::RustLock::new(vec!()),
     };
     initcage.load_lower_handle_stubs();
     cagetable.insert(1, interface::RustRfc::new(initcage));

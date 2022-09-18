@@ -1813,6 +1813,80 @@ impl Cage {
         }
     }
 
+    fn _truncate_helper(&self, inodenum: usize, length: isize, file_must_exist: bool) -> i32 {
+        if length < 0 {
+            return syscall_error(Errno::EINVAL, "truncate", "length specified as less than 0");
+        }
+        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+
+        match *inodeobj {
+            // only proceed when inode matches with a file
+            Inode::File(ref mut normalfile_inode_obj) => {
+                let ulength = length as usize;
+                let filesize = normalfile_inode_obj.size as usize;
+
+                // get file object table with write lock
+                let mut maybe_fileobject = FILEOBJECTTABLE.entry(inodenum);
+                let mut tempbind;
+                let close_on_exit;
+
+                //We check if the fileobject exists. If file_must_exist is true (i.e. we called the helper from
+                //ftruncate) then we know that an fd must exist and thus we panic if the fileobject does not
+                //exist. If file_must_exist is false (i.e. we called the helper from truncate), if the file does
+                //not exist,  we create a new fileobject to use which we remove once we are done with it
+                let fileobject = if let interface::RustHashEntry::Occupied(ref mut occ) = maybe_fileobject {
+                    close_on_exit = false;
+                    occ.get_mut()
+                } else if file_must_exist {
+                    panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
+                } else {
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                    tempbind = interface::openfile(sysfilename, true).unwrap();
+                    close_on_exit = true;
+                    &mut tempbind
+                };
+
+                // if length is greater than original filesize,
+                // file is extented with null bytes
+                if filesize < ulength {
+                    let blankbytecount = ulength - filesize;
+                    if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount) {
+                        if byteswritten != blankbytecount {
+                            panic!("zerofill_at() has failed");
+                        }
+                    } else {
+                        panic!("zerofill_at() has failed");
+                    }
+                } else { // if length is smaller than original filesize,
+                        // extra data are cut off
+                    fileobject.shrink(ulength).unwrap();
+                } 
+
+                if close_on_exit {
+                    fileobject.close().unwrap();
+                }
+
+                drop(fileobject);
+                drop(maybe_fileobject);
+
+                normalfile_inode_obj.size = ulength;
+
+                drop(inodeobj);
+                log_metadata(&FS_METADATA, inodenum);
+                0 // truncating has succeeded!
+            }
+            Inode::CharDev(_) => {
+                syscall_error(Errno::EINVAL, "truncate", "The named file is a character driver")
+            }
+            Inode::Socket(_) => {
+                syscall_error(Errno::EINVAL, "truncate", "The named file is a domain socket")
+            }
+            Inode::Dir(_) => {
+                syscall_error(Errno::EISDIR, "truncate", "The named file is a directory")
+            }
+        }
+    }
+
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
@@ -1824,50 +1898,16 @@ impl Cage {
             match &*filedesc_enum {
                 // only proceed when fd references a regular file
                 File(normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "ftruncate", "specified file not open for writing");
+                    }
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-
-                    match *inodeobj {
-                        // only proceed when inode matches with a file
-                        Inode::File(ref mut normalfile_inode_obj) => {
-                            // get file object table with write lock
-                            let mut fileobject = FILEOBJECTTABLE.get_mut(&inodenum).unwrap();
-                            let filesize = normalfile_inode_obj.size as isize;
-                            
-                            // if length is greater than original filesize,
-                            // file is extented with null bytes
-                            if filesize < length {
-                                let blankbytecount = length - filesize;
-                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize as usize, blankbytecount as usize) {
-                                    if byteswritten != blankbytecount as usize {
-                                        panic!("zerofill_at() has failed");
-                                    }
-                                } else {
-                                    panic!("zerofill_at() has failed");
-                                }
-                            } else { // if length is smaller than original filesize,
-                                     // extra data are cut off
-                                fileobject.shrink(length as usize).unwrap();
-                            } 
-                            drop(inodeobj);
-                            log_metadata(&FS_METADATA, inodenum);    
-                        }
-                        Inode::CharDev(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
-                        }
-                        Inode::Socket(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a domain socket");
-                        }
-                        Inode::Dir(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
-                        }
-                    };
+                    self._truncate_helper(inodenum, length, true)
                 }
                 _ => {
-                    return syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file");
+                    syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file")
                 }
-            };
-            0 // ftruncate() has succeeded!
+            }
         } else { 
             syscall_error(Errno::EBADF, "ftruncate", "fd is not a valid file descriptor")
         }
@@ -1875,7 +1915,14 @@ impl Cage {
 
     //------------------TRUNCATE SYSCALL------------------
     pub fn truncate_syscall(&self, path: &str, length: isize) -> i32 {
-        self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
+        let truepath = normpath(convpath(path), self);
+
+        //Walk the file tree to get inode from path
+        if let Some(inodenum) = metawalk(truepath.as_path()) {
+            self._truncate_helper(inodenum, length, false)
+        } else {
+            syscall_error(Errno::ENOENT, "truncate", "path does not refer to an existing file")
+        }
     }
 
     //------------------PIPE SYSCALL------------------
@@ -2128,5 +2175,268 @@ impl Cage {
         }
         
         0 //shmctl has succeeded!
+    }
+
+    //------------------MUTEX SYSCALLS------------------
+    
+    pub fn mutex_create_syscall(&self) -> i32 {
+        let mut mutextable = self.mutex_table.write();
+        let mut index_option = None;
+        for i in 0..mutextable.len() {
+            if mutextable[i].is_none() {
+                index_option = Some(i);
+                break;
+            }
+        }
+
+        let index = if let Some(ind) = index_option {
+            ind
+        } else {
+            mutextable.push(None);
+            mutextable.len() - 1
+        };
+
+        let mutex_result = interface::RawMutex::create();
+        match mutex_result {
+            Ok(mutex) => {
+                mutextable[index] = Some(interface::RustRfc::new(mutex));
+                index as i32
+            }
+            Err(_) => {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {syscall_error(i, "mutex_create", "The libc call to pthread_mutex_init failed!")},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
+                }
+            }
+        }
+    }
+
+    pub fn mutex_destroy_syscall(&self, mutex_handle: i32) -> i32 {
+        let mut mutextable = self.mutex_table.write();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            mutextable[mutex_handle  as usize] = None;
+            0
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_destroy", "Mutex handle does not refer to a valid mutex!")
+        }
+        //the RawMutex is destroyed on Drop
+
+        //this is currently assumed to always succeed, as the man page does not list possible
+        //errors for pthread_mutex_destroy
+    }
+
+    pub fn mutex_lock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.lock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_lock", "The libc call to pthread_mutex_lock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_lock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_lock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    pub fn mutex_trylock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.trylock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_trylock", "The libc call to pthread_mutex_trylock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_trylock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_trylock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    pub fn mutex_unlock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.unlock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_unlock", "The libc call to pthread_mutex_unlock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_unlock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_unlock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    //------------------CONDVAR SYSCALLS------------------
+
+    pub fn cond_create_syscall(&self) -> i32 {
+        let mut cvtable = self.cv_table.write();
+        let mut index_option = None;
+        for i in 0..cvtable.len() {
+            if cvtable[i].is_none() {
+                index_option = Some(i);
+                break;
+            }
+        }
+
+        let index = if let Some(ind) = index_option {
+            ind
+        } else {
+            cvtable.push(None);
+            cvtable.len() - 1
+        };
+
+        let cv_result = interface::RawCondvar::create();
+        match cv_result {
+            Ok(cv) => {
+                cvtable[index] = Some(interface::RustRfc::new(cv));
+                index as i32
+            }
+            Err(_) => {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {syscall_error(i, "cond_create", "The libc call to pthread_cond_init failed!")},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
+                }
+            }
+        }
+    }
+
+    pub fn cond_destroy_syscall(&self, cv_handle: i32) -> i32 {
+        let mut cvtable = self.cv_table.write();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            cvtable[cv_handle  as usize] = None;
+            0
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_destroy", "Condvar handle does not refer to a valid condvar!")
+        }
+        //the RawCondvar is destroyed on Drop
+
+        //this is currently assumed to always succeed, as the man page does not list possible
+        //errors for pthread_cv_destroy
+    }
+
+    pub fn cond_signal_syscall(&self, cv_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+            let retval = clonedcv.signal();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "cond_signal", "The libc call to pthread_cond_signal failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_signal returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_signal", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_broadcast_syscall(&self, cv_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+            let retval = clonedcv.broadcast();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "cond_broadcast", "The libc call to pthread_cond_broadcast failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_broadcast returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_broadcast", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_wait_syscall(&self, cv_handle: i32, mutex_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+
+            let mutextable = self.mutex_table.read();
+            if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+                let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+                drop(mutextable);
+                let retval = clonedcv.wait(&*clonedmutex);
+                if retval < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
+                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
+                    };
+                }
+
+                retval
+            } else {
+                //undefined behavior
+                syscall_error(Errno::EBADF, "cond_wait", "Mutex handle does not refer to a valid mutex!")
+            }
+
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_timedwait_syscall(&self, cv_handle: i32, mutex_handle: i32, time: interface::RustDuration) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+
+            let mutextable = self.mutex_table.read();
+            if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+                let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+                drop(mutextable);
+                let retval = clonedcv.timedwait(&*clonedmutex, time);
+                if retval < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
+                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
+                    };
+                }
+
+                retval
+            } else {
+                //undefined behavior
+                syscall_error(Errno::EBADF, "cond_wait", "Mutex handle does not refer to a valid mutex!")
+            }
+
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
+        }
     }
 }
