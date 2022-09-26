@@ -1112,7 +1112,8 @@ impl Cage {
 
                         //not supported yet
                         Pipe(pipefdobj) => {
-                            let pipe = PIPE_TABLE.get(&pipefdobj.pipe).unwrap().clone();
+                            let pipeopt = PIPE_TABLE[pipefdobj.pipe as usize].read();
+                            let pipe = pipeopt.as_ref().unwrap();
                             if pipe.check_select_read() {
                                 new_readfds.insert(*fd);
                                 retval += 1;
@@ -1158,7 +1159,8 @@ impl Cage {
 
                         //not supported yet
                         Pipe(pipefdobj) => {
-                            let pipe = PIPE_TABLE.get(&pipefdobj.pipe).unwrap().clone();
+                            let pipeopt = PIPE_TABLE[pipefdobj.pipe as usize].read();
+                            let pipe = pipeopt.as_ref().unwrap();
                             if pipe.check_select_write() {
                                 new_writefds.insert(*fd);
                                 retval += 1;

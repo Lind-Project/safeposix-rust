@@ -655,7 +655,8 @@ impl Cage {
                     }
 
                     // get the pipe, read from it, and return bytes read
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    let pipeopt = PIPE_TABLE[pipe_filedesc_obj.pipe as usize].read();
+                    let pipe = pipeopt.as_ref().unwrap();
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                     let ret = pipe.read_from_pipe(buf, count, nonblocking) as i32;
@@ -827,8 +828,8 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
                     // get the pipe, write to it, and return bytes written
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    let mut nonblocking = false;
+                    let pipeopt = PIPE_TABLE[pipe_filedesc_obj.pipe as usize].read();
+                    let pipe = pipeopt.as_ref().unwrap();                    let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                     let ret = pipe.write_to_pipe(buf, count, nonblocking) as i32;
                     if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
@@ -1173,7 +1174,8 @@ impl Cage {
                 }
             }
             Pipe(pipe_filedesc_obj) => {
-                let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                let pipeopt = PIPE_TABLE[pipe_filedesc_obj.pipe as usize].read();
+                let pipe = pipeopt.as_ref().unwrap();
                 pipe.incr_ref(pipe_filedesc_obj.flags);
             }
             Socket(socket_filedesc_obj) => {
@@ -1286,7 +1288,8 @@ impl Cage {
 
             }
             Pipe(pipe_filedesc_obj) => {
-                let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                let pipeopt = PIPE_TABLE[pipe_filedesc_obj.pipe as usize].read();
+                let pipe = pipeopt.as_ref().unwrap();
            
                 pipe.decr_ref(pipe_filedesc_obj.flags);
 
@@ -1298,7 +1301,7 @@ impl Cage {
 
                 if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
                     // last reference, lets remove it
-                    PIPE_TABLE.remove(&pipe_filedesc_obj.pipe).unwrap();
+                    PIPE_TABLE[pipe_filedesc_obj.pipe as usize].write().take();
                 }
 
             }
@@ -1936,7 +1939,8 @@ impl Cage {
         let actualflags = flags & flagsmask;
 
         // get next available pipe number, and set up pipe
-        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY)) {
+        let pipenumber = if let Some(pipeno) = insert_next_pipe() {
+            PIPE_TABLE[pipeno as usize].write().insert(interface::new_pipe(PIPE_CAPACITY));
             pipeno
         } else {
             return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
@@ -1951,7 +1955,7 @@ impl Cage {
             let thisfd = self.get_next_fd(None, Pipe(PipeDesc {pipe: pipenumber, flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
 
             if thisfd < 0 {
-                PIPE_TABLE.remove(&pipenumber).unwrap();
+                PIPE_TABLE[pipenumber as usize].write().take();
                 return thisfd;
             };
 

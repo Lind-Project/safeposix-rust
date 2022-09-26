@@ -11,9 +11,10 @@ use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
 
-pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>> = 
+pub type Pipe = interface::RustRfc<interface::RustLock<Option<interface::EmulatedPipe>>>;
+pub static PIPE_TABLE: interface::RustLazyGlobal<[Pipe; MAXPIPE as usize]> = 
     interface::RustLazyGlobal::new(|| 
-        interface::new_hashmap()
+        interface::rust_array_init(|_i| interface::RustRfc::new(interface::RustLock::new(None)))
 );
 
 #[derive(Debug, Clone)]
@@ -143,10 +144,9 @@ impl Cage {
 
 }
 
-pub fn insert_next_pipe(pipe: interface::EmulatedPipe) -> Option<i32> {
+pub fn insert_next_pipe() -> Option<i32> {
     for fd in STARTINGPIPE..MAXPIPE {
-        if let interface::RustHashEntry::Vacant(v) = PIPE_TABLE.entry(fd) {
-            v.insert(interface::RustRfc::new(pipe));
+        if PIPE_TABLE[fd as usize].read().is_none() {
             return Some(fd);
         }
     }
