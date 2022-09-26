@@ -1301,6 +1301,7 @@ impl Cage {
 
                 if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
                     // last reference, lets remove it
+                    drop(pipeopt);
                     PIPE_TABLE[pipe_filedesc_obj.pipe as usize].write().take();
                 }
 
