@@ -9,7 +9,7 @@ pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
-pub type LockedCage = interface::RustRfc<interface::RustLock<Option<Cage>>>;
+pub type LockedCage = interface::RustRfc<interface::RustLock<Option<interface::RustRfc<Cage>>>>;
 pub static CAGE_TABLE: interface::RustLazyGlobal<Vec<LockedCage>> = 
 interface::RustLazyGlobal::new(|| 
     (0..MAXCAGEID).map(|_x| interface::RustRfc::new(interface::RustLock::new(None))).collect()

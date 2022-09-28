@@ -154,7 +154,7 @@ impl Cage {
         }
         drop(shmtable);
 
-        CAGE_TABLE[child_cageid as usize].write().insert(cageobj);
+        CAGE_TABLE[child_cageid as usize].write().insert(interface::RustRfc::new(cageobj));
         0
     }
 
@@ -194,7 +194,7 @@ impl Cage {
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
-        { CAGE_TABLE[child_cageid as usize].write().insert(newcage); };
+        { CAGE_TABLE[child_cageid as usize].write().insert(interface::RustRfc::new(newcage)); };
         0
     }
 

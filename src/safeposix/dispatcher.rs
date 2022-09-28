@@ -131,8 +131,7 @@ macro_rules! check_and_dispatch_socketpair {
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
-    let wrappedcage = CAGE_TABLE[cageid as usize].read();
-    let cage = wrappedcage.as_ref().unwrap();
+    let cage = { CAGE_TABLE[cageid as usize].read().as_ref().unwrap().clone() };
 
     match callnum {
         ACCESS_SYSCALL => {
@@ -500,7 +499,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
-    cagetable[0].write().insert(utilcage);
+    cagetable[0].write().insert(interface::RustRfc::new(utilcage));
 
     //init cage is its own parent
     let mut initcage = Cage{
@@ -517,7 +516,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
     };
     initcage.load_lower_handle_stubs();
-    cagetable[1].write().insert(initcage);
+    cagetable[1].write().insert(interface::RustRfc::new(initcage));
 }
 
 #[no_mangle]
