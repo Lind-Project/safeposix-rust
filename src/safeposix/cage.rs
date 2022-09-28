@@ -9,10 +9,14 @@ pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
-pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
+pub type LockedCage = interface::RustRfc<interface::RustLock<Option<Cage>>>;
+pub static CAGE_TABLE: interface::RustLazyGlobal<Vec<LockedCage>> = 
+interface::RustLazyGlobal::new(|| 
+    (0..MAXCAGEID).map(|_x| interface::RustRfc::new(interface::RustLock::new(None))).collect()
+);
 
-pub type Pipe = interface::RustRfc<interface::RustLock<Option<interface::EmulatedPipe>>>;
-pub static PIPE_TABLE: interface::RustLazyGlobal<Vec<Pipe>> = 
+pub type LockedPipe = interface::RustRfc<interface::RustLock<Option<interface::EmulatedPipe>>>;
+pub static PIPE_TABLE: interface::RustLazyGlobal<Vec<LockedPipe>> = 
     interface::RustLazyGlobal::new(|| 
         (0..MAXPIPE).map(|_x| interface::RustRfc::new(interface::RustLock::new(None))).collect()
 );

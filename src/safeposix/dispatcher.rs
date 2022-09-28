@@ -131,7 +131,8 @@ macro_rules! check_and_dispatch_socketpair {
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
-    let cage = { CAGE_TABLE.get(&cageid).unwrap().clone() };
+    let wrappedcage = CAGE_TABLE[cageid as usize].read();
+    let cage = wrappedcage.as_ref().unwrap();
 
     match callnum {
         ACCESS_SYSCALL => {
@@ -499,7 +500,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
-    cagetable.insert(0, interface::RustRfc::new(utilcage));
+    cagetable[0].write().insert(utilcage);
 
     //init cage is its own parent
     let mut initcage = Cage{
@@ -516,26 +517,15 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
     };
     initcage.load_lower_handle_stubs();
-    cagetable.insert(1, interface::RustRfc::new(initcage));
+    cagetable[1].write().insert(initcage);
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
-    //wipe all keys from hashmap, i.e. free all cages
-    let mut remainingcages: Vec<(u64, interface::RustRfc<Cage>)> = vec![];
 
-    //dashmap doesn't allow you to get key, value pairs directly, it only allows you to get a
-    //RefMulti struct which can be decomposed into the key and value
-    for refmulti in CAGE_TABLE.iter() {
-        let (key, value) = refmulti.pair();
-        remainingcages.push((*key, (*value).clone()));
-    }
-    //Wipe the keys from the CAGE_TABLE so we only have one remaing reference to them
-    CAGE_TABLE.clear();  
-
-    //actually exit the cages
-    for (_cageid, cage) in remainingcages {
-        cage.exit_syscall(EXIT_SUCCESS);
+    for cage in CAGE_TABLE.iter() {
+        let cageopt = cage.write().take();
+        if cageopt.is_some() { cageopt.unwrap().exit_syscall(EXIT_SUCCESS); }
     }
 
     // remove any open domain socket inodes
