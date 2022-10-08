@@ -9,7 +9,7 @@ pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
-pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
+pub static mut CAGE_TABLE: Vec<Option<interface::RustRfc<Cage>>> = Vec::new();
 
 pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>> = 
     interface::RustLazyGlobal::new(|| 
