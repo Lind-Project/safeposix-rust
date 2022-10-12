@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
+use std::fmt;
 
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
@@ -21,20 +22,20 @@ pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
 }
 
+#[derive(Clone)]
 pub struct EmulatedPipe {
     write_end: Arc<Mutex<Producer<u8>>>,
     read_end: Arc<Mutex<Consumer<u8>>>,
-    pub refcount_write: AtomicU32,
-    pub refcount_read: AtomicU32,
-    size: usize,
-    eof: AtomicBool,
+    pub refcount_write: Arc<AtomicU32>,
+    pub refcount_read: Arc<AtomicU32>,
+    eof: Arc<AtomicBool>,
 }
 
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: AtomicU32::new(1), refcount_read: AtomicU32::new(1), size: size, eof: AtomicBool::new(false)}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false))}
     }
 
     pub fn set_eof(&self) {
@@ -135,3 +136,12 @@ impl EmulatedPipe {
 
 }
 
+impl fmt::Debug for EmulatedPipe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EmulatedPipe")
+         .field("refcount read", &self.refcount_read)
+         .field("refcount write", &self.refcount_write)
+         .field("eof", &self.eof)
+         .finish()
+    }
+}
