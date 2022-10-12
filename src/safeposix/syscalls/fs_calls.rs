@@ -1933,7 +1933,8 @@ impl Cage {
         let accflags = [O_RDONLY, O_WRONLY];
         for accflag in accflags {
 
-            let thisfd = self.get_next_fd(None, Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
+            let filedesc_enum = Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
+            let thisfd = self.get_next_fd(None, filedesc_enum);
 
             match accflag {
                 O_RDONLY => {pipefd.readfd = thisfd;},
