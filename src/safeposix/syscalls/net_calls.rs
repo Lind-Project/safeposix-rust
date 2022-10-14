@@ -1055,7 +1055,7 @@ impl Cage {
                                     retval += 1;
                                 } else {
                                     drop(sockfdobj);
-                                    drop(filedesc_enum);
+                                    drop(unlocked_fd);
                                     drop(sockobj);
                                     if self._nonblock_peek_read(*fd) {
                                         new_readfds.insert(*fd);

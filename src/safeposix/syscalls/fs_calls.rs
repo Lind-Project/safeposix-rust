@@ -1094,7 +1094,17 @@ impl Cage {
         let (dupfd, mut dupfdguard) = match fromdup2 {
             true => {
                 if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
-                let fdguard = self.filedescriptortable[newfd as usize].write();
+                let mut fdguard = self.filedescriptortable[newfd as usize].write();
+                if fdguard.is_some() {
+                    drop(fdguard);
+                    //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
+                    let close_result = Self::_close_helper_inner(&self, newfd);
+                    if close_result < 0 {
+                        return close_result;
+                    }
+                } else { drop(fdguard); }
+                fdguard = self.filedescriptortable[newfd as usize].write();
+
                 (newfd, fdguard)
             },
             false => {
@@ -1103,7 +1113,6 @@ impl Cage {
                 (newdupfd, guardopt.unwrap())
             }
         };
-
         let dupfdoption = &mut *dupfdguard;
 
         let mut unlocked_fd = self.filedescriptortable[oldfd as usize].write();
@@ -1140,14 +1149,6 @@ impl Cage {
                     // no stream refs
                 }
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
-            }
-
-            //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-            if fromdup2 && dupfdoption.is_some() {
-                let close_result = Self::_close_helper_inner(&self, newfd);
-                if close_result < 0 {
-                    return close_result;
-                }
             }
 
             // get and clone fd, wrap and insert into table.
