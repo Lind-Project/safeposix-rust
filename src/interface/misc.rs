@@ -14,7 +14,7 @@ pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{Arc as RustRfc};
-pub use parking_lot::{RwLock as RustLock, Mutex, Condvar};
+pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
 use libc::mmap;
 use std::ffi::c_void;

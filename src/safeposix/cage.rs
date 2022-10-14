@@ -97,7 +97,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>, fdobj: FileDescriptor) -> i32 {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockGuard<Option<FileDescriptor>>>) {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -106,11 +106,12 @@ impl Cage {
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
         for fd in start..MAXFD{
-            if !self.filedescriptortable[fd as usize].is_locked_exclusive() && self.filedescriptortable[fd as usize].read().is_none() {
-                return fd;
-            };
+            let fdguard = self.filedescriptortable[fd as usize].try_write();
+            if let Some(ref fdopt) = fdguard {
+                if fdopt.is_none() { return (fd, fdguard); }
+            }
         };
-        return syscall_error(Errno::ENFILE, "get_next_fd", "no available file descriptor number could be found");
+        return (syscall_error(Errno::ENFILE, "get_next_fd", "no available file descriptor number could be found"), None);
     }
 
     pub fn changedir(&self, newdir: interface::RustPathBuf) {
@@ -121,18 +122,18 @@ impl Cage {
 
 }
 
-pub fn fd_table_init() -> FdTable {
-    let fdtable = Vec::new();
+pub fn init_fdtable() -> FdTable {
+    let mut fdtable = Vec::new();
     // load lower handle stubs
     let stdin = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
     let stdout = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
     let stderr = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
-    fdtable[0] = stdin;
-    fdtable[1] = stdout;
-    fdtable[2] = stderr;
+    fdtable.push(stdin);
+    fdtable.push(stdout);
+    fdtable.push(stderr);
 
-    for fd in 3..MAXFD as usize {
-        fdtable[fd] = interface::RustRfc::new(interface::RustLock::new(None));
+    for _fd in 3..MAXFD as usize {
+        fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
     }
     fdtable
 }

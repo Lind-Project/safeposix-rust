@@ -44,7 +44,12 @@ impl Cage {
     }
 
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
-        return self.get_next_fd(None, Socket(sockfd));
+
+        let (fd, guardopt) = self.get_next_fd(None);
+        if fd < 0 { return fd }
+        let fdoption = &mut *guardopt.unwrap();
+        fdoption.insert(Socket(sockfd));
+        return fd;
     }
 
     fn _implicit_bind(&self, sockfdobj: &mut SocketDesc, domain: i32, sockobj: &(interface::Socket, ConnState)) -> i32 {
@@ -238,13 +243,11 @@ impl Cage {
     }
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
-            match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
-                    let sid = Self::getsockobjid(&mut *sockfdobj);
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                Socket(ref mut sockfdobj) => {
+                    let sid = Self::getsockobjid(sockfdobj);
                     let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                     let sockobj = locksock.read();
 
@@ -297,12 +300,10 @@ impl Cage {
     }
 
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
-            match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                Socket(ref mut sockfdobj) => {
                     if remoteaddr.get_family() != sockfdobj.realdomain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
@@ -319,7 +320,7 @@ impl Cage {
                                     Err(e) => return e,
                                 };
 
-                                let sid = Self::getsockobjid(&mut *sockfdobj);
+                                let sid = Self::getsockobjid(sockfdobj);
                                 let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                                 let sockobj = locksock.read();
 
@@ -329,7 +330,7 @@ impl Cage {
                     } else if sockfdobj.protocol == IPPROTO_TCP {
                         //for TCP, actually create the internal socket object and connect it
                         let mut remoteclone = remoteaddr.clone();
-                        let sid = Self::getsockobjid(&mut *sockfdobj);
+                        let sid = Self::getsockobjid(sockfdobj);
                         let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                         let mut sockobj = locksock.write();
 
@@ -338,7 +339,7 @@ impl Cage {
                         }
 
                         if let None = sockfdobj.localaddr {
-                            let localaddr = match Self::assign_new_addr(sockfdobj, sockfdobj.realdomain, sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
+                            let localaddr = match Self::assign_new_addr(&sockfdobj, sockfdobj.realdomain, sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
@@ -419,12 +420,10 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
-            match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                Socket(ref mut sockfdobj) => {
                     if dest_addr.get_family() != sockfdobj.realdomain as u16 {
                         return syscall_error(Errno::EINVAL, "sendto", "An address with an invalid family for the given domain was specified");
                     }
@@ -432,7 +431,7 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "sendto", "The flags are not understood!");
                     }
 
-                    let sid = Self::getsockobjid(&mut *sockfdobj);
+                    let sid = Self::getsockobjid(sockfdobj);
 
                     let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                     let sockobj = sockobjwrapper.read();
@@ -450,7 +449,7 @@ impl Cage {
 
                         IPPROTO_UDP => {
                             let tmpdest = *dest_addr;
-                            let ibindret = self._implicit_bind(&mut *sockfdobj, tmpdest.get_family() as i32, &*sockobj);
+                            let ibindret = self._implicit_bind(sockfdobj, tmpdest.get_family() as i32, &*sockobj);
                             if ibindret < 0 {
                                 return ibindret;
                             }
@@ -485,19 +484,17 @@ impl Cage {
         }
     }
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
-            match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                Socket(ref mut sockfdobj) => {
                     if (flags & !MSG_NOSIGNAL) != 0 {
                         return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
                     }
 
                     match sockfdobj.protocol {
                         IPPROTO_TCP => {
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let sid = Self::getsockobjid(sockfdobj);
                             let sockobjwrapper = NET_METADATA.socket_object_table.get(&sid).unwrap();
                             let sockobj = &*sockobjwrapper.read();
 
@@ -658,11 +655,9 @@ impl Cage {
     }
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let clonedfd = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = clonedfd.write();
-            return self.recv_common_inner(&mut *filedesc_enum, buf, buflen, flags, addr);
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
+            return self.recv_common_inner(filedesc_enum, buf, buflen, flags, addr);
         } else {
             return syscall_error(Errno::EBADF, "recvfrom", "invalid file descriptor");
         }
@@ -678,13 +673,10 @@ impl Cage {
 
     //we currently ignore backlog
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let clonedfd = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = clonedfd.write();
-
-            match &mut *filedesc_enum {
-                Socket(sockfdobj) => {
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                Socket(ref mut sockfdobj) => {
                     //get or create the socket and bind it before listening
                     let sid = Self::getsockobjid(sockfdobj);
                     let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
@@ -838,16 +830,15 @@ impl Cage {
 
     pub fn _cleanup_socket(&self, fd: i32, partial: bool) -> i32 {
 
-        //The FdTable must always be passed.
-
-        if let interface::RustHashEntry::Occupied(mut occval) = self.filedescriptortable.entry(fd) {
-            let inner_result = self._cleanup_socket_inner(&mut *occval.get_mut().write(), partial, true);
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
+            let inner_result = self._cleanup_socket_inner(filedesc_enum, partial, true);
             if inner_result < 0 {
                 return inner_result;
             }
 
             if !partial {
-                occval.remove();
+                let _discarded_fd = unlocked_fd.take();
             }
         } else {
             return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
@@ -861,33 +852,17 @@ impl Cage {
     //calls accept on the socket object with value depending on ipv4 or ipv6
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
 
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let unwrapclone = wrappedfd.clone();
-            drop(wrappedfd);
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //we need to reserve this fd early to make sure that we don't need to
-            //error out later so we perform get_next_fd manually, and populate it
-            //at the end
-            let mut vacantentry = None;
-            for possfd in 0..MAXFD{
-                match self.filedescriptortable.entry(possfd) {
-                    interface::RustHashEntry::Occupied(_) => {}
-                    interface::RustHashEntry::Vacant(vacant) => {
-                        vacantentry = Some(vacant);
-                        break;
-                    }
-                };
-            };
+            //error out later so we perform get_next_fd, and populate it at the end
 
-            if let None = vacantentry {
-                return syscall_error(Errno::ENFILE, "open_syscall", "no available file descriptor number could be found");
-            }
+            let (newfd, guardopt) = self.get_next_fd(None);
+            if newfd < 0 { return fd }
+            let newfdoption = &mut *guardopt.unwrap();
 
-            let entry = vacantentry.unwrap();
-            let key = *entry.key();
-
-            let mut filedesc_enum = unwrapclone.write();
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
                     match sockfdobj.protocol {
                         IPPROTO_UDP => {
@@ -902,16 +877,7 @@ impl Cage {
                                 return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                             }
 
-                            //we need to lock this socket for the duration so that nothing else can
-                            //access it before we're done populating with sane data, but we make
-                            //sure that we're not locking up the entire fdtable, insert takes
-                            //ownership of the entry so we can connect in another thread using the
-                            //fdtable
-                            let newsockobj = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0);
-                            let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
-                            let mut sockref = arclocksock.write();
-                            let mut newsockwithin = if let Socket(s) = &mut *sockref {s} else {unreachable!()};
-                            entry.insert(arclocksock.clone());
+                            let mut newsockwithin = self._socket_initializer(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0);
 
                             let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockfdobj.localaddr.unwrap().port()) {
                                 //if we got a pending connection in select/poll/whatever, return that here instead
@@ -940,7 +906,6 @@ impl Cage {
                             if let Err(_) = acceptedresult {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(e) => {
-                                        self.filedescriptortable.remove(&key);
                                         return syscall_error(e, "accept", "host system accept call failed");
                                     },
                                     Err(()) => panic!("Unknown errno value from socket send returned!"),
@@ -953,7 +918,6 @@ impl Cage {
                             let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockfdobj.protocol, sockfdobj.domain, false) {
                                 Ok(portnum) => portnum,
                                 Err(errnum) => {
-                                    self.filedescriptortable.remove(&key);
                                     return errnum;
                                 }
                             };
@@ -969,7 +933,6 @@ impl Cage {
                                 Ok(id) => Some(id),
                                 Err(errnum) => {
                                     NET_METADATA.listening_port_set.remove(&mux_port(newipaddr.clone(), newport, sockfdobj.domain, TCPPORT));
-                                    self.filedescriptortable.remove(&key);
                                     return errnum;
                                 }
                             };
@@ -986,10 +949,10 @@ impl Cage {
                                 };
                             };
                             
-
+                            newfdoption.insert(Socket(newsockwithin));
                             *addr = remote_addr; //populate addr with what address it connected to
 
-                            return key;
+                            return newfd;
                         }
                         _ => {
                             return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
@@ -1009,19 +972,17 @@ impl Cage {
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let clonedfd = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = clonedfd.write();
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let oldflags;
-            if let Socket(ref mut sockfdobj) = &mut *filedesc_enum {
+            if let Socket(ref mut sockfdobj) = filedesc_enum {
                 oldflags = sockfdobj.flags;
                 sockfdobj.flags |= O_NONBLOCK;
             } else {
                 return false;
             }
-            let retval = self.recv_common_inner(&mut *filedesc_enum, bufptr, 1, flags, &mut None);
-            if let Socket(ref mut sockfdobj) = &mut *filedesc_enum {
+            let retval = self.recv_common_inner(filedesc_enum, bufptr, 1, flags, &mut None);
+            if let Socket(ref mut sockfdobj) = filedesc_enum {
                 sockfdobj.flags = oldflags;
             } else {
                 unreachable!();
@@ -1055,12 +1016,9 @@ impl Cage {
         let mut retval = 0; 
         loop { //we must block manually
             for fd in readfds.iter() {
-                if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-                    let wrappedclone = wrappedfd.clone();
-                    drop(wrappedfd);
-                    let mut filedesc_enum = wrappedclone.write();
-
-                    match &mut *filedesc_enum {
+                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+                if let Some(filedesc_enum) = &mut *unlocked_fd {
+                    match filedesc_enum {
                         Socket(ref mut sockfdobj) => {
                             let sid = Self::getsockobjid(&mut *sockfdobj);
                             let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
@@ -1131,11 +1089,9 @@ impl Cage {
             }
 
             for fd in writefds.iter() {
-                if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-                    let wrappedclone = wrappedfd.clone();
-                    drop(wrappedfd);
-                    let mut filedesc_enum = wrappedclone.write();
-                    match &mut *filedesc_enum {
+                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+                if let Some(filedesc_enum) = &mut *unlocked_fd {
+                    match filedesc_enum {
                         Socket(ref mut sockfdobj) => {
                             // check if we've made an in progress connection first
                             let sid = Self::getsockobjid(&mut *sockfdobj);
@@ -1179,9 +1135,8 @@ impl Cage {
             
             for fd in exceptfds.iter() {
                 //we say none of them ever have exceptional conditions
-                if !self.filedescriptortable.contains_key(&fd) {
-                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
-                }
+                let unlocked_fd = self.filedescriptortable[*fd as usize].read();
+                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
             }
 
             if retval != 0 || interface::readtimer(start_time) > end_time {
@@ -1197,12 +1152,10 @@ impl Cage {
 
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
         
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc = wrappedclone.write();
-            if let Socket(sockfdobj) = &mut *filedesc {
-                //checking that we recieved SOL_SOCKET\
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            if let Socket(ref mut sockfdobj) = filedesc_enum {
+                //checking that we recieved SOL_SOCKET
                 match level {
                     SOL_UDP => {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
@@ -1275,11 +1228,9 @@ impl Cage {
 
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
         
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc = wrappedclone.write();
-            if let Socket(sockfdobj) = &mut *filedesc {
+        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            if let Socket(ref mut sockfdobj) = filedesc_enum {
                 //checking that we recieved SOL_SOCKET\
                 match level {
                     SOL_UDP => {
@@ -1321,7 +1272,7 @@ impl Cage {
                                 }
 
                                 if newoptions != sockfdobj.options {
-                                    let sid = Self::getsockobjid(&mut *sockfdobj);
+                                    let sid = Self::getsockobjid(sockfdobj);
                                     let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                                     let sockobj = locksock.read();
 
@@ -1371,11 +1322,9 @@ impl Cage {
     }
 
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc = wrappedclone.read();
-            if let Socket(sockfdobj) = &*filedesc {
+        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
+            if let Socket(sockfdobj) = filedesc_enum {
                 //if the socket is not connected, then we should return an error
                 if sockfdobj.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
@@ -1395,11 +1344,9 @@ impl Cage {
     }
 
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc = wrappedclone.read();
-            if let Socket(sockfdobj) = &*filedesc {
+        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
+            if let Socket(sockfdobj) = filedesc_enum {
                 if sockfdobj.localaddr == None {
                     
                     //sets the address to 0.0.0.0 if the address is not initialized yet
@@ -1506,7 +1453,12 @@ impl Cage {
             flags: 0
         });
         //get a file descriptor
-        return self.get_next_fd(None, epollobjfd);
+        let (fd, guardopt) = self.get_next_fd(None);
+        if fd < 0 { return fd }
+        let fdoption = &mut *guardopt.unwrap();
+        fdoption.insert(epollobjfd);
+        
+        return fd;
     }
 
     pub fn epoll_create_syscall(&self, size: i32) -> i32 {
@@ -1520,16 +1472,17 @@ impl Cage {
     pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
 
         //making sure that the epfd is really an epoll fd
-        if let Some(wrappedfd) = self.filedescriptortable.get(&epfd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum_epollfd = wrappedclone.write();
-            if let Epoll(epollfdobj) = &mut *filedesc_enum_epollfd {
+        let mut unlocked_fd = self.filedescriptortable[epfd as usize].write();
+        if let Some(filedesc_enum_epollfd) = &mut *unlocked_fd {
+            if let Epoll(epollfdobj) = filedesc_enum_epollfd {
 
                 //check if the other fd is an epoll or not...
-                if let Epoll(_) = &*self.filedescriptortable.get(&fd).unwrap().read() {
-                    return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
-                }
+                let unlocked_fd = self.filedescriptortable[fd as usize].read();
+                if let Some(filedesc_enum) = &*unlocked_fd {
+                    if let Epoll(_) = filedesc_enum {
+                        return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
+                    }
+                } else { return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor"); }
 
                 //now that we know that the types are all good...
                 match op {
@@ -1566,12 +1519,9 @@ impl Cage {
     }
 
     pub fn epoll_wait_syscall(&self, epfd: i32, events: &mut [EpollEvent], maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
-
-        if let Some(wrappedfd) = self.filedescriptortable.get(&epfd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc_enum = wrappedclone.write();
-            if let Epoll(epollfdobj) = &*filedesc_enum {
+        let mut unlocked_fd = self.filedescriptortable[epfd as usize].write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            if let Epoll(epollfdobj) = filedesc_enum {
                 if  maxevents <  0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
                 }
