@@ -2,7 +2,7 @@
 
 // System related system calls
 use crate::interface;
-use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, syscall_error, FileDescriptor::*, FSData, Rlimit, StatData};
+use crate::safeposix::cage::{Arg, CAGE_TABLE, Cage, Errno, syscall_error, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
@@ -104,8 +104,7 @@ impl Cage {
                         }
                     }
                     Pipe(pipe_filedesc_obj) => {
-                        let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                        pipe.incr_ref(pipe_filedesc_obj.flags)
+                        pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
