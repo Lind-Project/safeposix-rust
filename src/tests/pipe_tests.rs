@@ -21,8 +21,7 @@ pub mod pipe_tests {
 
         lindrustinit(0);
 
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
-
+        let cage = interface::cagetable_getref(1);
 
         let filefd = cage.open_syscall("test1gb.txt", O_CREAT | O_WRONLY, S_IRWXA);
         
@@ -46,15 +45,15 @@ pub mod pipe_tests {
         
         lindrustinit(0);
 
-        let cage1 = {CAGE_TABLE.get(&1).unwrap().clone()};
-
+        let cage1 = interface::cagetable_getref(1);
+        
         let mut pipefds = PipeArray {readfd: -1, writefd: -1};
         assert_eq!(cage1.pipe_syscall(&mut pipefds), 0);
         assert_eq!(cage1.fork_syscall(2), 0);
 
         let sender = std::thread::spawn(move || {
 
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
 
             assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
             assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
