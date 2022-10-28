@@ -9,7 +9,7 @@ pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
-pub static mut CAGE_TABLE: Vec<Option<interface::RustRfc<Cage>>> = Vec::new();
+pub use crate::interface::{CAGE_TABLE};
 
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {

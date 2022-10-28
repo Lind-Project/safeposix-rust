@@ -34,8 +34,6 @@ impl Cage {
     }
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        let mutcagetable = unsafe { &mut CAGE_TABLE };
-
         //construct a new mutex in the child cage where each initialized mutex is in the parent cage
         let mutextable = self.mutex_table.read();
         let mut new_mutex_table = vec!();
@@ -152,14 +150,14 @@ impl Cage {
             shment.shminfo.shm_nattch += 1;
         }
         drop(shmtable);
+        interface::cagetable_insert(child_cageid, cageobj);
 
-        mutcagetable[child_cageid as usize].insert(interface::RustRfc::new(cageobj));
         0
     }
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        { unsafe{ CAGE_TABLE[self.cageid as usize].take() };}
-        
+        interface::cagetable_remove(child_cageid);
+
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
 
@@ -193,7 +191,7 @@ impl Cage {
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
-        { unsafe{ CAGE_TABLE[child_cageid as usize].insert(interface::RustRfc::new(newcage))} };
+        interface::cagetable_insert(child_cageid, newcage);
         0
     }
 
@@ -217,7 +215,7 @@ impl Cage {
         decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        unsafe { CAGE_TABLE[self.cageid as usize].take() };
+        interface::cagetable_remove(self.cageid);
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status

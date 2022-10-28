@@ -7,8 +7,6 @@ use crate::interface;
 // Define constants using static or const
 // Imported into fs_calls file
 
-pub const MAXCAGEID: i32 = 1024;
-
 //GID AND UID DEFAULT VALUES
 
 pub const DEFAULT_UID : u32 = 1000;
