@@ -482,7 +482,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
-    
+    interface::cagetable_init();
     load_fs();
     incref_root();
     incref_root();

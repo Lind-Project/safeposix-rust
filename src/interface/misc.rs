@@ -33,7 +33,7 @@ use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
 
-fn cagetable_init() {
+pub fn cagetable_init() {
    unsafe { for _cage in 0..MAXCAGEID { CAGE_TABLE.push(None); }}
 }
 
