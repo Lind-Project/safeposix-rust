@@ -7,7 +7,6 @@ use crate::interface;
 // Define constants using static or const
 // Imported into fs_calls file
 
-
 //GID AND UID DEFAULT VALUES
 
 pub const DEFAULT_UID : u32 = 1000;

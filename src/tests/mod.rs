@@ -15,6 +15,7 @@ mod main_tests {
     use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
+    use crate::interface;
 
     use std::process::Command;
 
@@ -22,8 +23,8 @@ mod main_tests {
     pub fn tests() {
         lindrustinit(0);
         {
-            let cage = &CAGE_TABLE.get(&1).unwrap().clone();
-            crate::lib_fs_utils::lind_deltree(cage, "/");
+            let cage = interface::cagetable_getref(1);
+            crate::lib_fs_utils::lind_deltree(&cage, "/");
             assert_eq!(cage.mkdir_syscall("/dev", S_IRWXA), 0);
             assert_eq!(cage.mknod_syscall("/dev/null", S_IFCHR as u32| 0o777, makedev(&DevNo {major: 1, minor: 3})), 0);
             assert_eq!(cage.mknod_syscall("/dev/zero", S_IFCHR as u32| 0o777, makedev(&DevNo {major: 1, minor: 5})), 0);

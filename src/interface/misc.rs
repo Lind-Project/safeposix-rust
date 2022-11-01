@@ -26,6 +26,38 @@ pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice 
 use crate::interface::errnos::{VERBOSE};
 use std::time::Duration;
 
+const MAXCAGEID: i32 = 1024;
+const EXIT_SUCCESS : i32 = 0;
+
+use crate::safeposix::cage::{Cage};
+
+pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
+
+pub fn cagetable_init() {
+   unsafe { for _cage in 0..MAXCAGEID { CAGE_TABLE.push(None); }}
+}
+
+pub fn cagetable_insert(cageid: u64, cageobj: Cage) {
+    let _insertret = unsafe { CAGE_TABLE[cageid as usize].insert(RustRfc::new(cageobj)) };
+}
+
+pub fn cagetable_remove(cageid: u64) {
+    unsafe{ CAGE_TABLE[cageid as usize].take() };
+}
+
+pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
+    unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
+}
+
+pub fn cagetable_clear() {
+    unsafe {
+        for cage in CAGE_TABLE.iter_mut() {
+            let cageopt = cage.take();
+            if cageopt.is_some() { cageopt.unwrap().exit_syscall(EXIT_SUCCESS); }
+        }
+    }
+}
+
 pub fn log_from_ptr(buf: *const u8, length: usize) {
     if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
       log_to_stdout(s);

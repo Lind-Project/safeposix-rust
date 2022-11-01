@@ -3,6 +3,7 @@
 // System related system calls
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
+// use crate::safeposix::cage::{Arg, CAGE_TABLE, Cage, Errno, syscall_error, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
@@ -34,8 +35,6 @@ impl Cage {
     }
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        let mutcagetable = &CAGE_TABLE;
-
         //construct a new mutex in the child cage where each initialized mutex is in the parent cage
         let mutextable = self.mutex_table.read();
         let mut new_mutex_table = vec!();
@@ -99,8 +98,7 @@ impl Cage {
                         }
                     }
                     Pipe(pipe_filedesc_obj) => {
-                        let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                        pipe.incr_ref(pipe_filedesc_obj.flags)
+                        pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
                         if let Some(socknum) = socket_filedesc_obj.socketobjectid {
@@ -147,14 +145,14 @@ impl Cage {
             shment.shminfo.shm_nattch += 1;
         }
         drop(shmtable);
+        interface::cagetable_insert(child_cageid, cageobj);
 
-        mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
     }
 
-    pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        {CAGE_TABLE.remove(&self.cageid).unwrap();}
-     
+    pub fn exec_syscall(&self, child_cageid: u64) -> i32 {     
+        interface::cagetable_remove(self.cageid);
+
         self.unmap_shm_mappings();
 
         let mut cloexecvec = vec!();
@@ -187,7 +185,7 @@ impl Cage {
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
-        {CAGE_TABLE.insert(child_cageid, interface::RustRfc::new(newcage))};
+        interface::cagetable_insert(child_cageid, newcage);
         0
     }
 
@@ -208,7 +206,7 @@ impl Cage {
         decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        CAGE_TABLE.remove(&self.cageid);
+        interface::cagetable_remove(self.cageid);
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status

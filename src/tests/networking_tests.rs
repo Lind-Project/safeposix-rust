@@ -30,7 +30,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_bind() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50102u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
@@ -55,7 +55,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_bind_on_zero() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -81,7 +81,7 @@ pub mod net_tests {
         //creating a thread for the server so that the information can be sent between the two threads
         let thread = interface::helper_thread(move || {
             
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: 0 }, padding: 0}); //0.0.0.0
 
             let mut sockfd = cage2.accept_syscall(serversockfd, &mut socket2); //really can only make sure that the fd is valid
@@ -270,7 +270,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_bind_multiple() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50103u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
@@ -300,7 +300,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_connect_basic_udp() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //should be okay...
         let sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -319,7 +319,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_getpeername() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //doing a few things with connect -- only UDP right now
         let sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -344,7 +344,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_getsockname() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default()); 
@@ -372,7 +372,7 @@ pub mod net_tests {
     
     pub fn ut_lind_net_listen() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -390,7 +390,7 @@ pub mod net_tests {
         assert_eq!(cage.fork_syscall(2), 0);
         
         let thread = interface::helper_thread(move || {
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4::default());
             assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0); //really can only make sure that the fd is valid
             
@@ -417,7 +417,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_poll() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let filefd = cage.open_syscall("/netpolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
@@ -440,7 +440,7 @@ pub mod net_tests {
         //client 1 connects to the server to send and recv data...
         let thread1 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(100));
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
 
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
@@ -456,7 +456,7 @@ pub mod net_tests {
         let thread2 = interface::helper_thread(move || {
             //give it a longer time so that it can sufficiently process all of the data
             interface::sleep(interface::RustDuration::from_millis(200));
-            let cage3 = {CAGE_TABLE.get(&3).unwrap().clone()};
+            let cage3 = interface::cagetable_getref(3);
 
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
@@ -565,7 +565,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_recvfrom() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -588,7 +588,7 @@ pub mod net_tests {
         //creating a thread for the server so that the information can be sent between the two threads
         let thread = interface::helper_thread(move || {
             
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             interface::sleep(interface::RustDuration::from_millis(100)); 
 
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: port.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
@@ -676,7 +676,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_select () {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
@@ -707,7 +707,7 @@ pub mod net_tests {
 
         //client 1 connects to the server to send and recv data...
         let threadclient1 = interface::helper_thread(move || {
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
 
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
@@ -726,7 +726,7 @@ pub mod net_tests {
 
         //client 2 connects to the server to send and recv data...
         let threadclient2 = interface::helper_thread(move || {
-            let cage3 = {CAGE_TABLE.get(&3).unwrap().clone()};
+            let cage3 = interface::cagetable_getref(3);
 
             assert_eq!(cage3.close_syscall(serversockfd), 0);
 
@@ -809,7 +809,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_shutdown() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -827,7 +827,7 @@ pub mod net_tests {
         assert_eq!(cage.fork_syscall(2), 0);
 
         let thread = interface::helper_thread(move || {
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             
             interface::sleep(interface::RustDuration::from_millis(100)); 
 
@@ -859,7 +859,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_socket() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -889,7 +889,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_socketoptions() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         assert!(sockfd > 0);
@@ -975,7 +975,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_socketpair() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
         let cage2 = cage.clone();
@@ -1036,7 +1036,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_udp_bad_bind() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(sockfd > 0); //checking that the sockfd is valid
@@ -1061,7 +1061,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_udp_simple() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //just going to test the basic connect with UDP now...
         let serverfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -1075,7 +1075,7 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
         let thread = interface::helper_thread(move || {
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
 
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -1118,7 +1118,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_udp_connect() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //getting the sockets set up...
         let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -1136,7 +1136,7 @@ pub mod net_tests {
 
         let thread = interface::helper_thread(move || {
 
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             
             interface::sleep(interface::RustDuration::from_millis(20));
             let mut buf = sizecbuf(16);
@@ -1159,7 +1159,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let mut buf = vec![0u8; 5];
         let bufptr: *mut u8 = &mut buf[0];
@@ -1215,7 +1215,7 @@ pub mod net_tests {
         }
 
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(dnssocket > 0);
@@ -1283,7 +1283,7 @@ pub mod net_tests {
         let serversockfilename = "/server.sock";
 
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
         let serversockfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
@@ -1309,7 +1309,7 @@ pub mod net_tests {
         //creating a thread for the server so that the information can be sent between the two threads
         let thread = interface::helper_thread(move || {
             
-            let cage2 = {CAGE_TABLE.get(&2).unwrap().clone()};
+            let cage2 = interface::cagetable_getref(2);
             let mut socket2 = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, "".as_bytes())); // blank unix sockaddr
 
             let sockfd = cage2.accept_syscall(serversockfd, &mut socket2); //really can only make sure that the fd is valid
