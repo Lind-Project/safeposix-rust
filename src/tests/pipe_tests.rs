@@ -46,7 +46,7 @@ pub mod pipe_tests {
         lindrustinit(0);
 
         let cage1 = interface::cagetable_getref(1);
-        
+
         let mut pipefds = PipeArray {readfd: -1, writefd: -1};
         assert_eq!(cage1.pipe_syscall(&mut pipefds), 0);
         assert_eq!(cage1.fork_syscall(2), 0);

@@ -156,7 +156,7 @@ impl Cage {
     }
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        interface::cagetable_remove(child_cageid);
+        interface::cagetable_remove(self.cageid);
 
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
