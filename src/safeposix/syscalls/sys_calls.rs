@@ -65,7 +65,7 @@ impl Cage {
                 let new_cv_result = interface::RawCondvar::create();
                 match new_cv_result {
                     Ok(new_cv) => {new_cv_table.push(Some(interface::RustRfc::new(new_cv)))}
-                        Err(_) => {
+                    Err(_) => {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_cond_init failed!");},
                             Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
