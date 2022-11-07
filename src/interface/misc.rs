@@ -205,13 +205,12 @@ pub struct RawMutex {
 
 impl RawMutex {
     pub fn create() -> Result<Self, i32> {
-        let inner;
         let libcret;
+        let mut retval = Self {inner: unsafe{std::mem::zeroed()}};
         unsafe {
-            inner = std::mem::MaybeUninit::uninit();
-            libcret = libc::pthread_mutex_init((&mut inner.assume_init()) as *mut libc::pthread_mutex_t, std::ptr::null());
+            libcret = libc::pthread_mutex_init((&mut retval.inner) as *mut libc::pthread_mutex_t, std::ptr::null());
         }
-        if libcret < 0 { Err(libcret) } else { Ok(Self {inner: unsafe{inner.assume_init()}}) }
+        if libcret < 0 { Err(libcret) } else { Ok(retval) }
     }
 
     pub fn lock(&self) -> i32 {
@@ -245,13 +244,12 @@ pub struct RawCondvar {
 
 impl RawCondvar {
     pub fn create() -> Result<Self, i32> {
-        let inner;
         let libcret;
+        let mut retval = Self {inner: unsafe{std::mem::zeroed()}};
         unsafe {
-            inner = std::mem::MaybeUninit::uninit();
-            libcret = libc::pthread_cond_init((&mut inner.assume_init()) as *mut libc::pthread_cond_t, std::ptr::null());
+            libcret = libc::pthread_cond_init((&mut retval.inner) as *mut libc::pthread_cond_t, std::ptr::null());
         }
-        if libcret < 0 { Err(libcret) } else { Ok(Self {inner: unsafe{ inner.assume_init() }}) }
+        if libcret < 0 { Err(libcret) } else { Ok(retval) }
     }
 
     pub fn signal(&self) -> i32 {
