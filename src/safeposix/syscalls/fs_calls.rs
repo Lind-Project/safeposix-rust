@@ -1133,14 +1133,9 @@ impl Cage {
                         Inode::Socket(_) => panic!("dup: fd and inode do not match.")
                     }
                 }
-            }
-            Pipe(pipe_filedesc_obj) => {
-                pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
-            }
-            Socket(socket_filedesc_obj) => {
-                if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                    NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
-                }
+                Pipe(pipe_filedesc_obj) => {
+                    pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
+                }  
                 Socket(socket_filedesc_obj) => {
                     if let Some(socknum) = socket_filedesc_obj.socketobjectid {
                         NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
