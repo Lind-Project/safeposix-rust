@@ -1665,16 +1665,15 @@ impl Cage {
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
+                        let remove_inode = dir_obj.refcount == 0;
+                        if remove_inode { dir_obj.linkcount = 2; } // linkcount for an empty directory after rmdir must be 2
+                        drop(inodeobj);
+
                         let removal_result = Self::remove_from_parent_dir(parent_inodenum, &truepath);
                         if removal_result != 0 {return removal_result;}
 
                         // remove entry of corresponding inodenum from inodetable
-                        if dir_obj.refcount == 0 {
-                          drop(inodeobj);
-                          FS_METADATA.inodetable.remove(&inodenum).unwrap();
-                        } else {
-                          dir_obj.linkcount = 2;
-                        }
+                        if remove_inode { FS_METADATA.inodetable.remove(&inodenum).unwrap(); } 
 
                         log_metadata(&FS_METADATA, parent_inodenum);
                         log_metadata(&FS_METADATA, inodenum);       
