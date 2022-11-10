@@ -633,11 +633,9 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
 
-                    // get the pipe, read from it, and return bytes read
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                    let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
                     if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
                     else { return ret };
   
@@ -801,11 +799,10 @@ impl Cage {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
-                    // get the pipe, write to it, and return bytes written
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
+
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe.write_to_pipe(buf, count, nonblocking) as i32;
+                    let ret = pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32;
                     if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
                     else { return ret };
   
@@ -1136,9 +1133,13 @@ impl Cage {
                         Inode::Socket(_) => panic!("dup: fd and inode do not match.")
                     }
                 }
-                Pipe(pipe_filedesc_obj) => {
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                    pipe.incr_ref(pipe_filedesc_obj.flags);
+            }
+            Pipe(pipe_filedesc_obj) => {
+                pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
+            }
+            Socket(socket_filedesc_obj) => {
+                if let Some(socknum) = socket_filedesc_obj.socketobjectid {
+                    NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
                 }
                 Socket(socket_filedesc_obj) => {
                     if let Some(socknum) = socket_filedesc_obj.socketobjectid {
@@ -1223,28 +1224,17 @@ impl Cage {
                                     }
                                 }
                             }
-                        
                         } 
                     }
-
-
                 }
-                Pipe(pipe_filedesc_obj) => {
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-            
+                Pipe(pipe_filedesc_obj) => {   
+                    let pipe = &pipe_filedesc_obj.pipe;
                     pipe.decr_ref(pipe_filedesc_obj.flags);
 
-                    //Code below needs to reflect addition of pipes
                     if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
                         // we're closing the last write end, lets set eof
                         pipe.set_eof();
                     }
-
-                    if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
-                        // last reference, lets remove it
-                        PIPE_TABLE.remove(&pipe_filedesc_obj.pipe).unwrap();
-                    }
-
                 }
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -1862,12 +1852,7 @@ impl Cage {
         let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
-        // get next available pipe number, and set up pipe
-        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY)) {
-            pipeno
-        } else {
-            return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
-        };
+        let pipe = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
         
         // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
         // append each to pipefds list
@@ -1879,7 +1864,7 @@ impl Cage {
             if fd < 0 { return fd }
             let fdoption = &mut *guardopt.unwrap();
             
-            fdoption.insert(Pipe(PipeDesc {pipe: pipenumber, flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
+            fdoption.insert(Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
 
             match accflag {
                 O_RDONLY => {pipefd.readfd = fd;},

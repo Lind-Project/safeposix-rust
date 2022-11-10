@@ -11,11 +11,6 @@ use super::filesystem::normpath;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
 
-pub static PIPE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<i32, interface::RustRfc<interface::EmulatedPipe>>> = 
-    interface::RustLazyGlobal::new(|| 
-        interface::new_hashmap()
-);
-
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {
     File(FileDesc),
@@ -64,7 +59,7 @@ pub struct SocketDesc {
 
 #[derive(Debug, Clone)]
 pub struct PipeDesc {
-    pub pipe: i32,
+    pub pipe: interface::RustRfc<interface::EmulatedPipe>,
     pub flags: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>
 }
@@ -136,15 +131,4 @@ pub fn init_fdtable() -> FdTable {
         fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
     }
     fdtable
-}
-
-pub fn insert_next_pipe(pipe: interface::EmulatedPipe) -> Option<i32> {
-    for fd in STARTINGPIPE..MAXPIPE {
-        if let interface::RustHashEntry::Vacant(v) = PIPE_TABLE.entry(fd) {
-            v.insert(interface::RustRfc::new(pipe));
-            return Some(fd);
-        }
-    }
-
-    return None;
 }
