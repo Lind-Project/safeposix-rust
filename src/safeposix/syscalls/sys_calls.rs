@@ -115,7 +115,7 @@ impl Cage {
                 
                 let newfdobj = filedesc_enum.clone();
 
-                newfdtable[fd as usize].write().insert(newfdobj); //add deep copied fd to fd table
+                let _insertval = newfdtable[fd as usize].write().insert(newfdobj); //add deep copied fd to fd table
             }
 
         }

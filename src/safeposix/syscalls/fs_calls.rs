@@ -124,7 +124,7 @@ impl Cage {
             let position = if 0 != flags & O_APPEND {size} else {0};
             let allowmask = O_RDWRFLAGS | O_CLOEXEC;
             let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
-            fdoption.insert(newfd);
+            let _insertval = fdoption.insert(newfd);
         } else {panic!("Inode not created for some reason");}
 
         fd //open returns the opened file descriptor
@@ -1164,7 +1164,7 @@ impl Cage {
                 _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
 
-            dupfdoption.insert(filedesc_enum.clone());
+            let _insertval = dupfdoption.insert(filedesc_enum.clone());
 
             return dupfd;
         } else { return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor."); }
@@ -1858,7 +1858,7 @@ impl Cage {
             if fd < 0 { return fd }
             let fdoption = &mut *guardopt.unwrap();
             
-            fdoption.insert(Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
+            let _insertval = fdoption.insert(Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
 
             match accflag {
                 O_RDONLY => {pipefd.readfd = fd;},

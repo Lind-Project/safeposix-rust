@@ -48,7 +48,7 @@ impl Cage {
         let (fd, guardopt) = self.get_next_fd(None);
         if fd < 0 { return fd }
         let fdoption = &mut *guardopt.unwrap();
-        fdoption.insert(Socket(sockfd));
+        let _insertval = fdoption.insert(Socket(sockfd));
         return fd;
     }
 
@@ -520,7 +520,7 @@ impl Cage {
                             };
 
                             drop(filedesc_enum);
-
+                            drop(unlocked_fd);
                             //send from a udp socket is just shunted off to sendto with the remote address set
                             return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
                         }
@@ -949,7 +949,7 @@ impl Cage {
                                 };
                             };
                             
-                            newfdoption.insert(Socket(newsockwithin));
+                            let _insertval = newfdoption.insert(Socket(newsockwithin));
                             *addr = remote_addr; //populate addr with what address it connected to
 
                             return newfd;
@@ -1454,7 +1454,7 @@ impl Cage {
         let (fd, guardopt) = self.get_next_fd(None);
         if fd < 0 { return fd }
         let fdoption = &mut *guardopt.unwrap();
-        fdoption.insert(epollobjfd);
+        let _insertval = fdoption.insert(epollobjfd);
         
         return fd;
     }
