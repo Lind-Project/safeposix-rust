@@ -50,10 +50,15 @@ pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
 }
 
 pub fn cagetable_clear() {
+    let mut exitvec = Vec::new();
     unsafe {
         for cage in CAGE_TABLE.iter_mut() {
             let cageopt = cage.take();
-            if cageopt.is_some() { cageopt.unwrap().exit_syscall(EXIT_SUCCESS); }
+            if cageopt.is_some() { exitvec.push(cageopt.unwrap()); }
+        }
+
+        for cage in exitvec {
+            cage.exit_syscall(EXIT_SUCCESS);
         }
     }
 }
