@@ -56,10 +56,10 @@ pub fn cagetable_clear() {
             let cageopt = cage.take();
             if cageopt.is_some() { exitvec.push(cageopt.unwrap()); }
         }
+    }
 
-        for cage in exitvec {
-            cage.exit_syscall(EXIT_SUCCESS);
-        }
+    for cage in exitvec {
+        cage.exit_syscall(EXIT_SUCCESS);
     }
 }
 
