@@ -48,7 +48,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_simple() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.access_syscall("/", F_OK), 0);
         assert_eq!(cage.access_syscall("/", X_OK|R_OK), 0);
@@ -71,7 +71,7 @@ pub mod fs_tests {
 
     pub fn rdwrtest() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
@@ -102,7 +102,7 @@ pub mod fs_tests {
 
     pub fn prdwrtest() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
@@ -129,7 +129,7 @@ pub mod fs_tests {
 
     pub fn chardevtest() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
         assert!(fd >= 0);
@@ -159,7 +159,7 @@ pub mod fs_tests {
         //testing a muck up with the inode table where the regular close does not work as intended
 
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //write should work
         let mut fd = cage.open_syscall("/broken_close_file", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -194,7 +194,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_chmod() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/chmodTestFile";
@@ -220,7 +220,7 @@ pub mod fs_tests {
 
    pub fn ut_lind_fs_fchmod() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/fchmodTestFile";
@@ -248,7 +248,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_dir_chdir() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         
         //testing the ability to make and change to directories
 
@@ -274,7 +274,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_dir_mode() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let filepath1 = "/subdirDirMode1";
         let filepath2 = "/subdirDirMode2";
@@ -297,7 +297,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_dir_multiple() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall("/subdirMultiple1/subdirMultiple2", S_IRWXA), 0);
@@ -320,7 +320,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_dup() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/dupfile";
@@ -376,7 +376,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_dup2() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/dup2file";
@@ -420,7 +420,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_fcntl() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let filefd = cage.open_syscall("/fcntl_file", O_CREAT | O_EXCL, S_IRWXA);
@@ -446,7 +446,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_ioctl() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         
         let mut arg0: i32 = 0;
         let mut arg1: i32 = 1;
@@ -487,7 +487,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_fdflags() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let path = "/fdFlagsFile";
 
@@ -522,7 +522,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_file_link_unlink() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let path = "/fileLink";
         let path2 = "/fileLink2";
@@ -564,7 +564,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_file_lseek_past_end() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let path = "/lseekPastEnd";
 
@@ -590,7 +590,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_fstat_complex() {
         lindrustinit(0);
 
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let path = "/complexFile";
 
         let fd = cage.open_syscall(path, O_CREAT | O_WRONLY, S_IRWXA);
@@ -611,7 +611,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_getuid() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //let's get the initial -1s out of the way
         cage.getgid_syscall();
@@ -633,7 +633,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_load_fs() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let mut statdata = StatData::default();
 
@@ -658,7 +658,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_mknod() {
         // let's create /dev/null
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo {major: 1, minor: 3});
         let path = "/null";
 
@@ -707,7 +707,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_multiple_open() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         //try to open several files at once -- the fd's should not be overwritten
         let fd1 = cage.open_syscall("/foo", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -743,7 +743,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_rmdir() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let path = "/parent_dir/dir";
         assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
@@ -758,7 +758,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_stat_file_complex() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let fd = cage.open_syscall("/fooComplex", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
@@ -786,7 +786,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_stat_file_mode() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
@@ -811,7 +811,7 @@ pub mod fs_tests {
     
     pub fn  ut_lind_fs_statfs() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
         assert_eq!(cage.statfs_syscall("/", &mut fsdata), 0);
@@ -826,7 +826,7 @@ pub mod fs_tests {
     
     pub fn ut_lind_fs_rename() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let old_path = "/test_dir";
         assert_eq!(cage.mkdir_syscall(old_path, S_IRWXA), 0);
@@ -838,7 +838,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_ftruncate() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/ftruncate", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         assert!(fd >= 0);
@@ -864,7 +864,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_truncate() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let path = String::from("/truncate");
         let fd = cage.open_syscall(&path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -891,7 +891,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_getdents() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let bufsize = 50;
         let mut vec = vec![0u8; bufsize as usize];
@@ -923,7 +923,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_dir_chdir_getcwd() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let needed = "/subdir1\0".as_bytes().to_vec().len();
 
         let needed_u32: u32 = needed as u32;
@@ -952,7 +952,7 @@ pub mod fs_tests {
 
     pub fn ut_lind_fs_exec_cloexec() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let mut uselessstatdata = StatData::default();
 
         let fd1 = cage.open_syscall("/cloexecuted", O_CREAT | O_TRUNC | O_RDWR | O_CLOEXEC, S_IRWXA);
@@ -964,8 +964,7 @@ pub mod fs_tests {
 
         assert_eq!(cage.exec_syscall(2), 0);
 
-        let execcage = {CAGE_TABLE.get(&2).unwrap().clone()};
-
+        let execcage = interface::cagetable_getref(2);
         assert_eq!(execcage.fstat_syscall(fd1, &mut uselessstatdata), -(Errno::EBADF as i32));
         assert_eq!(execcage.fstat_syscall(fd2, &mut uselessstatdata), 0);
 
@@ -980,7 +979,7 @@ pub mod fs_tests {
     use libc::c_void;
     pub fn ut_lind_fs_shm() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let key = 31337;
         let mut shmidstruct = ShmidsStruct::default();
 
