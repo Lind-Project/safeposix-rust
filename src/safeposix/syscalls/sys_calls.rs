@@ -152,9 +152,6 @@ impl Cage {
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         interface::cagetable_remove(self.cageid);
 
-        let mut cloexecvec = vec!();
-        let iterator = self.filedescriptortable.iter();
-
         self.unmap_shm_mappings();
 
         let mut cloexecvec = vec!();

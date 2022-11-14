@@ -514,7 +514,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
-    cagetable.insert(1, interface::RustRfc::new(initcage));
+    interface::cagetable_insert(1, initcage);
 }
 
 #[no_mangle]
