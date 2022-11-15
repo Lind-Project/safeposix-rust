@@ -17,6 +17,7 @@ use std::fmt;
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
+const PAGE_SIZE: usize = 4096;
 
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
@@ -29,13 +30,14 @@ pub struct EmulatedPipe {
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
     eof: Arc<AtomicBool>,
+    size: usize
 }
 
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false))}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false)), size: size}
     }
 
     pub fn set_eof(&self) {
@@ -97,7 +99,9 @@ impl EmulatedPipe {
         }
 
         while bytes_written < length {
-            let bytes_to_write = min(length, bytes_written as usize + write_end.remaining());
+            let remaining = write_end.remaining();
+            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
+            let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
         }   
