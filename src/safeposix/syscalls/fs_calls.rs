@@ -625,6 +625,7 @@ impl Cage {
                 }
                 Socket(_) => {
                     drop(filedesc_enum);
+                    drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
@@ -784,6 +785,7 @@ impl Cage {
                 }
                 Socket(_) => {
                     drop(filedesc_enum);
+                    drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }
                 Stream(stream_filedesc_obj) => {
