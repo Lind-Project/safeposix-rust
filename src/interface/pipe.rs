@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use std::slice;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use ringbuf::{RingBuffer, Producer, Consumer};
+use ringbuf::{HeapRb, Producer, Consumer, ring_buffer::RbWrite, ring_buffer::RbRead};
 use std::cmp::min;
 use std::fmt;
 
@@ -25,8 +25,8 @@ pub fn new_pipe(size: usize) -> EmulatedPipe {
 
 #[derive(Clone)]
 pub struct EmulatedPipe {
-    write_end: Arc<Mutex<Producer<u8>>>,
-    read_end: Arc<Mutex<Consumer<u8>>>,
+    write_end: Arc<Mutex<Producer<u8, Arc<HeapRb<u8>>>>>,
+    read_end: Arc<Mutex<Consumer<u8, Arc<HeapRb<u8>>>>>,
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
     eof: Arc<AtomicBool>,
@@ -35,7 +35,7 @@ pub struct EmulatedPipe {
 
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
-        let rb = RingBuffer::<u8>::new(size);
+        let rb = HeapRb::<u8>::new(size);
         let (prod, cons) = rb.split();
         EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false)), size: size}
     }
@@ -75,7 +75,7 @@ impl EmulatedPipe {
     pub fn check_select_write(&self) -> bool {
 
         let write_end = self.write_end.lock();
-        let pipe_space = write_end.remaining();
+        let pipe_space = write_end.free_len();
 
         return pipe_space != 0;
     }
@@ -93,13 +93,10 @@ impl EmulatedPipe {
 
         let mut write_end = self.write_end.lock();
 
-        let pipe_space = write_end.remaining();
-        if nonblocking && (pipe_space == 0) {
-            return -1;
-        }
-
         while bytes_written < length {
-            let remaining = write_end.remaining();
+            let remaining = write_end.free_len();
+            if nonblocking && (remaining == 0) { return -1; }
+
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
@@ -122,13 +119,11 @@ impl EmulatedPipe {
         };
 
         let mut read_end = self.read_end.lock();
-        let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
-            return -1;
-        }
 
         while bytes_read < length {
-            pipe_space = read_end.len();
+            let pipe_space = read_end.len();
+            if nonblocking && (pipe_space == 0) { return -1; }
+
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
