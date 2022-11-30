@@ -93,14 +93,17 @@ impl EmulatedPipe {
 
         let mut write_end = self.write_end.lock();
 
-        while bytes_written < length {
-            let remaining = write_end.free_len();
-            if nonblocking && (remaining == 0) { return -1; }
+        let mut remaining = write_end.free_len();
+        if nonblocking && (remaining == 0) { return -1; }
 
+        loop {
+            
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
+            if bytes_written < length { remaining = write_end.free_len(); }
+            else { break; }
         }   
 
         bytes_written as i32
@@ -119,15 +122,18 @@ impl EmulatedPipe {
         };
 
         let mut read_end = self.read_end.lock();
+        let mut pipe_space = read_end.len();
+        if nonblocking && (pipe_space == 0) {
+            return -1;
+        }
 
-        while bytes_read < length {
-            let pipe_space = read_end.len();
-            if nonblocking && (pipe_space == 0) { return -1; }
-
+        loop {
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
+            if bytes_read < length { pipe_space = read_end.len(); }
+            else { break; }
         }
 
         bytes_read as i32
