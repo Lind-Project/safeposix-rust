@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use std::slice;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use ringbuf::{HeapRb, Producer, Consumer, ring_buffer::RbWrite, ring_buffer::RbRead};
+use ringbuf::{HeapRb, HeapProducer, HeapConsumer, ring_buffer::RbWrite, ring_buffer::RbRead};
 use std::cmp::min;
 use std::fmt;
 
@@ -25,8 +25,8 @@ pub fn new_pipe(size: usize) -> EmulatedPipe {
 
 #[derive(Clone)]
 pub struct EmulatedPipe {
-    write_end: Arc<Mutex<Producer<u8, Arc<HeapRb<u8>>>>>,
-    read_end: Arc<Mutex<Consumer<u8, Arc<HeapRb<u8>>>>>,
+    write_end: Arc<Mutex<HeapProducer<u8>>>,
+    read_end: Arc<Mutex<HeapConsumer<u8>>>,
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
     eof: Arc<AtomicBool>,
