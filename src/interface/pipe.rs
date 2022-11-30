@@ -97,8 +97,11 @@ impl EmulatedPipe {
         if nonblocking && (remaining == 0) { return -1; }
 
         loop {
-            
-            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
+            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { 
+                remaining = write_end.free_len();
+                continue; 
+            }
+
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
