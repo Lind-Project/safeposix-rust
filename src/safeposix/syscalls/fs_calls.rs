@@ -624,7 +624,6 @@ impl Cage {
                     }
                 }
                 Socket(_) => {
-                    drop(filedesc_enum);
                     drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
@@ -784,7 +783,6 @@ impl Cage {
                     }
                 }
                 Socket(_) => {
-                    drop(filedesc_enum);
                     drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }

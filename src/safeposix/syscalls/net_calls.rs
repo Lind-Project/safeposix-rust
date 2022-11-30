@@ -517,8 +517,6 @@ impl Cage {
                                 Some(x) => x.clone(),
                                 None => {return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");},
                             };
-
-                            drop(filedesc_enum);
                             drop(unlocked_fd);
                             //send from a udp socket is just shunted off to sendto with the remote address set
                             return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
