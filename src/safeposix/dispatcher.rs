@@ -94,7 +94,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 
 
 use crate::interface;
-use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
+use super::cage::*;
 use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
@@ -488,10 +488,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     incref_root();
     
     let utilcage = Cage{
-        cageid: 0, 
-        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, 
-        filedescriptortable: interface::RustHashMap::new(),
+        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, filedescriptortable: init_fdtable(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -503,11 +501,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     interface::cagetable_insert(0, utilcage);
 
     //init cage is its own parent
-    let mut initcage = Cage{
+    let initcage = Cage{
         cageid: 1, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
-        filedescriptortable: interface::RustHashMap::new(),
+        filedescriptortable: init_fdtable(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -516,7 +514,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
-    initcage.load_lower_handle_stubs();
     interface::cagetable_insert(1, initcage);
 }
 
