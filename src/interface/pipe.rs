@@ -103,6 +103,7 @@ impl EmulatedPipe {
             }
 
             let bytes_to_write = min(length, bytes_written as usize + remaining);
+            if bytes_to_write == bytes_written { continue; }
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
             if bytes_written < length { remaining = write_end.free_len(); }
@@ -114,7 +115,6 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    // BUG: This only currently works as SPSC
     pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_read = 0;
@@ -133,6 +133,7 @@ impl EmulatedPipe {
         loop {
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
+            if bytes_to_read == bytes_read { continue; }
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
             if bytes_read < length { pipe_space = read_end.len(); }

@@ -582,7 +582,7 @@ impl Cage {
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
-        if let Some( filedesc_enum) = &mut *unlocked_fd {
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
             match filedesc_enum {
@@ -624,7 +624,7 @@ impl Cage {
                     }
                 }
                 Socket(_) => {
-                    drop(filedesc_enum);
+                    drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
@@ -783,7 +783,7 @@ impl Cage {
                     }
                 }
                 Socket(_) => {
-                    drop(filedesc_enum);
+                    drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }
                 Stream(stream_filedesc_obj) => {
@@ -1088,27 +1088,24 @@ impl Cage {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         };
 
-        let (dupfd, mut dupfdguard) = match fromdup2 {
-            true => {
-                if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
-                let mut fdguard = self.filedescriptortable[newfd as usize].write();
-                if fdguard.is_some() {
-                    drop(fdguard);
-                    //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-                    let close_result = Self::_close_helper_inner(&self, newfd);
-                    if close_result < 0 {
-                        return close_result;
-                    }
-                } else { drop(fdguard); }
-                fdguard = self.filedescriptortable[newfd as usize].write();
+        let (dupfd, mut dupfdguard) = if fromdup2 {
+            if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
+            let mut fdguard = self.filedescriptortable[newfd as usize].write();
+            if fdguard.is_some() {
+                drop(fdguard);
+                //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
+                let close_result = Self::_close_helper_inner(&self, newfd);
+                if close_result < 0 {
+                    return close_result;
+                }
+            } else { drop(fdguard); }
+            fdguard = self.filedescriptortable[newfd as usize].write();
 
-                (newfd, fdguard)
-            },
-            false => {
-                let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
-                if newdupfd < 0 { return syscall_error(Errno::ENFILE, "dup2_helper", "no available file descriptor number could be found"); }
-                (newdupfd, guardopt.unwrap())
-            }
+            (newfd, fdguard)
+        } else {
+            let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
+            if newdupfd < 0 { return syscall_error(Errno::ENFILE, "dup2_helper", "no available file descriptor number could be found"); }
+            (newdupfd, guardopt.unwrap())
         };
         let dupfdoption = &mut *dupfdguard;
 

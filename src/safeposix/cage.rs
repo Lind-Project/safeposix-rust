@@ -103,6 +103,7 @@ impl Cage {
         for fd in start..MAXFD{
             let fdguard = self.filedescriptortable[fd as usize].try_write();
             if let Some(ref fdopt) = fdguard {
+                // we grab the lock here and if there is no occupied cage, we return the fdno and guard while keeping the fd slot locked
                 if fdopt.is_none() { return (fd, fdguard); }
             }
         };
