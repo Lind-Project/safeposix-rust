@@ -102,6 +102,7 @@ impl EmulatedPipe {
             let remaining = write_end.remaining();
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
+            if bytes_to_write == bytes_written { continue; }
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
         }   
@@ -130,6 +131,7 @@ impl EmulatedPipe {
             pipe_space = read_end.len();
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
+            if bytes_to_read == bytes_read { continue; }
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
         }
