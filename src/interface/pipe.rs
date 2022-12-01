@@ -125,9 +125,7 @@ impl EmulatedPipe {
 
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
-            return -1;
-        }
+        if nonblocking && (pipe_space == 0) { return -1; }
 
         loop {
             if pipe_space == 0 {
