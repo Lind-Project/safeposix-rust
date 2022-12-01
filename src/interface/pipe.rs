@@ -103,7 +103,10 @@ impl EmulatedPipe {
             }
 
             let bytes_to_write = min(length, bytes_written as usize + remaining);
-            if bytes_to_write == bytes_written { continue; }
+            if bytes_to_write == bytes_written { 
+                remaining = write_end.free_len();
+                continue; 
+            }
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
             if bytes_written < length { remaining = write_end.free_len(); }
