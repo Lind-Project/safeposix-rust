@@ -44,10 +44,6 @@ impl Cage {
     }
 
     fn _socket_inserter(&self, sockfd: SocketDesc) -> i32 {
-<<<<<<< HEAD
-
-=======
->>>>>>> develop
         let (fd, guardopt) = self.get_next_fd(None);
         if fd < 0 { return fd }
         let fdoption = &mut *guardopt.unwrap();
