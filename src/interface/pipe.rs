@@ -6,7 +6,7 @@
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 
-use parking_lot::Mutex;
+use parking_lot::{Mutex, Condvar};
 use std::slice;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -19,6 +19,31 @@ const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
 
+pub struct PipeCondVar {
+    lock: Arc<Mutex<i32>>,
+    cv: Condvar
+}
+
+impl PipeCondVar {
+    pub fn new() -> Self {
+        Self {lock: Arc::new(Mutex::new(0)), cv: Condvar::new()}
+    }
+
+    pub fn wait(&self) {
+        let mut guard = self.lock.lock();
+        *guard +=1;
+        self.cv.wait(&mut guard);
+    }
+
+    pub fn signal(&self) -> bool {
+        let guard = self.lock.lock();
+        if *guard == 1 {
+            self.cv.notify_all();
+            return true;
+        } else { return false; }
+    }
+}
+
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
 }
@@ -29,6 +54,8 @@ pub struct EmulatedPipe {
     read_end: Arc<Mutex<Consumer<u8>>>,
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
+    writecv: Arc<PipeCondVar>,
+    readcv: Arc<PipeCondVar>,
     eof: Arc<AtomicBool>,
     size: usize
 }
@@ -37,7 +64,7 @@ impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false)), size: size}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), writecv: Arc::new(PipeCondVar::new()), readcv: Arc::new(PipeCondVar::new()), eof: Arc::new(AtomicBool::new(false)), size: size}
     }
 
     pub fn set_eof(&self) {
@@ -103,7 +130,11 @@ impl EmulatedPipe {
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
+            let wrote_this_iter = bytes_to_write - bytes_written;
             bytes_written = bytes_to_write;
+            self.readcv.signal();
+            if wrote_this_iter == remaining { self.writecv.wait(); }
+
         }   
 
         bytes_written as i32
@@ -131,7 +162,10 @@ impl EmulatedPipe {
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
+            let read_this_iter = bytes_to_read - bytes_read;
             bytes_read = bytes_to_read;
+            self.writecv.signal();
+            if read_this_iter == pipe_space { self.readcv.wait() }
         }
 
         bytes_read as i32
