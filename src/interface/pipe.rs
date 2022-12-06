@@ -20,27 +20,26 @@ const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
 
 pub struct PipeCondVar {
-    lock: Arc<Mutex<i32>>,
+    lock: Arc<Mutex<bool>>,
     cv: Condvar
 }
 
 impl PipeCondVar {
     pub fn new() -> Self {
-        Self {lock: Arc::new(Mutex::new(0)), cv: Condvar::new()}
+        Self {lock: Arc::new(Mutex::new(false)), cv: Condvar::new()}
     }
 
     pub fn wait(&self) {
         let mut guard = self.lock.lock();
-        *guard +=1;
-        self.cv.wait(&mut guard);
+        if !*guard {
+            self.cv.wait(&mut guard);
+        }
     }
 
-    pub fn signal(&self) -> bool {
-        let guard = self.lock.lock();
-        if *guard == 1 {
-            self.cv.notify_all();
-            return true;
-        } else { return false; }
+    pub fn signal(&self) {
+        let mut guard = self.lock.lock();
+        *guard = true;
+        self.cv.notify_all();
     }
 }
 
