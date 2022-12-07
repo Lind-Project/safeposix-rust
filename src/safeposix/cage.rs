@@ -9,7 +9,7 @@ pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 
-pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
+pub use crate::interface::{CAGE_TABLE};
 
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {
@@ -59,7 +59,7 @@ pub struct EpollDesc {
     pub flags: i32
 }
 
-pub type FdTable = interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<FileDescriptor>>>;
+pub type FdTable = Vec<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>>;
 
 #[derive(Debug)]
 pub struct Cage {
@@ -78,7 +78,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>, fdobj: FileDescriptor) -> i32 {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockGuard<Option<FileDescriptor>>>) {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -87,23 +87,13 @@ impl Cage {
 
         // let's get the next available fd number. The standard says we need to return the lowest open fd number.
         for fd in start..MAXFD{
-            match self.filedescriptortable.entry(fd) {
-                interface::RustHashEntry::Occupied(_) => {}
-                interface::RustHashEntry::Vacant(vacant) => {
-                    vacant.insert(interface::RustRfc::new(interface::RustLock::new(fdobj)));
-                    return fd;
-                }
-            };
+            let fdguard = self.filedescriptortable[fd as usize].try_write();
+            if let Some(ref fdopt) = fdguard {
+                // we grab the lock here and if there is no occupied cage, we return the fdno and guard while keeping the fd slot locked
+                if fdopt.is_none() { return (fd, fdguard); }
+            }
         };
-        return syscall_error(Errno::ENFILE, "get_next_fd", "no available file descriptor number could be found");
-    }
-
-    pub fn add_to_fd_table(&self, fd: i32, descriptor: FileDescriptor) {
-        self.filedescriptortable.insert(fd, interface::RustRfc::new(interface::RustLock::new(descriptor)));
-    }
-
-    pub fn rm_from_fd_table(&self, fd: &i32) {
-        self.filedescriptortable.remove(fd);
+        return (syscall_error(Errno::ENFILE, "get_next_fd", "no available file descriptor number could be found"), None);
     }
 
     pub fn changedir(&self, newdir: interface::RustPathBuf) {
@@ -112,14 +102,20 @@ impl Cage {
         *cwdbox = newwd;
     }
 
-    pub fn load_lower_handle_stubs(&mut self) {
-        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let fdtable = &self.filedescriptortable;
-        fdtable.insert(0, stdin);
-        fdtable.insert(1, stdout);
-        fdtable.insert(2, stderr);
-    }
+}
 
+pub fn init_fdtable() -> FdTable {
+    let mut fdtable = Vec::new();
+    // load lower handle stubs
+    let stdin = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
+    let stdout = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
+    let stderr = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
+    fdtable.push(stdin);
+    fdtable.push(stdout);
+    fdtable.push(stderr);
+
+    for _fd in 3..MAXFD as usize {
+        fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
+    }
+    fdtable
 }
