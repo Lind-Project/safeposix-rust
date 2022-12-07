@@ -5,9 +5,11 @@ use crate::interface;
 use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
+use crate::safeposix::syscall_numbers::*;
 use super::sys_constants::*;
 use super::net_constants::*;
 use super::fs_constants::*;
+use std::sync::atomic::Ordering;
 
 impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
@@ -73,16 +75,27 @@ impl Cage {
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
-            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed))
+            geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
+            syscall_allowlist: Cage::get_init_syscall_allowlist()
         };
         mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
     }
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        {CAGE_TABLE.remove(&self.cageid).unwrap();}
-        
+        for callnum in 1..self.syscall_allowlist.len() {
+            match callnum as i32 {
+                CLOSE_SYSCALL => {
+                    continue;
+                }
+                EXIT_SYSCALL => {
+                    continue;
+                }
+                _ => self.syscall_allowlist[callnum].store(false, Ordering::Relaxed),
+            }
+        }
+
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
         for pair in iterator {
@@ -106,7 +119,8 @@ impl Cage {
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
-            geteuid: interface::RustAtomicI32::new(-1)
+            geteuid: interface::RustAtomicI32::new(-1),
+            syscall_allowlist: Cage::get_init_syscall_allowlist()
         };
         //wasteful clone of fdtable, but mutability constraints exist
 

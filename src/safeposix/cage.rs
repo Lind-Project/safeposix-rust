@@ -8,6 +8,7 @@ pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
+use super::syscall_numbers::MAX_SYSCALL_NUMBER;
 
 pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
 
@@ -89,10 +90,18 @@ pub struct Cage {
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
-    pub geteuid: interface::RustAtomicI32
+    pub geteuid: interface::RustAtomicI32,
+    pub syscall_allowlist: Vec<interface::RustAtomicBool>
 }
 
 impl Cage {
+    pub fn get_init_syscall_allowlist() -> Vec<interface::RustAtomicBool> {
+        let mut syscall_allowlist = Vec::new();
+        for _ in 0..MAX_SYSCALL_NUMBER {
+            syscall_allowlist.push(interface::RustAtomicBool::new(true));
+        }
+        syscall_allowlist
+    }
 
     pub fn get_next_fd(&self, startfd: Option<i32>, fdobj: FileDescriptor) -> i32 {
 
