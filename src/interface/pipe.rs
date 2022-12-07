@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
 use std::fmt;
+pub use std::time::{Instant, Duration};
 
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
@@ -126,12 +127,16 @@ impl EmulatedPipe {
             return -1;
         }
 
+        let mut timer = Instant::now();
         while bytes_read < length {
             pipe_space = read_end.len();
+            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
+            if pipe_space != self.size  && timer.elapsed().as_micros() < 100 && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE { continue };
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
             bytes_read = bytes_to_read;
+            timer = Instant::now();
         }
 
         bytes_read as i32
