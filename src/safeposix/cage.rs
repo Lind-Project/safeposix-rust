@@ -38,22 +38,8 @@ pub struct StreamDesc {
 
 #[derive(Debug, Clone)]
 pub struct SocketDesc {
-    pub mode: i32,
-    pub domain: i32,
-    pub realdomain: i32,
-    pub reallocalpath: Option<interface::RustPathBuf>,
-    pub optinode: Option<usize>,
-    pub socktype: i32,
-    pub protocol: i32,
-    pub options: i32,
-    pub sndbuf: i32,
-    pub rcvbuf: i32,
     pub flags: i32,
-    pub errno: i32,
-    pub localaddr: Option<interface::GenSockaddr>,
-    pub remoteaddr: Option<interface::GenSockaddr>,
-    pub last_peek: interface::RustDeque<u8>,
-    pub socketobjectid: Option<i32>,
+    pub sockethandleid: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>
 }
 

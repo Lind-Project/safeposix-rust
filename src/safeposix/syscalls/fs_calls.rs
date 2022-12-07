@@ -1173,8 +1173,9 @@ impl Cage {
                 pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
             Socket(socket_filedesc_obj) => {
-                if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                    NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
+                let socknum = socket_filedesc_obj.sockethandleid;
+                if let Some(sock) = NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().innersocket {
+                    sock.refcnt += 1;
                 }
             }
             Stream(_normalfile_filedesc_obj) => {
@@ -1246,13 +1247,20 @@ impl Cage {
             Epoll(_) => {} //Epoll closing not implemented yet
             Socket(socket_filedesc_obj) => {
                 let mut cleanflag = false;
-                if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                    let mut sockobjopt = NET_METADATA.socket_object_table.get_mut(&socknum);
-                    //in case shutdown?
-                    if let Some(ref mut sockobj) = sockobjopt {
-                        let mut so_tmp = sockobj.write();
-                        so_tmp.0.refcnt -= 1;
-                        cleanflag = so_tmp.0.refcnt == 0;
+                let socknum = socket_filedesc_obj.sockethandleid;
+                let mut sockobjopt = NET_METADATA.socket_object_table.get_mut(&socknum);
+                let mut inodeopt = None;
+                let mut pathopt = None;
+                //in case shutdown?
+                if let Some(ref mut sockobj) = sockobjopt {
+                    let mut so_tmp = sockobj.write();
+                    if let Some(sock) = so_tmp.innersocket {
+                        sock.refcnt -= 1;
+                        cleanflag = sock.refcnt == 0;
+                    }
+                    if let Some(ui) = so_tmp.unix_info {
+                        inodeopt = Some(ui.inode);
+                        pathopt = Some(ui.reallocalpath.clone());
                     }
                 }
                 if cleanflag {
@@ -1262,24 +1270,20 @@ impl Cage {
                         return retval;
                     }
                 }
-                if let Some(inodenum) = socket_filedesc_obj.optinode {
+                if let Some(inodenum) = inodeopt {
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                    if let Inode::Socket(ref mut sock) = *inodeobj { 
-                        sock.refcount -= 1; 
+                    if let Inode::Socket(ref mut sock) = *inodeobj {
+                        sock.refcount -= 1;
                         if sock.refcount == 0 {
                             if sock.linkcount == 0 {
                                 drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
-                                if let Some(truepath) = socket_filedesc_obj.reallocalpath.clone() {
-                                    NET_METADATA.domain_socket_table.remove(&truepath);
-                                }
+                                let truepath = pathopt.unwrap();
+                                NET_METADATA.domain_socket_table.remove(&truepath);
                             }
                         }
-                    
-                    } 
+                    }
                 }
-
-
             }
             Pipe(pipe_filedesc_obj) => {   
                 let pipe = &pipe_filedesc_obj.pipe;    
@@ -1389,16 +1393,16 @@ impl Cage {
                 File(obj) => {&mut obj.flags},
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
-                        let sid = Self::getsockobjid(&mut *sockfdobj);
-                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                        let sockobj = locksock.read();
+                        let locksock = NET_METADATA.socket_object_table.get(&sockfdobj.sockethandleid).unwrap().clone();
+                        let sockhandle = locksock.write();
                         let fcntlret;
 
-                        if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
-                            fcntlret = sockobj.0.set_nonblocking();
-                        }
-                        else { //clear non-blocking I/O
-                            fcntlret = sockobj.0.set_blocking();
+                        if let Some(ins) = sockhandle.innersocket {
+                            if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
+                                fcntlret = ins.set_nonblocking();
+                            } else { //clear non-blocking I/O
+                                fcntlret = ins.set_blocking();
+                            }
                         }
 
                         if fcntlret < 0 {
@@ -1472,20 +1476,22 @@ impl Cage {
                             return arg_result; //syscall_error
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                            let sockobj = locksock.read();
+                            let locksock = NET_METADATA.socket_object_table.get(&sockfdobj.sockethandleid).unwrap().clone();
+                            let sockhandle = locksock.write();
+
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
                             let ioctlret;
 
-                            if arg == 0 { //clear non-blocking I/O
-                                *flags &= !O_NONBLOCK;
-                                ioctlret = sockobj.0.set_blocking();
-                            }
-                            else { //set for non-blocking I/O
-                                *flags |= O_NONBLOCK;
-                                ioctlret = sockobj.0.set_nonblocking();
+                            if let Some(ins) = sockhandle.innersocket {
+                                if arg == 0 { //clear non-blocking I/O
+                                    *flags &= !O_NONBLOCK;
+                                    ioctlret = ins.set_blocking();
+                                }
+                                else { //set for non-blocking I/O
+                                    *flags |= O_NONBLOCK;
+                                    ioctlret = ins.set_nonblocking();
+                                }
                             }
                             
                             if ioctlret < 0 {

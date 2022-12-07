@@ -68,6 +68,33 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
     }
 }
 
+pub struct UnixSocketInfo {
+    pub mode: i32,
+    pub reallocalpath: interface::RustPathBuf,
+    pub inode: usize,
+}
+
+pub struct SocketHandle {
+    pub innersocket: Option<interface::Socket>,
+
+    pub options: i32,
+    pub state: ConnState,
+    pub protocol: i32,
+    pub domain: i32,
+    pub realdomain: i32,
+    pub last_peek: interface::RustDeque<u8>,
+    pub localaddr: Option<interface::GenSockaddr>,
+    pub remoteaddr: Option<interface::GenSockaddr>,
+
+    pub unix_info: Option<UnixSocketInfo>,
+
+    pub socktype: i32,
+    pub sndbuf: i32,
+    pub rcvbuf: i32,
+    pub errno: i32,
+    pub refcnt: i32
+}
+
 pub struct NetMetadata {
     pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed
     next_ephemeral_port_tcpv4: interface::RustRfc<interface::RustLock<u16>>,
@@ -77,7 +104,7 @@ pub struct NetMetadata {
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
     pub revds_table: interface::RustHashMap<interface::GenSockaddr, interface::GenSockaddr>,
-    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
+    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<SocketHandle>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 
@@ -178,7 +205,7 @@ impl NetMetadata {
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
     }
 
-    fn insert_to_next_socketobjectid(&self, val: (interface::Socket, ConnState)) -> Option<i32> {
+    fn insert_to_next_socketobjectid(&self, val: SocketHandle) -> Option<i32> {
         for i in MINSOCKOBJID..MAXSOCKOBJID {
             if let interface::RustHashEntry::Vacant(v) = self.socket_object_table.entry(i) {
                 v.insert(interface::RustRfc::new(interface::RustLock::new(val)));
@@ -305,8 +332,8 @@ impl NetMetadata {
         }
     }
 
-    pub fn insert_into_socketobjecttable(&self, sock: interface::Socket, connstate: ConnState) -> Result<i32, i32> {
-        if let Some(id) = self.insert_to_next_socketobjectid((sock, connstate)) {
+    pub fn insert_into_socketobjecttable(&self, sockh: SocketHandle) -> Result<i32, i32> {
+        if let Some(id) = self.insert_to_next_socketobjectid(sockh) {
             Ok(id)
         } else {
             Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
