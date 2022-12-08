@@ -130,8 +130,9 @@ impl EmulatedPipe {
         let mut timer = Instant::now();
         while bytes_read < length {
             pipe_space = read_end.len();
-            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
-            if pipe_space != self.size  && timer.elapsed().as_micros() < 100 && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE { continue };
+            // we read if the pipe is full, otherwise we try to limit reads to 4096 bytes (unless whats leftover of this write is < 4096)
+            // to prevent deadlock, we also read if 100us has elapsed
+            if pipe_space != self.size  && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE && timer.elapsed().as_micros() < 100 { continue };
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
