@@ -1084,8 +1084,8 @@ impl Cage {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
 
-        let mut filedesc_enum = self.filedescriptortable[oldfd as usize].write();
-        let filedesc_enum = if let Some(f) = *filedesc_enum {f} else {
+        let filedesc_enum = self.filedescriptortable[oldfd as usize].write();
+        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         };
 
@@ -1135,7 +1135,7 @@ impl Cage {
             }
             Socket(socket_filedesc_obj) => {
                 let socknum = socket_filedesc_obj.sockethandleid;
-                if let Some(sock) = NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().innersocket {
+                if let Some(sock) = &mut NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().innersocket {
                     sock.refcnt += 1;
                 }
             }
@@ -1190,21 +1190,22 @@ impl Cage {
                 Socket(ref socket_filedesc_obj) => {
                     let mut cleanflag = false;
                     let socknum = socket_filedesc_obj.sockethandleid;
-                    let mut sockobjopt = NET_METADATA.socket_object_table.get_mut(&socknum);
+                    let mut sockhandleopt = NET_METADATA.socket_object_table.get_mut(&socknum);
                     let mut inodeopt = None;
                     let mut pathopt = None;
                     //in case shutdown?
-                    if let Some(ref mut sockobj) = sockobjopt {
-                        let mut so_tmp = sockobj.write();
-                        if let Some(sock) = so_tmp.innersocket {
+                    if let Some(ref mut sockhandle) = sockhandleopt {
+                        let mut so_tmp = sockhandle.write();
+                        if let Some(sock) = &mut so_tmp.innersocket {
                             sock.refcnt -= 1;
                             cleanflag = sock.refcnt == 0;
                         }
-                        if let Some(ui) = so_tmp.unix_info {
+                        if let Some(ui) = &so_tmp.unix_info {
                             inodeopt = Some(ui.inode);
                             pathopt = Some(ui.reallocalpath.clone());
                         }
                     }
+                    drop(sockhandleopt);
                     if cleanflag {
                         let mut fdclone = filedesc_enum.clone();
                         let retval = self._cleanup_socket_inner(&mut fdclone, -1, false);
@@ -1327,23 +1328,23 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
                         let locksock = NET_METADATA.socket_object_table.get(&sockfdobj.sockethandleid).unwrap().clone();
-                        let sockhandle = locksock.write();
-                        let fcntlret;
+                        let mut sockhandle = locksock.write();
 
-                        if let Some(ins) = sockhandle.innersocket {
+                        if let Some(ins) = &mut sockhandle.innersocket {
+                            let fcntlret;
                             if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
                                 fcntlret = ins.set_nonblocking();
                             } else { //clear non-blocking I/O
                                 fcntlret = ins.set_blocking();
                             }
+                            if fcntlret < 0 {
+                                match Errno::from_discriminant(interface::get_errno()) {
+                                    Ok(i) => {return syscall_error(i, "fcntl", "The libc call to fcntl failed!");},
+                                    Err(()) => panic!("Unknown errno value from fcntl returned!"),
+                                };
+                            }
                         }
 
-                        if fcntlret < 0 {
-                            match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {return syscall_error(i, "fcntl", "The libc call to fcntl failed!");},
-                                Err(()) => panic!("Unknown errno value from fcntl returned!"),
-                            };
-                        }
                     }
 
                     &mut sockfdobj.flags
@@ -1408,23 +1409,23 @@ impl Cage {
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
                             let locksock = NET_METADATA.socket_object_table.get(&sockfdobj.sockethandleid).unwrap().clone();
-                            let sockhandle = locksock.write();
+                            let mut sockhandle = locksock.write();
 
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
-                            let ioctlret;
+                            let mut ioctlret = 0;
 
-                            if let Some(ins) = sockhandle.innersocket {
-                                if arg == 0 { //clear non-blocking I/O
-                                    *flags &= !O_NONBLOCK;
+                            if arg == 0 { //clear non-blocking I/O
+                                *flags &= !O_NONBLOCK;
+                                if let Some(ins) = &mut sockhandle.innersocket {
                                     ioctlret = ins.set_blocking();
                                 }
-                                else { //set for non-blocking I/O
-                                    *flags |= O_NONBLOCK;
+                            } else { //set for non-blocking I/O
+                                *flags |= O_NONBLOCK;
+                                if let Some(ins) = &mut sockhandle.innersocket {
                                     ioctlret = ins.set_nonblocking();
                                 }
                             }
-                            
                             if ioctlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "ioctl", "The libc call to ioctl failed!");},
