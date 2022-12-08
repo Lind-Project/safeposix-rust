@@ -109,6 +109,22 @@ impl Cage {
         }
     }
 
+    pub fn force_innersocket(sockhandle: &mut SocketHandle) {
+        if let None = sockhandle.innersocket {
+            let thissock = interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
+
+            for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
+                if sockhandle.options & (1 << reuse) == 0 {continue;}
+                let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
+                if sockret < 0 {
+                    panic!("Cannot handle failure in setsockopt on socket creation");
+                }
+            }
+
+            sockhandle.innersocket = Some(thissock);
+        };
+    }
+
     //we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
@@ -133,22 +149,7 @@ impl Cage {
             newsockaddr = interface::GenSockaddr::V4(innersockaddr);
         }
 
-        if let None = sockhandle.innersocket {
-            let thissock = interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
-
-            for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
-                if sockhandle.options & (1 << reuse) == 0 {continue;}
-                let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
-                if sockret < 0 {
-                    match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(i) => {return syscall_error(i, "bind", "The libc call to setsockopt failed!");},
-                        Err(()) => panic!("Unknown errno value from setsockopt returned!"),
-                    };
-                }
-            }
-
-            sockhandle.innersocket = Some(thissock);
-        };
+        Self::force_innersocket(sockhandle);
 
         let newlocalport = if prereserved {
             localaddr.port()
@@ -327,7 +328,10 @@ impl Cage {
                             return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
                         }
 
+
                         if let None = sockhandle.localaddr {
+                            Self::force_innersocket(&mut sockhandle);
+
                             let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.realdomain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
                                 Ok(a) => a,
                                 Err(e) => return e,
@@ -728,6 +732,7 @@ impl Cage {
                                     };
                                 }
                             }
+
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
                             if listenret < 0 {
                                 let lr = match Errno::from_discriminant(interface::get_errno()) {
