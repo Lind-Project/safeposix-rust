@@ -527,6 +527,8 @@ impl Cage {
                                 None => {return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");},
                             };
                             drop(unlocked_fd);
+                            drop(sockhandle);
+                            drop(locksock);
                             //send from a udp socket is just shunted off to sendto with the remote address set
                             return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
                         }
@@ -1057,8 +1059,8 @@ impl Cage {
                                     retval += 1;
                                 } else {
                                     drop(sockfdobj);
-                                    drop(filedesc_enum);
                                     drop(sockhandle);
+                                    drop(unlocked_fd);
                                     if self._nonblock_peek_read(*fd) {
                                         new_readfds.insert(*fd);
                                         retval += 1;
