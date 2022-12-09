@@ -19,6 +19,7 @@ const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
+const READ_TIMEOUT: usize = 65536;
 
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
@@ -132,7 +133,7 @@ impl EmulatedPipe {
             pipe_space = read_end.len();
             // we read if the pipe is full, otherwise we try to limit reads to 4096 bytes (unless whats leftover of this write is < 4096)
             // to prevent deadlock, we also read if 100us has elapsed
-            if pipe_space != self.size  && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE && counter < 100000 { 
+            if pipe_space != self.size  && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE && counter < READ_TIMEOUT { 
                 counter = counter + 1;
                 continue;
             };
