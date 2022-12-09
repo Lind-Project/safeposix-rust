@@ -137,7 +137,6 @@ impl EmulatedPipe {
                 counter = counter + 1;
                 continue;
             };
-            println!("counter is: {}", counter);
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
             read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
