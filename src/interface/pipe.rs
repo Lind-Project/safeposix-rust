@@ -134,7 +134,7 @@ impl EmulatedPipe {
             // to prevent deadlock, we also read if 100us has elapsed
             if pipe_space != self.size  && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE && counter < 100 { 
                 counter = counter + 1;
-                continue 
+                continue;
             };
             println!("counter is: {}", counter);
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
