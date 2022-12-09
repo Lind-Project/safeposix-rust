@@ -132,7 +132,7 @@ impl EmulatedPipe {
         while bytes_read < length {
             pipe_space = read_end.len();
             // we read if the pipe is full, otherwise we try to limit reads to 4096 bytes (unless whats leftover of this write is < 4096)
-            // to prevent deadlock, we also read if 100us has elapsed
+            // to prevent deadlock, we also read if the counter reaches 2^16 (approx. 100us)
             if pipe_space != self.size  && (length - bytes_read) > PAGE_SIZE && pipe_space < PAGE_SIZE && counter < READ_TIMEOUT { 
                 counter = counter + 1;
                 continue;
