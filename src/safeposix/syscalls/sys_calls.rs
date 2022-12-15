@@ -197,6 +197,7 @@ impl Cage {
 
         // close fds
         for fd in 0..MAXFD {
+            unsafe{self.filedescriptortable[fd as usize].force_unlock_write();}
             self._close_helper(fd);
         }
 
