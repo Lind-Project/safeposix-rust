@@ -28,8 +28,9 @@ use std::time::Duration;
 
 const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
+const MAXFD: i32 = 1024;
 
-use crate::safeposix::cage::{Cage};
+use crate::safeposix::cage::{Cage, FileDescriptor};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
 
@@ -47,6 +48,12 @@ pub fn cagetable_remove(cageid: u64) {
 
 pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
+}
+
+pub fn cagetable_unlockfds(cage: &Cage) {
+    for fd in 0..MAXFD {
+        unsafe{ cage.filedescriptortable[fd as usize].force_unlock_write(); }
+    }
 }
 
 pub fn cagetable_clear() {
