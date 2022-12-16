@@ -54,7 +54,7 @@ pub fn cagetable_unlockfds(cageid: u64) {
     let cage = cagetable_getref(cageid);
     for fd in 0..MAXFD {
         unsafe{ 
-            let fdlock = cage.filedescriptortable[fd as usize]
+            let fdlock = &cage.filedescriptortable[fd as usize];
             if fdlock.is_locked_exclusive() { fdlock.force_unlock_write(); }
             else if fdlock.is_locked() {fdlock.force_unlock_read(); } 
         }
