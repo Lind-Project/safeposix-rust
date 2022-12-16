@@ -50,7 +50,8 @@ pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
 }
 
-pub fn cagetable_unlockfds(cage: &Cage) {
+pub fn cagetable_unlockfds(cageid: u64) {
+    let cage = cagetable_getref(cageid);
     for fd in 0..MAXFD {
         unsafe{ cage.filedescriptortable[fd as usize].force_unlock_write(); }
     }

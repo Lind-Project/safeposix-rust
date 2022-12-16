@@ -537,3 +537,9 @@ pub extern "C" fn lindrustfinalize() {
         let _logremove = interface::removefile(LOGFILENAME.to_string());
     }
 }
+
+#[no_mangle]
+pub extern "C" fn lindrustfatalunlock(cageid: u64) {
+    interface::cagetable_unlockfds(cageid);
+}
+

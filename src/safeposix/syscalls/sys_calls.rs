@@ -195,8 +195,6 @@ impl Cage {
 
         self.unmap_shm_mappings();
 
-        interface::cagetable_unlockfds(self);
-
         // close fds
         for fd in 0..MAXFD {
             self._close_helper(fd);
