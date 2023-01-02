@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 // retreive cage table
-use std::sync::atomic::Ordering;
+use interface::RustAtomicOrdering::Relaxed;
 
 use crate::interface;
 use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
@@ -9,7 +9,7 @@ use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, p
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
 use super::syscalls::sys_constants::*;
-use super::syscall_nubmers::*;
+use super::syscall_numbers::*;
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -41,7 +41,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 
     // need to match based on if cage exists
     let cage = { CAGE_TABLE.get(&cageid).unwrap().clone() };
-    if !cage.syscall_allowlist[callnum as usize].load(Ordering::Relaxed) {
+    if !cage.syscall_allowlist[callnum as usize].load(Relaxed) {
         return syscall_error(Errno::EPERM, &(callnum.to_string()), "Syscall is not permitted in this cage");
     }
 
