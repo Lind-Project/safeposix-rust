@@ -94,6 +94,15 @@ pub fn get_errno() -> i32 {
     (unsafe{*libc::__errno_location()}) as i32
 }
 
+extern "C" {
+    fn pthread_testcancel(natp: *mut c_void);
+}
+
+pub fn cancel_point() {
+    unsafe { pthread_testcancel(0 as *mut c_void); }
+}
+    
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();

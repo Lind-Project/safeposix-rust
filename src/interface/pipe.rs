@@ -98,6 +98,7 @@ impl EmulatedPipe {
         }
 
         while bytes_written < length {
+            interface::cancel_point();
             let remaining = write_end.remaining();
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
@@ -127,6 +128,7 @@ impl EmulatedPipe {
         }
 
         while bytes_read < length {
+            interface::cancel_point();
             pipe_space = read_end.len();
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);
