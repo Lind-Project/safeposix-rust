@@ -95,11 +95,11 @@ pub fn get_errno() -> i32 {
 }
 
 extern "C" {
-    pub fn lindthread_testcancel(natp: *mut c_void);
+    pub fn lindthread_testcancel(natp: *const c_void);
 }
 
 pub fn cancel_point() {
-    unsafe { lindthread_testcancel(0 as *mut c_void); }
+    unsafe { lindthread_testcancel(0 as *const c_void); }
 }
     
 
