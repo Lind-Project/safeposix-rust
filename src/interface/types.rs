@@ -37,8 +37,8 @@ pub struct StatData {
   pub st_gid: u32,
   pub st_rdev: u64,
   pub st_size: usize,
-  pub st_blksize: isize,
-  pub st_blocks: usize,
+  pub st_blksize: i32,
+  pub st_blocks: u32,
   //currently we don't populate or care about the time bits here
   pub st_atim: (u64, u64),
   pub st_mtim: (u64, u64),
