@@ -212,6 +212,8 @@ pub struct Socket {
 impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
+        let timeoutval = libc::timeval { tv_sec: 1, tv_usec: 0 };
+        unsafe {libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVTIMEO, (&timeoutval as *const libc::timeval) as *const libc::c_void, size_of::<libc::timeval>() as u32)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
         Self {refcnt: 1, raw_sys_fd: fd}
     }

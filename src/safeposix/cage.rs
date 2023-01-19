@@ -8,6 +8,7 @@ pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
+use super::net::SocketHandle;
 
 pub use crate::interface::{CAGE_TABLE};
 
@@ -39,7 +40,7 @@ pub struct StreamDesc {
 #[derive(Debug, Clone)]
 pub struct SocketDesc {
     pub flags: i32,
-    pub sockethandleid: i32,
+    pub handle: interface::RustRfc<interface::RustLock<SocketHandle>>,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>
 }
 

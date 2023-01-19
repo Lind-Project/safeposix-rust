@@ -27,7 +27,6 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_tcpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
-            socket_object_table: interface::RustHashMap::new(),
             domain_socket_table: interface::RustHashMap::new(),
             revds_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
@@ -68,12 +67,14 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
     }
 }
 
+#[derive(Debug)]
 pub struct UnixSocketInfo {
     pub mode: i32,
     pub reallocalpath: interface::RustPathBuf,
     pub inode: usize,
 }
 
+#[derive(Debug)]
 pub struct SocketHandle {
     pub innersocket: Option<interface::Socket>,
 
@@ -92,7 +93,6 @@ pub struct SocketHandle {
     pub sndbuf: i32,
     pub rcvbuf: i32,
     pub errno: i32,
-    pub refcnt: i32
 }
 
 pub struct NetMetadata {
@@ -104,7 +104,6 @@ pub struct NetMetadata {
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
     pub revds_table: interface::RustHashMap<interface::GenSockaddr, interface::GenSockaddr>,
-    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<SocketHandle>>>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
 }
 
@@ -203,16 +202,6 @@ impl NetMetadata {
             }
         }
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
-    }
-
-    fn insert_to_next_socketobjectid(&self, val: SocketHandle) -> Option<i32> {
-        for i in MINSOCKOBJID..MAXSOCKOBJID {
-            if let interface::RustHashEntry::Vacant(v) = self.socket_object_table.entry(i) {
-                v.insert(interface::RustRfc::new(interface::RustLock::new(val)));
-                return Some(i);
-            }
-        }
-        return None;
     }
 
     pub fn _reserve_localport(&self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, rebindability: bool) -> Result<u16, i32> {
@@ -329,14 +318,6 @@ impl NetMetadata {
             interface::RustHashEntry::Vacant(_) => {
                 return Err(syscall_error(Errno::EINVAL, "release", "provided port is not being used"));
             }
-        }
-    }
-
-    pub fn insert_into_socketobjecttable(&self, sockh: SocketHandle) -> Result<i32, i32> {
-        if let Some(id) = self.insert_to_next_socketobjectid(sockh) {
-            Ok(id)
-        } else {
-            Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
         }
     }
 

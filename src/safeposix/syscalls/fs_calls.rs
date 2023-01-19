@@ -1133,11 +1133,8 @@ impl Cage {
             Pipe(pipe_filedesc_obj) => {
                 pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
-            Socket(socket_filedesc_obj) => {
-                let socknum = socket_filedesc_obj.sockethandleid;
-                if let Some(sock) = &mut NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().innersocket {
-                    sock.refcnt += 1;
-                }
+            Socket(_socket_filedesc_obj) => {
+                //we handle the closing of these on drop
             }
             Stream(_normalfile_filedesc_obj) => {
                 // no stream refs
@@ -1145,7 +1142,7 @@ impl Cage {
             _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
         }
 
-        let mut dupd_fd_enum = filedesc_enum.clone();
+        let mut dupd_fd_enum = filedesc_enum.clone(); //clones the arc for sockethandle
 
         // get and clone fd, wrap and insert into table.
         match dupd_fd_enum { // we don't want to pass on the CLOEXEC flag
@@ -1189,23 +1186,20 @@ impl Cage {
                 Epoll(_) => {} //Epoll closing not implemented yet
                 Socket(ref socket_filedesc_obj) => {
                     let mut cleanflag = false;
-                    let socknum = socket_filedesc_obj.sockethandleid;
-                    let mut sockhandleopt = NET_METADATA.socket_object_table.get_mut(&socknum);
+                    let sock_tmp = socket_filedesc_obj.handle.clone();
+                    let mut sockhandle = sock_tmp.write();
                     let mut inodeopt = None;
                     let mut pathopt = None;
                     //in case shutdown?
-                    if let Some(ref mut sockhandle) = sockhandleopt {
-                        let mut so_tmp = sockhandle.write();
-                        if let Some(sock) = &mut so_tmp.innersocket {
-                            sock.refcnt -= 1;
-                            cleanflag = sock.refcnt == 0;
-                        }
-                        if let Some(ui) = &so_tmp.unix_info {
-                            inodeopt = Some(ui.inode);
-                            pathopt = Some(ui.reallocalpath.clone());
-                        }
+                    if let Some(sock) = &mut sockhandle.innersocket {
+                        sock.refcnt -= 1;
+                        cleanflag = sock.refcnt == 0;
                     }
-                    drop(sockhandleopt);
+                    if let Some(ui) = &sockhandle.unix_info {
+                        inodeopt = Some(ui.inode);
+                        pathopt = Some(ui.reallocalpath.clone());
+                    }
+                    drop(sockhandle);
                     if cleanflag {
                         let mut fdclone = filedesc_enum.clone();
                         let retval = self._cleanup_socket_inner(&mut fdclone, -1, false);
@@ -1327,8 +1321,8 @@ impl Cage {
                 File(obj) => {&mut obj.flags},
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
-                        let locksock = NET_METADATA.socket_object_table.get(&sockfdobj.sockethandleid).unwrap().clone();
-                        let mut sockhandle = locksock.write();
+                        let sock_tmp = sockfdobj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
 
                         if let Some(ins) = &mut sockhandle.innersocket {
                             let fcntlret;
@@ -1408,8 +1402,8 @@ impl Cage {
                             return arg_result; //syscall_error
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
-                            let locksock = NET_METADATA.socket_object_table.get(&sockfdobj.sockethandleid).unwrap().clone();
-                            let mut sockhandle = locksock.write();
+                            let sock_tmp = sockfdobj.handle.clone();
+                            let mut sockhandle = sock_tmp.write();
 
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
