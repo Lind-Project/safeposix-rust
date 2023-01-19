@@ -1170,7 +1170,7 @@ impl Cage {
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
         //check that the fd is valid
-            return Self::_close_helper(self, fd);
+        return Self::_close_helper(self, fd);
     }
 
     pub fn _close_helper_inner(&self, fd: i32) -> i32 {
@@ -1185,28 +1185,15 @@ impl Cage {
                 Stream(_) => {}
                 Epoll(_) => {} //Epoll closing not implemented yet
                 Socket(ref socket_filedesc_obj) => {
-                    let mut cleanflag = false;
                     let sock_tmp = socket_filedesc_obj.handle.clone();
-                    let mut sockhandle = sock_tmp.write();
+                    let sockhandle = sock_tmp.write();
                     let mut inodeopt = None;
                     let mut pathopt = None;
-                    //in case shutdown?
-                    if let Some(sock) = &mut sockhandle.innersocket {
-                        sock.refcnt -= 1;
-                        cleanflag = sock.refcnt == 0;
-                    }
                     if let Some(ui) = &sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
                         pathopt = Some(ui.reallocalpath.clone());
                     }
                     drop(sockhandle);
-                    if cleanflag {
-                        let mut fdclone = filedesc_enum.clone();
-                        let retval = self._cleanup_socket_inner(&mut fdclone, -1, false);
-                        if retval < 0 {
-                            return retval;
-                        }
-                    }
                     if let Some(inodenum) = inodeopt {
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {

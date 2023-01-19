@@ -95,6 +95,12 @@ pub struct SocketHandle {
     pub errno: i32,
 }
 
+impl Drop for SocketHandle {
+    fn drop(&mut self) {
+        Cage::_cleanup_socket_inner_helper(self, -1, false);
+    }
+}
+
 pub struct NetMetadata {
     pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed
     next_ephemeral_port_tcpv4: interface::RustRfc<interface::RustLock<u16>>,

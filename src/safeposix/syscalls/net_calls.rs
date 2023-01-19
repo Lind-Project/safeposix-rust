@@ -772,61 +772,65 @@ impl Cage {
         }
     }
 
-    pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
+    pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
         let mut releaseflag = false;
+        if let Some(ref sobj) = sockhandle.innersocket {
+            if shutdown {
+                let shutresult = sobj.shutdown(how);
+
+                if shutresult < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
+                        Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                    };
+                }
+
+                match how {
+                    SHUT_RD => {
+                        if sockhandle.state == ConnState::CONNRDONLY { releaseflag = true; }
+                        sockhandle.state = ConnState::CONNWRONLY;
+                    }
+                    SHUT_WR => {
+                        if sockhandle.state == ConnState::CONNWRONLY { releaseflag = true; }
+                        sockhandle.state = ConnState::CONNRDONLY;
+                    }
+                    SHUT_RDWR => {
+                        releaseflag = true;
+                        sockhandle.state = ConnState::NOTCONNECTED;
+                    }
+                    _ => {
+                        //See http://linux.die.net/man/2/shutdown for nuance to this error
+                        return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+                    }
+                }
+            } else {
+                //Reaching this means that the socket is closed. Removing the sockobj
+                //indicates that the sockobj will drop, and therefore close
+                releaseflag = true;
+                sockhandle.innersocket = None;
+            }
+        }
+
+        if releaseflag {
+            if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
+                //move to end
+                let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
+                sockhandle.localaddr = None;
+                if let Err(e) = release_ret_val {return e;}
+            }
+        }
+        return 0;
+    }
+
+    pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
         if let Socket(sockfdobj) = filedesc {
             let sock_tmp = sockfdobj.handle.clone();
             let mut sockhandle = sock_tmp.write();
-            if let Some(ref sobj) = sockhandle.innersocket {
-                if shutdown {
-                    let shutresult = sobj.shutdown(how);
 
-                    if shutresult < 0 {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
-                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
-                        };
-                    }
-
-                    match how {
-                        SHUT_RD => {
-                            if sockhandle.state == ConnState::CONNRDONLY { releaseflag = true; }
-                            sockhandle.state = ConnState::CONNWRONLY;
-                        }
-                        SHUT_WR => {
-                            if sockhandle.state == ConnState::CONNWRONLY { releaseflag = true; }
-                            sockhandle.state = ConnState::CONNRDONLY;
-                        }
-                        SHUT_RDWR => {
-                            releaseflag = true;
-                            sockhandle.state = ConnState::NOTCONNECTED;
-                        }
-                        _ => {
-                            //See http://linux.die.net/man/2/shutdown for nuance to this error
-                            return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
-                        }
-                    }
-                } else {
-                    //Reaching this means that the socket is closed. Removing the sockobj
-                    //indicates that the sockobj will drop, and therefore close
-                    releaseflag = true;
-                    sockhandle.innersocket = None;
-                }
-            }
-
-            if releaseflag {
-                if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                    //move to end
-                    let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
-                    sockhandle.localaddr = None;
-                    if let Err(e) = release_ret_val {return e;}
-                }
-            }
-
+            Self::_cleanup_socket_inner_helper(&mut *sockhandle, how, shutdown)
         } else {
-            return syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket");
+            syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket")
         }
-        return 0;
     }
 
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
