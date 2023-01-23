@@ -599,9 +599,15 @@ impl Cage {
 
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {
+                                        //We have the recieve timeout set to every one second, so
+                                        //if our blocking socket ever returns EAGAIN, it must be
+                                        //the case that this recv timeout was exceeded, and we
+                                        //should thus not treat this as a failure in our emulated
+                                        //socket; see comment in Socket::new in interface/comm.rs
                                         if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
                                             continue;
                                         }
+
                                         return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
                                     },
                                     Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),

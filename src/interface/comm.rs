@@ -212,6 +212,10 @@ pub struct Socket {
 impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
+        
+        //we make every socket have a recieve timeout of one second
+        //This is in order to allow the socket to process and recieve
+        //shutdowns while blocked on blocking recv syscalls.
         let timeoutval = libc::timeval { tv_sec: 1, tv_usec: 0 };
         unsafe {libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVTIMEO, (&timeoutval as *const libc::timeval) as *const libc::c_void, size_of::<libc::timeval>() as u32)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
