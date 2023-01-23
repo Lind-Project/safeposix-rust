@@ -67,6 +67,7 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
     }
 }
 
+//A substructure for information only populated in a unix domain socket
 #[derive(Debug)]
 pub struct UnixSocketInfo {
     pub mode: i32,
@@ -74,6 +75,7 @@ pub struct UnixSocketInfo {
     pub inode: usize,
 }
 
+//This structure contains all socket-associated data that is not held in the fd
 #[derive(Debug)]
 pub struct SocketHandle {
     pub innersocket: Option<interface::Socket>,
@@ -95,6 +97,13 @@ pub struct SocketHandle {
     pub errno: i32,
 }
 
+//This cleanup-on-drop strategy is used in lieu of manual refcounting in order to allow the close
+//syscall not to have to wait to increase the refcnt manually in case for example it is in a
+//blocking recv. This clean-on-drop strategy is made possible by the fact that file descriptors
+//hold reference to a SocketHandle via an Arc, so only when the last reference to a SocketHandle is
+//gone--that is when the last cage has closed it--do we actually attempt to shut down the inner
+//socket, which is what we could have done manually in close instead. This should be both cleaner
+//and faster, because we don't have to wait for the recv timeout like we do in shutdown
 impl Drop for SocketHandle {
     fn drop(&mut self) {
         Cage::_cleanup_socket_inner_helper(self, -1, false);

@@ -108,6 +108,7 @@ impl Cage {
         }
     }
 
+    //creates a sockhandle if none exists, otherwise this is a no-op
     pub fn force_innersocket(sockhandle: &mut SocketHandle) {
         if let None = sockhandle.innersocket {
             let thissock = interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
