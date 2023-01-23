@@ -100,12 +100,12 @@ impl Cage {
                         pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
-                        if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                            NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
-                        }
-                        if let Some(inodenum) = socket_filedesc_obj.optinode {
-                            if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                sock.refcount += 1; } 
+                        let sock_tmp = socket_filedesc_obj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
+                        if let Some(uinfo) = &mut sockhandle.unix_info {
+                            if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
+                                sock.refcount += 1;
+                            }
                         }
                     }
                     _ => {}

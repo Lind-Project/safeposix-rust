@@ -439,13 +439,13 @@ pub mod net_tests {
         cage.fork_syscall(2);
         //client 1 connects to the server to send and recv data...
         let thread1 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(100));
+            interface::sleep(interface::RustDuration::from_millis(30));
             let cage2 = interface::cagetable_getref(2);
 
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
             //giving it a longer pause time to that it can process all of the data that it is recieving
-            interface::sleep(interface::RustDuration::from_millis(1000));
+            interface::sleep(interface::RustDuration::from_millis(100));
 
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             cage2.exit_syscall(EXIT_SUCCESS);
@@ -455,13 +455,13 @@ pub mod net_tests {
         //client 2 connects to the server to send and recv data...
         let thread2 = interface::helper_thread(move || {
             //give it a longer time so that it can sufficiently process all of the data
-            interface::sleep(interface::RustDuration::from_millis(200));
+            interface::sleep(interface::RustDuration::from_millis(45));
             let cage3 = interface::cagetable_getref(3);
 
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
 
-            interface::sleep(interface::RustDuration::from_millis(1000));
+            interface::sleep(interface::RustDuration::from_millis(100));
 
             assert_eq!(cage3.close_syscall(serversockfd), 0);
             cage3.exit_syscall(EXIT_SUCCESS);
@@ -471,11 +471,7 @@ pub mod net_tests {
         let thread3 = interface::helper_thread(move || {
             let mut infds: Vec<i32>;
             let mut outfds: Vec<i32>;
-            let mut counter = 0; // this is to make sure that the loop doesn't go on forever
-            loop {
-                counter = counter + 1;
-                if counter == 600 { break; }
-
+            for _counter in 0..600 {
                 //start a while true loop for processing requests
                 let pollretvalue = cage.poll_syscall(&mut polled.as_mut_slice(), Some(interface::RustDuration::ZERO));
                 assert!(pollretvalue >= 0);
@@ -744,10 +740,7 @@ pub mod net_tests {
         });
 
         //acting as the server and processing the request
-        let mut counter = 0;
-        loop {
-            if counter > 600 { break; }
-            counter += 1;
+        for _counter in 0..600 {
             let mut binputs = inputs.clone();
             let mut boutputs = outputs.clone();
             let mut bexcepts = excepts.clone();
@@ -835,6 +828,7 @@ pub mod net_tests {
             let fd = cage2.accept_syscall(serversockfd, &mut socket2); 
             assert!(fd > 0);
             
+            assert_eq!(cage2.netshutdown_syscall(fd, SHUT_RD), 0);
             assert_eq!(cage2.send_syscall(fd, str2cbuf("random string"), 13, 0), 13);
             assert_eq!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0);
             assert_ne!(cage2.netshutdown_syscall(fd, SHUT_RDWR), 0); //should fail
