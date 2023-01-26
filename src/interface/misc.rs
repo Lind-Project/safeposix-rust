@@ -16,7 +16,7 @@ use std::str::{from_utf8, Utf8Error};
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::mmap;
+use libc::{mmap, pthread_self, pthread_exit};
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -94,14 +94,16 @@ pub fn get_errno() -> i32 {
     (unsafe{*libc::__errno_location()}) as i32
 }
 
-extern "C" {
-    pub fn lindthread_testcancel(natp: *const c_void);
+pub fn lind_threadexit() {
+    unsafe { pthread_exit(0 as *mut c_void); }
 }
 
-pub fn cancel_point() {
-    unsafe { lindthread_testcancel(0 as *const c_void); }
+pub fn check_thread(cageid: u64, tid: u64, is_self: bool) -> bool {
+    let cage = cagetable_getref(cageid);
+    let pthread_id = if is_self { unsafe { pthread_self() as u64 } } else { tid };
+    let killable = *cage.thread_table.get(&pthread_id).unwrap();
+    killable
 }
-    
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};

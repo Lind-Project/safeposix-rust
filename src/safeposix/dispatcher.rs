@@ -478,6 +478,24 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
+
+#[no_mangle]
+pub extern "C" fn lindthreadinit(cageid: u64, tid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.insert(tid, false);
+}
+
+#[no_mangle]
+pub extern "C" fn lindcheckthread(cageid: u64, tid: u64, is_self: bool) -> bool {
+    interface::check_thread(cageid, tid, is_self)
+}
+
+#[no_mangle]
+pub extern "C" fn lindthreadremove(cageid: u64, tid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.remove(&tid);
+}
+
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
@@ -497,6 +515,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -513,6 +532,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(1, initcage);
 }

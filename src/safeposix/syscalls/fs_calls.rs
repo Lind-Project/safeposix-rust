@@ -635,7 +635,7 @@ impl Cage {
 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                    let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking, self.cageid) as i32;
                     if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
                     else { return ret };
   
