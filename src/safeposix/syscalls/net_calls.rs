@@ -1606,10 +1606,28 @@ impl Cage {
         let newdomain = if domain == AF_UNIX {AF_INET} else {domain};
         let sock1fd = this.socket_syscall(newdomain, socktype, protocol);
         if sock1fd < 0 {return sock1fd;}
+
+        // We set SO_REUSEADDR for socketpair because otherwise, after the sockets are closed, they
+        // can get into a TIME_WAIT state which makes the sockets unusable for 60 seconds--however
+        // because socketpair is local we don't need such a timeout for the peer to tell the socket
+        // has closed, so we set SO_REUSEADDR to allow rebinding--this prevents the case where if
+        // lind closes and is restarted within 60 seconds, it fails to bind a socket created via
+        // socketpair.
+        let setsockopt_res1 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
+        if setsockopt_res1 != 0 { //this should really only happen with ENOMEM/ENOBUFS
+            this.close_syscall(sock1fd);
+            return setsockopt_res1;
+        }
         let sock2fd = this.socket_syscall(newdomain, socktype, protocol);
         if sock2fd < 0 {
             this.close_syscall(sock1fd);
             return sock2fd;
+        }
+        let setsockopt_res2 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
+        if setsockopt_res2 != 0 { //this should really only happen with ENOMEM/ENOBUFS
+            this.close_syscall(sock2fd);
+            this.close_syscall(sock1fd);
+            return setsockopt_res2;
         }
     
         let portlessaddr = if newdomain == AF_INET {
