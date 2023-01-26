@@ -480,20 +480,20 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 
 
 #[no_mangle]
-pub extern "C" fn lindthreadinit(cageid: u64, tid: u64) {
+pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
     let cage = interface::cagetable_getref(cageid);
-    cage.thread_table.insert(tid, false);
+    cage.thread_table.insert(pthreadid, kill);
 }
 
 #[no_mangle]
-pub extern "C" fn lindcheckthread(cageid: u64, tid: u64, is_self: bool) -> bool {
-    interface::check_thread(cageid, tid, is_self)
+pub extern "C" fn lindcheckthread(cageid: u64, pthreadid: u64, is_self: bool) -> bool {
+    interface::check_thread(cageid, pthreadid, is_self)
 }
 
 #[no_mangle]
-pub extern "C" fn lindthreadremove(cageid: u64, tid: u64) {
+pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
     let cage = interface::cagetable_getref(cageid);
-    cage.thread_table.remove(&tid);
+    cage.thread_table.remove(&pthreadid);
 }
 
 #[no_mangle]
