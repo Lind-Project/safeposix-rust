@@ -104,7 +104,7 @@ pub fn get_pthreadid() {
 
 pub fn check_thread(cageid: u64, tid: u64, inrustposix: bool) -> bool {
     let cage = cagetable_getref(cageid);
-    let pthread_id = if inrustposix { get_pthreadid(); } } else { tid };
+    let pthread_id = if inrustposix { get_pthreadid(); } else { tid };
     let killable = *cage.thread_table.get(&pthread_id).unwrap();
     if inrustposix { cage.thread_table.insert(pthread_id, false); }
     killable
