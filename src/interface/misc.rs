@@ -102,6 +102,7 @@ pub fn check_thread(cageid: u64, tid: u64, is_self: bool) -> bool {
     let cage = cagetable_getref(cageid);
     let pthread_id = if is_self { unsafe { pthread_self() as u64 } } else { tid };
     let killable = *cage.thread_table.get(&pthread_id).unwrap();
+    if killable { cage.thread_table.insert(pthread_id, false); }
     killable
 }
 
