@@ -110,6 +110,11 @@ pub fn check_thread(cageid: u64, tid: u64, inrustposix: bool) -> bool {
     killable
 }
 
+pub fn cancelpoint(cageid: u64) {
+    if check_thread(cageid, 0, true) { lind_threadexit(); }
+}
+
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
