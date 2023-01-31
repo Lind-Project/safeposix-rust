@@ -94,11 +94,12 @@ impl EmulatedPipe {
 
         let pipe_space = write_end.remaining();
         if nonblocking && (pipe_space == 0) {
-            return -1;
+            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
         }
 
         while bytes_written < length {
             let remaining = write_end.remaining();
+            if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); }
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
@@ -123,7 +124,7 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
         if nonblocking && (pipe_space == 0) {
-            return -1;
+            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
         }
 
         while bytes_read < length {
