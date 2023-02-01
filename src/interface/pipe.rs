@@ -61,6 +61,7 @@ impl EmulatedPipe {
         if (flags & O_RDWRFLAGS) == O_RDONLY {self.refcount_read.fetch_sub(1, Ordering::Relaxed);}
         if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
+
     pub fn check_select_read(&self) -> bool {
         let read_end = self.read_end.lock();
         let pipe_space = read_end.len();
@@ -111,7 +112,7 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool, cageid: u64) -> i32 {
 
         let mut bytes_read = 0;
 
@@ -127,6 +128,7 @@ impl EmulatedPipe {
         }
 
         while bytes_read < length {
+            interface::cancelpoint(cageid);
             pipe_space = read_end.len();
             if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
             let bytes_to_read = min(length, bytes_read + pipe_space);

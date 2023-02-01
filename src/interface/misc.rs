@@ -16,7 +16,7 @@ use std::str::{from_utf8, Utf8Error};
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::mmap;
+use libc::{mmap, pthread_self, pthread_exit};
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -92,6 +92,26 @@ pub fn flush_stdout() {
 
 pub fn get_errno() -> i32 {
     (unsafe{*libc::__errno_location()}) as i32
+}
+
+pub fn lind_threadexit() {
+    unsafe { pthread_exit(0 as *mut c_void); }
+}
+
+pub fn get_pthreadid() -> u64 {
+    unsafe { pthread_self() as u64 } 
+}
+
+pub fn check_thread(cageid: u64, tid: u64, inrustposix: bool) -> bool {
+    let cage = cagetable_getref(cageid);
+    let pthread_id = if inrustposix { get_pthreadid() } else { tid };
+    let killable = *cage.thread_table.get(&pthread_id).unwrap();
+    if inrustposix { cage.thread_table.insert(pthread_id, false); }
+    killable
+}
+
+pub fn cancelpoint(cageid: u64) {
+    if check_thread(cageid, 0, true) { lind_threadexit(); }
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
