@@ -94,10 +94,12 @@ impl EmulatedPipe {
 
         let pipe_space = write_end.remaining();
         if nonblocking && (pipe_space == 0) {
-            return -1;
+            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
         }
 
         while bytes_written < length {
+            if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); } // EPIPE, all read ends are closed
+
             let remaining = write_end.remaining();
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
@@ -113,8 +115,6 @@ impl EmulatedPipe {
     // Will wait for bytes unless pipe is empty and eof is set.
     pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
-        let mut bytes_read = 0;
-
         let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts_mut(ptr, length)
@@ -123,18 +123,19 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
         if nonblocking && (pipe_space == 0) {
-            return -1;
+            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
         }
 
-        while bytes_read < length {
+        // wait for something to be in the pipe, but break on eof
+        while pipe_space == 0 {
+            if self.eof.load(Ordering::SeqCst) { return 0; }
             pipe_space = read_end.len();
-            if (pipe_space == 0) && self.eof.load(Ordering::SeqCst) { break; }
-            let bytes_to_read = min(length, bytes_read + pipe_space);
-            read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
-            bytes_read = bytes_to_read;
         }
 
-        bytes_read as i32
+        let bytes_to_read = min(length, pipe_space);
+        read_end.pop_slice(&mut buf[0..bytes_to_read]);
+   
+        bytes_to_read as i32
     }
 
 }
