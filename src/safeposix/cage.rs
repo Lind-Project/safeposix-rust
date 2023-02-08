@@ -108,10 +108,10 @@ impl Cage {
     pub fn signalcvs(&self) {
         let cvtable = self.cv_table.read();
         
-        for cv_handle in cvtable.len() {
-            cvtable[cv_handle  as usize].is_some() {
+        for cv_handle in 0..cvtable.len() {
+            if cvtable[cv_handle  as usize].is_some() {
                 let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
-                let retval = clonedcv.signal();
+                clonedcv.signal();
             }
         }
     }

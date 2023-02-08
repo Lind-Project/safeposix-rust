@@ -607,7 +607,7 @@ impl Cage {
                                         //socket; see comment in Socket::new in interface/comm.rs
                                         if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
                                             if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                                cancelpoint(self.cageid); //check cancellation status
+                                                loop { interface::cancelpoint(self.cageid); } //check cancellation
                                             }
                                 
                                             continue;

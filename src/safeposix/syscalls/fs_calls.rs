@@ -2231,10 +2231,6 @@ impl Cage {
             drop(cvtable);
             let retval = clonedcv.signal();
 
-            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                cancelpoint(self.cageid);
-            }
-
             if retval < 0 {
                 match Errno::from_discriminant(interface::get_errno()) {
                     Ok(i) => {return syscall_error(i, "cond_signal", "The libc call to pthread_cond_signal failed!");},
@@ -2281,6 +2277,11 @@ impl Cage {
                 let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
                 drop(mutextable);
                 let retval = clonedcv.wait(&*clonedmutex);
+
+                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                    loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
+                }
+ 
                 if retval < 0 {
                     match Errno::from_discriminant(interface::get_errno()) {
                         Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
