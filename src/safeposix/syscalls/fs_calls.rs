@@ -2231,6 +2231,10 @@ impl Cage {
             drop(cvtable);
             let retval = clonedcv.signal();
 
+            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                cancelpoint(self.cageid);
+            }
+
             if retval < 0 {
                 match Errno::from_discriminant(interface::get_errno()) {
                     Ok(i) => {return syscall_error(i, "cond_signal", "The libc call to pthread_cond_signal failed!");},

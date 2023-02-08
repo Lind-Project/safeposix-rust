@@ -68,6 +68,7 @@ pub struct Cage {
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: FdTable,
+    pub cancelstatus: interface::RustAtomicBool,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
@@ -104,6 +105,16 @@ impl Cage {
         *cwdbox = newwd;
     }
 
+    pub fn signalcvs(&self) {
+        let cvtable = self.cv_table.read();
+        
+        for cv_handle in cvtable.len() {
+            cvtable[cv_handle  as usize].is_some() {
+                let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+                let retval = clonedcv.signal();
+            }
+        }
+    }
 }
 
 pub fn init_fdtable() -> FdTable {

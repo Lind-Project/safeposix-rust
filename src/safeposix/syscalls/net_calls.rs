@@ -606,7 +606,10 @@ impl Cage {
                                         //should thus not treat this as a failure in our emulated
                                         //socket; see comment in Socket::new in interface/comm.rs
                                         if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
-                                            interface::cancelpoint(self.cageid);
+                                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                cancelpoint(self.cageid); //check cancellation status
+                                            }
+                                
                                             continue;
                                         }
 

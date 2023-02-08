@@ -479,6 +479,14 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
 }
 
 
+
+#[no_mangle]
+pub extern "C" fn lindcancelinit(cageid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.cancelstatus.store(true, interface::RustAtomicOrdering::Relaxed);
+    cage.signalcvs();
+}
+
 #[no_mangle]
 pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
     let cage = interface::cagetable_getref(cageid);
@@ -506,8 +514,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     incref_root();
     
     let utilcage = Cage{
-        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: init_fdtable(),
+        cageid: 0, 
+        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, 
+        filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -525,6 +536,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
         filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
