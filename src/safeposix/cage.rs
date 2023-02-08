@@ -111,7 +111,7 @@ impl Cage {
         for cv_handle in 0..cvtable.len() {
             if cvtable[cv_handle  as usize].is_some() {
                 let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
-                clonedcv.signal();
+                clonedcv.broadcast();
             }
         }
     }
