@@ -107,7 +107,7 @@ impl EmulatedPipe {
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
-            unsafe { sched_yield(); }
+            // unsafe { sched_yield(); }
         }   
 
         bytes_written as i32
