@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
 use std::fmt;
+use libc::sched_yield;
 
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
@@ -106,6 +107,7 @@ impl EmulatedPipe {
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
+            sched_yield();
         }   
 
         bytes_written as i32
@@ -130,6 +132,7 @@ impl EmulatedPipe {
         while pipe_space == 0 {
             if self.eof.load(Ordering::SeqCst) { return 0; }
             pipe_space = read_end.len();
+            sched_yield();
         }
 
         let bytes_to_read = min(length, pipe_space);
