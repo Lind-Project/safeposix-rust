@@ -76,6 +76,7 @@ pub struct Cage {
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
+    pub waitingcvs: interface::RustAtomicI32,
     pub thread_table: interface::RustHashMap<u64, bool>
 }
 
@@ -108,10 +109,12 @@ impl Cage {
     pub fn signalcvs(&self) {
         let cvtable = self.cv_table.read();
         
-        for cv_handle in 0..cvtable.len() {
-            if cvtable[cv_handle  as usize].is_some() {
-                let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
-                clonedcv.broadcast();
+        while self.waitingcvs.load(interface::RustAtomicOrdering::Relaxed) > 1 {
+            for cv_handle in 0..cvtable.len() {
+                if cvtable[cv_handle  as usize].is_some() {
+                    let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+                    clonedcv.broadcast();
+                }
             }
         }
     }
