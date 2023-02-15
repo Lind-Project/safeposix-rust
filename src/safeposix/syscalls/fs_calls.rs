@@ -2161,10 +2161,6 @@ impl Cage {
             drop(mutextable);
             let retval = clonedmutex.unlock();
 
-            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
-            }
-
             if retval < 0 {
                 match Errno::from_discriminant(interface::get_errno()) {
                     Ok(i) => {return syscall_error(i, "mutex_unlock", "The libc call to pthread_mutex_unlock failed!");},

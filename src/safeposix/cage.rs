@@ -113,6 +113,7 @@ impl Cage {
                 let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
                 clonedcv.broadcast();
             }
+            interface::sleep(interface::RustDuration::from_millis(100));
         }
     }
 }
