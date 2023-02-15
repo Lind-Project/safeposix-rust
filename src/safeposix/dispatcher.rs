@@ -526,7 +526,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
-        waitingcvs: interface::RustAtomicI32::new(0),
         thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(0, utilcage);
@@ -545,7 +544,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
-        waitingcvs: interface::RustAtomicI32::new(0),
         thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(1, initcage);

@@ -136,7 +136,6 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
-            waitingcvs: interface::RustAtomicI32::new(0),
             thread_table: interface::RustHashMap::new(),
         };
 
@@ -185,7 +184,6 @@ impl Cage {
             rev_shm: interface::Mutex::new(vec!()),
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
-            waitingcvs: interface::RustAtomicI32::new(0),
             thread_table: interface::RustHashMap::new(),
         };
         //wasteful clone of fdtable, but mutability constraints exist

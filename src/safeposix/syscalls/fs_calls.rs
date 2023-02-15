@@ -2161,6 +2161,10 @@ impl Cage {
             drop(mutextable);
             let retval = clonedmutex.unlock();
 
+            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
+            }
+
             if retval < 0 {
                 match Errno::from_discriminant(interface::get_errno()) {
                     Ok(i) => {return syscall_error(i, "mutex_unlock", "The libc call to pthread_mutex_unlock failed!");},
@@ -2276,14 +2280,8 @@ impl Cage {
             if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
                 let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
                 drop(mutextable);
-                self.waitingcvs.fetch_add(1, interface::RustAtomicOrdering::Relaxed);
                 let retval = clonedcv.wait(&*clonedmutex);
-                self.waitingcvs.fetch_sub(1, interface::RustAtomicOrdering::Relaxed);
 
-                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                    loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
-                }
- 
                 if retval < 0 {
                     match Errno::from_discriminant(interface::get_errno()) {
                         Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
