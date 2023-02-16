@@ -2278,6 +2278,8 @@ impl Cage {
                 drop(mutextable);
                 let retval = clonedcv.wait(&*clonedmutex);
 
+                // if the cancel status is set in the cage, we trap around a cancel point
+                // until the individual thread is signaled to cancel itself
                 if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
                     loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
                 }

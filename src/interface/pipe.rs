@@ -19,7 +19,7 @@ const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
 
-const CANCEL_CHECK_INTERVAL: usize = 1048576;
+const CANCEL_CHECK_INTERVAL: usize = 1048576; // check to cancel pipe reads every 2^20 iterations
 
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)

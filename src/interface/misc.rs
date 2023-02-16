@@ -105,14 +105,14 @@ pub fn get_pthreadid() -> u64 {
 }
 
 // this function checks if a thread is killable and returns that state
-// if called from within rustposix (from the cancelpoint function), it uses pthread_self to identify itself
-// then 
 pub fn check_thread(cageid: u64, tid: u64) -> bool {
     let cage = cagetable_getref(cageid);
     let killable = *cage.thread_table.get(&tid).unwrap();
     killable
 }
 
+// in-rustposix cancelpoints checks if the thread is killable,
+// and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {

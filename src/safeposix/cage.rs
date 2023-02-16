@@ -105,6 +105,7 @@ impl Cage {
         *cwdbox = newwd;
     }
 
+    // function to signal all cvs in a cage when forcing exit
     pub fn signalcvs(&self) {
         let cvtable = self.cv_table.read();
         
