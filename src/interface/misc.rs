@@ -94,6 +94,8 @@ pub fn get_errno() -> i32 {
     (unsafe{*libc::__errno_location()}) as i32
 }
 
+// Cancellation functions
+
 pub fn lind_threadexit() {
     unsafe { pthread_exit(0 as *mut c_void); }
 }
@@ -102,16 +104,22 @@ pub fn get_pthreadid() -> u64 {
     unsafe { pthread_self() as u64 } 
 }
 
-pub fn check_thread(cageid: u64, tid: u64, inrustposix: bool) -> bool {
+// this function checks if a thread is killable and returns that state
+// if called from within rustposix (from the cancelpoint function), it uses pthread_self to identify itself
+// then 
+pub fn check_thread(cageid: u64, tid: u64) -> bool {
     let cage = cagetable_getref(cageid);
-    let pthread_id = if inrustposix { get_pthreadid() } else { tid };
-    let killable = *cage.thread_table.get(&pthread_id).unwrap();
-    if inrustposix { cage.thread_table.insert(pthread_id, false); }
+    let killable = *cage.thread_table.get(&tid).unwrap();
     killable
 }
 
 pub fn cancelpoint(cageid: u64) {
-    if check_thread(cageid, 0, true) { lind_threadexit(); }
+    let pthread_id = get_pthreadid();
+    if check_thread(cageid, pthread_id) {
+        let cage = cagetable_getref(cageid);
+        cage.thread_table.insert(pthread_id, false); 
+        lind_threadexit(); 
+    }
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {

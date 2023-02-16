@@ -495,7 +495,7 @@ pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
 
 #[no_mangle]
 pub extern "C" fn lindcheckthread(cageid: u64, pthreadid: u64) -> bool {
-    interface::check_thread(cageid, pthreadid, false)
+    interface::check_thread(cageid, pthreadid)
 }
 
 #[no_mangle]
