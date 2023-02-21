@@ -127,6 +127,7 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
+            cancelstatus: interface::RustAtomicBool::new(false),
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
@@ -135,6 +136,7 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
+            thread_table: interface::RustHashMap::new(),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -174,6 +176,7 @@ impl Cage {
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
             parent: self.parent, 
             filedescriptortable: self.filedescriptortable.clone(),
+            cancelstatus: interface::RustAtomicBool::new(false),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
@@ -181,6 +184,7 @@ impl Cage {
             rev_shm: interface::Mutex::new(vec!()),
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
+            thread_table: interface::RustHashMap::new(),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
