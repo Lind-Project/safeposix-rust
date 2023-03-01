@@ -127,11 +127,13 @@ macro_rules! check_and_dispatch_socketpair {
     };
 }
 
+#[no_mangle]
 pub extern "C" fn quick_write(fd: i32, buf: *const u8, count: usize, cageid: u64) -> i32 {
     let cage = interface::cagetable_getref(cageid);
     cage.write_syscall(fd, buf, count)
 }
 
+#[no_mangle]
 pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) -> i32 {
     let cage = interface::cagetable_getref(cageid);
     cage.read_syscall(fd, buf, size)
