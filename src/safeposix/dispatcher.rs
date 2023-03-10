@@ -92,6 +92,7 @@ const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
 const GETIFADDRS_SYSCALL: i32 = 146;
 
+const SIGACTION_SYSCALL: i32 = 147;
 
 use crate::interface;
 use super::cage::*;
@@ -471,6 +472,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         FTRUNCATE_SYSCALL => {
             check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
         }
+        SIGACTION_SYSCALL => {
+            check_and_dispatch!(cage.sigaction_syscall, interface::get_int(arg1), interface::get_constsigactionstruct(arg2), interface::get_sigactionstruct(arg3))
+        }
 
         _ => {//unknown syscall
             -1
@@ -497,6 +501,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        signalhandler: interface::RustHashMap::new(),
+        sigset: interface::RustHashSet::new()
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -513,6 +519,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        signalhandler: interface::RustHashMap::new(),
+        sigset: interface::RustHashSet::new()
     };
     interface::cagetable_insert(1, initcage);
 }

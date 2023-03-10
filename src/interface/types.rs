@@ -139,6 +139,20 @@ pub struct ShmidsStruct {
   pub shm_nattch: u32
 }
 
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct SigactionStruct {
+  pub sa_handler: fn(i32),
+  pub sa_mask: i32,
+  pub sa_flags: i32,
+  pub sa_restorer: fn()
+}
+
+#[derive(Debug, Clone)]
+pub struct SigHandler {
+    pub handlerptr: fn(i32)
+}
+
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -167,7 +181,9 @@ pub union Arg {
   pub dispatch_structtimespec: *mut TimeSpec,
   pub dispatch_pipearray: *mut PipeArray,
   pub dispatch_sockpair: *mut SockPair,
-  pub dispatch_ioctlptrunion: IoctlPtrUnion
+  pub dispatch_ioctlptrunion: IoctlPtrUnion,
+  pub dispatch_sigactionstruct: *mut SigactionStruct,
+  pub dispatch_constsigactionstruct: *const SigactionStruct
 }
 
 
@@ -570,4 +586,20 @@ pub fn get_duration_from_millis(union_argument: Arg) ->Result<Option<interface::
 
 pub fn arg_nullity(union_argument: &Arg) -> bool {
     unsafe{union_argument.dispatch_cbuf}.is_null()
+}
+
+pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<&'a mut SigactionStruct, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigactionstruct};
+    if !pointer.is_null() {
+        return Ok(unsafe{&mut *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<&'a SigactionStruct, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigactionstruct};
+    if !pointer.is_null() {
+        return Ok(unsafe{& *pointer});
+    }
+    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }

@@ -135,6 +135,8 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
+            signalhandler: self.signalhandler.clone(),
+            sigset: self.sigset.clone()
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -181,6 +183,8 @@ impl Cage {
             rev_shm: interface::Mutex::new(vec!()),
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
+            signalhandler: interface::RustHashMap::new(),
+            sigset: interface::RustHashSet::new()
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -248,6 +252,16 @@ impl Cage {
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+    }
+
+    pub fn sigaction_syscall(&self, sig: i32, act: &interface::SigactionStruct, oact: &mut interface::SigactionStruct) -> i32 {
+        self.signalhandler.insert(
+            sig,
+            interface::SigHandler {
+                handlerptr: act.sa_handler
+            }
+        );
+        return 0;
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
