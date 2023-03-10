@@ -68,6 +68,7 @@ pub struct Cage {
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: FdTable,
+    pub cancelstatus: interface::RustAtomicBool,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
@@ -75,6 +76,7 @@ pub struct Cage {
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
+    pub thread_table: interface::RustHashMap<u64, bool>,
     pub signalhandler: interface::RustHashMap<i32, interface::SigHandler>,
     pub sigset: interface::RustHashSet<i32>
 }
@@ -105,6 +107,17 @@ impl Cage {
         *cwdbox = newwd;
     }
 
+    // function to signal all cvs in a cage when forcing exit
+    pub fn signalcvs(&self) {
+        let cvtable = self.cv_table.read();
+        
+        for cv_handle in 0..cvtable.len() {
+            if cvtable[cv_handle  as usize].is_some() {
+                let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+                clonedcv.broadcast();
+            }
+        }
+    }
 }
 
 pub fn init_fdtable() -> FdTable {

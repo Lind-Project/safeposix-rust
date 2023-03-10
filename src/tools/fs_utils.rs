@@ -110,6 +110,7 @@ fn main() {
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
                         filedescriptortable: init_fdtable(),
+                        cancelstatus: interface::RustAtomicBool::new(false),
                         getgid: interface::RustAtomicI32::new(-1), 
                         getuid: interface::RustAtomicI32::new(-1), 
                         getegid: interface::RustAtomicI32::new(-1), 
@@ -117,6 +118,7 @@ fn main() {
                         rev_shm: interface::Mutex::new(vec!()),
                         mutex_table: interface::RustLock::new(vec!()),
                         cv_table: interface::RustLock::new(vec!()),
+                        thread_table: interface::RustHashMap::new(),
                         signalhandler: interface::RustHashMap::new(),
                         sigset: interface::RustHashSet::new()};
 

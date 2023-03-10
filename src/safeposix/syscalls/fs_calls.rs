@@ -635,10 +635,7 @@ impl Cage {
 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
-                    if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
-                    else { return ret };
-  
+                    return pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking, self.cageid) as i32  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -802,10 +799,7 @@ impl Cage {
 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32;
-                    if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
-                    else { return ret };
-  
+                    return pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
@@ -2283,6 +2277,13 @@ impl Cage {
                 let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
                 drop(mutextable);
                 let retval = clonedcv.wait(&*clonedmutex);
+
+                // if the cancel status is set in the cage, we trap around a cancel point
+                // until the individual thread is signaled to cancel itself
+                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                    loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
+                }
+ 
                 if retval < 0 {
                     match Errno::from_discriminant(interface::get_errno()) {
                         Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
