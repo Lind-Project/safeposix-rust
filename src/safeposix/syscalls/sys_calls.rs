@@ -258,13 +258,27 @@ impl Cage {
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
 
-    pub fn sigaction_syscall(&self, sig: i32, act: &interface::SigactionStruct, oact: &mut interface::SigactionStruct) -> i32 {
-        self.signalhandler.insert(
-            sig,
-            interface::SigHandler {
-                handlerptr: act.sa_handler
+    pub fn sigaction_syscall(&self, sig: i32, act: Option<&interface::SigactionStruct>, oact: Option<&mut interface::SigactionStruct>) -> i32 {
+        if let Some(some_oact) = oact {
+            let old_sigactionstruct = self.signalhandler.get(&sig);
+
+            match old_sigactionstruct {
+                Some(entry) => {
+                    some_oact.clone_from(entry.value());
+                },
+                None => {
+
+                }
             }
-        );
+        }
+
+        if let Some(some_act) = act {
+            self.signalhandler.insert(
+                sig,
+                some_act.clone()
+            );
+        }
+
         return 0;
     }
 

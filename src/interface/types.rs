@@ -139,19 +139,18 @@ pub struct ShmidsStruct {
   pub shm_nattch: u32
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct SigactionStruct {
-  pub sa_handler: fn(i32),
-  pub sa_mask: i32,
-  pub sa_flags: i32,
-  pub sa_restorer: fn()
+  pub sa_handler: unsafe extern "C" fn(i32),
+  pub sa_mask: u128,
+  pub sa_flags: i32
 }
 
-#[derive(Debug, Clone)]
-pub struct SigHandler {
-    pub handlerptr: fn(i32)
-}
+// #[derive(Debug, Clone)]
+// pub struct SigHandler {
+//     pub handlerptr: unsafe extern "C" fn(i32)
+// }
 
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
@@ -588,18 +587,22 @@ pub fn arg_nullity(union_argument: &Arg) -> bool {
     unsafe{union_argument.dispatch_cbuf}.is_null()
 }
 
-pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<&'a mut SigactionStruct, i32> {
+pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a mut SigactionStruct>, i32> {
     let pointer = unsafe{union_argument.dispatch_sigactionstruct};
+
     if !pointer.is_null() {
-        return Ok(unsafe{&mut *pointer});
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
     }
-    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<&'a SigactionStruct, i32> {
+pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a SigactionStruct>, i32> {
     let pointer = unsafe{union_argument.dispatch_constsigactionstruct};
+
     if !pointer.is_null() {
-        return Ok(unsafe{& *pointer});
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
     }
-    return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
