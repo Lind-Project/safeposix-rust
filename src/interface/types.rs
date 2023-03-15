@@ -143,14 +143,10 @@ pub struct ShmidsStruct {
 #[repr(C)]
 pub struct SigactionStruct {
   pub sa_handler: unsafe extern "C" fn(i32),
-  pub sa_mask: u128,
-  pub sa_flags: i32
+  pub sa_mask: [u64; 16],
+  pub sa_flags: i32,
+  pub _padding: u64
 }
-
-// #[derive(Debug, Clone)]
-// pub struct SigHandler {
-//     pub handlerptr: unsafe extern "C" fn(i32)
-// }
 
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
