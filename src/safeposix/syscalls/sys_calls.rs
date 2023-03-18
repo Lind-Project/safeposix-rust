@@ -100,6 +100,16 @@ impl Cage {
                         pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
+                        // checking whether this is a domain socket
+                        if let Some(socket_type) = socket_filedesc_obj.handle.domain {
+                            if socket_type == AF_UNIX {
+                                if let Some(pipe_pair) = socket_filedesc_obj.handle.unix_info {
+                                    pipe_pair.pipe.incr_ref(O_WRONLY);
+                                    pipe_pair.remotepipe.incr_ref(O_RDONLY);
+                                }
+                            }
+                        }
+
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
                         if let Some(uinfo) = &mut sockhandle.unix_info {
