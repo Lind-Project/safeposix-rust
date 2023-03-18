@@ -79,7 +79,19 @@ impl GenSockaddr {
             GenSockaddr::V6(_) => panic!("Invalid function called for this type of Sockaddr.")
         }
     }
+    
+    pub fn set_path_null(&mut self) {
+        match self {
+            GenSockaddr::Unix(ref mut unixaddr) => {
+                let array_path : [u8; 108] = [0; 108];
+                unixaddr.sun_path = array_path;
+            },
+            GenSockaddr::V4(_) => panic!("Invalid function called for this type of Sockaddr."),
+            GenSockaddr::V6(_) => panic!("Invalid function called for this type of Sockaddr.")
+        }
+    }
 }
+
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub enum GenIpaddr {

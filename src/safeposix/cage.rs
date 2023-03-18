@@ -17,6 +17,7 @@ pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
+    DomainSocket(DomainSocketDesc),
     Pipe(PipeDesc),
     Epoll(EpollDesc)
 }
@@ -132,4 +133,13 @@ pub fn init_fdtable() -> FdTable {
         fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
     }
     fdtable
+}
+
+pub fn create_unix_sockpipes() -> (interface::RustRfc<interface::EmulatedPipe>, interface::RustRfc<interface::EmulatedPipe>) {
+
+    // do I have to check if the pipe2 failed and delete the first one somehow?
+    let pipe1 = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
+    let pipe2 = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
+
+    (pipe1, pipe2)
 }

@@ -281,11 +281,7 @@ impl Cage {
                             parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
                             parentdirinodeobj.linkcount += 1;
                             drop(parentinodeobj);
-                            log_metadata(&FS_METADATA, pardirinode);
-                            log_metadata(&FS_METADATA, inodenum);
-                        } else {
-                            panic!("Parent directory was not a directory!");
-                        }
+                        } 
                         0 //link has succeeded
                     }
 
@@ -339,10 +335,10 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj, has_domsock) = match *inodeobj {
-                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, false)},
-                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
-                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
+                let (currefcount, curlinkcount, has_fobj, log) = match *inodeobj {
+                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, true)},
+                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
+                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
@@ -367,7 +363,7 @@ impl Cage {
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
                 // we don't log domain sockets
-                if !has_domsock {
+                if log {
                     log_metadata(&FS_METADATA, parentinodenum);
                     log_metadata(&FS_METADATA, inodenum);
                 }
@@ -512,6 +508,9 @@ impl Cage {
                 Socket(_) => {
                     return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
                 }
+                DomainSocket(_) => {
+                    return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
+                }
                 Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE);}
                 Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000);}
                 Epoll(_) => {self._stat_alt_helper(statbuf, 0xfeef0000);}
@@ -556,7 +555,7 @@ impl Cage {
 
                     return Self::_istatfs_helper(self, databuf);
                 },
-                Socket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
+                Socket(_) | DomainSocket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
             }
         }
         return syscall_error(Errno::EBADF, "statfs", "invalid file descriptor");
@@ -623,7 +622,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {
+                Socket(_) | DomainSocket(_) => {
                     drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
@@ -683,7 +682,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {
+                Socket(_) | DomainSocket(_) => {
                     syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with a socket, cannot seek")
                 }
                 Stream(_) => {
@@ -779,7 +778,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {
+                Socket(_) | DomainSocket(_) => {
                     drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }
@@ -879,7 +878,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {
+                Socket(_) | DomainSocket(_) => {
                     syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with a socket, cannot seek")
                 }
                 Stream(_) => {
@@ -970,7 +969,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {
+                Socket(_) | DomainSocket(_) => {
                     syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with a socket, cannot seek")
                 }
                 Stream(_) => {
@@ -1127,8 +1126,20 @@ impl Cage {
             Pipe(pipe_filedesc_obj) => {
                 pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
-            Socket(_socket_filedesc_obj) => {
-                //we handle the closing of these on drop
+            Socket(socket_filedesc_obj) => {
+                //we handle the closing of sockets on drop
+                // checking whether this is a domain socket
+
+                let sock_tmp = socket_filedesc_obj.handle.clone();
+                let sockhandle = sock_tmp.write();
+                if let Some(socket_type) = sockhandle.domain {
+                    if socket_type == AF_UNIX {
+                        if let Some(pipe_pair) = sockhandle.unix_info {
+                            pipe_pair.pipe.incr_ref(O_WRONLY);
+                            pipe_pair.remotepipe.incr_ref(O_RDONLY);
+                        }
+                    }
+                }
             }
             Stream(_normalfile_filedesc_obj) => {
                 // no stream refs
@@ -1147,6 +1158,7 @@ impl Cage {
                 pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
             }
             Socket(ref mut socket_filedesc_obj) => {
+                // can do this for domainsockets and sockets
                 socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
             }
             Stream(ref mut stream_filedesc_obj) => {
@@ -1182,12 +1194,44 @@ impl Cage {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let sockhandle = sock_tmp.write();
                     let mut inodeopt = None;
-                    let mut pathopt = None;
                     if let Some(ui) = &sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
-                        pathopt = Some(ui.reallocalpath.clone());
                     }
                     drop(sockhandle);
+
+                    // if it is a domain socket, then decrement the references
+                    let sock_tmp = sockfdobj.handle.clone();
+                    let mut sockhandle = sock_tmp.write();
+
+                    if let Some(socket_type) = sockhandle.domain {
+                        if socket_type == AF_UNIX {
+                            // making sure that the pipes exist
+                            if let Some(pipe_pair) = sockhandle.unix_info {
+                                pipe_pair.pipe.decr_ref(O_WRONLY);
+                                pipe_pair.remotepipe.decr_ref(O_WRONLY);
+
+                                // delete the pipe if we are out of refs
+                                if pipe_pair.pipe.get_write_ref() == 0 {
+                                    // we're closing the last write end, lets set eof
+                                    pipe_pair.pipe.set_eof();
+                                }
+                                if pipe_pair.pipe.get_write_ref() + pipe_pair.pipe.get_read_ref() == 0 {
+                                    // last reference, lets remove it
+                                    sockhandle.unix_info = None;
+                                }
+
+                                if pipe_pair.remotepipe.get_write_ref() == 0 {
+                                    // we're closing the last write end, lets set eof
+                                    pipe_pair.pipe.set_eof();
+                                }
+                                if pipe_pair.remotepipe.get_write_ref() + pipe_pair.remotepipe.get_read_ref() == 0 {
+                                    // last reference, lets remove it
+                                    sockhandle.unix_info = None;
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(inodenum) = inodeopt {
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {
@@ -1196,14 +1240,12 @@ impl Cage {
                                 if sock.linkcount == 0 {
                                     drop(inodeobj);
                                     FS_METADATA.inodetable.remove(&inodenum);
-                                    let truepath = pathopt.unwrap();
-                                    NET_METADATA.domain_socket_table.remove(&truepath);
                                 }
                             }
                         }
                     }
                 }
-                Pipe(pipe_filedesc_obj) => {   
+                Pipe(ref pipe_filedesc_obj) => {   
                     let pipe = &pipe_filedesc_obj.pipe;
                     pipe.decr_ref(pipe_filedesc_obj.flags);
 
@@ -1212,7 +1254,7 @@ impl Cage {
                         pipe.set_eof();
                     }
                 }
-                File(normalfile_filedesc_obj) => {
+                File(ref normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
