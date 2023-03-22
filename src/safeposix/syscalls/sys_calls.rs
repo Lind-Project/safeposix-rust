@@ -138,7 +138,8 @@ impl Cage {
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
-            sigset: self.sigset.clone()
+            sigset: self.sigset.clone(),
+            main_threadid: interface::get_pthreadid()
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -188,7 +189,8 @@ impl Cage {
             cv_table: interface::RustLock::new(vec!()),
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
-            sigset: interface::RustHashSet::new()
+            sigset: interface::RustHashSet::new(),
+            main_threadid: interface::get_pthreadid()
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
