@@ -262,17 +262,18 @@ impl Cage {
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
 
-            match old_sigactionstruct {
-                Some(entry) => {
-                    some_oact.clone_from(entry.value());
-                },
-                None => {
-
-                }
+            if let Some(entry) = old_sigactionstruct {
+                some_oact.clone_from(entry.value());
+            } else {
+                return syscall_error(Errno::EINVAL, "sigaction", "Signal action unmodified in lind")
             }
         }
 
         if let Some(some_act) = act {
+            if sig == 9 || sig == 19 {
+                return syscall_error(Errno::EINVAL, "sigaction", "Cannot modify the action of SIGKILL or SIGSTOP");
+            }
+
             self.signalhandler.insert(
                 sig,
                 some_act.clone()
