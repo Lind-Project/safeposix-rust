@@ -120,7 +120,9 @@ fn main() {
                         cv_table: interface::RustLock::new(vec!()),
                         thread_table: interface::RustHashMap::new(),
                         signalhandler: interface::RustHashMap::new(),
-                        sigset: interface::RustHashSet::new()};
+                        sigset: interface::RustHashSet::new(),
+                        main_threadid: interface::get_pthreadid()
+                    };
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {
