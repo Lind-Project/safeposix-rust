@@ -509,6 +509,19 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
 }
 
 #[no_mangle]
+pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
+    let cage = interface::cagetable_getref(cageid);
+    if !cage.sigset.contains(&signo) {
+        return match cage.signalhandler.get(&signo) {
+            Some(action_struct) => action_struct.sa_handler,
+            None => 0,
+        };
+    }
+    //TODO: properly handle sigprocmask later
+    return 0;
+}
+
+#[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
