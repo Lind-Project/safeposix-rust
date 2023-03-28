@@ -16,7 +16,7 @@ use std::str::{from_utf8, Utf8Error};
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::{mmap, pthread_self, pthread_exit};
+use libc::{mmap, pthread_self, pthread_exit, pthread_kill};
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -98,6 +98,10 @@ pub fn get_errno() -> i32 {
 
 pub fn lind_threadexit() {
     unsafe { pthread_exit(0 as *mut c_void); }
+}
+
+pub fn lind_threadkill(thread_id: u64, sig: i32) -> i32 {
+    unsafe { pthread_kill(thread_id, sig) as i32 }
 }
 
 pub fn get_pthreadid() -> u64 {

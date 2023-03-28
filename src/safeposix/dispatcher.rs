@@ -93,6 +93,7 @@ const GETPEERNAME_SYSCALL: i32 = 145;
 const GETIFADDRS_SYSCALL: i32 = 146;
 
 const SIGACTION_SYSCALL: i32 = 147;
+const KILL_SYSCALL: i32 = 148;
 
 use crate::interface;
 use super::cage::*;
@@ -474,6 +475,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         SIGACTION_SYSCALL => {
             check_and_dispatch!(cage.sigaction_syscall, interface::get_int(arg1), interface::get_constsigactionstruct(arg2), interface::get_sigactionstruct(arg3))
+        }
+        KILL_SYSCALL => {
+            check_and_dispatch!(cage.kill_syscall, interface::get_int(arg1), interface::get_int(arg2))
         }
 
         _ => {//unknown syscall

@@ -285,6 +285,11 @@ impl Cage {
         return 0;
     }
 
+    pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
+        let cage_main_thread_id = interface::cagetable_getref(cage_id as u64).main_threadid;
+        interface::lind_threadkill(cage_main_thread_id, sig)
+    }
+
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
         match res_type {
             RLIMIT_NOFILE => {
