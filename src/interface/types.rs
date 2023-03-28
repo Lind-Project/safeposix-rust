@@ -148,7 +148,7 @@ pub struct SigsetStruct {
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct SigactionStruct {
-  pub sa_handler: unsafe extern "C" fn(i32),
+  pub sa_handler: u32,
   pub sa_mask: SigsetStruct,
   pub sa_flags: i32,
 }
