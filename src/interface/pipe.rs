@@ -13,7 +13,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
 use std::fmt;
-use libc::sched_yield;
 
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
@@ -105,8 +104,9 @@ impl EmulatedPipe {
             if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); } // EPIPE, all read ends are closed
 
             let remaining = write_end.remaining();
+
             if remaining == 0 {
-                unsafe { sched_yield(); }
+                interface::lind_yield(); //yield on a full pipe
                 continue 
             }
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
@@ -147,7 +147,7 @@ impl EmulatedPipe {
             
             pipe_space = read_end.len();
             count = count + 1;
-            unsafe { sched_yield(); }
+            if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
         }
 
         let bytes_to_read = min(length, pipe_space);
