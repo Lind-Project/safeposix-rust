@@ -105,11 +105,12 @@ impl EmulatedPipe {
             if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); } // EPIPE, all read ends are closed
 
             let remaining = write_end.remaining();
-            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
-            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { 
+            if remaining == 0 {
                 unsafe { sched_yield(); }
                 continue 
-            };
+            }
+            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
+            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
