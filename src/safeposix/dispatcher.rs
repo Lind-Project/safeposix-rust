@@ -127,6 +127,19 @@ macro_rules! check_and_dispatch_socketpair {
     };
 }
 
+
+// the following "quick" functions are implemented for research purposes
+// to increase I/O performance by bypassing the dispatcher and type checker
+#[no_mangle]
+pub extern "C" fn quick_write(fd: i32, buf: *const u8, count: usize, cageid: u64) -> i32 {
+  unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().write_syscall(fd, buf, count) }
+}
+
+#[no_mangle]
+pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) -> i32 {
+    unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().read_syscall(fd, buf, size) }
+}
+
 #[no_mangle]
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
@@ -478,6 +491,32 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
     }
 }
 
+
+
+#[no_mangle]
+pub extern "C" fn lindcancelinit(cageid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.cancelstatus.store(true, interface::RustAtomicOrdering::Relaxed);
+    cage.signalcvs();
+}
+
+#[no_mangle]
+pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.insert(pthreadid, kill);
+}
+
+#[no_mangle]
+pub extern "C" fn lindcheckthread(cageid: u64, pthreadid: u64) -> bool {
+    interface::check_thread(cageid, pthreadid)
+}
+
+#[no_mangle]
+pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.remove(&pthreadid);
+}
+
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
@@ -488,8 +527,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     incref_root();
     
     let utilcage = Cage{
-        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: init_fdtable(),
+        cageid: 0, 
+        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, 
+        filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -497,6 +539,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -506,6 +549,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
         filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -513,6 +557,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(1, initcage);
 }

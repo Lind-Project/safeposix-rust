@@ -16,7 +16,7 @@ use std::str::{from_utf8, Utf8Error};
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::mmap;
+use libc::{mmap, pthread_self, pthread_exit};
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -92,6 +92,34 @@ pub fn flush_stdout() {
 
 pub fn get_errno() -> i32 {
     (unsafe{*libc::__errno_location()}) as i32
+}
+
+// Cancellation functions
+
+pub fn lind_threadexit() {
+    unsafe { pthread_exit(0 as *mut c_void); }
+}
+
+pub fn get_pthreadid() -> u64 {
+    unsafe { pthread_self() as u64 } 
+}
+
+// this function checks if a thread is killable and returns that state
+pub fn check_thread(cageid: u64, tid: u64) -> bool {
+    let cage = cagetable_getref(cageid);
+    let killable = *cage.thread_table.get(&tid).unwrap();
+    killable
+}
+
+// in-rustposix cancelpoints checks if the thread is killable,
+// and if sets killable back to false and kills the thread
+pub fn cancelpoint(cageid: u64) {
+    let pthread_id = get_pthreadid();
+    if check_thread(cageid, pthread_id) {
+        let cage = cagetable_getref(cageid);
+        cage.thread_table.insert(pthread_id, false); 
+        lind_threadexit(); 
+    }
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
