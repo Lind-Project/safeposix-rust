@@ -363,21 +363,4 @@ impl NetMetadata {
         }
     }
 
-    fn insert_to_next_domsockobjectid(&self, val: ConnState) -> Option<i32> {
-        for i in MINSOCKOBJID..MAXSOCKOBJID {
-            if let interface::RustHashEntry::Vacant(v) = self.domsock_object_table.entry(i) {
-                v.insert(val);
-                return Some(i);
-            }
-        }
-        return None;
-    }
-
-    pub fn insert_into_domsockobjecttable(&self, connstate: ConnState) -> Result<i32, i32> {
-        if let Some(id) = self.insert_to_next_domsockobjectid(connstate) {
-            Ok(id)
-        } else {
-            Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
-        }
-    }
 }

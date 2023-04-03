@@ -390,21 +390,6 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
     newp
 }
 
-pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
-    match metawalkandparent(truepath.as_path()) {
-        //If the file does not exist
-        (None, ..) => { panic!("path does not exist") }
-        //If the file exists but has no parent, it's the root directory
-        (Some(_), None) => { panic!("cannot unlink root directory") }
-
-        //If both the file and the parent directory exists
-        (Some(inodenum), Some(parentinodenum)) => {
-            Cage::remove_from_parent_dir(parentinodenum, &truepath);
-
-            FS_METADATA.inodetable.remove(&inodenum);
-        }
-    }
-}
 
 pub fn incref_root() {
     if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
