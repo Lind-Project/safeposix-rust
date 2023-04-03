@@ -8,7 +8,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
 use super::fs_constants::*;
 use super::sys_constants::*;
-use crate::safeposix::cage::{CAGE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct, FileDescriptor};
+use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
@@ -53,12 +53,6 @@ impl Cage {
         0
     }
 
-    pub fn swap_unixaddr(remoteaddr: &interface::GenSockaddr) -> interface::GenSockaddr {
-        let mut swapaddr = remoteaddr.clone();
-        if let Some(addr) = NET_METADATA.revds_table.get(&remoteaddr.clone()) { swapaddr = *addr; }
-        swapaddr
-    }
-
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
@@ -84,7 +78,7 @@ impl Cage {
                     }
                     PF_UNIX => {
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-                        return self._socket_inserter(DomainSocket(sockfdobj));
+                        return self._socket_inserter(Socket(sockfdobj));
                     }
                     _ => {
                         return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented domain");
@@ -106,7 +100,7 @@ impl Cage {
                     }
                     PF_UNIX => {
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-                        return self._socket_inserter(DomainSocket(sockfdobj));
+                        return self._socket_inserter(Socket(sockfdobj));
                     }
                     _ => {
                         return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented domain");
@@ -143,60 +137,60 @@ impl Cage {
         self.bind_inner(fd, localaddr, false)
     }
 
-    fn bind_inner_domain_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr) -> i32 {
+    // fn bind_inner_domain_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr) -> i32 {
         
-        let sock_tmp = sockfdobj.handle.clone();
-        let sockhandle = sock_tmp.write();
+    //     let sock_tmp = sockfdobj.handle.clone();
+    //     let sockhandle = sock_tmp.write();
         
-        if localaddr.get_family() != sockhandle.domain as u16 {
-            return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
-        }
+    //     if localaddr.get_family() != sockhandle.domain as u16 {
+    //         return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
+    //     }
 
-        if sockhandle.localaddr.is_some() {
-            return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
-        }
+    //     if sockhandle.localaddr.is_some() {
+    //         return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
+    //     }
 
-        sockhandle.localaddr = Some(localaddr.clone());
+    //     sockhandle.localaddr = Some(localaddr.clone());
 
-        let path = localaddr.path();
-        //Check that path is not empty
-        if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
-        let truepath = normpath(convpath(path), self);
+    //     let path = localaddr.path();
+    //     //Check that path is not empty
+    //     if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+    //     let truepath = normpath(convpath(path), self);
 
-        match metawalkandparent(truepath.as_path()) {
-            //If neither the file nor parent exists
-            (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
-            //If the file doesn't exist but the parent does
-            (None, Some(pardirinode)) => {
-                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+    //     match metawalkandparent(truepath.as_path()) {
+    //         //If neither the file nor parent exists
+    //         (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
+    //         //If the file doesn't exist but the parent does
+    //         (None, Some(pardirinode)) => {
+    //             let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                let mode;
-                if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                    mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
-                } else { unreachable!() }
-                let effective_mode = S_IFSOCK as u32 | mode;
+    //             let mode;
+    //             if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+    //                 mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
+    //             } else { unreachable!() }
+    //             let effective_mode = S_IFSOCK as u32 | mode;
 
-                let time = interface::timestamp(); //We do a real timestamp now
-                let newinode = Inode::Socket(SocketInode {
-                    size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 1, refcount: 1,
-                    atime: time, ctime: time, mtime: time
-                });
+    //             let time = interface::timestamp(); //We do a real timestamp now
+    //             let newinode = Inode::Socket(SocketInode {
+    //                 size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+    //                 mode: effective_mode, linkcount: 1, refcount: 1,
+    //                 atime: time, ctime: time, mtime: time
+    //             });
 
-                let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-                if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-                    ind.filename_to_inode_dict.insert(filename, newinodenum);
-                    ind.linkcount += 1;
-                } //insert a reference to the file in the parent directory
-                // sockfdobj.inode = Some(newinodenum.clone());
-                // FS_METADATA.inodetable.insert(newinodenum, newinode);
-                // sockfdobj.localpath = Some(truepath);  
-            }
-            (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
-        }
+    //             let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+    //             if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+    //                 ind.filename_to_inode_dict.insert(filename, newinodenum);
+    //                 ind.linkcount += 1;
+    //             } //insert a reference to the file in the parent directory
+    //             // sockfdobj.inode = Some(newinodenum.clone());
+    //             // FS_METADATA.inodetable.insert(newinodenum, newinode);
+    //             // sockfdobj.localpath = Some(truepath);  
+    //         }
+    //         (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
+    //     }
 
-        0
-    }
+    //     0
+    // }
 
     fn bind_inner_socket(&self, sockhandle: &mut SocketHandle, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if localaddr.get_family() != sockhandle.domain as u16 {
@@ -318,7 +312,7 @@ impl Cage {
                     if let Some(socket_type) = sockhandle.domain {
                         if socket_type == AF_UNIX {
                             if let Some(pipe_pair) = sockhandle.unix_info {
-                                self.bind_inner_domain_socket(sockfdobj, localaddr)
+                                self.bind_inner_socket(sockfdobj, localaddr, prereserved)
                             }
                         } else {
                             self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved)
@@ -423,25 +417,26 @@ impl Cage {
                                         Ok(a) => a,
                                         Err(e) => return e,
                                     };
-                                    self.bind_inner_domain_socket(sockfdobj, &localaddr);
+                                    self.bind_inner_socket(sockfdobj, &localaddr, false);
                                 }
         
                                 let (localpipe, remotepipe) = create_unix_sockpipes();
         
                                 sockhandle.remoteaddr = Some(remoteaddr.clone());
-                                sockhandle.pipe = localpipe;
+                                sockhandle.unix_info.pipe = localpipe.clone();
+                                sockhandle.unix_info.remotepipe = remotepipe.clone();
                                 sockhandle.remotepipe = remotepipe;
         
                                 if sockfdobj.flags & O_NONBLOCK != 0 {
                                     //non-block connect
                                     let remotepathbuf = convpath(remoteaddr.path().clone());
-                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockhandle.localaddr.unwrap().clone(), localpipe, remotepipe, None));
+                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockhandle.localaddr.unwrap().clone(), localpipe.clone(), remotepipe.clone(), None));
                                     sockhandle.state = ConnState::INPROGRESS;
                                     return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
                                 } else {
                                     let connvar = interface::RustRfc::new(ConnCondVar::new());
                                     let remotepathbuf = convpath(remoteaddr.path().clone());
-                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockhandle.localaddr.unwrap().clone(), localpipe, remotepipe, Some(connvar.clone())));
+                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockhandle.localaddr.unwrap().clone(), localpipe.clone(), remotepipe.clone(), Some(connvar.clone())));
                                     connvar.wait();
                                     sockhandle.state = ConnState::CONNECTED;
                                     return 0;                        
@@ -1060,9 +1055,9 @@ impl Cage {
                                 //we need to lock this socket for the duration 
                                 //see similar note above for details
                                 let newsockobj = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
-                                let arclocksock = interface::RustRfc::new(interface::RustLock::new(DomainSocket(newsockobj)));
+                                let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
                                 let mut domsockref = arclocksock.write();
-                                let mut newsockwithin = if let DomainSocket(s) = &mut *domsockref {s} else {unreachable!()};
+                                let mut newsockwithin = if let Socket(s) = &mut *domsockref {s} else {unreachable!()};
                                 entry.insert(arclocksock.clone());
     
                                 let remote_addr : interface::GenSockaddr;
