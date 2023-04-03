@@ -183,7 +183,9 @@ pub union Arg {
   pub dispatch_sockpair: *mut SockPair,
   pub dispatch_ioctlptrunion: IoctlPtrUnion,
   pub dispatch_sigactionstruct: *mut SigactionStruct,
-  pub dispatch_constsigactionstruct: *const SigactionStruct
+  pub dispatch_constsigactionstruct: *const SigactionStruct,
+  pub dispatch_sigsett: *mut u64,
+  pub dispatch_constsigsett: *const u64
 }
 
 
@@ -600,6 +602,26 @@ pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a mut Sig
 
 pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a SigactionStruct>, i32> {
     let pointer = unsafe{union_argument.dispatch_constsigactionstruct};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_sigsett<'a>(union_argument: Arg) -> Result<Option<&'a mut u64>, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigsett};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constsigsett<'a>(union_argument: Arg) -> Result<Option<&'a u64>, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigsett};
 
     if !pointer.is_null() {
         Ok(Some(unsafe{& *pointer}))

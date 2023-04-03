@@ -138,7 +138,7 @@ impl Cage {
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
-            sigset: self.sigset.clone(),
+            sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
             main_threadid: interface::get_pthreadid()
         };
 
@@ -189,7 +189,7 @@ impl Cage {
             cv_table: interface::RustLock::new(vec!()),
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
-            sigset: interface::RustHashSet::new(),
+            sigset: interface::RustAtomicU64::new(0),
             main_threadid: interface::get_pthreadid()
         };
         //wasteful clone of fdtable, but mutability constraints exist
@@ -282,12 +282,29 @@ impl Cage {
             );
         }
 
-        return 0;
+        0
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
         let cage_main_thread_id = interface::cagetable_getref(cage_id as u64).main_threadid;
         interface::lind_threadkill(cage_main_thread_id, sig)
+    }
+
+    pub fn sigprocmask_syscall(&self, how: i32, set: Option<& u64>, oldset: Option<&mut u64>) -> i32 {
+        if let Some(some_oldset) = oldset {
+            *some_oldset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
+        }
+
+        if let Some(some_set) = set {
+            let curr_sigset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
+            match how {
+                1 => self.sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed),
+                2 => self.sigset.store(curr_sigset & !*some_set, interface::RustAtomicOrdering::Relaxed),
+                3 => self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed),
+                _ => _ = syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
+            }
+        }
+        0
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
