@@ -71,6 +71,7 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 pub struct UnixSocketInfo {
     pub mode: i32,
     pub pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub path: interface::RustPathBuf,
     pub remotepipe: interface::RustRfc<interface::EmulatedPipe>,
     pub inode: usize,
 }
@@ -186,6 +187,7 @@ impl NetMetadata {
             true
         }
     }
+    
     pub fn _get_available_udp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));

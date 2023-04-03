@@ -356,9 +356,6 @@ impl Cage {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename).unwrap();
                         }
-                        if has_domsock {
-                            NET_METADATA.domain_socket_table.remove(&truepath);
-                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
@@ -508,9 +505,6 @@ impl Cage {
                 Socket(_) => {
                     return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
                 }
-                DomainSocket(_) => {
-                    return syscall_error(Errno::EOPNOTSUPP, "fstat", "we don't support fstat on sockets yet");
-                }
                 Stream(_) => {self._stat_alt_helper(statbuf, STREAMINODE);}
                 Pipe(_) => {self._stat_alt_helper(statbuf, 0xfeef0000);}
                 Epoll(_) => {self._stat_alt_helper(statbuf, 0xfeef0000);}
@@ -555,7 +549,7 @@ impl Cage {
 
                     return Self::_istatfs_helper(self, databuf);
                 },
-                Socket(_) | DomainSocket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
+                Socket(_) | Pipe(_) | Stream(_) | Epoll(_)=> {return syscall_error(Errno::EBADF, "fstatfs", "can't fstatfs on socket, stream, pipe, or epollfd");}
             }
         }
         return syscall_error(Errno::EBADF, "statfs", "invalid file descriptor");
@@ -622,7 +616,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) | DomainSocket(_) => {
+                Socket(_) => {
                     drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
@@ -682,7 +676,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) | DomainSocket(_) => {
+                Socket(_) => {
                     syscall_error(Errno::ESPIPE, "pread", "file descriptor is associated with a socket, cannot seek")
                 }
                 Stream(_) => {
@@ -778,7 +772,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) | DomainSocket(_) => {
+                Socket(_) => {
                     drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }
@@ -878,7 +872,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) | DomainSocket(_) => {
+                Socket(_) => {
                     syscall_error(Errno::ESPIPE, "pwrite", "file descriptor is associated with a socket, cannot seek")
                 }
                 Stream(_) => {
@@ -969,7 +963,7 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) | DomainSocket(_) => {
+                Socket(_) => {
                     syscall_error(Errno::ESPIPE, "lseek", "file descriptor is associated with a socket, cannot seek")
                 }
                 Stream(_) => {
