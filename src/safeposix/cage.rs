@@ -17,8 +17,7 @@ pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
-    DomainSocket(DomainSocketDesc),
-    Pipe(PipeDesc),
+    Pipe(PipeDesc),~
     Epoll(EpollDesc)
 }
 
