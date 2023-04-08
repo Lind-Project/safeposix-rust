@@ -1,4 +1,4 @@
-// // Authors: Nicholas Renner and Jonathan Singer
+// // Authors: Nicholas Renner and Jonathan Singer and Tristan Brigham
 // //
 // //
 
