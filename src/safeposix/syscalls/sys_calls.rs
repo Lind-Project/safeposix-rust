@@ -291,20 +291,31 @@ impl Cage {
     }
 
     pub fn sigprocmask_syscall(&self, how: i32, set: Option<& u64>, oldset: Option<&mut u64>) -> i32 {
+        let mut res = 0;
+
         if let Some(some_oldset) = oldset {
             *some_oldset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
         }
 
         if let Some(some_set) = set {
             let curr_sigset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
-            match how {
-                1 => self.sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed),
-                2 => self.sigset.store(curr_sigset & !*some_set, interface::RustAtomicOrdering::Relaxed),
-                3 => self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed),
-                _ => _ = syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
+            res = match how {
+                0 => {
+                    self.sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                1 => {
+                    self.sigset.store(curr_sigset & !*some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                2 => {
+                    self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
             }
         }
-        0
+        res
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
