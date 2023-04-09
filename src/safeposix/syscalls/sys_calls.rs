@@ -189,7 +189,7 @@ impl Cage {
             cv_table: interface::RustLock::new(vec!()),
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
-            sigset: interface::RustAtomicU64::new(0),
+            sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
             main_threadid: interface::get_pthreadid()
         };
         //wasteful clone of fdtable, but mutability constraints exist
