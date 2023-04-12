@@ -236,10 +236,6 @@ pub fn get_usize(union_argument: Arg) -> Result<usize, i32> { //should not retur
     return Ok(unsafe{union_argument.dispatch_usize})
 }
 
-pub fn get_sigsettype(union_argument: Arg) -> Result<SigsetType, i32> {
-    get_ulong(union_argument) as Result<SigsetType, i32>
-}
-
 pub fn get_cbuf(union_argument: Arg) -> Result<*const u8, i32> {
     let data = unsafe{union_argument.dispatch_cbuf};
     if !data.is_null() {

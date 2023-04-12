@@ -519,7 +519,7 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
 #[no_mangle]
 pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     let cage = interface::cagetable_getref(cageid);
-    if cage.sigset.load(interface::RustAtomicOrdering::Relaxed) & (1 << (signo-1)) == 0 {
+    if !interface::lind_sigismember(cage.sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
         return match cage.signalhandler.get(&signo) {
             Some(action_struct) => action_struct.sa_handler,
             None => 0,
