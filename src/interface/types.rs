@@ -149,7 +149,7 @@ pub struct SigsetStruct {
 #[repr(C)]
 pub struct SigactionStruct {
   pub sa_handler: u32,
-  pub sa_mask: SigsetStruct,
+  pub sa_mask: u64,
   pub sa_flags: i32,
 }
 
