@@ -24,6 +24,7 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
+use crate::interface::types::{SigsetType};
 use std::time::Duration;
 
 const MAXCAGEID: i32 = 1024;
@@ -169,6 +170,32 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Er
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
     return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
+}
+
+// Sigset Operations
+// 
+// sigsetops defined here are different from the ones in glibc. Since the sigset is just a u64
+// bitmask, we can just return the modified version of the sigset instead of changing it in-place.
+// It would also avoid any ownership issue and make the code cleaner.
+
+pub fn lind_sigemptyset() -> SigsetType {
+    0
+}
+
+pub fn lind_sigfillset() -> SigsetType {
+    u64::MAX
+}
+
+pub fn lind_sigaddset(set: SigsetType, signum: i32) -> SigsetType {
+    set | (1 << (signum - 1))
+}
+
+pub fn lind_sigdelset(set: SigsetType, signum: i32) -> SigsetType {
+    set & !(1 << (signum - 1))
+}
+
+pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
+    set & (1 << (signum - 1)) != 0
 }
 
 #[derive(Debug)]

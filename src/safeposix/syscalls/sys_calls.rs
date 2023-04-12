@@ -290,7 +290,7 @@ impl Cage {
         interface::lind_threadkill(cage_main_thread_id, sig)
     }
 
-    pub fn sigprocmask_syscall(&self, how: i32, set: Option<& u64>, oldset: Option<&mut u64>) -> i32 {
+    pub fn sigprocmask_syscall(&self, how: i32, set: Option<& interface::SigsetType>, oldset: Option<&mut interface::SigsetType>) -> i32 {
         let mut res = 0;
 
         if let Some(some_oldset) = oldset {
