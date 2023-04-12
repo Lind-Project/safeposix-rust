@@ -272,7 +272,7 @@ impl Cage {
         }
 
         if let Some(some_act) = act {
-            if sig == 9 || sig == 19 {
+            if sig == 9 || sig == 19 { // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(Errno::EINVAL, "sigaction", "Cannot modify the action of SIGKILL or SIGSTOP");
             }
 
@@ -300,15 +300,15 @@ impl Cage {
         if let Some(some_set) = set {
             let curr_sigset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
             res = match how {
-                0 => {
+                0 => { // Block signals in set
                     self.sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
-                1 => {
+                1 => { // Unblock signals in set
                     self.sigset.store(curr_sigset & !*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
-                2 => {
+                2 => { // Set sigset to set
                     self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
