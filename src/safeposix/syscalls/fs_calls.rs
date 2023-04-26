@@ -281,6 +281,10 @@ impl Cage {
                             parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
                             parentdirinodeobj.linkcount += 1;
                             drop(parentinodeobj);
+                            log_metadata(&FS_METADATA, pardirinode);
+                            log_metadata(&FS_METADATA, inodenum);
+                        } else {
+                            panic!("Parent directory was not a directory!");
                         } 
                         0 //link has succeeded
                     }
@@ -1066,7 +1070,7 @@ impl Cage {
     }
 
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fromdup2: bool) -> i32 {
-        //checking if the new fd is out of range
+        //checking if tshe new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
@@ -1120,13 +1124,13 @@ impl Cage {
             Pipe(pipe_filedesc_obj) => {
                 pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
-            Socket(socket_filedesc_obj) => {
+            Socket(ref socket_filedesc_obj) => {
                 //we handle the closing of sockets on drop
                 // checking whether this is a domain socket
 
                 let sock_tmp = socket_filedesc_obj.handle.clone();
                 let sockhandle = sock_tmp.write();
-                if let Some(socket_type) = sockhandle.domain {
+                if let socket_type = sockhandle.domain {
                     if socket_type == AF_UNIX {
                         if let Some(pipe_pair) = sockhandle.unix_info {
                             pipe_pair.pipe.incr_ref(O_WRONLY);
@@ -1184,20 +1188,20 @@ impl Cage {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {}
                 Epoll(_) => {} //Epoll closing not implemented yet
-                Socket(ref socket_filedesc_obj) => {
+                Socket(ref mut socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
-                    let sockhandle = sock_tmp.write();
+                    let mut sockhandle = sock_tmp.write();
                     let mut inodeopt = None;
                     if let Some(ui) = &sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
                     }
                     drop(sockhandle);
-
+                    
                     // if it is a domain socket, then decrement the references
-                    let sock_tmp = sockfdobj.handle.clone();
-                    let mut sockhandle = sock_tmp.write();
+                    // let sock_tmp = sockfdobj.handle.clone();
+                    // let mut sockhandle = sock_tmp.write();
 
-                    if let Some(socket_type) = sockhandle.domain {
+                    if let socket_type = sockhandle.domain {
                         if socket_type == AF_UNIX {
                             // making sure that the pipes exist
                             if let Some(pipe_pair) = sockhandle.unix_info {

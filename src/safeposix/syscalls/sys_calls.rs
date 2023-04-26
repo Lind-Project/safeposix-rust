@@ -101,9 +101,11 @@ impl Cage {
                     }
                     Socket(socket_filedesc_obj) => {
                         // checking whether this is a domain socket
-                        if let Some(socket_type) = socket_filedesc_obj.handle.domain {
+                        let sock_tmp = socket_filedesc_obj.handle.clone();
+                        let sockhandle = sock_tmp.write();
+                        if let socket_type = sockhandle.domain {
                             if socket_type == AF_UNIX {
-                                if let Some(pipe_pair) = socket_filedesc_obj.handle.unix_info {
+                                if let Some(pipe_pair) = sockhandle.unix_info {
                                     pipe_pair.pipe.incr_ref(O_WRONLY);
                                     pipe_pair.remotepipe.incr_ref(O_RDONLY);
                                 }

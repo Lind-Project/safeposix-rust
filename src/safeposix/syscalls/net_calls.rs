@@ -4,7 +4,6 @@
 
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
-
 use super::net_constants::*;
 use super::fs_constants::*;
 use super::sys_constants::*;
@@ -30,7 +29,7 @@ impl Cage {
         let (fd, guardopt) = self.get_next_fd(None);
         if fd < 0 { return fd }
         let fdoption = &mut *guardopt.unwrap();
-        let _insertval = fdoption.insert(Socket(sockfd));
+        let _insertval = fdoption.insert(sockfd);
         return fd;
     }
 
@@ -309,15 +308,15 @@ impl Cage {
                     let mut sockhandle = sock_tmp.write();
 
                     // check if this is a domain socket
-                    if let Some(socket_type) = sockhandle.domain {
-                        if socket_type == AF_UNIX {
-                            if let Some(pipe_pair) = sockhandle.unix_info {
-                                self.bind_inner_socket(sockfdobj, localaddr, prereserved)
-                            }
-                        } else {
-                            self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved)
-                        }
-                    } 
+                    // if let socket_type = sockhandle.domain {
+                        // if socket_type == AF_UNIX {
+                        //     if let Some(pipe_pair) = sockhandle.unix_info {
+                        //         self.bind_inner_socket(sockfdobj, localaddr, prereserved)
+                        //     }
+                        // } else {
+                    self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved)
+                        //}
+                    //} 
                 }
                 _ => {
                     syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket")
@@ -328,9 +327,9 @@ impl Cage {
         }
     }
 
-    fn assign_new_addr_unix(sockfdobj: &SocketDesc) -> Result<interface::GenSockaddr, i32> {
-        if let Some(addr) = &sockfdobj.localaddr {
-            Ok(addr.clone())
+    fn assign_new_addr_unix(sockhandle: &SocketHandle) -> Result<interface::GenSockaddr, i32> {
+        if let addr = &sockhandle.localaddr {
+            Ok(addr.clone().unwrap())
         } else {
             let path = interface::gen_ud_path();
             let newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
@@ -404,39 +403,51 @@ impl Cage {
                     } else if sockhandle.protocol == IPPROTO_TCP {
                         
                         // check whether this is a domain socket or not:
-                        if sockfdobj.state != ConnState::NOTCONNECTED {
+                        if sockhandle.state != ConnState::NOTCONNECTED {
                             return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
                         }
 
                         // every branch in the domsocks branch terminates with a return so the code after this is for non-domsocks
-                        if let Some(socket_type) = sockhandle.domain {
+                        if let socket_type = sockhandle.domain {
                             if socket_type == AF_UNIX {
                                 // domain socket
                                 if let None = sockhandle.localaddr {
-                                    let localaddr = match Self::assign_new_addr_unix(sockfdobj) {
+                                    let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
                                         Ok(a) => a,
                                         Err(e) => return e,
                                     };
-                                    self.bind_inner_socket(sockfdobj, &localaddr, false);
+                                    self.bind_inner_socket(&mut *sockhandle, &localaddr, false);
                                 }
         
                                 let (localpipe, remotepipe) = create_unix_sockpipes();
         
                                 sockhandle.remoteaddr = Some(remoteaddr.clone());
-                                sockhandle.unix_info.pipe = localpipe.clone();
-                                sockhandle.unix_info.remotepipe = remotepipe.clone();
-                                sockhandle.remotepipe = remotepipe;
+                                sockhandle.unix_info.as_ref().unwrap().pipe = localpipe.clone();
+                                sockhandle.unix_info.as_ref().unwrap().remotepipe = remotepipe.clone();
+                                //sockhandle.remotepipe = remotepipe;
         
                                 if sockfdobj.flags & O_NONBLOCK != 0 {
                                     //non-block connect
                                     let remotepathbuf = convpath(remoteaddr.path().clone());
-                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockhandle.localaddr.unwrap().clone(), localpipe.clone(), remotepipe.clone(), None));
+                                    let entry = DomsockTableEntry {
+                                        sockaddr: sockhandle.localaddr.unwrap().clone(),
+                                        remote_pipe: remotepipe.clone(),
+                                        local_pipe: localpipe.clone(),
+                                        cond_var: None,
+                                    };
+                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
                                     sockhandle.state = ConnState::INPROGRESS;
                                     return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
                                 } else {
                                     let connvar = interface::RustRfc::new(ConnCondVar::new());
+                                    let entry = DomsockTableEntry {
+                                        sockaddr: sockhandle.localaddr.unwrap().clone(),
+                                        remote_pipe: remotepipe.clone(),
+                                        local_pipe: localpipe.clone(),
+                                        cond_var: Some(connvar.clone()),
+                                    };
                                     let remotepathbuf = convpath(remoteaddr.path().clone());
-                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, (sockhandle.localaddr.unwrap().clone(), localpipe.clone(), remotepipe.clone(), Some(connvar.clone())));
+                                    NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
                                     connvar.wait();
                                     sockhandle.state = ConnState::CONNECTED;
                                     return 0;                        
@@ -459,8 +470,8 @@ impl Cage {
                                 Ok(a) => a,
                                 Err(e) => return e,
                             };
-
-                            let bindret = sockobj.0.bind(&localaddr);
+                            let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
+                            //let bindret = sockfdobj.0.bind(&localaddr);
                             if bindret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
@@ -504,17 +515,17 @@ impl Cage {
     }
 
     fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, options: i32) -> SocketHandle {
-        let mut fakedomain = domain;
-        if domain == PF_UNIX {
-            fakedomain = PF_INET;
-        }
+        // let mut fakedomain = domain;
+        // if domain == PF_UNIX {
+        //     fakedomain = PF_INET;
+        // }
 
         SocketHandle {
             innersocket: None,
             options: options,
             state: conn,
             protocol: protocol,
-            domain: fakedomain,
+            //domain: fakedomain,
             domain: domain,
             last_peek: interface::RustDeque::new(),
             localaddr: None,
@@ -542,7 +553,7 @@ impl Cage {
                     let mut sockhandle = sock_tmp.write();
 
                     // check if this is a domain socket
-                    if let Some(socket_type) = sockhandle.domain {
+                    if let socket_type = sockhandle.domain {
                         if socket_type == AF_UNIX {
                             return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
                         }
@@ -615,7 +626,7 @@ impl Cage {
                     }
 
                     // check if this is a domain socket
-                    if let Some(socket_type) = sockhandle.domain {
+                    if let socket_type = sockhandle.domain {
                         if socket_type == AF_UNIX {
         
                             match sockhandle.protocol {
@@ -692,20 +703,21 @@ impl Cage {
     fn recv_common_inner(&self, filedesc_enum: &mut FileDescriptor, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         match &mut *filedesc_enum {
             Socket(ref mut sockfdobj) => {
-                match sockfdobj.handle.protocol {
+                let sock_tmp = sockfdobj.handle.clone();
+                let mut sockhandle = sock_tmp.write();
+                match sockhandle.protocol {
                     IPPROTO_TCP => {
                         // let sid = Self::getsockobjid(&mut *sockfdobj);
                         // let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                         // let sockobj = locksock.read();
 
-                        let sock_tmp = sockfdobj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
+                        
 
                         if (flags & !MSG_NOSIGNAL) != 0 {
                             return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
                         }
 
-                        if sockobj.1 != ConnState::CONNECTED {
+                        if sockhandle.state != ConnState::CONNECTED {
                             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                         }
 
@@ -713,9 +725,9 @@ impl Cage {
                         let mut newbufptr = buf;
 
                         //if we have peeked some data before, fill our buffer with that data before moving on
-                        if !sockfdobj.last_peek.is_empty() {
-                            let bytecount = interface::rust_min(sockfdobj.last_peek.len(), newbuflen);
-                            interface::copy_fromrustdeque_sized(buf, bytecount, &sockfdobj.last_peek);
+                        if !sockhandle.last_peek.is_empty() {
+                            let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
+                            interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
                             newbuflen -= bytecount;
                             newbufptr = newbufptr.wrapping_add(bytecount);
 
@@ -723,8 +735,8 @@ impl Cage {
                             //and if the bytecount is more than the length of the peeked data, then we remove the entire
                             //buffer
                             if flags & MSG_PEEK == 0 {
-                                sockfdobj.last_peek.drain(..(
-                                    if bytecount > sockfdobj.last_peek.len() {sockfdobj.last_peek.len()} 
+                                sockhandle.last_peek.drain(..(
+                                    if bytecount > sockhandle.last_peek.len() {sockhandle.last_peek.len()} 
                                     else {bytecount}
                                 ));
                             }
@@ -740,22 +752,22 @@ impl Cage {
                         let retval;
 
                         // check if this is a domain socket
-                        if let Some(socket_type) = sockhandle.domain {
-                            if socket_type == AF_UNIX {
-                                // get the remote socket pipe, read from it, and return bytes read
-                                let pipe = PIPE_TABLE.get(&sockfdobj.remotepipe).unwrap().clone();
-                                let mut nonblocking = false;
-                                if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                                retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
+                        //if let socket_type = sockhandle.domain {
+                            // if socket_type == AF_UNIX {
+                            //     // get the remote socket pipe, read from it, and return bytes read
+                            //     let pipe = PIPE_TABLE.get(&sockfdobj.remotepipe).unwrap().clone();
+                            //     let mut nonblocking = false;
+                            //     if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                            //     retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
 
+                            // } else {
+                            if sockfdobj.flags & O_NONBLOCK != 0 {
+                                retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
                             } else {
-                                if sockfdobj.flags & O_NONBLOCK != 0 {
-                                    retval = sockobj.0.recvfrom_nonblocking(bufleft, buflenleft, addr);
-                                } else {
-                                    retval = sockobj.0.recvfrom(bufleft, buflenleft, addr);
-                                }
+                                retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
                             }
-                        }
+                            //}
+                        //}
 
                         if retval < 0 {
                             //If we have already read from a peek but have failed to read more, exit!
@@ -774,7 +786,7 @@ impl Cage {
 
                         if flags & MSG_PEEK != 0 {
                             //extend from the point after we read our previously peeked bytes
-                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockfdobj.last_peek);
+                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
                         }
 
                         return totalbyteswritten;
@@ -799,9 +811,9 @@ impl Cage {
 
                         //if the remoteaddr is set and addr is not, use remoteaddr
                         let retval = if addr.is_none() && sockhandle.remoteaddr.is_some() {
-                            sockobj.0.recvfrom(buf, buflen, &mut sockhandle.remote_addr.as_mut())
+                            sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut sockhandle.remoteaddr.as_mut())
                         } else {
-                            sockobj.0.recvfrom(buf, buflen, addr)
+                            sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
                         };
 
                         if retval < 0 {
@@ -1057,8 +1069,8 @@ impl Cage {
                                 let newsockobj = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
                                 let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
                                 let mut domsockref = arclocksock.write();
-                                let mut newsockwithin = if let Socket(s) = &mut *domsockref {s} else {unreachable!()};
-                                entry.insert(arclocksock.clone());
+                                //let mut newsockwithin = if let Socket(s) = &mut *domsockref {s} else {unreachable!()};
+                                // entry.insert(arclocksock.clone());
     
                                 let remote_addr : interface::GenSockaddr;
                                 let localpipenumber;
@@ -1070,43 +1082,53 @@ impl Cage {
     
                                     if let Some(ds) = dsconnobj {
                                         // if its blocking it will have a connvar, signal it
-                                        if let Some(connvar) = &ds.3 {
+                                        if let Some(connvar) = ds.get_cond_var() {
                                             if !connvar.signal() { 
                                                 drop(ds);
                                                 continue;
                                             }
                                         }
-                                        remote_addr = ds.0.clone();
-                                        remotepipenumber = ds.1;
-                                        localpipenumber = ds.2;
+                                        let addr = ds.get_sockaddr();
+                                        remote_addr = addr.clone();
+                                        remotepipenumber = ds.get_remote_pipe();
+                                        localpipenumber = ds.get_local_pipe();
                                         drop(ds);
                                         NET_METADATA.domsock_accept_table.remove(&localpathbuf);
                                         break;
                                     } else {
                                         if 0 != (sockfdobj.flags & O_NONBLOCK) {
                                             // if non block return EAGAIN
-                                            self.filedescriptortable.remove(&key);
+                                            //self.filedescriptortable.remove(&key);
                                             return syscall_error(Errno::EAGAIN, "accept", "host system accept call failed");
                                         }
                                     }
                                 }
-    
+
+                                let newsock_tmp = newsockobj.handle.clone();
+                                let mut newsockhandle = newsock_tmp.write();
+
                                 let pathclone = normpath(convpath(remote_addr.path().clone()), self);
                                 if let Some(inodenum) = metawalk(pathclone.as_path()) {                
-                                    newsockwithin.localpath = Some(pathclone);   
-                                    newsockwithin.inode = Some(inodenum.clone());   
+                                    // newsockwithin.localpath = Some(pathclone);   
+                                    // newsockwithin.inode = Some(inodenum.clone());   
+                                    newsockhandle.unix_info = Some(UnixSocketInfo {
+                                        path: pathclone,
+                                        inode: inodenum.clone(),
+                                        mode: sockhandle.unix_info.as_ref().unwrap().mode,
+                                        pipe: *localpipenumber,
+                                        remotepipe: *remotepipenumber,
+                                    });
                                     if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
                                         sock.refcount += 1; 
                                     } 
                                 }; 
-    
-                                newsockwithin.pipe = localpipenumber;
-                                newsockwithin.remotepipe = remotepipenumber;
-                                newsockwithin.state = ConnState::CONNECTED;
-                                newsockwithin.remoteaddr = Some(remote_addr.clone());
+
+                                newsockhandle.state = ConnState::CONNECTED;
+                                newsockhandle.remoteaddr = Some(remote_addr.clone());
                                 *addr = remote_addr; //populate addr with what address it connected to
-    
-                                return key;
+                                
+                                //return key;
+                                return 0;
                             }
                         }
                     }
@@ -1578,9 +1600,9 @@ impl Cage {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
                 // will swap if unix
-                let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
-                //all of the checks that we had have passed if we are here
-                *ret_addr = remoteaddr;
+                // let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
+                // //all of the checks that we had have passed if we are here
+                // *ret_addr = remoteaddr;
                 return 0;
 
             } else {
