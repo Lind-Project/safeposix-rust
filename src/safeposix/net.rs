@@ -114,13 +114,13 @@ impl Drop for SocketHandle {
 
 #[derive(Debug)]
 pub struct ConnCondVar {
-    lock: interface::RustRfc<interface::RustMutex<i32>>,
-    cv: interface::RustCondvar
+    lock: interface::RustRfc<interface::Mutex<i32>>,
+    cv: interface::Condvar
 }
 
 impl ConnCondVar {
     pub fn new() -> Self {
-        Self {lock: interface::RustRfc::new(interface::RustMutex::new(0)), cv: interface::RustCondvar::new()}
+        Self {lock: interface::RustRfc::new(interface::Mutex::new(0)), cv: interface::Condvar::new()}
     }
 
     pub fn wait(&self) {
@@ -138,6 +138,27 @@ impl ConnCondVar {
     }
 }
 
+pub struct DomsockTableEntry {
+    sockaddr: interface::GenSockaddr,
+    remote_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    local_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    cond_var: Option<interface::RustRfc<ConnCondVar>>,
+}
+
+impl DomsockTableEntry {
+    pub fn get_cond_var(&self) -> Option<&interface::RustRfc<ConnCondVar>> {
+        self.cond_var.as_ref()
+    }
+    pub fn get_sockaddr(&self) -> &interface::GenSockaddr {
+        &self.sockaddr
+    }
+    pub fn get_local_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+        &self.local_pipe
+    }
+    pub fn get_remote_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+        &self.remote_pipe
+    }
+}
 
 pub struct NetMetadata {
     pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed
@@ -147,7 +168,7 @@ pub struct NetMetadata {
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
     pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
-    pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, (interface::GenSockaddr, RustRfc<Pipe>, RustRfc<Pipe>, Option<interface::RustRfc<ConnCondVar>>)>
+    pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, DomsockTableEntry>
 }
 
 impl NetMetadata {

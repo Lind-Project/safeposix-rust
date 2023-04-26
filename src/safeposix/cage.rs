@@ -17,7 +17,7 @@ pub enum FileDescriptor {
     File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
-    Pipe(PipeDesc),~
+    Pipe(PipeDesc),
     Epoll(EpollDesc)
 }
 
@@ -41,7 +41,7 @@ pub struct StreamDesc {
 pub struct SocketDesc {
     pub flags: i32,
     pub handle: interface::RustRfc<interface::RustLock<SocketHandle>>,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::RustRfc<interface::AdvisoryLock>,
 }
 
 #[derive(Debug, Clone)]
