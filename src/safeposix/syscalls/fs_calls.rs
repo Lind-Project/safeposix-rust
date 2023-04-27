@@ -1194,29 +1194,29 @@ impl Cage {
                     let mut inodeopt = None;
                     if let Some(ui) = &sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
-                        if let Some(pipe_pair) = sockhandle.unix_info {
-                            pipe_pair.pipe.decr_ref(O_WRONLY);
-                            pipe_pair.remotepipe.decr_ref(O_WRONLY);
+                        //if let Some(pipe_pair) = sockhandle.unix_info {
+                        pipe_pair.pipe.decr_ref(O_WRONLY);
+                        pipe_pair.remotepipe.decr_ref(O_WRONLY);
 
-                            // delete the pipe if we are out of refs
-                            if pipe_pair.pipe.get_write_ref() == 0 {
-                                // we're closing the last write end, lets set eof
-                                pipe_pair.pipe.set_eof();
-                            }
-                            if pipe_pair.pipe.get_write_ref() + pipe_pair.pipe.get_read_ref() == 0 {
-                                // last reference, lets remove it
-                                sockhandle.unix_info = None;
-                            }
-
-                            if pipe_pair.remotepipe.get_write_ref() == 0 {
-                                // we're closing the last write end, lets set eof
-                                pipe_pair.pipe.set_eof();
-                            }
-                            if pipe_pair.remotepipe.get_write_ref() + pipe_pair.remotepipe.get_read_ref() == 0 {
-                                // last reference, lets remove it
-                                sockhandle.unix_info = None;
-                            }
+                        // delete the pipe if we are out of refs
+                        if pipe_pair.pipe.get_write_ref() == 0 {
+                            // we're closing the last write end, lets set eof
+                            pipe_pair.pipe.set_eof();
                         }
+                        if pipe_pair.pipe.get_write_ref() + pipe_pair.pipe.get_read_ref() == 0 {
+                            // last reference, lets remove it
+                            sockhandle.unix_info = None;
+                        }
+
+                        if pipe_pair.remotepipe.get_write_ref() == 0 {
+                            // we're closing the last write end, lets set eof
+                            pipe_pair.pipe.set_eof();
+                        }
+                        if pipe_pair.remotepipe.get_write_ref() + pipe_pair.remotepipe.get_read_ref() == 0 {
+                            // last reference, lets remove it
+                            sockhandle.unix_info = None;
+                        }
+                        //}
                     }
                     
                     
@@ -1251,7 +1251,7 @@ impl Cage {
                     //         }
                     //     }
                     // }
-                    
+
                     drop(sockhandle);
                     if let Some(inodenum) = inodeopt {
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
