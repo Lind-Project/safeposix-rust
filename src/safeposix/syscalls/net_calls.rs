@@ -71,6 +71,7 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                 }
                 match domain {
+<<<<<<< HEAD
                     PF_INET | PF_UNIX => {
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
                         return self._socket_inserter(Socket(sockfdobj));
@@ -79,6 +80,16 @@ impl Cage {
                     //     let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
                     //     return self._socket_inserter(Socket(sockfdobj));
                     // }
+=======
+                    PF_INET => {
+                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+                        return self._socket_inserter(Socket(sockfdobj));
+                    }
+                    PF_UNIX => {
+                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+                        return self._socket_inserter(Socket(sockfdobj));
+                    }
+>>>>>>> b516ec15d4655c2b6fc866c7d506126a2351db7a
                     _ => {
                         return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented domain");
                     }
@@ -746,11 +757,19 @@ impl Cage {
                                 return bytecount as i32;
                             }
                         }
+<<<<<<< HEAD
 
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
                         let retval;
 
+=======
+
+                        let bufleft = newbufptr;
+                        let buflenleft = newbuflen;
+                        let retval;
+
+>>>>>>> b516ec15d4655c2b6fc866c7d506126a2351db7a
                         // check if this is a domain socket
                         //if let socket_type = sockhandle.domain {
                             // if socket_type == AF_UNIX {
