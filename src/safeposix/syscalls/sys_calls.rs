@@ -216,6 +216,11 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+        
+        // Trigger SIGCHLD
+        if self.cageid != self.parent {
+            self.kill_syscall(self.parent, 17);
+        }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
