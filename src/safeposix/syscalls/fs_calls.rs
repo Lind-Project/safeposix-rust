@@ -1194,7 +1194,6 @@ impl Cage {
                     let mut inodeopt = None;
                     if let Some(ui) = &sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
-<<<<<<< HEAD
                         //if let Some(pipe_pair) = sockhandle.unix_info {
                         pipe_pair.pipe.decr_ref(O_WRONLY);
                         pipe_pair.remotepipe.decr_ref(O_WRONLY);
@@ -1218,8 +1217,6 @@ impl Cage {
                             sockhandle.unix_info = None;
                         }
                         //}
-=======
->>>>>>> b516ec15d4655c2b6fc866c7d506126a2351db7a
                     }
                     
                     
