@@ -70,9 +70,9 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 #[derive(Debug)]
 pub struct UnixSocketInfo {
     pub mode: i32,
-    pub pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub pipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
     pub path: interface::RustPathBuf,
-    pub remotepipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub remotepipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
     pub inode: usize,
 }
 

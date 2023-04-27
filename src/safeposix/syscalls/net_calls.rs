@@ -75,10 +75,6 @@ impl Cage {
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
                         return self._socket_inserter(Socket(sockfdobj));
                     }
-                    // PF_UNIX => {
-                    //     let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-                    //     return self._socket_inserter(Socket(sockfdobj));
-                    // }
                     _ => {
                         return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented domain");
                     }
@@ -93,11 +89,7 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.");
                 }
                 match domain {
-                    PF_INET => {
-                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-                        return self._socket_inserter(Socket(sockfdobj));
-                    }
-                    PF_UNIX => {
+                    PF_INET | PF_UNIX => {
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
                         return self._socket_inserter(Socket(sockfdobj));
                     }
@@ -119,11 +111,13 @@ impl Cage {
         if let None = sockhandle.innersocket {
             let thissock = interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
 
-            for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
-                if sockhandle.options & (1 << reuse) == 0 {continue;}
-                let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
-                if sockret < 0 {
-                    panic!("Cannot handle failure in setsockopt on socket creation");
+            if sockhandle.domain != AF_UNIX {
+                for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
+                    if sockhandle.options & (1 << reuse) == 0 {continue;}
+                    let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
+                    if sockret < 0 {
+                        panic!("Cannot handle failure in setsockopt on socket creation");
+                    }
                 }
             }
 
@@ -136,61 +130,6 @@ impl Cage {
         self.bind_inner(fd, localaddr, false)
     }
 
-    // fn bind_inner_domain_socket(&self, sockfdobj: &mut SocketDesc, localaddr: &interface::GenSockaddr) -> i32 {
-        
-    //     let sock_tmp = sockfdobj.handle.clone();
-    //     let sockhandle = sock_tmp.write();
-        
-    //     if localaddr.get_family() != sockhandle.domain as u16 {
-    //         return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
-    //     }
-
-    //     if sockhandle.localaddr.is_some() {
-    //         return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
-    //     }
-
-    //     sockhandle.localaddr = Some(localaddr.clone());
-
-    //     let path = localaddr.path();
-    //     //Check that path is not empty
-    //     if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
-    //     let truepath = normpath(convpath(path), self);
-
-    //     match metawalkandparent(truepath.as_path()) {
-    //         //If neither the file nor parent exists
-    //         (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
-    //         //If the file doesn't exist but the parent does
-    //         (None, Some(pardirinode)) => {
-    //             let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
-
-    //             let mode;
-    //             if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-    //                 mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
-    //             } else { unreachable!() }
-    //             let effective_mode = S_IFSOCK as u32 | mode;
-
-    //             let time = interface::timestamp(); //We do a real timestamp now
-    //             let newinode = Inode::Socket(SocketInode {
-    //                 size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-    //                 mode: effective_mode, linkcount: 1, refcount: 1,
-    //                 atime: time, ctime: time, mtime: time
-    //             });
-
-    //             let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-    //             if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-    //                 ind.filename_to_inode_dict.insert(filename, newinodenum);
-    //                 ind.linkcount += 1;
-    //             } //insert a reference to the file in the parent directory
-    //             // sockfdobj.inode = Some(newinodenum.clone());
-    //             // FS_METADATA.inodetable.insert(newinodenum, newinode);
-    //             // sockfdobj.localpath = Some(truepath);  
-    //         }
-    //         (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
-    //     }
-
-    //     0
-    // }
-
     fn bind_inner_socket(&self, sockhandle: &mut SocketHandle, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if localaddr.get_family() != sockhandle.domain as u16 {
             return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
@@ -200,99 +139,71 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "bind", "The socket is already bound to an address");
         }
 
-        let intent_to_rebind = sockhandle.options & (1 << SO_REUSEPORT) != 0;
         let mut newsockaddr = localaddr.clone();
-
-        // if sockhandle.domain == AF_UNIX {
-        //     // create fake IPV4 addr
-        //     let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
-        //     let innersockaddr = interface::SockaddrV4{sin_family: AF_INET as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
-        //     newsockaddr = interface::GenSockaddr::V4(innersockaddr);
-        // }
-
         Self::force_innersocket(sockhandle);
 
-        let newlocalport = if prereserved {
-            localaddr.port()
+        if sockhandle.domain == AF_UNIX {
+            // Unix Sockets
+            let path = localaddr.path();
+            //Check that path is not empty
+            if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+            let truepath = normpath(convpath(path), self);
+
+            match metawalkandparent(truepath.as_path()) {
+                //If neither the file nor parent exists
+                (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
+                //If the file doesn't exist but the parent does
+                (None, Some(pardirinode)) => {
+                    let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+
+                    //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
+                    let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                    let newinode;
+
+                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                        let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
+                        let effective_mode = S_IFSOCK as u32 | mode;
+
+                        let time = interface::timestamp(); //We do a real timestamp now
+                        newinode = Inode::Socket(SocketInode {
+                            size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                            mode: effective_mode, linkcount: 1, refcount: 1,
+                            atime: time, ctime: time, mtime: time,
+                        });
+
+                        dir.filename_to_inode_dict.insert(filename.clone(), newinodenum);
+                        dir.linkcount += 1;
+                    } else {
+                       return syscall_error(Errno::ENOTDIR, "socket", "unix domain socket path made socket address child of non-directory file");
+                    }
+
+                    sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, pipe: None, path: truepath.clone(), remotepipe: None, inode: newinodenum});
+                    FS_METADATA.inodetable.insert(newinodenum, newinode);
+                }
+                (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
+            }
         } else {
-            let localout = NET_METADATA._reserve_localport(newsockaddr.addr(), newsockaddr.port(), sockhandle.protocol, sockhandle.domain, intent_to_rebind);
-            if let Err(errnum) = localout {return errnum;}
-            localout.unwrap()
-        };
-        newsockaddr.set_port(newlocalport);
+            // INET Sockets
+            let intent_to_rebind = sockhandle.options & (1 << SO_REUSEPORT) != 0;
 
-        // if sockhandle.domain == AF_UNIX {
-        //     let path = localaddr.path();
-        //     //Check that path is not empty
-        //     if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
-        //     let truepath = normpath(convpath(path), self);
+            let newlocalport = if prereserved {
+                localaddr.port()
+            } else {
+                let localout = NET_METADATA._reserve_localport(newsockaddr.addr(), newsockaddr.port(), sockhandle.protocol, sockhandle.domain, intent_to_rebind);
+                if let Err(errnum) = localout {return errnum;}
+                localout.unwrap()
+            };
 
-        //     match metawalkandparent(truepath.as_path()) {
-        //         //If neither the file nor parent exists
-        //         (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
-        //         //If the file doesn't exist but the parent does
-        //         (None, Some(pardirinode)) => {
-        //             let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+            newsockaddr.set_port(newlocalport);
+            let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&newsockaddr);
 
-        //             //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
-        //             let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-        //             let newinode;
-
-        //             if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-        //                 let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
-        //                 let effective_mode = S_IFSOCK as u32 | mode;
-
-        //                 let time = interface::timestamp(); //We do a real timestamp now
-        //                 newinode = Inode::Socket(SocketInode {
-        //                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        //                     mode: effective_mode, linkcount: 1, refcount: 1,
-        //                     atime: time, ctime: time, mtime: time,
-        //                 });
-
-        //                 dir.filename_to_inode_dict.insert(filename.clone(), newinodenum);
-        //                 dir.linkcount += 1;
-        //             } else {
-        //                return syscall_error(Errno::ENOTDIR, "socket", "unix domain socket path made socket address child of non-directory file");
-        //             }
-
-        //             //we bind at this point in order that all errors that could have happened already did, but before we add any metadata, so as to minimize cleanup necessary
-
-        //             let bindret = if let Some(sock) = &mut sockhandle.innersocket {
-        //                 sock.bind(&newsockaddr)
-        //             } else {unreachable!();}; //we clobber innersocket if it's None
-
-        //             if bindret < 0 {
-        //                 //undo the insertion if the bind failed
-        //                 if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
-        //                     dir.filename_to_inode_dict.remove(&filename);
-        //                     dir.linkcount -= 1;
-        //                 } else {
-        //                     panic!("Known directory is somehow not a directory?");
-        //                 }
-
-        //                 match Errno::from_discriminant(interface::get_errno()) {
-        //                     Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
-        //                     Err(()) => panic!("Unknown errno value from socket bind returned!"),
-        //                 };
-        //             }
-
-        //             sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, inode: newinodenum, reallocalpath: truepath.clone()});
-        //             FS_METADATA.inodetable.insert(newinodenum, newinode);
-        //             NET_METADATA.domain_socket_table.insert(truepath, newsockaddr.clone());
-        //             NET_METADATA.revds_table.insert(newsockaddr, localaddr.clone());
-        //         }
-        //         (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
-        //     }
-        // } else {
-        //     let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&newsockaddr);
-
-        //     if bindret < 0 {
-        //         match Errno::from_discriminant(interface::get_errno()) {
-        //             Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
-        //             Err(()) => panic!("Unknown errno value from socket bind returned!"),
-        //         };
-        //     }
-        // }
+            if bindret < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
+                    Err(()) => panic!("Unknown errno value from socket bind returned!"),
+                };
+            }
+        }
 
         sockhandle.localaddr = Some(newsockaddr);
 
@@ -306,17 +217,7 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
-
-                    // check if this is a domain socket
-                    // if let socket_type = sockhandle.domain {
-                        // if socket_type == AF_UNIX {
-                        //     if let Some(pipe_pair) = sockhandle.unix_info {
-                        //         self.bind_inner_socket(sockfdobj, localaddr, prereserved)
-                        //     }
-                        // } else {
                     self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved)
-                        //}
-                    //} 
                 }
                 _ => {
                     syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket")
