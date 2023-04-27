@@ -103,14 +103,14 @@ impl Cage {
                         // checking whether this is a domain socket
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let sockhandle = sock_tmp.write();
-                        if let socket_type = sockhandle.domain {
-                            if socket_type == AF_UNIX {
-                                if let Some(pipe_pair) = sockhandle.unix_info {
-                                    pipe_pair.pipe.expect("REASON").incr_ref(O_WRONLY);
-                                    pipe_pair.remotepipe.expect("REASON").incr_ref(O_RDONLY);
-                                }
+                        let socket_type = sockhandle.domain;
+                        if socket_type == AF_UNIX {
+                            if let Some(pipe_pair) = &sockhandle.unix_info {
+                                pipe_pair.pipe.as_ref().expect("REASON").incr_ref(O_WRONLY);
+                                pipe_pair.remotepipe.as_ref().expect("REASON").incr_ref(O_RDONLY);
                             }
                         }
+                        //}
 
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();

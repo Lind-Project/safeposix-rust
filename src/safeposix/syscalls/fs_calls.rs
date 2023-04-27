@@ -1130,14 +1130,14 @@ impl Cage {
 
                 let sock_tmp = socket_filedesc_obj.handle.clone();
                 let sockhandle = sock_tmp.write();
-                if let socket_type = sockhandle.domain {
-                    if socket_type == AF_UNIX {
-                        if let Some(pipe_pair) = sockhandle.unix_info {
-                            pipe_pair.pipe.expect("REASON").incr_ref(O_WRONLY);
-                            pipe_pair.remotepipe.expect("REASON").incr_ref(O_RDONLY);
-                        }
+                let socket_type = sockhandle.domain;
+                if socket_type == AF_UNIX {
+                    if let Some(pipe_pair) = &sockhandle.unix_info {
+                        pipe_pair.pipe.as_ref().expect("REASON").incr_ref(O_WRONLY);
+                        pipe_pair.remotepipe.as_ref().expect("REASON").incr_ref(O_RDONLY);
                     }
                 }
+                //}
             }
             Stream(_normalfile_filedesc_obj) => {
                 // no stream refs
@@ -1194,29 +1194,33 @@ impl Cage {
                     let mut inodeopt = None;
                     if let Some(ui) = &sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
-                        if let Some(pipe_pair) = sockhandle.unix_info {
-                            pipe_pair.pipe.expect("REASON").decr_ref(O_WRONLY);
-                            pipe_pair.remotepipe.expect("REASON").decr_ref(O_WRONLY);
-
-                            // delete the pipe if we are out of refs
-                            if pipe_pair.pipe.expect("REASON").get_write_ref() == 0 {
-                                // we're closing the last write end, lets set eof
-                                pipe_pair.pipe.expect("REASON").set_eof();
-                            }
-                            if pipe_pair.pipe.expect("REASON").get_write_ref() + pipe_pair.pipe.expect("REASON").get_read_ref() == 0 {
+                        let pipe_pair = ui;
+                        pipe_pair.pipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
+                        pipe_pair.remotepipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
+                        // delete the pipe if we are out of refs
+                        if pipe_pair.pipe.as_ref().expect("REASON").get_write_ref() == 0 {
+                            // we're closing the last write end, lets set eof
+                            pipe_pair.pipe.as_ref().expect("REASON").set_eof();
+                        }
+                        {
+                            let sockhandle_mut = sockhandle.unix_info.as_mut().expect("REASON");
+                            if pipe_pair.pipe.as_ref().expect("REASON").get_write_ref() + pipe_pair.pipe.as_ref().expect("REASON").get_read_ref() == 0 {
                                 // last reference, lets remove it
-                                sockhandle.unix_info = None;
-                            }
-
-                            if pipe_pair.remotepipe.expect("REASON").get_write_ref() == 0 {
-                                // we're closing the last write end, lets set eof
-                                pipe_pair.pipe.expect("REASON").set_eof();
-                            }
-                            if pipe_pair.remotepipe.expect("REASON").get_write_ref() + pipe_pair.remotepipe.expect("REASON").get_read_ref() == 0 {
-                                // last reference, lets remove it
-                                sockhandle.unix_info = None;
+                                sockhandle_mut.unix_info = None;
                             }
                         }
+                        if pipe_pair.remotepipe.as_ref().expect("REASON").get_write_ref() == 0 {
+                            // we're closing the last write end, lets set eof
+                            pipe_pair.pipe.as_ref().expect("REASON").set_eof();
+                        }
+                        {
+                            let sockhandle_mut = sockhandle.unix_info.as_mut().expect("REASON");
+                            if pipe_pair.remotepipe.as_ref().expect("REASON").get_write_ref() + pipe_pair.remotepipe.as_ref().expect("REASON").get_read_ref() == 0 {
+                                // last reference, lets remove it
+                                sockhandle_mut.unix_info = None;
+                            }
+                        }
+                        //}
                     }
                     
                     
