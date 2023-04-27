@@ -106,8 +106,8 @@ impl Cage {
                         if let socket_type = sockhandle.domain {
                             if socket_type == AF_UNIX {
                                 if let Some(pipe_pair) = sockhandle.unix_info {
-                                    pipe_pair.pipe.incr_ref(O_WRONLY);
-                                    pipe_pair.remotepipe.incr_ref(O_RDONLY);
+                                    pipe_pair.pipe.expect("REASON").incr_ref(O_WRONLY);
+                                    pipe_pair.remotepipe.expect("REASON").incr_ref(O_RDONLY);
                                 }
                             }
                         }

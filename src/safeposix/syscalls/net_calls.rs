@@ -323,8 +323,8 @@ impl Cage {
                                 let (localpipe, remotepipe) = create_unix_sockpipes();
         
                                 sockhandle.remoteaddr = Some(remoteaddr.clone());
-                                sockhandle.unix_info.as_ref().unwrap().pipe = localpipe.clone();
-                                sockhandle.unix_info.as_ref().unwrap().remotepipe = remotepipe.clone();
+                                sockhandle.unix_info.as_ref().unwrap().pipe = Some(localpipe.clone());
+                                sockhandle.unix_info.as_ref().unwrap().remotepipe = Some(remotepipe.clone());
                                 //sockhandle.remotepipe = remotepipe;
         
                                 if sockfdobj.flags & O_NONBLOCK != 0 {
@@ -541,7 +541,7 @@ impl Cage {
                                     if let Some(pipe_pair) = sockhandle.unix_info {
                                         let mut nonblocking = false;
                                         if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                                        let retval = pipe_pair.pipe.write_to_pipe(buf, buflen, nonblocking) as i32;
+                                        let retval = pipe_pair.pipe.expect("REASON").write_to_pipe(buf, buflen, nonblocking) as i32;
                                         if retval < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
                                         else { 
                                             return retval;
@@ -647,19 +647,11 @@ impl Cage {
                                 return bytecount as i32;
                             }
                         }
-<<<<<<< HEAD
 
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
                         let retval;
 
-=======
-
-                        let bufleft = newbufptr;
-                        let buflenleft = newbuflen;
-                        let retval;
-
->>>>>>> b516ec15d4655c2b6fc866c7d506126a2351db7a
                         // check if this is a domain socket
                         //if let socket_type = sockhandle.domain {
                             // if socket_type == AF_UNIX {
@@ -1024,8 +1016,8 @@ impl Cage {
                                         path: pathclone,
                                         inode: inodenum.clone(),
                                         mode: sockhandle.unix_info.as_ref().unwrap().mode,
-                                        pipe: *localpipenumber,
-                                        remotepipe: *remotepipenumber,
+                                        pipe: Some(*localpipenumber),
+                                        remotepipe: Some(*remotepipenumber),
                                     });
                                     if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
                                         sock.refcount += 1; 
