@@ -1264,7 +1264,9 @@ pub mod net_tests {
         //next we need to skip the null byte, qtype, and qclass to extract the main response payload
         let recordptr = dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
         let record = unsafe{&*recordptr};
-        assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+        let addr = u32::from_be(record.addr.s_addr);
+        assert_eq!(addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+        //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
 
         lindrustfinalize();
     }

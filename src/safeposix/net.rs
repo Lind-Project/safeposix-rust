@@ -139,26 +139,26 @@ impl ConnCondVar {
 }
 
 pub struct DomsockTableEntry {
-    sockaddr: interface::GenSockaddr,
-    remote_pipe: interface::RustRfc<interface::EmulatedPipe>,
-    local_pipe: interface::RustRfc<interface::EmulatedPipe>,
-    cond_var: Option<interface::RustRfc<ConnCondVar>>,
+    pub sockaddr: interface::GenSockaddr,
+    pub remote_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub local_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub cond_var: Option<interface::RustRfc<ConnCondVar>>,
 }
 
-impl DomsockTableEntry {
-    pub fn get_cond_var(&self) -> Option<&interface::RustRfc<ConnCondVar>> {
-        self.cond_var.as_ref()
-    }
-    pub fn get_sockaddr(&self) -> &interface::GenSockaddr {
-        &self.sockaddr
-    }
-    pub fn get_local_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
-        &self.local_pipe
-    }
-    pub fn get_remote_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
-        &self.remote_pipe
-    }
-}
+// impl DomsockTableEntry {
+//     pub fn get_cond_var(&self) -> Option<&interface::RustRfc<ConnCondVar>> {
+//         self.cond_var.as_ref()
+//     }
+//     pub fn get_sockaddr(&self) -> &interface::GenSockaddr {
+//         &self.sockaddr
+//     }
+//     pub fn get_local_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+//         &self.local_pipe
+//     }
+//     pub fn get_remote_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+//         &self.remote_pipe
+//     }
+// }
 
 pub struct NetMetadata {
     pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed

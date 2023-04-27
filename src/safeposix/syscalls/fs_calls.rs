@@ -1192,35 +1192,35 @@ impl Cage {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
                     let mut inodeopt = None;
-                    if let Some(ui) = &sockhandle.unix_info {
+                    if let Some (ref mut ui) = sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
-                        let pipe_pair = ui;
-                        pipe_pair.pipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
-                        pipe_pair.remotepipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
+                        ui.pipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
+                        ui.remotepipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
                         // delete the pipe if we are out of refs
-                        if pipe_pair.pipe.as_ref().expect("REASON").get_write_ref() == 0 {
+                        if ui.pipe.as_ref().expect("REASON").get_write_ref() == 0 {
                             // we're closing the last write end, lets set eof
-                            pipe_pair.pipe.as_ref().expect("REASON").set_eof();
+                            ui.pipe.as_ref().expect("REASON").set_eof();
                         }
-                        {
-                            let sockhandle_mut = sockhandle.unix_info.as_mut().expect("REASON");
-                            if pipe_pair.pipe.as_ref().expect("REASON").get_write_ref() + pipe_pair.pipe.as_ref().expect("REASON").get_read_ref() == 0 {
-                                // last reference, lets remove it
-                                sockhandle_mut.unix_info = None;
-                            }
+                        if ui.pipe.as_ref().expect("REASON").get_write_ref() + ui.pipe.as_ref().expect("REASON").get_read_ref() == 0 {
+                            // last reference, lets remove it
+                            ui.mode = 0;
+                            ui.pipe = None;
+                            ui.path = interface::RustPathBuf::new();
+                            ui.remotepipe = None;
+                            ui.inode = 0;
                         }
-                        if pipe_pair.remotepipe.as_ref().expect("REASON").get_write_ref() == 0 {
+                        if ui.remotepipe.as_ref().expect("REASON").get_write_ref() == 0 {
                             // we're closing the last write end, lets set eof
-                            pipe_pair.pipe.as_ref().expect("REASON").set_eof();
+                            ui.pipe.as_ref().expect("REASON").set_eof();
                         }
-                        {
-                            let sockhandle_mut = sockhandle.unix_info.as_mut().expect("REASON");
-                            if pipe_pair.remotepipe.as_ref().expect("REASON").get_write_ref() + pipe_pair.remotepipe.as_ref().expect("REASON").get_read_ref() == 0 {
-                                // last reference, lets remove it
-                                sockhandle_mut.unix_info = None;
-                            }
+                        if ui.remotepipe.as_ref().expect("REASON").get_write_ref() + ui.remotepipe.as_ref().expect("REASON").get_read_ref() == 0 {
+                            // last reference, lets remove it
+                            ui.mode = 0;
+                            ui.pipe = None;
+                            ui.path = interface::RustPathBuf::new();
+                            ui.remotepipe = None;
+                            ui.inode = 0;
                         }
-                        //}
                     }
                     
                     

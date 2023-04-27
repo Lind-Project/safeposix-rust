@@ -340,8 +340,8 @@ impl Cage {
                                 let remotepathbuf = convpath(remoteaddr.path().clone());
                                 let entry = DomsockTableEntry {
                                     sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                    remote_pipe: remotepipe.clone(),
-                                    local_pipe: localpipe.clone(),
+                                    remote_pipe: Some(remotepipe.clone()).unwrap(),
+                                    local_pipe: Some(localpipe.clone()).unwrap(),
                                     cond_var: None,
                                 };
                                 NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
@@ -351,8 +351,8 @@ impl Cage {
                                 let connvar = interface::RustRfc::new(ConnCondVar::new());
                                 let entry = DomsockTableEntry {
                                     sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                    remote_pipe: remotepipe.clone(),
-                                    local_pipe: localpipe.clone(),
+                                    remote_pipe: Some(remotepipe.clone()).unwrap(),
+                                    local_pipe: Some(localpipe.clone()).unwrap(),
                                     cond_var: Some(connvar.clone()),
                                 };
                                 let remotepathbuf = convpath(remoteaddr.path().clone());
