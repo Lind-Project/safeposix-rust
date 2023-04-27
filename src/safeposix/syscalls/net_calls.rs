@@ -71,14 +71,14 @@ impl Cage {
                     return syscall_error(Errno::EOPNOTSUPP, "socket", "The only SOCK_STREAM implemented is TCP. Unknown protocol input.");
                 }
                 match domain {
-                    PF_INET => {
+                    PF_INET | PF_UNIX => {
                         let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
                         return self._socket_inserter(Socket(sockfdobj));
                     }
-                    PF_UNIX => {
-                        let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-                        return self._socket_inserter(Socket(sockfdobj));
-                    }
+                    // PF_UNIX => {
+                    //     let sockfdobj = self._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+                    //     return self._socket_inserter(Socket(sockfdobj));
+                    // }
                     _ => {
                         return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented domain");
                     }
