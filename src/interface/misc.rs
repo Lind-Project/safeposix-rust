@@ -198,6 +198,12 @@ pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
     set & (1 << (signum - 1)) != 0
 }
 
+// Signals
+pub fn kill_inner(cage_id: u64, sig: i32) -> i32 {
+    let cage_main_thread_id = cagetable_getref(cage_id).main_threadid;
+    lind_threadkill(cage_main_thread_id, sig)
+}
+
 #[derive(Debug)]
 pub struct AdvisoryLock {
     //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
