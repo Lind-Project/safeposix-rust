@@ -219,7 +219,7 @@ impl Cage {
         
         // Trigger SIGCHLD
         if self.cageid != self.parent {
-            interface::lind_kill(self.parent, 17);
+            interface::lind_kill(self.parent, SIGCHLD);
         }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
