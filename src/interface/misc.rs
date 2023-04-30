@@ -199,7 +199,7 @@ pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
 }
 
 // Signals
-pub fn kill_inner(cage_id: u64, sig: i32) -> i32 {
+pub fn lind_kill(cage_id: u64, sig: i32) -> i32 {
     let cage_main_thread_id = cagetable_getref(cage_id).main_threadid;
     lind_threadkill(cage_main_thread_id, sig)
 }

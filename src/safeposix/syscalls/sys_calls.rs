@@ -219,7 +219,7 @@ impl Cage {
         
         // Trigger SIGCHLD
         if self.cageid != self.parent {
-            interface::kill_inner(self.parent, 17);
+            interface::lind_kill(self.parent, 17);
         }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
@@ -291,7 +291,7 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        interface::kill_inner(cage_id as u64, sig)
+        interface::lind_kill(cage_id as u64, sig)
     }
 
     pub fn sigprocmask_syscall(&self, how: i32, set: Option<& interface::SigsetType>, oldset: Option<&mut interface::SigsetType>) -> i32 {
