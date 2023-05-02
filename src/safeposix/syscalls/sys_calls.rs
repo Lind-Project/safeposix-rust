@@ -318,6 +318,10 @@ impl Cage {
         res
     }
 
+    pub fn alarm_syscall(&self, seconds: u32) -> i32 {
+        0
+    }
+
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
         match res_type {
             RLIMIT_NOFILE => {

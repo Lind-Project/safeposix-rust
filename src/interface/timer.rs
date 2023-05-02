@@ -5,6 +5,7 @@
 
 use std::thread;
 use std::time::SystemTime;
+use std::sync::Mutex;
 pub use std::time::Instant as RustInstant;
 pub use std::time::Duration as RustDuration;
 
@@ -25,4 +26,69 @@ pub fn readtimer(now: RustInstant) -> RustDuration {
 // Sleep function to sleep for specified duration
 pub fn sleep(dur: RustDuration) {
     thread::sleep(dur);
+}
+
+struct _AlarmClock {
+    pub cageid: Option<u64>,
+    pub start_instant: RustInstant,
+    pub duration: RustDuration,
+    pub is_ticking: bool,
+}
+
+pub struct AlarmClock {
+    _ac: Mutex<_AlarmClock>,
+}
+
+impl AlarmClock {
+    pub new() -> Self {
+        _ac: Mutex::new(
+            _AlarmClock {
+                cageid: None,
+                start_instant: RustInstant::now(),
+                duration: RustDuration::ZERO,
+                is_ticking: false,
+            }
+        )
+    }
+
+    pub lind_alarm(&self, seconds: u32, cageid: u64) -> u32 {
+        let mut guard = self._ac.lock().unwrap();
+        let remaining_seconds = 0;
+
+        if *guard.is_ticking {
+            remaining_seconds = *guard.start_instant.elapsed().saturating_sub(*guard.duration).as_secs() as u32;
+        }
+
+        *guard.cageid = Some(cageid);
+        *guard.start_instant = RustInstant::now();
+        *guard.duration = RustDuration::from_secs(seconds as u64);
+        *guard.is_ticking = true;
+
+        Mutex::unlock(guard);
+    }
+
+    pub tick(&self) {
+        while true {
+            let mut guard = self._ac.lock().unwrap();
+
+            if *guard.is_ticking {
+                let remaining_seconds = *guard.start_instant.elapsed().checked_sub(*guard.duration);
+
+                match remaining_seconds {
+                    Some(_) => (),
+                    None    => {
+                        if let Some(cageid) = *guard.cageid {
+                            interface::lind_kill(cageid, 14);
+                            *guard.cageid = None;
+                        }
+                    },
+                }
+
+                *guard.is_ticking = false;
+            }
+
+            Mutex::unlock(guard);
+            thread::sleep(RustDuration::from_secs(1));
+        }
+    }
 }
