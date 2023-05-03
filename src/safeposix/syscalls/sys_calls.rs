@@ -216,6 +216,11 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+        
+        // Trigger SIGCHLD
+        if self.cageid != self.parent {
+            interface::lind_kill(self.parent, SIGCHLD);
+        }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
@@ -286,8 +291,7 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        let cage_main_thread_id = interface::cagetable_getref(cage_id as u64).main_threadid;
-        interface::lind_threadkill(cage_main_thread_id, sig)
+        interface::lind_kill(cage_id as u64, sig)
     }
 
     pub fn sigprocmask_syscall(&self, how: i32, set: Option<& interface::SigsetType>, oldset: Option<&mut interface::SigsetType>) -> i32 {

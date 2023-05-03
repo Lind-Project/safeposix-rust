@@ -101,7 +101,9 @@ impl EmulatedPipe {
         }
 
         while bytes_written < length {
-            if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); } // EPIPE, all read ends are closed
+            if self.get_read_ref() == 0 {
+                return syscall_error(Errno::EPIPE, "write", "broken pipe");
+            } // EPIPE, all read ends are closed
 
             let remaining = write_end.remaining();
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)

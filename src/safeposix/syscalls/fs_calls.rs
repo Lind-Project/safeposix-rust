@@ -7,6 +7,7 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
 use super::fs_constants::*;
+use super::sys_constants::*;
 
 impl Cage {
 
@@ -799,7 +800,10 @@ impl Cage {
 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    return pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32
+                    
+                    let retval = pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32;
+                    if retval == -(Errno::EPIPE as i32) { interface::lind_kill(self.cageid, SIGPIPE); } // Trigger SIGPIPE
+                    retval
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
