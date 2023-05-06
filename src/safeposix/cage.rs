@@ -79,7 +79,8 @@ pub struct Cage {
     pub thread_table: interface::RustHashMap<u64, bool>,
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
     pub sigset: interface::RustAtomicU64,
-    pub main_threadid: u64
+    pub main_threadid: u64,
+    pub alarm_clock: interface::AlarmClock,
 }
 
 impl Cage {

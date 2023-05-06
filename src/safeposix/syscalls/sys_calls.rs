@@ -139,7 +139,8 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
-            main_threadid: interface::get_pthreadid()
+            main_threadid: interface::get_pthreadid(),
+            alarm_clock: interface::AlarmClock::new(),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -190,7 +191,8 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
-            main_threadid: interface::get_pthreadid()
+            main_threadid: interface::get_pthreadid(),
+            alarm_clock: self.alarm_clock.clone(),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -323,7 +325,7 @@ impl Cage {
     }
 
     pub fn alarm_syscall(&self, seconds: u32) -> i32 {
-        0
+        self.alarm_clock.lind_alarm(seconds, self.cageid) as i32
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {

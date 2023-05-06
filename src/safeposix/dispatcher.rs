@@ -558,7 +558,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
-        main_threadid: interface::get_pthreadid()
+        main_threadid: interface::get_pthreadid(),
+        alarm_clock: interface::AlarmClock::new(),
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -579,7 +580,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
-        main_threadid: interface::get_pthreadid()
+        main_threadid: interface::get_pthreadid(),
+        alarm_clock: interface::AlarmClock::new(),
     };
     interface::cagetable_insert(1, initcage);
 }
