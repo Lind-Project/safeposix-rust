@@ -31,7 +31,7 @@ pub fn sleep(dur: RustDuration) {
 }
 
 #[derive(Debug)]
-struct _AlarmClock {
+struct _IntervalTimer {
     pub cageid: Option<u64>,
     pub start_instant: RustInstant,
     pub duration: RustDuration,
@@ -39,15 +39,15 @@ struct _AlarmClock {
 }
 
 #[derive(Clone, Debug)]
-pub struct AlarmClock {
-    _ac: Arc<Mutex<_AlarmClock>>,
+pub struct IntervalTimer {
+    _ac: Arc<Mutex<_IntervalTimer>>,
 }
 
-impl AlarmClock {
+impl IntervalTimer {
     pub fn new() -> Self {
-        let new_alarm_clock = Self {
+        let new_interval_timer = Self {
             _ac: Arc::new(Mutex::new(
-                _AlarmClock {
+                _IntervalTimer {
                     cageid: None,
                     start_instant: RustInstant::now(),
                     duration: RustDuration::ZERO,
@@ -56,13 +56,13 @@ impl AlarmClock {
             ))
         };
 
-        let new_alarm_clock_dup = new_alarm_clock.clone();
+        let new_interval_timer_dup = new_interval_timer.clone();
 
         thread::spawn(move || {
-            new_alarm_clock_dup.tick();
+            new_interval_timer_dup.tick();
         });
 
-        new_alarm_clock
+        new_interval_timer
     }
 
     pub fn lind_alarm(&self, seconds: u32, cageid: u64) -> u32 {
@@ -98,15 +98,14 @@ impl AlarmClock {
                             if let Some(cageid) = guard.cageid {
                                 lind_kill(cageid, 14);
                                 guard.cageid = None;
+                                guard.is_ticking = false;
                             }
                         },
                     }
-
-                    guard.is_ticking = false;
                 }
             }
 
-            thread::sleep(RustDuration::from_secs(1));
+            thread::sleep(RustDuration::from_millis(1)); // One jiffy
         }
     }
 }

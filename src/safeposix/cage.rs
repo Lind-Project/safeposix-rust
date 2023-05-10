@@ -80,7 +80,7 @@ pub struct Cage {
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
     pub sigset: interface::RustAtomicU64,
     pub main_threadid: u64,
-    pub alarm_clock: interface::AlarmClock,
+    pub interval_timer: interface::IntervalTimer,
 }
 
 impl Cage {
