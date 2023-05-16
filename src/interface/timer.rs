@@ -32,7 +32,7 @@ pub fn sleep(dur: RustDuration) {
 
 #[derive(Debug)]
 struct _IntervalTimer {
-    pub cageid: Option<u64>,
+    pub cageid: u64,
     pub start_instant: RustInstant,
     pub duration: RustDuration,
     pub is_ticking: bool,
@@ -45,24 +45,17 @@ pub struct IntervalTimer {
 
 impl IntervalTimer {
     pub fn new() -> Self {
-        let new_interval_timer = Self {
+        Self {
             _ac: Arc::new(Mutex::new(
                 _IntervalTimer {
-                    cageid: None,
+                    cageid: None, // TODO: This implementation doesn't work for the exec syscall in
+                                  // safeposix
                     start_instant: RustInstant::now(),
                     duration: RustDuration::ZERO,
                     is_ticking: false,
                 }
             ))
-        };
-
-        let new_interval_timer_dup = new_interval_timer.clone();
-
-        thread::spawn(move || {
-            new_interval_timer_dup.tick();
-        });
-
-        new_interval_timer
+        }
     }
 
     pub fn lind_alarm(&self, seconds: u32, cageid: u64) -> u32 {
@@ -75,10 +68,22 @@ impl IntervalTimer {
                 remaining_seconds = guard.duration.saturating_sub(guard.start_instant.elapsed()).as_secs() as u32;
             }
 
-            guard.cageid = Some(cageid);
-            guard.start_instant = RustInstant::now();
-            guard.duration = RustDuration::from_secs(seconds as u64);
-            guard.is_ticking = true;
+            if seconds == 0 {
+                guard.is_ticking = false;
+            } else {
+                guard.cageid = Some(cageid);
+                guard.start_instant = RustInstant::now();
+                guard.duration = RustDuration::from_secs(seconds as u64);
+
+                if !guard.is_ticking {
+                    guard.is_ticking = true;
+
+                    let self_dup = self.clone();
+                    thread::spawn(move || {
+                        self_dup.tick();
+                    });
+                }
+            }
         }
 
         remaining_seconds
@@ -90,18 +95,17 @@ impl IntervalTimer {
                 let mut guard = self._ac.lock().unwrap();
 
                 if guard.is_ticking {
-                    let remaining_seconds = guard.duration.checked_sub(guard.start_instant.elapsed());
+                    let remaining_seconds = guard.duration.saturating_sub(guard.start_instant.elapsed());
 
-                    match remaining_seconds {
-                        Some(_) => (),
-                        None    => {
-                            if let Some(cageid) = guard.cageid {
-                                lind_kill(cageid, 14);
-                                guard.cageid = None;
-                                guard.is_ticking = false;
-                            }
-                        },
+                    if remaining_seconds == RustDuration::ZERO {
+                        if let Some(cageid) = guard.cageid {
+                            lind_kill(cageid, 14);
+                            guard.cageid = None;
+                            guard.is_ticking = false;
+                        }
                     }
+                } else {
+                    break;
                 }
             }
 
