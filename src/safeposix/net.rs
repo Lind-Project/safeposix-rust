@@ -129,13 +129,13 @@ impl ConnCondVar {
         self.cv.wait(&mut guard);
     }
 
-    pub fn signal(&self) -> bool {
-        let guard = self.lock.lock();
-        if *guard == 1 {
-            self.cv.notify_all();
-            return true;
-        } else { return false; }
-    }
+    //pub fn signal(&self) -> bool {
+      //  let guard = self.lock.lock();
+       // if *guard == 1 {
+        //    self.cv.notify_all();
+         //   return true;
+       // } else { return false; }
+   // }
 }
 
 pub struct DomsockTableEntry {

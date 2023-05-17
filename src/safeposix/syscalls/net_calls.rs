@@ -382,11 +382,11 @@ impl Cage {
                             let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
                             //let bindret = sockfdobj.0.bind(&localaddr);
                             if bindret < 0 {
+                                sockhandle.localaddr = Some(localaddr);
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
                                     Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
                                 };
-                                sockhandle.localaddr = Some(localaddr);
                             }
                         } 
 
@@ -1503,7 +1503,7 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getpeername_syscall(&self, fd: i32, _ret_addr: &mut interface::GenSockaddr) -> i32 {
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {

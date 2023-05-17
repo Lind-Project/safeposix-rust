@@ -102,23 +102,27 @@ impl Cage {
                     Socket(socket_filedesc_obj) => {
                         // checking whether this is a domain socket
                         let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let sockhandle = sock_tmp.write();
+                        let mut sockhandle = sock_tmp.write();
                         let socket_type = sockhandle.domain;
                         if socket_type == AF_UNIX {
                             if let Some(pipe_pair) = &sockhandle.unix_info {
                                 pipe_pair.pipe.as_ref().expect("REASON").incr_ref(O_WRONLY);
                                 pipe_pair.remotepipe.as_ref().expect("REASON").incr_ref(O_RDONLY);
+                                if let Some(uinfo) = &mut sockhandle.unix_info {    
+                                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
+                                        sock.refcount += 1;
+                                    }
+                                }
                             }
                         }
                         //}
-
-                        let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
-                        if let Some(uinfo) = &mut sockhandle.unix_info {
-                            if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
-                                sock.refcount += 1;
-                            }
-                        }
+                        //let sock_tmp = socket_filedesc_obj.handle.clone();
+                        //let mut sockhandle = sock_tmp.write();
+                        //if let Some(uinfo) = &mut sockhandle.unix_info {
+                        //    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
+                        //        sock.refcount += 1;
+                        //    }
+                        //}
                     }
                     _ => {}
                 }
