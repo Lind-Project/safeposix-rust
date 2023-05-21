@@ -622,9 +622,9 @@ impl Cage {
 
                         
 
-                        if (flags & !MSG_NOSIGNAL) != 0 {
-                            return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
-                        }
+                        //if (flags & !MSG_NOSIGNAL) == 0 {
+                        //    return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
+                        //}
 
                         if sockhandle.state != ConnState::CONNECTED {
                             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
@@ -791,7 +791,7 @@ impl Cage {
                             }
 
                             // simple if it's a domain socket
-                            if sockhandle.domain == AF_INET {
+                            if sockhandle.domain == AF_UNIX {
                                 sockhandle.state = ConnState::LISTEN;
                                 return 0;
                             }
@@ -1207,49 +1207,51 @@ impl Cage {
                                     }
                                 }
                             }
+                            else {
+                                if sockhandle.state == ConnState::LISTEN {
+                                    if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
 
-                            if sockhandle.state == ConnState::LISTEN {
-                                if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
+                                        //innersock unwrap ok because sockhandle is listening
+                                        let listeningsocket = match sockhandle.domain {
+                                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                            _ => panic!("Unknown domain in accepting socket"),
+                                        };
+                                        drop(sockhandle);
+                                        if let Ok(_) = listeningsocket.0 {
+                                            //save the pending connection for accept to do something with it
+                                            vacant.insert(vec!(listeningsocket));
+                                        } else {
+                                            //if it returned an error, then don't insert it into new_readfds
+                                        continue;
+                                        }
+                                    } //if it's already got a pending connection, add it!
 
-                                    //innersock unwrap ok because sockhandle is listening
-                                    let listeningsocket = match sockhandle.domain {
-                                        PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                        PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                        _ => panic!("Unknown domain in accepting socket"),
-                                    };
-                                    drop(sockhandle);
-                                    if let Ok(_) = listeningsocket.0 {
-                                        //save the pending connection for accept to do something with it
-                                        vacant.insert(vec!(listeningsocket));
-                                    } else {
-                                        //if it returned an error, then don't insert it into new_readfds
-                                      continue;
-                                    }
-                                } //if it's already got a pending connection, add it!
-
-                                //if we reach here there is a pending connection
-                                new_readfds.insert(*fd);
-                                retval += 1;
-                                //sockhandle innersocket unwrap ok if INPROGRESS
-                            } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                    sockhandle.state = ConnState::CONNECTED;
+                                    //if we reach here there is a pending connection
                                     new_readfds.insert(*fd);
                                     retval += 1;
-                            } else {
-                                if sockhandle.protocol == IPPROTO_UDP {
-                                    new_readfds.insert(*fd);
-                                    retval += 1;
-                                } else {
-                                    // drop(sockfdobj);
-                                    drop(sockhandle);
-                                    drop(unlocked_fd);
-                                    if self._nonblock_peek_read(*fd) {
+                                    //sockhandle innersocket unwrap ok if INPROGRESS
+                                } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
+                                        sockhandle.state = ConnState::CONNECTED;
                                         new_readfds.insert(*fd);
                                         retval += 1;
+                                } else {
+                                    if sockhandle.protocol == IPPROTO_UDP {
+                                        new_readfds.insert(*fd);
+                                        retval += 1;
+                                    } else {
+                                        drop(sockfdobj);
+                                        drop(sockhandle);
+                                        drop(unlocked_fd);
+                                        if self._nonblock_peek_read(*fd) {
+                                            new_readfds.insert(*fd);
+                                            retval += 1;
+                                        }
                                     }
                                 }
                             }
                         }
+
 
                         //we don't support selecting streams
                         Stream(_) => {continue;}
@@ -1503,7 +1505,7 @@ impl Cage {
         }
     }
 
-    pub fn getpeername_syscall(&self, fd: i32, _ret_addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
@@ -1513,10 +1515,11 @@ impl Cage {
                 if sockhandle.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
+                *ret_addr = sockhandle.remoteaddr.unwrap();
                 // will swap if unix
-                // let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
+                //let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
                 // //all of the checks that we had have passed if we are here
-                // *ret_addr = remoteaddr;
+                //*ret_addr = remoteaddr;
                 return 0;
 
             } else {
