@@ -5,7 +5,7 @@
 
 use std::thread;
 use std::time::SystemTime;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 pub use std::time::Instant as RustInstant;
 pub use std::time::Duration as RustDuration;
 
@@ -33,8 +33,12 @@ pub fn sleep(dur: RustDuration) {
 #[derive(Debug)]
 struct _IntervalTimer {
     pub cageid: u64,
+    pub init_instant: RustInstant, // The instant this process is created
+    
     pub start_instant: RustInstant,
-    pub duration: RustDuration,
+    pub curr_duration: RustDuration,
+    pub next_duration: RustDuration,
+
     pub is_ticking: bool,
 }
 
@@ -44,49 +48,52 @@ pub struct IntervalTimer {
 }
 
 impl IntervalTimer {
-    pub fn new() -> Self {
+    pub fn new(cageid: u64) -> Self {
         Self {
             _ac: Arc::new(Mutex::new(
                 _IntervalTimer {
-                    cageid: None, // TODO: This implementation doesn't work for the exec syscall in
+                    cageid: cageid, // TODO: This implementation doesn't work for the exec syscall in
                                   // safeposix
+                    init_instant: RustInstant::now(),
                     start_instant: RustInstant::now(),
-                    duration: RustDuration::ZERO,
+                    curr_duration: RustDuration::ZERO,
+                    next_duration: RustDuration::ZERO,
                     is_ticking: false,
                 }
             ))
         }
     }
 
-    pub fn lind_alarm(&self, seconds: u32, cageid: u64) -> u32 {
-        let mut remaining_seconds = 0;
-        
-        {
-            let mut guard = self._ac.lock().unwrap();
+    // Similar to getitimer. Returns (next value, current value)
+    pub fn get_itimer(&self) -> (RustDuration, RustDuration) {
+        let guard = self._ac.lock().unwrap();
 
-            if guard.is_ticking {
-                remaining_seconds = guard.duration.saturating_sub(guard.start_instant.elapsed()).as_secs() as u32;
-            }
+        (guard.curr_duration, guard.next_duration)
+    }
 
-            if seconds == 0 {
-                guard.is_ticking = false;
-            } else {
-                guard.cageid = Some(cageid);
-                guard.start_instant = RustInstant::now();
-                guard.duration = RustDuration::from_secs(seconds as u64);
+    fn _set_itimer(&self, guard: &mut MutexGuard<_IntervalTimer>, curr_duration: RustDuration, next_duration: RustDuration) {
+        if curr_duration.is_zero() {
+            guard.is_ticking = false;
+        } else {
+            guard.start_instant = RustInstant::now();
+            guard.curr_duration = curr_duration;
+            guard.next_duration = next_duration;
 
-                if !guard.is_ticking {
-                    guard.is_ticking = true;
+            if !guard.is_ticking {
+                guard.is_ticking = true;
 
-                    let self_dup = self.clone();
-                    thread::spawn(move || {
-                        self_dup.tick();
-                    });
-                }
+                let self_dup = self.clone();
+                thread::spawn(move || { // There is a chance that there'll be two ticking threads running
+                                        // at the same time
+                    self_dup.tick();
+                });
             }
         }
+    }
 
-        remaining_seconds
+    pub fn set_itimer(&self, curr_duration: RustDuration, next_duration: RustDuration) {
+        let mut guard = self._ac.lock().unwrap();
+        self._set_itimer(&mut guard, curr_duration, next_duration);
     }
 
     pub fn tick(&self) {
@@ -95,14 +102,16 @@ impl IntervalTimer {
                 let mut guard = self._ac.lock().unwrap();
 
                 if guard.is_ticking {
-                    let remaining_seconds = guard.duration.saturating_sub(guard.start_instant.elapsed());
+                    let remaining_seconds = guard.curr_duration.saturating_sub(guard.start_instant.elapsed());
 
                     if remaining_seconds == RustDuration::ZERO {
-                        if let Some(cageid) = guard.cageid {
-                            lind_kill(cageid, 14);
-                            guard.cageid = None;
-                            guard.is_ticking = false;
-                        }
+                        lind_kill(guard.cageid, 14);
+                        
+                        let new_curr_duration = guard.next_duration;
+                        let new_next_duration = guard.next_duration;
+                        self._set_itimer(&mut guard, new_curr_duration, new_next_duration); // DEADLOCK
+                        // Calling self.set_itimer will automatically turn of the timer if
+                        // next_duration is ZERO
                     }
                 } else {
                     break;

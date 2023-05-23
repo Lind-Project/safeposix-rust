@@ -95,7 +95,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 const SIGACTION_SYSCALL: i32 = 147;
 const KILL_SYSCALL: i32 = 148;
 const SIGPROCMASK_SYSCALL: i32 = 149;
-const ALARM_SYSCALL: i32 = 150;
+const SETITIMER_SYSCALL: i32 = 151;
 
 use crate::interface;
 use super::cage::*;
@@ -484,8 +484,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SIGPROCMASK_SYSCALL => {
             check_and_dispatch!(cage.sigprocmask_syscall, interface::get_int(arg1), interface::get_constsigsett(arg2), interface::get_sigsett(arg3))
         }
-        ALARM_SYSCALL => {
-            check_and_dispatch!(cage.alarm_syscall, interface::get_uint(arg1))
+        SETITIMER_SYSCALL => {
+            check_and_dispatch!(cage.setitimer_syscall, interface::get_int(arg1), interface::get_constitimerval(arg2), interface::get_itimerval(arg3)) 
         }
 
         _ => {//unknown syscall
@@ -559,7 +559,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
         main_threadid: interface::get_pthreadid(),
-        interval_timer: interface::IntervalTimer::new(),
+        interval_timer: interface::IntervalTimer::new(0),
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -581,7 +581,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
         main_threadid: interface::get_pthreadid(),
-        interval_timer: interface::IntervalTimer::new(),
+        interval_timer: interface::IntervalTimer::new(1),
     };
     interface::cagetable_insert(1, initcage);
 }

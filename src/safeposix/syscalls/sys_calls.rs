@@ -140,7 +140,7 @@ impl Cage {
             signalhandler: self.signalhandler.clone(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
             main_threadid: interface::get_pthreadid(),
-            interval_timer: interface::IntervalTimer::new(),
+            interval_timer: interface::IntervalTimer::new(child_cageid),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -324,8 +324,34 @@ impl Cage {
         res
     }
 
-    pub fn alarm_syscall(&self, seconds: u32) -> i32 {
-        self.interval_timer.lind_alarm(seconds, self.cageid) as i32
+    pub fn setitimer_syscall(&self, which: i32, new_value: Option<& interface::ITimerVal>, old_value: Option<&mut interface::ITimerVal>) -> i32 {
+        match which {
+            0 => { // ITMER_REAL
+                if let Some(some_old_value) = old_value {
+                    let (curr_duration, next_duration) = self.interval_timer.get_itimer();
+                    some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;
+                    some_old_value.it_value.tv_usec = curr_duration.subsec_millis() as i64;
+                    some_old_value.it_interval.tv_sec = next_duration.as_secs() as i64;
+                    some_old_value.it_interval.tv_usec = next_duration.subsec_millis() as i64;
+                }
+
+                if let Some(some_new_value) = new_value {
+                    let curr_duration = interface::RustDuration::new(
+                        some_new_value.it_value.tv_sec as u64,
+                        some_new_value.it_value.tv_usec as u32,
+                    );
+                    let next_duration = interface::RustDuration::new(
+                        some_new_value.it_interval.tv_sec as u64,
+                        some_new_value.it_interval.tv_usec as u32,
+                    );
+
+                    self.interval_timer.set_itimer(curr_duration, next_duration);
+                }
+            }
+
+            _ => { /* ITIMER_VIRTUAL and ITIMER_PROF is not implemented*/ }
+        }
+        0
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {
