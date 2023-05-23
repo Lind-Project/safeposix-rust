@@ -109,7 +109,7 @@ impl IntervalTimer {
                         
                         let new_curr_duration = guard.next_duration;
                         let new_next_duration = guard.next_duration;
-                        self._set_itimer(&mut guard, new_curr_duration, new_next_duration); // DEADLOCK
+                        self._set_itimer(&mut guard, new_curr_duration, new_next_duration);
                         // Calling self.set_itimer will automatically turn of the timer if
                         // next_duration is ZERO
                     }
@@ -120,5 +120,12 @@ impl IntervalTimer {
 
             thread::sleep(RustDuration::from_millis(1)); // One jiffy
         }
+    }
+
+    pub fn clone_with_new_cageid(&self, cageid: u64) -> Self {
+        let mut guard = self._ac.lock().unwrap();
+        guard.cageid = cageid;
+
+        self.clone()
     }
 }
