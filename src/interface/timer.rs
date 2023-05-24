@@ -52,8 +52,7 @@ impl IntervalTimer {
         Self {
             _ac: Arc::new(Mutex::new(
                 _IntervalTimer {
-                    cageid: cageid, // TODO: This implementation doesn't work for the exec syscall in
-                                  // safeposix
+                    cageid: cageid,
                     init_instant: RustInstant::now(),
                     start_instant: RustInstant::now(),
                     curr_duration: RustDuration::ZERO,
@@ -108,7 +107,9 @@ impl IntervalTimer {
                         lind_kill(guard.cageid, 14);
                         
                         let new_curr_duration = guard.next_duration;
-                        let new_next_duration = guard.next_duration;
+                        // Repeat the intervals until user cancel it
+                        let new_next_duration = guard.next_duration; 
+
                         self._set_itimer(&mut guard, new_curr_duration, new_next_duration);
                         // Calling self.set_itimer will automatically turn of the timer if
                         // next_duration is ZERO
