@@ -1195,114 +1195,24 @@ impl Cage {
                 Socket(ref mut socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
-                    let mut inodeopt = None;
+
+                    // we need to do the following if UDS
                     if let Some (ref mut ui) = sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
                         if let Some(pipe) = ui.pipe.as_ref() {
                             pipe.decr_ref(O_WRONLY);
-                        }
-                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
-                            remotepipe.decr_ref(O_WRONLY);
-                        }
-                        //ui.pipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
-                        //ui.remotepipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
-                        // delete the pipe if we are out of refs
-                        if let Some(pipe) = ui.pipe.as_ref() {
-                         // we're closing the last write end, lets set eof
-                            if pipe.get_write_ref() == 0 {
-                                pipe.set_eof();
-                            }
-                        }
-                        if let Some(pipe) = ui.pipe.as_ref() {
-                            //last reference, lets remove it
-                            if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
-                                ui.mode = 0;
-                                ui.pipe = None;
-                                ui.path = interface::RustPathBuf::new();
-                                ui.remotepipe = None;
-                                ui.inode = 0;
-                            }
-                        }
-
-                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
-                            if remotepipe.get_write_ref() == 0 {
-                                remotepipe.set_eof();
-                            }
-                        }
-                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
-                            //last reference, lets remove it
-                            if remotepipe.get_write_ref() + remotepipe.get_read_ref() == 0 {
-                                ui.mode = 0;
-                                ui.pipe = None;
-                                ui.path = interface::RustPathBuf::new();
-                                ui.remotepipe = None;
-                                ui.inode = 0;
-                            }
-                        }
-
-                        //if ui.pipe.as_ref().expect("REASON").get_write_ref() == 0 {
                             // we're closing the last write end, lets set eof
-                          //  ui.pipe.as_ref().expect("REASON").set_eof();
-                        //}
-                        //if ui.pipe.as_ref().expect("REASON").get_write_ref() + ui.pipe.as_ref().expect("REASON").get_read_ref() == 0 {
-                            // last reference, lets remove it
-                          //  ui.mode = 0;
-                          //  ui.pipe = None;
-                          //  ui.path = interface::RustPathBuf::new();
-                          //  ui.remotepipe = None;
-                          //  ui.inode = 0;
-                       // }
-                       // if ui.remotepipe.as_ref().expect("REASON").get_write_ref() == 0 {
-                            // we're closing the last write end, lets set eof
-                         //   ui.pipe.as_ref().expect("REASON").set_eof();
-                       // }
-                       // if ui.remotepipe.as_ref().expect("REASON").get_write_ref() + ui.remotepipe.as_ref().expect("REASON").get_read_ref() == 0 {
-                            // last reference, lets remove it
-                          //  ui.mode = 0;
-                          //  ui.pipe = None;
-                          //  ui.path = interface::RustPathBuf::new();
-                          //  ui.remotepipe = None;
-                          //  ui.inode = 0;
-                        //}
-                    }
-                    
-                    
-                    // if it is a domain socket, then decrement the references
-                    // let sock_tmp = sockfdobj.handle.clone();
-                    // let mut sockhandle = sock_tmp.write();
-                    // if let socket_type = sockhandle.domain {
-                    //     if socket_type == AF_UNIX {
-                    //         // making sure that the pipes exist
-                    //         if let Some(pipe_pair) = sockhandle.unix_info {
-                    //             pipe_pair.pipe.decr_ref(O_WRONLY);
-                    //             pipe_pair.remotepipe.decr_ref(O_WRONLY);
+                            if pipe.get_write_ref() == 0 { pipe.set_eof(); }
+                            //last reference, lets remove it
+                            if pipe.get_write_ref() + pipe.get_read_ref() == 0 { ui.pipe = None; }
+                        }
+                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
+                            remotepipe.decr_ref(O_RDONLY);
+                            //last reference, lets remove it
+                            if remotepipe.get_write_ref() + remotepipe.get_read_ref() == 0 { ui.pipe = None; }
 
-                    //             // delete the pipe if we are out of refs
-                    //             if pipe_pair.pipe.get_write_ref() == 0 {
-                    //                 // we're closing the last write end, lets set eof
-                    //                 pipe_pair.pipe.set_eof();
-                    //             }
-                    //             if pipe_pair.pipe.get_write_ref() + pipe_pair.pipe.get_read_ref() == 0 {
-                    //                 // last reference, lets remove it
-                    //                 sockhandle.unix_info = None;
-                    //             }
-
-                    //             if pipe_pair.remotepipe.get_write_ref() == 0 {
-                    //                 // we're closing the last write end, lets set eof
-                    //                 pipe_pair.pipe.set_eof();
-                    //             }
-                    //             if pipe_pair.remotepipe.get_write_ref() + pipe_pair.remotepipe.get_read_ref() == 0 {
-                    //                 // last reference, lets remove it
-                    //                 sockhandle.unix_info = None;
-                    //             }
-                    //         }
-                    //     }
-                    // }
-
-                    drop(sockhandle);
-                    
-                    if let Some(inodenum) = inodeopt {
-                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                        }
+                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {
                             sock.refcount -= 1;
                             if sock.refcount == 0 {
@@ -1313,6 +1223,8 @@ impl Cage {
                             }
                         }
                     }
+
+                    drop(sockhandle); // drop the sockhandle regardless of socket type
                 }
                 Pipe(ref pipe_filedesc_obj) => {   
                     let pipe = &pipe_filedesc_obj.pipe;
