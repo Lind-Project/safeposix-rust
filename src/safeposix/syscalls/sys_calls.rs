@@ -105,9 +105,13 @@ impl Cage {
                         let mut sockhandle = sock_tmp.write();
                         let socket_type = sockhandle.domain;
                         if socket_type == AF_UNIX {
-                            if let Some(pipe_pair) = &sockhandle.unix_info {
-                                pipe_pair.pipe.as_ref().expect("REASON").incr_ref(O_WRONLY);
-                                pipe_pair.remotepipe.as_ref().expect("REASON").incr_ref(O_RDONLY);
+                            if let Some(sockinfo) = &sockhandle.unix_info {
+                                if let Some(pipe) = sockinfo.pipe.as_ref() {
+                                    pipe.incr_ref(O_WRONLY);
+                                }
+                                if let Some(remotepipe) = sockinfo.remotepipe.as_ref() {
+                                    remotepipe.incr_ref(O_RDONLY);
+                                }
                                 if let Some(uinfo) = &mut sockhandle.unix_info {    
                                     if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
                                         sock.refcount += 1;

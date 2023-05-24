@@ -1132,9 +1132,13 @@ impl Cage {
                 let sockhandle = sock_tmp.write();
                 let socket_type = sockhandle.domain;
                 if socket_type == AF_UNIX {
-                    if let Some(pipe_pair) = &sockhandle.unix_info {
-                        pipe_pair.pipe.as_ref().expect("REASON").incr_ref(O_WRONLY);
-                        pipe_pair.remotepipe.as_ref().expect("REASON").incr_ref(O_RDONLY);
+                    if let Some(sockinfo) = &sockhandle.unix_info {
+                        if let Some(pipe) = sockinfo.pipe.as_ref() {
+                            pipe.incr_ref(O_WRONLY);
+                        }
+                        if let Some(remotepipe) = sockinfo.remotepipe.as_ref() {
+                            remotepipe.incr_ref(O_RDONLY);
+                        }
                     }
                 }
                 //}
@@ -1194,33 +1198,72 @@ impl Cage {
                     let mut inodeopt = None;
                     if let Some (ref mut ui) = sockhandle.unix_info {
                         inodeopt = Some(ui.inode);
-                        ui.pipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
-                        ui.remotepipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
+                        if let Some(pipe) = ui.pipe.as_ref() {
+                            pipe.decr_ref(O_WRONLY);
+                        }
+                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
+                            remotepipe.decr_ref(O_WRONLY);
+                        }
+                        //ui.pipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
+                        //ui.remotepipe.as_ref().expect("REASON").decr_ref(O_WRONLY);
                         // delete the pipe if we are out of refs
-                        if ui.pipe.as_ref().expect("REASON").get_write_ref() == 0 {
+                        if let Some(pipe) = ui.pipe.as_ref() {
+                         // we're closing the last write end, lets set eof
+                            if pipe.get_write_ref() == 0 {
+                                pipe.set_eof();
+                            }
+                        }
+                        if let Some(pipe) = ui.pipe.as_ref() {
+                            //last reference, lets remove it
+                            if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
+                                ui.mode = 0;
+                                ui.pipe = None;
+                                ui.path = interface::RustPathBuf::new();
+                                ui.remotepipe = None;
+                                ui.inode = 0;
+                            }
+                        }
+
+                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
+                            if remotepipe.get_write_ref() == 0 {
+                                remotepipe.set_eof();
+                            }
+                        }
+                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
+                            //last reference, lets remove it
+                            if remotepipe.get_write_ref() + remotepipe.get_read_ref() == 0 {
+                                ui.mode = 0;
+                                ui.pipe = None;
+                                ui.path = interface::RustPathBuf::new();
+                                ui.remotepipe = None;
+                                ui.inode = 0;
+                            }
+                        }
+
+                        //if ui.pipe.as_ref().expect("REASON").get_write_ref() == 0 {
                             // we're closing the last write end, lets set eof
-                            ui.pipe.as_ref().expect("REASON").set_eof();
-                        }
-                        if ui.pipe.as_ref().expect("REASON").get_write_ref() + ui.pipe.as_ref().expect("REASON").get_read_ref() == 0 {
+                          //  ui.pipe.as_ref().expect("REASON").set_eof();
+                        //}
+                        //if ui.pipe.as_ref().expect("REASON").get_write_ref() + ui.pipe.as_ref().expect("REASON").get_read_ref() == 0 {
                             // last reference, lets remove it
-                            ui.mode = 0;
-                            ui.pipe = None;
-                            ui.path = interface::RustPathBuf::new();
-                            ui.remotepipe = None;
-                            ui.inode = 0;
-                        }
-                        if ui.remotepipe.as_ref().expect("REASON").get_write_ref() == 0 {
+                          //  ui.mode = 0;
+                          //  ui.pipe = None;
+                          //  ui.path = interface::RustPathBuf::new();
+                          //  ui.remotepipe = None;
+                          //  ui.inode = 0;
+                       // }
+                       // if ui.remotepipe.as_ref().expect("REASON").get_write_ref() == 0 {
                             // we're closing the last write end, lets set eof
-                            ui.pipe.as_ref().expect("REASON").set_eof();
-                        }
-                        if ui.remotepipe.as_ref().expect("REASON").get_write_ref() + ui.remotepipe.as_ref().expect("REASON").get_read_ref() == 0 {
+                         //   ui.pipe.as_ref().expect("REASON").set_eof();
+                       // }
+                       // if ui.remotepipe.as_ref().expect("REASON").get_write_ref() + ui.remotepipe.as_ref().expect("REASON").get_read_ref() == 0 {
                             // last reference, lets remove it
-                            ui.mode = 0;
-                            ui.pipe = None;
-                            ui.path = interface::RustPathBuf::new();
-                            ui.remotepipe = None;
-                            ui.inode = 0;
-                        }
+                          //  ui.mode = 0;
+                          //  ui.pipe = None;
+                          //  ui.path = interface::RustPathBuf::new();
+                          //  ui.remotepipe = None;
+                          //  ui.inode = 0;
+                        //}
                     }
                     
                     

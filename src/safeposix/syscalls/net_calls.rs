@@ -111,13 +111,11 @@ impl Cage {
         if let None = sockhandle.innersocket {
             let thissock = interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
 
-            if sockhandle.domain != AF_UNIX {
-                for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
-                    if sockhandle.options & (1 << reuse) == 0 {continue;}
-                    let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
-                    if sockret < 0 {
-                        panic!("Cannot handle failure in setsockopt on socket creation");
-                    }
+            for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
+                if sockhandle.options & (1 << reuse) == 0 {continue;}
+                let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
+                if sockret < 0 {
+                    panic!("Cannot handle failure in setsockopt on socket creation");
                 }
             }
 
@@ -140,7 +138,6 @@ impl Cage {
         }
 
         let mut newsockaddr = localaddr.clone();
-        Self::force_innersocket(sockhandle);
 
         if sockhandle.domain == AF_UNIX {
             // Unix Sockets
@@ -185,6 +182,8 @@ impl Cage {
         } else {
             // INET Sockets
             let intent_to_rebind = sockhandle.options & (1 << SO_REUSEPORT) != 0;
+            Self::force_innersocket(sockhandle);
+
 
             let newlocalport = if prereserved {
                 localaddr.port()
@@ -363,54 +362,58 @@ impl Cage {
                             }                        
                         }
                         //}
-                        
-                        //for TCP, actually create the internal socket object and connect it
-                        let remoteclone = remoteaddr.clone();
+                        else {
+                            //for TCP, actually create the internal socket object and connect it
+                            let remoteclone = remoteaddr.clone();
 
-                        if sockhandle.state != ConnState::NOTCONNECTED {
-                            return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
-                        }
+                            if sockhandle.state != ConnState::NOTCONNECTED {
+                                return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
+                            }
 
 
-                        if let None = sockhandle.localaddr {
-                            Self::force_innersocket(&mut sockhandle);
+                            if let None = sockhandle.localaddr {
+                                Self::force_innersocket(&mut sockhandle);
 
-                            let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.domain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
-                                Ok(a) => a,
-                                Err(e) => return e,
-                            };
-                            let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
-                            //let bindret = sockfdobj.0.bind(&localaddr);
-                            if bindret < 0 {
-                                sockhandle.localaddr = Some(localaddr);
+                                let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.domain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
+                                    Ok(a) => a,
+                                    Err(e) => return e,
+                                };
+                                let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
+                                //let bindret = sockfdobj.0.bind(&localaddr);
+                                if bindret < 0 {
+                                    sockhandle.localaddr = Some(localaddr);
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                                    };
+                                }
+                            } 
+
+                            let mut inprogress = false;
+                            let connectret = sockhandle.innersocket.as_ref().unwrap().connect(&remoteclone);
+                            if connectret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
-                                    Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                                    Ok(i) => {
+                                        if i == Errno::EINPROGRESS { inprogress = true; }
+                                        else { return syscall_error(i, "connect", "The libc call to connect failed!") };
+                                    },
+                                    Err(()) => panic!("Unknown errno value from socket connect returned!"),
                                 };
                             }
-                        } 
 
-                        let mut inprogress = false;
-                        let connectret = sockhandle.innersocket.as_ref().unwrap().connect(&remoteclone);
-                        if connectret < 0 {
-                            match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {
-                                    if i == Errno::EINPROGRESS { inprogress = true; }
-                                    else { return syscall_error(i, "connect", "The libc call to connect failed!") };
-                                },
-                                Err(()) => panic!("Unknown errno value from socket connect returned!"),
-                            };
+                            sockhandle.state = ConnState::CONNECTED;
+                            sockhandle.remoteaddr = Some(remoteaddr.clone());
+                            sockhandle.errno = 0;
+                            if inprogress {
+                                sockhandle.state = ConnState::INPROGRESS;
+                                return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
+                            }
+                            else {
+                                return 0;
+                            }
                         }
-
-                        sockhandle.state = ConnState::CONNECTED;
-                        sockhandle.remoteaddr = Some(remoteaddr.clone());
-                        sockhandle.errno = 0;
-                        if inprogress {
-                            sockhandle.state = ConnState::INPROGRESS;
-                            return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
-                        }
-                        return 0;
-                    } else {
+                }
+                else {
                         return syscall_error(Errno::EOPNOTSUPP, "connect", "Unkown protocol in connect");
                     }
                 }
@@ -546,10 +549,10 @@ impl Cage {
                                 }
     
                                 // get the socket pipe, write to it, and return bytes written
-                                if let Some(pipe_pair) = &sockhandle.unix_info {
+                                if let Some(sockinfo) = &sockhandle.unix_info {
                                     let mut nonblocking = false;
                                     if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                                    let retval = pipe_pair.pipe.as_ref().expect("REASON").write_to_pipe(buf, buflen, nonblocking) as i32;
+                                    let retval = sockinfo.pipe.as_ref().expect("REASON").write_to_pipe(buf, buflen, nonblocking) as i32;
                                     if retval < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
                                     else { 
                                         return retval;
@@ -622,7 +625,7 @@ impl Cage {
 
                         
 
-                        //if (flags & !MSG_NOSIGNAL) == 0 {
+                        //if (flags & !MSG_NOSIGNAL) != 0 {
                         //    return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
                         //}
 
@@ -659,25 +662,26 @@ impl Cage {
 
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
-                        let retval;
-
+                        let mut retval = 0;
+                        //let retval;
                         // check if this is a domain socket
-                        //if let socket_type = sockhandle.domain {
-                            // if socket_type == AF_UNIX {
-                            //     // get the remote socket pipe, read from it, and return bytes read
-                            //     let pipe = PIPE_TABLE.get(&sockfdobj.remotepipe).unwrap().clone();
-                            //     let mut nonblocking = false;
-                            //     if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                            //     retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
-
-                            // } else {
-                            if sockfdobj.flags & O_NONBLOCK != 0 {
+                        if sockhandle.domain  == AF_UNIX {
+                            // get the remote socket pipe, read from it, and return bytes read
+                            if let Some(sockinfo) = &sockhandle.unix_info {
+                                let mut nonblocking = false;
+                                if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
+                                if let Some (pipe) = &sockinfo.pipe {
+                                    return pipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid);
+                                }
+                            }
+                        } 
+                        else {
+                             if sockfdobj.flags & O_NONBLOCK != 0 {
                                 retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
                             } else {
                                 retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
                             }
-                            //}
-                        //}
+                       }
 
                         if retval < 0 {
                             //If we have already read from a peek but have failed to read more, exit!
@@ -706,9 +710,6 @@ impl Cage {
                         // let sid = Self::getsockobjid(&mut *sockfdobj);
                         // let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
                         // let sockobj = locksock.read();
-
-                        let sock_tmp = sockfdobj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
 
                         let binddomain : i32;
                         if let Some(baddr) = addr {
