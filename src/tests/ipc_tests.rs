@@ -38,8 +38,6 @@ pub mod ipc_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-
-
     pub fn ut_lind_ipc_pipe() {
 
         let byte_chunk: usize = 131072;
@@ -108,8 +106,7 @@ pub mod ipc_tests {
         lindrustfinalize();
     }
 
-
-    pub fn ut_lind_ipc_domain_socket() {
+     pub fn ut_lind_ipc_domain_socket() {
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
@@ -242,5 +239,6 @@ pub mod ipc_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
+    } 
+    
 }
