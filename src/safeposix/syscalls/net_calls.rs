@@ -965,88 +965,89 @@ impl Cage {
                     let sockhandle = sock_tmp.read();
 
                     // check if domain socket
-                    //if sockhandle.domain == AF_UNIX {
-                    //     match sockhandle.protocol {
-                    //         IPPROTO_UDP => {
-                    //             return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
-                    //         }
-                    //         IPPROTO_TCP => {
+                    if sockhandle.domain == AF_UNIX {
+                        match sockhandle.protocol {
+                            IPPROTO_UDP => {
+                                return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
+                            }
+                            IPPROTO_TCP => {
     
-                    //             if sockhandle.state != ConnState::LISTEN {
-                    //                 return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
-                    //             }
+                                if sockhandle.state != ConnState::LISTEN {
+                                    return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
+                                }
     
-                    //             //we need to lock this socket for the duration 
-                    //             //see similar note above for details
-                    //             let newsockobj = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
-                    //             let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
-                    //             let mut domsockref = arclocksock.write();
-                    //             //let mut newsockwithin = if let Socket(s) = &mut *domsockref {s} else {unreachable!()};
-                    //             // entry.insert(arclocksock.clone());
+                                //we need to lock this socket for the duration 
+                                //see similar note above for details
+                                let newsockobj = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+                                //let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
+                                //let domsockref = arclocksock.write();
+                                //let mut newsockwithin = if let Socket(s) = &mut *domsockref {s} else {unreachable!()};
+                                //domsock_accept_table.insert(arclocksock.clone());
     
-                    //             let remote_addr : interface::GenSockaddr;
-                    //             let localpipenumber;
-                    //             let remotepipenumber;
+                                let remote_addr : interface::GenSockaddr;
+                                let localpipenumber;
+                                let remotepipenumber;
     
-                    //             loop {
-                    //                 let localpathbuf = convpath(sockhandle.localaddr.unwrap().path().clone());
-                    //                 let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
+                                loop {
+                                    let localpathbuf = convpath(sockhandle.localaddr.unwrap().path().clone());
+                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
     
-                    //                 if let Some(ds) = dsconnobj {
-                    //                     // if its blocking it will have a connvar, signal it
-                    //                     if let Some(connvar) = ds.get_cond_var() {
-                    //                         if !connvar.signal() { 
-                    //                             drop(ds);
-                    //                             continue;
-                    //                         }
-                    //                     }
-                    //                     let addr = ds.get_sockaddr();
-                    //                     remote_addr = addr.clone();
-                    //                     remotepipenumber = ds.get_remote_pipe();
-                    //                     localpipenumber = ds.get_local_pipe();
-                    //                     drop(ds);
-                    //                     NET_METADATA.domsock_accept_table.remove(&localpathbuf);
-                    //                     break;
-                    //                 } else {
-                    //                     if 0 != (sockfdobj.flags & O_NONBLOCK) {
-                    //                         // if non block return EAGAIN
-                    //                         //self.filedescriptortable.remove(&key);
-                    //                         return syscall_error(Errno::EAGAIN, "accept", "host system accept call failed");
-                    //                     }
-                    //                 }
-                    //             }
+                                    if let Some(ds) = dsconnobj {
+                                        // if its blocking it will have a connvar, signal it
+                                        if let Some(connvar) = ds.get_cond_var() {
+                                            if !connvar.signal() { 
+                                                //drop(ds);
+                                                continue;
+                                            }
+                                        }
+                                        let addr = ds.get_sockaddr().clone();
+                                        remote_addr = addr.clone();
+                                        remotepipenumber = ds.get_remote_pipe().clone();
+                                        localpipenumber = ds.get_local_pipe().clone();
+                                        drop(ds);
+                                        NET_METADATA.domsock_accept_table.remove(&localpathbuf);
+                                        break;
+                                    } else {
+                                        if 0 != (sockfdobj.flags & O_NONBLOCK) {
+                                            // if non block return EAGAIN
+                                            //self.filedescriptortable.remove(&key);
+                                            return syscall_error(Errno::EAGAIN, "accept", "host system accept call failed");
+                                        }
+                                    }
+                                }
 
-                    //             let newsock_tmp = newsockobj.handle.clone();
-                    //             let mut newsockhandle = newsock_tmp.write();
+                                let newsock_tmp = newsockobj.handle.clone();
+                                let mut newsockhandle = newsock_tmp.write();
 
-                    //             let pathclone = normpath(convpath(remote_addr.path().clone()), self);
-                    //             if let Some(inodenum) = metawalk(pathclone.as_path()) {                
-                    //                 // newsockwithin.localpath = Some(pathclone);   
-                    //                 // newsockwithin.inode = Some(inodenum.clone());   
-                    //                 newsockhandle.unix_info = Some(UnixSocketInfo {
-                    //                     path: pathclone,
-                    //                     inode: inodenum.clone(),
-                    //                     mode: sockhandle.unix_info.as_ref().unwrap().mode,
-                    //                     pipe: Some(localpipenumber.clone()),
-                    //                     remotepipe: Some(remotepipenumber.clone()),
-                    //                 });
-                    //                 if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                    //                     sock.refcount += 1; 
-                    //                 } 
-                    //             }; 
+                                let pathclone = normpath(convpath(remote_addr.path().clone()), self);
+                                if let Some(inodenum) = metawalk(pathclone.as_path()) {                
+                                    // newsockwithin.localpath = Some(pathclone);   
+                                    // newsockwithin.inode = Some(inodenum.clone());   
+                                    newsockhandle.unix_info = Some(UnixSocketInfo {
+                                        path: pathclone,
+                                        inode: inodenum.clone(),
+                                        mode: sockhandle.unix_info.as_ref().unwrap().mode,
+                                        pipe: Some(localpipenumber.clone()),
+                                        remotepipe: Some(remotepipenumber.clone()),
+                                    });
+                                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
+                                        sock.refcount += 1; 
+                                    } 
+                                }; 
 
-                    //             newsockhandle.state = ConnState::CONNECTED;
-                    //             newsockhandle.remoteaddr = Some(remote_addr.clone());
-                    //             *addr = remote_addr; //populate addr with what address it connected to
+                                newsockhandle.state = ConnState::CONNECTED;
+                                newsockhandle.remoteaddr = Some(remote_addr.clone());
+                                *addr = remote_addr; //populate addr with what address it connected to
                                 
-                    //             //return key;
-                    //             return 0;
-                    //         }
-                    //         _ => {
-                    //             return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
-                    //         }
-                    //     }
-                    // }
+                                //return key;
+                                return 0;
+                            }
+                            _ => {
+                                return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+                            }
+                        }
+                    }
+                    
 
                     match sockhandle.protocol {
                         IPPROTO_UDP => {
