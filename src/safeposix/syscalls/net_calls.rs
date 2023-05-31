@@ -751,8 +751,11 @@ impl Cage {
     }
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+        println!("fd: {}", fd);
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
-        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
+        println!("unlocked_fd: {:?}", unlocked_fd);
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            println!("filedesc_enum: {:?}", filedesc_enum);
             return self.recv_common_inner(filedesc_enum, buf, buflen, flags, addr);
         } else {
             return syscall_error(Errno::EBADF, "recvfrom", "invalid file descriptor");
@@ -957,6 +960,8 @@ impl Cage {
 
             let (newfd, guardopt) = self.get_next_fd(None);
             if newfd < 0 { return fd }
+            println!("fd: {}", fd);
+            println!("newfd: {:?}", newfd);
             let newfdoption = &mut *guardopt.unwrap();
 
             match filedesc_enum {
@@ -982,7 +987,6 @@ impl Cage {
                                 //let arclocksock = interface::RustRfc::new(interface::RustLock::new(Socket(newsockobj)));
                                 //let domsockref = arclocksock.write();
                                 //let mut newsockwithin = if let Socket(s) = &mut *domsockref {s} else {unreachable!()};
-                                //domsock_accept_table.insert(arclocksock.clone());
     
                                 let remote_addr : interface::GenSockaddr;
                                 let localpipenumber;
@@ -996,7 +1000,7 @@ impl Cage {
                                         // if its blocking it will have a connvar, signal it
                                         if let Some(connvar) = ds.get_cond_var() {
                                             if !connvar.signal() { 
-                                                //drop(ds);
+                                                drop(ds);
                                                 continue;
                                             }
                                         }
@@ -1039,8 +1043,8 @@ impl Cage {
                                 newsockhandle.remoteaddr = Some(remote_addr.clone());
                                 *addr = remote_addr; //populate addr with what address it connected to
                                 
-                                //return key;
-                                return 0;
+                                return newfd;
+                                //return 0;
                             }
                             _ => {
                                 return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
