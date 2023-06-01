@@ -205,9 +205,7 @@ pub mod ipc_tests {
             //Writing 50, peek 50
             assert_eq!(cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 50, MSG_PEEK, &mut Some(&mut socket2)), 50);
             assert_eq!(cbuf2str(&buf), "A".repeat(50) + &"\0".repeat(50));
-            println!("HELLO");
             assert_eq!(cage2.close_syscall(sockfd), 0);
-            println!("HERE");
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
             assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
