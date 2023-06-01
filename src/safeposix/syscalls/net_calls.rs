@@ -619,26 +619,12 @@ impl Cage {
                 let mut sockhandle = sock_tmp.write();
                 match sockhandle.protocol {
                     IPPROTO_TCP => {
-                        // let sid = Self::getsockobjid(&mut *sockfdobj);
-                        // let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                        // let sockobj = locksock.read();
-
-                        
-
-                        //if (flags & !MSG_NOSIGNAL) != 0 {
-                        //    return syscall_error(Errno::EOPNOTSUPP, "send", "The flags are not understood!");
-                        //}
-
                         if sockhandle.state != ConnState::CONNECTED {
                             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                         }
 
                         let mut newbuflen = buflen;
                         let mut newbufptr = buf;
-                        if flags & MSG_PEEK != 0 {
-                            //extend from the point after we read our previously peeked bytes
-                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
-                        }
 
                         //if we have peeked some data before, fill our buffer with that data before moving on
                         if !sockhandle.last_peek.is_empty() {
@@ -674,7 +660,7 @@ impl Cage {
                                 let mut nonblocking = false;
                                 if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                                 if let Some (pipe) = &sockinfo.pipe {
-                                    return pipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid);
+                                    retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid);
                                 }
                             }
                         } 
@@ -685,35 +671,35 @@ impl Cage {
                                 retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
                             }
                        }
-
+    
                         if retval < 0 {
                             //If we have already read from a peek but have failed to read more, exit!
                             if buflen != buflenleft {
                                 return (buflen - buflenleft) as i32;
                             }
 
-                            match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
-                                Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                            };
-
+                            if sockhandle.domain == AF_UNIX {
+                                return retval;
+                            }
+                            else {
+                                match Errno::from_discriminant(interface::get_errno()) {
+                                    Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
+                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                };
+                            }
                         }
 
                         let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
 
-                        //if flags & MSG_PEEK != 0 {
+                        if flags & MSG_PEEK != 0 {
                             //extend from the point after we read our previously peeked bytes
-                          //  interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
-                        //}
+                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
+                        }
 
                         return totalbyteswritten;
 
                     }
                     IPPROTO_UDP => {
-                        // let sid = Self::getsockobjid(&mut *sockfdobj);
-                        // let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                        // let sockobj = locksock.read();
-
                         let binddomain : i32;
                         if let Some(baddr) = addr {
                             binddomain = baddr.get_family() as i32;

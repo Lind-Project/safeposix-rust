@@ -1141,7 +1141,6 @@ impl Cage {
                         }
                     }
                 }
-                //}
             }
             Stream(_normalfile_filedesc_obj) => {
                 // no stream refs
@@ -1198,18 +1197,18 @@ impl Cage {
 
                     // we need to do the following if UDS
                     if let Some (ref mut ui) = sockhandle.unix_info {
-                        inodeopt = Some(ui.inode);
+                        let inodenum = ui.inode;
                         if let Some(pipe) = ui.pipe.as_ref() {
                             pipe.decr_ref(O_WRONLY);
                             // we're closing the last write end, lets set eof
                             if pipe.get_write_ref() == 0 { pipe.set_eof(); }
                             //last reference, lets remove it
-                            if pipe.get_write_ref() + pipe.get_read_ref() == 0 { ui.pipe = None; }
+                            if (pipe.get_write_ref() as u64)  + (pipe.get_read_ref() as u64)  == 0 { ui.pipe = None; }
                         }
                         if let Some(remotepipe) = ui.remotepipe.as_ref() {
                             remotepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
-                            if remotepipe.get_write_ref() + remotepipe.get_read_ref() == 0 { ui.pipe = None; }
+                            if (remotepipe.get_write_ref() as u64) + (remotepipe.get_read_ref() as u64)  == 0 { ui.pipe = None; }
 
                         }
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();

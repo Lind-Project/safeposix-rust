@@ -4,7 +4,7 @@ pub mod net_tests {
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::mem::size_of;
-
+    //commented tests receive weird EINTR when running in RR
     pub fn net_tests() {
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
@@ -957,67 +957,65 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-
-
-
-    //pub fn ut_lind_net_socketpair() {
-    //     lindrustinit(0);
-    //     let cage = interface::cagetable_getref(1);
-    //     let mut socketpair = interface::SockPair::default();
-    //     assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
-    //     let cage2 = cage.clone();
-
-    //     let thread = interface::helper_thread(move || {
-    //         let mut buf = sizecbuf(10);
-    //         cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
-    //         assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
-            
-    //         interface::sleep(interface::RustDuration::from_millis(30));
-    //         assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15); 
-    //     });
-
-    //     assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
-
-    //     let mut buf2 = sizecbuf(15);
-    //     cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-    //     assert_eq!(cbuf2str(&buf2), "Socketpair Test");
     
-    //     thread.join().unwrap();
+    pub fn ut_lind_net_socketpair() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
+        let cage2 = cage.clone();
 
-    //     assert_eq!(cage.close_syscall(socketpair.sock1), 0);
-    //     assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+        let thread = interface::helper_thread(move || {
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
-    //     // end of the TCP test
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15);
+        });
 
-    //     socketpair = interface::SockPair::default();
-    //     assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_DGRAM, 0, &mut socketpair), 0);
+        assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
-    //     let cage2 = cage.clone();
-    //     let thread = interface::helper_thread(move || {
-    //         let mut buf = sizecbuf(10);
-    //         cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
-    //         assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
-            
-    //         interface::sleep(interface::RustDuration::from_millis(30));
-    //         assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15); 
-    //     });
+        let mut buf2 = sizecbuf(15);
+        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
 
-    //     assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
+        thread.join().unwrap();
 
-    //     let mut buf2 = sizecbuf(15);
-    //     cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-    //     assert_eq!(cbuf2str(&buf2), "Socketpair Test");
-    
-    //     thread.join().unwrap();
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
-    //     assert_eq!(cage.close_syscall(socketpair.sock1), 0);
-    //     assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+        // end of the TCP test
 
-    //     //end of the UDP test
+        socketpair = interface::SockPair::default();
+        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_DGRAM, 0, &mut socketpair), 0);
 
-    //     assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-    //     lindrustfinalize();
-    // }
+        let cage2 = cage.clone();
+        let thread = interface::helper_thread(move || {
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15);
+        });
+
+        assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
+
+        let mut buf2 = sizecbuf(15);
+        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+
+        //end of the UDP test
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     pub fn ut_lind_net_udp_bad_bind() {
         lindrustinit(0);
@@ -1041,103 +1039,103 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    //RR EINTR error
-    //pub fn ut_lind_net_udp_simple() {
-    //     lindrustinit(0);
-    //     let cage = interface::cagetable_getref(1);
+    pub fn ut_lind_net_udp_simple() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
 
-    //     //just going to test the basic connect with UDP now...
-    //     let serverfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-    //     let clientfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        //just going to test the basic connect with UDP now...
+        let serverfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let clientfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
 
-    //     let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0});
+        let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50121_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0});
 
-    //     assert!(serverfd > 0);
-    //     assert!(clientfd > 0);
+        assert!(serverfd > 0);
+        assert!(clientfd > 0);
         
-    //     //forking the cage to get another cage with the same information
-    //     assert_eq!(cage.fork_syscall(2), 0);
-    //     let thread = interface::helper_thread(move || {
-    //         let cage2 = interface::cagetable_getref(2);
-    //         assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
 
-    //         interface::sleep(interface::RustDuration::from_millis(30));
+            interface::sleep(interface::RustDuration::from_millis(30));
             
-    //         let mut buf = sizecbuf(10);
-    //         cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
-    //         assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
-    //         interface::sleep(interface::RustDuration::from_millis(30));
-    //         assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 5);
-    //         assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 5);
+            assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
-    //         assert_eq!(cage2.close_syscall(serverfd), 0);
-    //         assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-    //     });
+            assert_eq!(cage2.close_syscall(serverfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
         
-    //     interface::sleep(interface::RustDuration::from_millis(50));
-    //     let mut buf2 = str2cbuf("test");
-    //     assert_eq!(cage.sendto_syscall(clientfd, buf2, 4, 0, &socket), 4);
-    //     let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-    //     assert!(sendsockfd2 > 0);
+        interface::sleep(interface::RustDuration::from_millis(50));
+        let mut buf2 = str2cbuf("test");
+        assert_eq!(cage.sendto_syscall(clientfd, buf2, 4, 0, &socket), 4);
+        let sendsockfd2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        assert!(sendsockfd2 > 0);
 
-    //     let sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50992_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-    //     let socket2 = interface::GenSockaddr::V4(sockaddr2); //127.0.0.1
+        let sockaddr2 = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50992_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let socket2 = interface::GenSockaddr::V4(sockaddr2); //127.0.0.1
 
-    //     interface::sleep(interface::RustDuration::from_millis(50));
+        interface::sleep(interface::RustDuration::from_millis(50));
 
-    //     buf2 = str2cbuf("test2");
-    //     assert_eq!(cage.bind_syscall(sendsockfd2, &socket2), 0);
-    //     assert_eq!(cage.sendto_syscall(sendsockfd2, buf2, 5, 0, &socket), 5);
+        buf2 = str2cbuf("test2");
+        assert_eq!(cage.bind_syscall(sendsockfd2, &socket2), 0);
+        assert_eq!(cage.sendto_syscall(sendsockfd2, buf2, 5, 0, &socket), 5);
 
-    //     thread.join().unwrap();
+        thread.join().unwrap();
 
-    //     assert_eq!(cage.close_syscall(sendsockfd2), 0);
-    //     assert_eq!(cage.close_syscall(clientfd), 0);
-    //     assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-    //     lindrustfinalize();
-    // }
-    
-        // pub fn ut_lind_net_udp_connect() {
-    //     lindrustinit(0);
-    //     let cage = interface::cagetable_getref(1);
+        assert_eq!(cage.close_syscall(sendsockfd2), 0);
+        assert_eq!(cage.close_syscall(clientfd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
-    //     //getting the sockets set up...
-    //     let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-    //     let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-    //     let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 51111_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
-    //     let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+    pub fn ut_lind_net_udp_connect() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
 
-    //     assert!(listenfd > 0);
-    //     assert!(sendfd > 0);
+        //getting the sockets set up...
+        let listenfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let sendfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let sockaddr = interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 51111_u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0};
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
 
-    //     assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
+        assert!(listenfd > 0);
+        assert!(sendfd > 0);
 
-    //     //forking the cage to get another cage with the same information
-    //     assert_eq!(cage.fork_syscall(2), 0);
+        assert_eq!(cage.bind_syscall(listenfd, &socket), 0);
 
-    //     let thread = interface::helper_thread(move || {
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
 
-    //         let cage2 = interface::cagetable_getref(2);
+        let thread = interface::helper_thread(move || {
 
-    //         interface::sleep(interface::RustDuration::from_millis(20));
-    //         let mut buf = sizecbuf(16);
-    //         assert_eq!(cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0), 16);
-    //         assert_ne!(buf, sizecbuf(16));
-    //         assert_eq!(cbuf2str(&buf), "UDP Connect Test");
+            let cage2 = interface::cagetable_getref(2);
+            
+            interface::sleep(interface::RustDuration::from_millis(20));
+            let mut buf = sizecbuf(16);
+            assert_eq!(cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0), 16);
+            assert_ne!(buf, sizecbuf(16));
+            assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
-    //         assert_eq!(cage2.close_syscall(listenfd), 0);
-    //         assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-    //     });
+            assert_eq!(cage2.close_syscall(listenfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+        
+        assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
+        interface::sleep(interface::RustDuration::from_millis(50));
+        assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16); 
+        thread.join().unwrap();
 
-    //     assert_eq!(cage.connect_syscall(sendfd, &socket), 0);
-    //     interface::sleep(interface::RustDuration::from_millis(50));
-    //     assert_eq!(cage.send_syscall(sendfd, str2cbuf("UDP Connect Test"), 16, 0), 16);
-    //     thread.join().unwrap();
-
-    //     assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-    //     lindrustfinalize();
-    // }
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+ 
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -1171,92 +1169,91 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-//pub fn ut_lind_net_dns_rootserver_ping() {
-    //     //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
-    //     #[repr(C)]
-    //     struct DnsHeader {
-    //         xid: u16,
-    //         flags: u16,
-    //         qdcount: u16,
-    //         ancount: u16,
-    //         nscount: u16,
-    //         arcount: u16
-    //     }
-
-    //     /* Structure of the bytes for an IPv4 answer */
-    //     #[repr(C, packed(1))]
-    //     struct DnsRecordAT {
-    //         compression: u16,
-    //         typ: u16,
-    //         clas: u16,
-    //         ttl: u32,
-    //         length: u16,
-    //         addr: interface::V4Addr,
-    //     }
-
-    //     lindrustinit(0);
-    //     let cage = interface::cagetable_getref(1);
-
-    //     let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-    //     assert!(dnssocket > 0);
-
-    //     let dnsh = DnsHeader {
-    //         xid: 0x1234u16.to_be(),
-    //         flags: 0x0100u16.to_be(), 
-    //         qdcount: 0x0001u16.to_be(),
-    //         ancount: 0,
-    //         nscount: 0,
-    //         arcount: 0,
-    //     };
-
-    //     //specify payload information for dns request
-    //     let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes();//numbers signify how many characters until next dot
-    //     let dnstype = 1u16; 
-    //     let dnsclass = 1u16;
-
-    //     //construct packet
-    //     let packetlen = std::mem::size_of::<DnsHeader>() + hostname.len() + std::mem::size_of::<u16>() + std::mem::size_of::<u16>();
-    //     let mut packet = vec![0u8;packetlen];
-
-    //     let packslice = packet.as_mut_slice();
-    //     let mut pslen = std::mem::size_of::<DnsHeader>();
-    //     unsafe {
-    //       let dnss = ::std::slice::from_raw_parts(((&dnsh) as *const DnsHeader) as *const u8, std::mem::size_of::<DnsHeader>());
-    //       packslice[..pslen].copy_from_slice(dnss);
-    //     }
-    //     packslice[pslen..pslen+hostname.len()].copy_from_slice(hostname.as_slice());
-    //     pslen += hostname.len();
-    //     packslice[pslen..pslen+2].copy_from_slice(&dnstype.to_be_bytes());
-    //     packslice[pslen+2..pslen+4].copy_from_slice(&dnsclass.to_be_bytes());
-
-    //     //send packet
-    //     let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([208, 67, 222, 222]) }, padding: 0}); //opendns ip addr
-    //     assert_eq!(cage.sendto_syscall(dnssocket, packslice.as_ptr(), packslice.len(), 0, &dnsaddr), packslice.len() as i32);
-
-    //     let mut dnsresp = [0u8; 512];
-
-    //     //recieve DNS response
-    //     let _resplen = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
-
-    //     //extract packet header
-    //     let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader)};
-    //     assert_eq!(u16::from_be(response_header.flags) & 0xf, 0);
-
-    //     //skip over the name
-    //     let mut nameptr = std::mem::size_of::<DnsHeader>();
-    //     while dnsresp[nameptr] != 0 {
-    //         nameptr += dnsresp[nameptr] as usize + 1;
-    //     }
-
-    //     //next we need to skip the null byte, qtype, and qclass to extract the main response payload
-    //     let recordptr = dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
-    //     let record = unsafe{&*recordptr};
-    //     let addr = u32::from_be(record.addr.s_addr);
-    //     assert_eq!(addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-    //     //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-
-    //     lindrustfinalize();
-    // }
-   
     
+    pub fn ut_lind_net_dns_rootserver_ping() {
+        //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
+        #[repr(C)]
+        struct DnsHeader {
+            xid: u16,
+            flags: u16,
+            qdcount: u16,
+            ancount: u16,
+            nscount: u16,
+            arcount: u16
+        }
+
+        /* Structure of the bytes for an IPv4 answer */
+        #[repr(C, packed(1))]
+        struct DnsRecordAT {
+            compression: u16,
+            typ: u16,
+            clas: u16,
+            ttl: u32,
+            length: u16,
+            addr: interface::V4Addr,
+        }
+
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        assert!(dnssocket > 0);
+
+        let dnsh = DnsHeader {
+            xid: 0x1234u16.to_be(),
+            flags: 0x0100u16.to_be(),
+            qdcount: 0x0001u16.to_be(),
+            ancount: 0,
+            nscount: 0,
+            arcount: 0,
+        };
+
+        //specify payload information for dns request
+        let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes();//numbers signify how many characters until next dot
+        let dnstype = 1u16;
+        let dnsclass = 1u16;
+
+        //construct packet
+        let packetlen = std::mem::size_of::<DnsHeader>() + hostname.len() + std::mem::size_of::<u16>() + std::mem::size_of::<u16>();
+        let mut packet = vec![0u8;packetlen];
+
+        let packslice = packet.as_mut_slice();
+        let mut pslen = std::mem::size_of::<DnsHeader>();
+        unsafe {
+          let dnss = ::std::slice::from_raw_parts(((&dnsh) as *const DnsHeader) as *const u8, std::mem::size_of::<DnsHeader>());
+          packslice[..pslen].copy_from_slice(dnss);
+        }
+        packslice[pslen..pslen+hostname.len()].copy_from_slice(hostname.as_slice());
+        pslen += hostname.len();
+        packslice[pslen..pslen+2].copy_from_slice(&dnstype.to_be_bytes());
+        packslice[pslen+2..pslen+4].copy_from_slice(&dnsclass.to_be_bytes());
+
+        //send packet
+        let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 53u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([208, 67, 222, 222]) }, padding: 0}); //opendns ip addr
+        assert_eq!(cage.sendto_syscall(dnssocket, packslice.as_ptr(), packslice.len(), 0, &dnsaddr), packslice.len() as i32);
+
+        let mut dnsresp = [0u8; 512];
+
+        //recieve DNS response
+        let _resplen = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
+
+        //extract packet header
+        let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader)};
+        assert_eq!(u16::from_be(response_header.flags) & 0xf, 0);
+
+        //skip over the name
+        let mut nameptr = std::mem::size_of::<DnsHeader>();
+        while dnsresp[nameptr] != 0 {
+            nameptr += dnsresp[nameptr] as usize + 1;
+        }
+
+        //next we need to skip the null byte, qtype, and qclass to extract the main response payload
+        let recordptr = dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
+        let record = unsafe{&*recordptr};
+        let addr = u32::from_be(record.addr.s_addr);
+        assert_eq!(addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+        //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+
+        lindrustfinalize();
+    }
 }
