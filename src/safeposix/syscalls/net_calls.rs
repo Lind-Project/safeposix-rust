@@ -10,6 +10,7 @@ use super::sys_constants::*;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
+use crate::interface::new_sockaddr_unix;
 
 impl Cage {
     fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool, conn: ConnState) -> SocketDesc {
@@ -552,7 +553,13 @@ impl Cage {
                                 if let Some(sockinfo) = &sockhandle.unix_info {
                                     let mut nonblocking = false;
                                     if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                                    let retval = sockinfo.pipe.as_ref().expect("REASON").write_to_pipe(buf, buflen, nonblocking) as i32;
+                                    let retval = match sockinfo.pipe.as_ref() {
+                                        Some(pipe) => pipe.write_to_pipe(buf, buflen, nonblocking) as i32,
+                                        None => {
+                                            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");  
+                                        }
+                                    };
+                                    //let retval = sockinfo.pipe.as_ref().expect("REASON").write_to_pipe(buf, buflen, nonblocking) as i32;
                                     if retval < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
                                     else { 
                                         return retval;
@@ -1182,6 +1189,8 @@ impl Cage {
                                 if sockhandle.state == ConnState::CONNECTED {
                                     drop(sockfdobj);
                                     drop(filedesc_enum);
+                                    drop(unlocked_fd);
+                                    drop(sockhandle);
                                     if self._nonblock_peek_read(*fd) {
                                         new_readfds.insert(*fd);
                                         retval += 1;
@@ -1263,16 +1272,27 @@ impl Cage {
                         Socket(ref mut sockfdobj) => {
                             // check if we've made an in progress connection first
                             let sock_tmp = sockfdobj.handle.clone();
-                            let mut sockhandle = sock_tmp.write();
-                            if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                sockhandle.state = ConnState::CONNECTED;
-                            } 
-                            
-                            //we always say sockets are writable? Even though this is not true
-                            new_writefds.insert(*fd);
-                            retval += 1;
-                        }
+                            let mut sockhandle = sock_tmp.write();                                                  
+                            if sockhandle.domain == AF_UNIX {
+                                let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
 
+                               // if sockhandle.state == ConnState::INPROGRESS {
+                                 //   let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                   // let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
+                                if dsconnobj.is_none() && sockhandle.state == ConnState::INPROGRESS { 
+                                    sockhandle.state = ConnState::CONNECTED; 
+                                } 
+                                if sockhandle.state == ConnState::CONNECTED {                                    
+                                    drop(sockfdobj);
+                                    drop(filedesc_enum);
+                                    drop(unlocked_fd);
+                                    drop(sockhandle);
+                                    new_writefds.insert(*fd);
+                                    retval += 1;
+                                }
+                            }
+                        }
                         //we always say streams are writable?
                         Stream(_) => {
                             new_writefds.insert(*fd);
@@ -1517,39 +1537,63 @@ impl Cage {
             if let Socket(sockfdobj) = filedesc_enum {
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
-
-                // domainsock
-                if sockhandle.domain == AF_UNIX {
-                    if sockhandle.localaddr == None {
-                        ret_addr.set_path_null();
-                        ret_addr.set_family(sockhandle.domain as u16);
+               // if sockhandle.domain == AF_UNIX {
+                 //   if sockhandle.localaddr == None {
+                 //       let null_path: &[u8] = &[];
+                 //       *ret_addr = interface::GenSockaddr::Unix(new_sockaddr_unix(sockhandle.domain as u16, null_path));
+                //        return 0;
+               //     }
+                    //if the socket is not none, then return the socket
+               //     *ret_addr = sockhandle.localaddr.unwrap();
+               //     return 0;
+               // }
+                //else {
+                //    if sockhandle.localaddr == None {
+                        //sets the address to 0.0.0.0 if the address is not initialized yet
+                        //setting the family as well based on the domain
+                //        let addr = match sockhandle.domain {
+                //            AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
+                //            AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
+                //            _ => { unreachable!() }
+                //        };
+                //        ret_addr.set_addr(addr);
+                //        ret_addr.set_port(0);
+                //        ret_addr.set_family(sockhandle.domain as u16);
+                //        return 0;
+                //    }
+                //    *ret_addr = sockhandle.localaddr.unwrap();
+                //    return 0;
+                //}
+               
+                match sockhandle.domain {
+                    AF_UNIX => {
+                        if sockhandle.localaddr == None {
+                            let null_path: &[u8] = &[];
+                            *ret_addr = interface::GenSockaddr::Unix(new_sockaddr_unix(sockhandle.domain as u16, null_path));
+                            return 0;
+                        }
+                        *ret_addr = sockhandle.localaddr.unwrap();
                         return 0;
                     }
-
-                    //if the socket is not none, then return the socket
-                    *ret_addr = sockhandle.localaddr.unwrap();
-                    return 0;
-                }
-
-
-                if sockhandle.localaddr == None {
-                    
-                    //sets the address to 0.0.0.0 if the address is not initialized yet
-                    //setting the family as well based on the domain
-                    let addr = match sockhandle.domain {
-                        AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
-                        AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
-                        _ => { unreachable!() }
-                    };
-                    ret_addr.set_addr(addr);
-                    ret_addr.set_port(0);
-                    ret_addr.set_family(sockhandle.domain as u16);
-                    return 0;
-                }
- 
-                //if the socket is not none, then return the socket
-                *ret_addr = sockhandle.localaddr.unwrap();
-                return 0;
+                    AF_INET | AF_INET6 => {
+                        if sockhandle.localaddr == None {
+                             let addr = match sockhandle.domain {
+                                AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
+                                AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
+                                _ => { unreachable!() }
+                            };
+                            ret_addr.set_addr(addr);
+                            ret_addr.set_port(0);
+                            ret_addr.set_family(sockhandle.domain as u16);
+                            return 0;         
+                        }
+                        *ret_addr = sockhandle.localaddr.unwrap();
+                        return 0;
+                    }
+                    _ => {
+                        return syscall_error(Errno::EOPNOTSUPP, "getsockname", "Unknown domain");
+                    }
+               }; 
 
             } else {
                 return syscall_error(Errno::ENOTSOCK, "getsockname", "the provided file is not a socket");
