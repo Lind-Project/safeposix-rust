@@ -129,7 +129,7 @@ pub fn cancelpoint(cageid: u64) {
 
 pub fn sigcheck(cageid: u64) -> bool {
     let cage = cagetable_getref(cageid);
-    cage.pending_signal.load(interface::RustAtomicOrdering::Relaxed)
+    cage.pending_signal.load(RustAtomicOrdering::Relaxed)
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
