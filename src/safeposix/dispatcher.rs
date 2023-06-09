@@ -530,6 +530,19 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 }
 
 #[no_mangle]
+pub extern "C" fn lindsetpendingsignal(cageid: u64, pthreadid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.remove(&pthreadid);
+}
+
+#[no_mangle]
+pub extern "C" fn lindgetpendingsignal(cageid: u64, pthreadid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.pending_signal.store(true, interface::RustAtomicOrdering::Relaxed)
+}
+
+
+#[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
@@ -553,7 +566,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
-        sigset: interface::RustAtomicU64::new(0),
+        sigset: interface::RustAtomicU64::new(0),            
+        pending_signal: interface::RustAtomicBool::new(false),
         main_threadid: interface::get_pthreadid()
     };
     interface::cagetable_insert(0, utilcage);
@@ -575,6 +589,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
+        pending_signal: interface::RustAtomicBool::new(false),
         main_threadid: interface::get_pthreadid()
     };
     interface::cagetable_insert(1, initcage);

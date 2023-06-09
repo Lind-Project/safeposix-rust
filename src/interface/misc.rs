@@ -127,6 +127,11 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
+pub fn sigcheck(cageid: u64) -> bool {
+    let cage = cagetable_getref(cageid);
+    cage.pending_signal.load(interface::RustAtomicOrdering::Relaxed)
+}
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();

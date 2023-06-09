@@ -138,7 +138,8 @@ impl EmulatedPipe {
             if self.eof.load(Ordering::SeqCst) { return 0; }
 
             if count == CANCEL_CHECK_INTERVAL { 
-                interface::cancelpoint(cageid); 
+                interface::cancelpoint(cageid);
+                if interface::sigcheck(cageid) { return syscall_error(Errno::EINTR, "read", "interrupted function call"); }
                 count = 0;
             }
             

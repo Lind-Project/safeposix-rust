@@ -121,6 +121,7 @@ fn main() {
                         thread_table: interface::RustHashMap::new(),
                         signalhandler: interface::RustHashMap::new(),
                         sigset: interface::RustAtomicU64::new(0),
+                        pending_signal: interface::RustAtomicBool::new(false),
                         main_threadid: interface::get_pthreadid()
                     };
 

@@ -139,6 +139,7 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
+            pending_signal: interface::RustAtomicBool::new(false),
             main_threadid: interface::get_pthreadid()
         };
 
@@ -190,6 +191,7 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
+            pending_signal: interface::RustAtomicBool::new(false),
             main_threadid: interface::get_pthreadid()
         };
         //wasteful clone of fdtable, but mutability constraints exist
