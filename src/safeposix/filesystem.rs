@@ -164,6 +164,10 @@ pub fn format_fs() {
     devchildren.insert("urandom".to_string(), 5);
     devchildren.insert("random".to_string(), 6);
 
+    let tmpchildren = interface::RustHashMap::new();
+    tmpchildren.insert("..".to_string(), 1); 
+    tmpchildren.insert(".".to_string(), 2); 
+
     let time = interface::timestamp(); //We do a real timestamp now
     let devdirinode = Inode::Dir(DirectoryInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
@@ -197,12 +201,22 @@ pub fn format_fs() {
         atime: time, ctime: time, mtime: time,
         dev: DevNo {major: 1, minor: 8},
     }); //inode 6
-    newmetadata.nextinode.store(7, interface::RustAtomicOrdering::Relaxed);
+    let tmpdirinode = Inode::Dir(DirectoryInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+        mode: (S_IFDIR | 0755) as u32,
+        linkcount: 3 + 4, 
+        refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        filename_to_inode_dict: tmpchildren,
+    }); //inode 7
+
+    newmetadata.nextinode.store(8, interface::RustAtomicOrdering::Relaxed);
     newmetadata.inodetable.insert(2, devdirinode);
     newmetadata.inodetable.insert(3, nullinode);
     newmetadata.inodetable.insert(4, zeroinode);
     newmetadata.inodetable.insert(5, urandominode);
     newmetadata.inodetable.insert(6, randominode);
+    newmetadata.inodetable.insert(7, tmpdirinode);
 
     let _logremove = interface::removefile(LOGFILENAME.to_string());
 
