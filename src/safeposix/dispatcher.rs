@@ -117,13 +117,17 @@ macro_rules! get_onearg {
 //the body of a closure within the variadic macro
 macro_rules! check_and_dispatch {
     ( $cage:ident . $func:ident, $($arg:expr),* ) => {
-        (|| Ok($cage.$func( $($arg?),* )))().into_ok_or_err()
+        match (|| Ok($cage.$func( $($arg?),* )))() {
+            Ok(i) => i, Err(i) => i
+        }
     };
 }
 
 macro_rules! check_and_dispatch_socketpair {
     ( $func:expr, $cage:ident, $($arg:expr),* ) => {
-        (|| Ok($func( $cage, $($arg?),* )))().into_ok_or_err()
+        match (|| Ok($func( $cage, $($arg?),* )))() {
+            Ok(i) => i, Err(i) => i
+        }
     };
 }
 
