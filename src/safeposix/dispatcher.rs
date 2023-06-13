@@ -525,7 +525,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-    
+    //lib::lib_fs_utils::visit_children(); 
     let utilcage = Cage{
         cageid: 0, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
