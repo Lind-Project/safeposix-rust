@@ -579,7 +579,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean
-    cleartmp(path, &cage);
+    cleartmp();
 }
 
 #[no_mangle]
@@ -592,7 +592,7 @@ pub extern "C" fn lindrustfinalize() {
         remove_domain_sock(truepath);
     }
     // clear /tmp folder
-    cleartmp(path, &cage);
+    cleartmp();
 
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
