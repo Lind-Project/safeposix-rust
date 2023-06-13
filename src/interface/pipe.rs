@@ -101,7 +101,9 @@ impl EmulatedPipe {
         }
 
         while bytes_written < length {
-            if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); } // EPIPE, all read ends are closed
+            if self.get_read_ref() == 0 {
+                return syscall_error(Errno::EPIPE, "write", "broken pipe");
+            } // EPIPE, all read ends are closed
 
             let remaining = write_end.remaining();
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
@@ -136,7 +138,8 @@ impl EmulatedPipe {
             if self.eof.load(Ordering::SeqCst) { return 0; }
 
             if count == CANCEL_CHECK_INTERVAL { 
-                interface::cancelpoint(cageid); 
+                interface::cancelpoint(cageid);
+                if interface::sigcheck(cageid) { return syscall_error(Errno::EINTR, "read", "interrupted function call"); }
                 count = 0;
             }
             

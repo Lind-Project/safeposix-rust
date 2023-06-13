@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
@@ -24,6 +24,7 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
+use crate::interface::types::{SigsetType};
 use std::time::Duration;
 
 const MAXCAGEID: i32 = 1024;
@@ -126,6 +127,11 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
+pub fn sigcheck(cageid: u64) -> bool {
+    let cage = cagetable_getref(cageid);
+    cage.pending_signal.load(RustAtomicOrdering::Relaxed)
+}
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();
@@ -169,6 +175,38 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Er
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
     return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
+}
+
+// Sigset Operations
+// 
+// sigsetops defined here are different from the ones in glibc. Since the sigset is just a u64
+// bitmask, we can just return the modified version of the sigset instead of changing it in-place.
+// It would also avoid any ownership issue and make the code cleaner.
+
+pub fn lind_sigemptyset() -> SigsetType {
+    0
+}
+
+pub fn lind_sigfillset() -> SigsetType {
+    u64::MAX
+}
+
+pub fn lind_sigaddset(set: SigsetType, signum: i32) -> SigsetType {
+    set | (1 << (signum - 1))
+}
+
+pub fn lind_sigdelset(set: SigsetType, signum: i32) -> SigsetType {
+    set & !(1 << (signum - 1))
+}
+
+pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
+    set & (1 << (signum - 1)) != 0
+}
+
+// Signals
+pub fn lind_kill(cage_id: u64, sig: i32) -> i32 {
+    let cage_main_thread_id = cagetable_getref(cage_id).main_threadid;
+    lind_threadkill(cage_main_thread_id, sig)
 }
 
 #[derive(Debug)]

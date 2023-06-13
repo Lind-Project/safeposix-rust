@@ -138,7 +138,8 @@ impl Cage {
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
-            sigset: self.sigset.clone(),
+            sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
+            pending_signal: interface::RustAtomicBool::new(false),
             main_threadid: interface::get_pthreadid()
         };
 
@@ -189,7 +190,8 @@ impl Cage {
             cv_table: interface::RustLock::new(vec!()),
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
-            sigset: interface::RustHashSet::new(),
+            sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
+            pending_signal: interface::RustAtomicBool::new(false),
             main_threadid: interface::get_pthreadid()
         };
         //wasteful clone of fdtable, but mutability constraints exist
@@ -216,6 +218,11 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+        
+        // Trigger SIGCHLD
+        if self.cageid != self.parent {
+            interface::lind_kill(self.parent, SIGCHLD);
+        }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
@@ -272,7 +279,7 @@ impl Cage {
         }
 
         if let Some(some_act) = act {
-            if sig == 9 || sig == 19 {
+            if sig == 9 || sig == 19 { // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(Errno::EINVAL, "sigaction", "Cannot modify the action of SIGKILL or SIGSTOP");
             }
 
@@ -282,12 +289,39 @@ impl Cage {
             );
         }
 
-        return 0;
+        0
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        let cage_main_thread_id = interface::cagetable_getref(cage_id as u64).main_threadid;
-        interface::lind_threadkill(cage_main_thread_id, sig)
+        interface::lind_kill(cage_id as u64, sig)
+    }
+
+    pub fn sigprocmask_syscall(&self, how: i32, set: Option<& interface::SigsetType>, oldset: Option<&mut interface::SigsetType>) -> i32 {
+        let mut res = 0;
+
+        if let Some(some_oldset) = oldset {
+            *some_oldset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
+        }
+
+        if let Some(some_set) = set {
+            let curr_sigset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
+            res = match how {
+                0 => { // Block signals in set
+                    self.sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                1 => { // Unblock signals in set
+                    self.sigset.store(curr_sigset & !*some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                2 => { // Set sigset to set
+                    self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
+            }
+        }
+        res
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {

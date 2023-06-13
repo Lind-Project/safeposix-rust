@@ -139,17 +139,13 @@ pub struct ShmidsStruct {
   pub shm_nattch: u32
 }
 
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct SigsetStruct {
-  pub val: [u64; 16]
-}
+pub type SigsetType = u64;
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct SigactionStruct {
   pub sa_handler: u32,
-  pub sa_mask: SigsetStruct,
+  pub sa_mask: SigsetType,
   pub sa_flags: i32,
 }
 
@@ -183,7 +179,9 @@ pub union Arg {
   pub dispatch_sockpair: *mut SockPair,
   pub dispatch_ioctlptrunion: IoctlPtrUnion,
   pub dispatch_sigactionstruct: *mut SigactionStruct,
-  pub dispatch_constsigactionstruct: *const SigactionStruct
+  pub dispatch_constsigactionstruct: *const SigactionStruct,
+  pub dispatch_sigsett: *mut SigsetType,
+  pub dispatch_constsigsett: *const SigsetType
 }
 
 
@@ -600,6 +598,26 @@ pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a mut Sig
 
 pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a SigactionStruct>, i32> {
     let pointer = unsafe{union_argument.dispatch_constsigactionstruct};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_sigsett<'a>(union_argument: Arg) -> Result<Option<&'a mut SigsetType>, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigsett};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constsigsett<'a>(union_argument: Arg) -> Result<Option<&'a SigsetType>, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigsett};
 
     if !pointer.is_null() {
         Ok(Some(unsafe{& *pointer}))

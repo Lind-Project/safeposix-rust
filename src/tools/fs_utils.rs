@@ -120,7 +120,8 @@ fn main() {
                         cv_table: interface::RustLock::new(vec!()),
                         thread_table: interface::RustHashMap::new(),
                         signalhandler: interface::RustHashMap::new(),
-                        sigset: interface::RustHashSet::new(),
+                        sigset: interface::RustAtomicU64::new(0),
+                        pending_signal: interface::RustAtomicBool::new(false),
                         main_threadid: interface::get_pthreadid()
                     };
 
