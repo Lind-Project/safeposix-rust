@@ -524,9 +524,12 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
     cage.thread_table.remove(&pthreadid);
 }
 
-pub extern "C" fn visitchild(childcage: &Cage, childpath: &str, isdir: bool) {
-    if isdir { lib_fs_utils::lind_deltree(childcage, childpath); }
-    else {childcage.unlink_syscall(childpath);}
+#[no_mangle]
+fn cleartmp(path: &str, cage: &Cage) {
+    lib_fs_utils::visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
+        if isdir { lib_fs_utils::lind_deltree(childcage, childpath); }
+        else {childcage.unlink_syscall(childpath);}
+    });
 }
 
 #[no_mangle]
@@ -537,7 +540,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-    let path = "/tmp";
+    let path = "tmp";
 
     let utilcage = Cage{
         cageid: 0, 
@@ -554,15 +557,13 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
         thread_table: interface::RustHashMap::new(),
     };
+    let cage = interface::cagetable_getref(0);
     if interface::pathexists(path.to_string()) {
-        lib_fs_utils::visit_children(&utilcage, path, None, |childcage, childpath, isdir, _| {
-                visitchild(childcage, childpath, isdir);     
-            });    
+        cleartmp(path, &cage);  
     }
     else {
         utilcage.mkdir_syscall(path, S_IRWXA);
     }
-
     interface::cagetable_insert(0, utilcage);
 
     //init cage is its own parent
@@ -582,14 +583,13 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(1, initcage);
-   
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
 
     interface::cagetable_clear();
-    let path = "/tmp";
+    let path = "tmp";
 
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
@@ -597,9 +597,7 @@ pub extern "C" fn lindrustfinalize() {
     }
     let cage = interface::cagetable_getref(0);
     if interface::pathexists(path.to_string()) {
-        lib_fs_utils::visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
-                visitchild(childcage, childpath, isdir);     
-            });    
+        cleartmp(path, &cage);
     }
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
