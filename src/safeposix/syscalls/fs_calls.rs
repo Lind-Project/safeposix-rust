@@ -1635,7 +1635,7 @@ impl Cage {
         // try to get inodenum of input path and its parent
         match metawalkandparent(truepath.as_path()) {
             (None, ..) => {
-                syscall_error(Errno::EEXIST, "rmdir", "Path does not exist")
+                syscall_error(Errno::ENOENT, "rmdir", "Path does not exist")
             }
             (Some(_), None) => { // path exists but parent does not => path is root dir
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")

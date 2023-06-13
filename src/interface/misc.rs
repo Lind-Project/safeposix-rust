@@ -16,7 +16,8 @@ use std::str::{from_utf8, Utf8Error};
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::{mmap, pthread_self, pthread_exit, pthread_kill};
+use libc::{mmap, pthread_self, pthread_exit, pthread_kill, sched_yield};
+
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -107,6 +108,10 @@ pub fn lind_threadkill(thread_id: u64, sig: i32) -> i32 {
 
 pub fn get_pthreadid() -> u64 {
     unsafe { pthread_self() as u64 } 
+}
+
+pub fn lind_yield() {
+    unsafe { sched_yield(); }
 }
 
 // this function checks if a thread is killable and returns that state
