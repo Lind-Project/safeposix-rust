@@ -561,6 +561,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
     };
 
+    interface::cagetable_insert(0, initcage);
+
     //init cage is its own parent
     let initcage = Cage{
         cageid: 1, 
