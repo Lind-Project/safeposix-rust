@@ -521,11 +521,19 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
 }
 
 #[no_mangle]
-fn cleartmp(path: &str, cage: &Cage) {
-    lib_fs_utils::visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
-        if isdir { lib_fs_utils::lind_deltree(childcage, childpath); }
-        else {childcage.unlink_syscall(childpath);}
-    });
+fn cleartmp() {
+    let path = "tmp";
+
+    let cage = interface::cagetable_getref(0);
+    if interface::pathexists(path.to_string()) {
+        lib_fs_utils::visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
+            if isdir { lib_fs_utils::lind_deltree(childcage, childpath); }
+            else {childcage.unlink_syscall(childpath);}
+        });
+    }
+    else {
+        utilcage.mkdir_syscall(path, S_IRWXA);
+    }
 }
 
 #[no_mangle]
@@ -536,7 +544,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-    let path = "tmp";
 
     let utilcage = Cage{
         cageid: 0, 
@@ -553,14 +560,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
         thread_table: interface::RustHashMap::new(),
     };
-    let cage = interface::cagetable_getref(0);
-    if interface::pathexists(path.to_string()) {
-        cleartmp(path, &cage);
-    }
-    else {
-        utilcage.mkdir_syscall(path, S_IRWXA);
-    }
-    interface::cagetable_insert(0, utilcage);
 
     //init cage is its own parent
     let initcage = Cage{
@@ -579,6 +578,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(1, initcage);
+    // make sure /tmp is clean
+    cleartmp(path, &cage);
 }
 
 #[no_mangle]
@@ -590,10 +591,9 @@ pub extern "C" fn lindrustfinalize() {
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
     }
-    let cage = interface::cagetable_getref(0);
-    if interface::pathexists(path.to_string()) {
-        cleartmp(path, &cage);
-    }
+    // clear /tmp folder
+    cleartmp(path, &cage);
+
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
