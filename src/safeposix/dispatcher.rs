@@ -532,7 +532,7 @@ fn cleartmp() {
         });
     }
     else {
-        utilcage.mkdir_syscall(path, S_IRWXA);
+        cage.mkdir_syscall(path, S_IRWXA);
     }
 }
 
