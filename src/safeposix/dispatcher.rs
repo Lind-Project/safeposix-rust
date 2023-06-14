@@ -516,6 +516,10 @@ pub extern "C" fn lindcancelinit(cageid: u64) {
 pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
     let cage = interface::cagetable_getref(cageid);
     cage.thread_table.insert(pthreadid, kill);
+    if cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed) == 0 {
+        cage.main_threadid.store(interface::get_pthreadid(), interface::RustAtomicOrdering::Relaxed);
+    }
+
 }
 
 #[no_mangle]
@@ -581,7 +585,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),            
         pending_signal: interface::RustAtomicBool::new(false),
-        main_threadid: interface::get_pthreadid()
+        main_threadid: interface::RustAtomicU64::new(0)
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -603,7 +607,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
         pending_signal: interface::RustAtomicBool::new(false),
-        main_threadid: interface::get_pthreadid()
+        main_threadid: interface::RustAtomicU64::new(0)
     };
     interface::cagetable_insert(1, initcage);
 }

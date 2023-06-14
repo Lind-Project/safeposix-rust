@@ -140,7 +140,7 @@ impl Cage {
             signalhandler: self.signalhandler.clone(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
             pending_signal: interface::RustAtomicBool::new(false),
-            main_threadid: interface::get_pthreadid()
+            main_threadid: interface::RustAtomicU64::new(0)
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -192,7 +192,7 @@ impl Cage {
             signalhandler: interface::RustHashMap::new(),
             sigset: interface::RustAtomicU64::new(self.sigset.load(interface::RustAtomicOrdering::Relaxed)),
             pending_signal: interface::RustAtomicBool::new(false),
-            main_threadid: interface::get_pthreadid()
+            main_threadid: interface::RustAtomicU64::new(0)
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
