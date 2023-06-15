@@ -575,7 +575,6 @@ pub extern "C" fn lindrustfinalize() {
         remove_domain_sock(truepath);
     }
 
-
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {

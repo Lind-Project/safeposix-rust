@@ -103,7 +103,6 @@ impl Cage {
             _ => {
                 return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented socket type");
             }
-
         }
     }
 
@@ -1243,7 +1242,6 @@ impl Cage {
                             }
                         }
 
-
                         //we don't support selecting streams
                         Stream(_) => {continue;}
 
@@ -1538,33 +1536,33 @@ impl Cage {
             if let Socket(sockfdobj) = filedesc_enum {
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
-               // if sockhandle.domain == AF_UNIX {
-                 //   if sockhandle.localaddr == None {
-                 //       let null_path: &[u8] = &[];
-                 //       *ret_addr = interface::GenSockaddr::Unix(new_sockaddr_unix(sockhandle.domain as u16, null_path));
-                //        return 0;
-               //     }
+                if sockhandle.domain == AF_UNIX {
+                    if sockhandle.localaddr == None {
+                        let null_path: &[u8] = &[];
+                        *ret_addr = interface::GenSockaddr::Unix(new_sockaddr_unix(sockhandle.domain as u16, null_path));
+                        return 0;
+                    }
                     //if the socket is not none, then return the socket
-               //     *ret_addr = sockhandle.localaddr.unwrap();
-               //     return 0;
-               // }
-                //else {
-                //    if sockhandle.localaddr == None {
+                    *ret_addr = sockhandle.localaddr.unwrap();
+                    return 0;
+                }
+                else {
+                    if sockhandle.localaddr == None {
                         //sets the address to 0.0.0.0 if the address is not initialized yet
                         //setting the family as well based on the domain
-                //        let addr = match sockhandle.domain {
-                //            AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
-                //            AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
-                //            _ => { unreachable!() }
-                //        };
-                //        ret_addr.set_addr(addr);
-                //        ret_addr.set_port(0);
-                //        ret_addr.set_family(sockhandle.domain as u16);
-                //        return 0;
-                //    }
-                //    *ret_addr = sockhandle.localaddr.unwrap();
-                //    return 0;
-                //}
+                        let addr = match sockhandle.domain {
+                            AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
+                            AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
+                            _ => { unreachable!() }
+                        };
+                        ret_addr.set_addr(addr);
+                        ret_addr.set_port(0);
+                        ret_addr.set_family(sockhandle.domain as u16);
+                        return 0;
+                    }
+                    *ret_addr = sockhandle.localaddr.unwrap();
+                    return 0;
+                }
                
                 match sockhandle.domain {
                     AF_UNIX => {

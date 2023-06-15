@@ -285,7 +285,7 @@ impl Cage {
                             log_metadata(&FS_METADATA, inodenum);
                         } else {
                             panic!("Parent directory was not a directory!");
-                        } 
+                        }
                         0 //link has succeeded
                     }
 
@@ -371,7 +371,6 @@ impl Cage {
                 }
                 0 //unlink has succeeded
             }
-
         }
         //NET_METADATA.domsock_paths.remove(&truepath);
     }
@@ -1072,7 +1071,7 @@ impl Cage {
     }
 
     pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fromdup2: bool) -> i32 {
-        //checking if tshe new fd is out of range
+        //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }

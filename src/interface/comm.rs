@@ -92,7 +92,6 @@ impl GenSockaddr {
     }
 }
 
-
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub enum GenIpaddr {
     V4(V4Addr),
