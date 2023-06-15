@@ -176,6 +176,7 @@ impl Cage {
                     }
 
                     sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, pipe: None, path: truepath.clone(), remotepipe: None, inode: newinodenum});
+                    NET_METADATA.domsock_paths.insert(truepath);
                     FS_METADATA.inodetable.insert(newinodenum, newinode);
                 }
                 (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }

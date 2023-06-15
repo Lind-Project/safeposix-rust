@@ -368,10 +368,13 @@ impl Cage {
                     log_metadata(&FS_METADATA, parentinodenum);
                     log_metadata(&FS_METADATA, inodenum);
                 }
+                NET_METADATA.domsock_paths.remove(&truepath);
+
                 0 //unlink has succeeded
             }
 
         }
+        //NET_METADATA.domsock_paths.remove(&truepath);
     }
 
     //------------------------------------CREAT SYSCALL------------------------------------
@@ -1194,10 +1197,12 @@ impl Cage {
                 Socket(ref mut socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
+                    let path = convpath(sockhandle.localaddr.unwrap().path().clone());
 
                     // we need to do the following if UDS
                     if let Some (ref mut ui) = sockhandle.unix_info {
                         let inodenum = ui.inode;
+                        //let path = convpath(sockhandle.localaddr.unwrap().path().clone());
                         if let Some(pipe) = ui.pipe.as_ref() {
                             pipe.decr_ref(O_WRONLY);
                             // we're closing the last write end, lets set eof
@@ -1218,6 +1223,7 @@ impl Cage {
                                 if sock.linkcount == 0 {
                                     drop(inodeobj);
                                     FS_METADATA.inodetable.remove(&inodenum);
+                                    NET_METADATA.domsock_paths.remove(&path);
                                 }
                             }
                         }
@@ -1726,6 +1732,8 @@ impl Cage {
                     drop(pardir_inodeobj);
                     log_metadata(&FS_METADATA, parent_inodenum);       
                 }
+                NET_METADATA.domsock_paths.remove(&true_oldpath);
+                NET_METADATA.domsock_paths.insert(true_newpath);
                 0 // success
             }
         }
