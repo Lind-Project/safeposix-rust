@@ -363,13 +363,12 @@ impl Cage {
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
+                NET_METADATA.domsock_paths.remove(&truepath);
                 // we don't log domain sockets
                 if log {
                     log_metadata(&FS_METADATA, parentinodenum);
                     log_metadata(&FS_METADATA, inodenum);
                 }
-                NET_METADATA.domsock_paths.remove(&truepath);
-
                 0 //unlink has succeeded
             }
 
