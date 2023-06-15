@@ -570,7 +570,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 pub extern "C" fn lindrustfinalize() {
 
     interface::cagetable_clear();
-
+ 
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {

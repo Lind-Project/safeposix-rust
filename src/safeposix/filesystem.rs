@@ -390,7 +390,6 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
     newp
 }
 
-
 pub fn incref_root() {
     if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
         rootdir_dirinode_obj.refcount += 1;
