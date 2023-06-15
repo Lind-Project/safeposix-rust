@@ -1170,7 +1170,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+ 
     pub fn ut_lind_net_dns_rootserver_ping() {
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
