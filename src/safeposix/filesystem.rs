@@ -321,6 +321,31 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
 }
 
+pub fn inodeandparent(dir_inode_no: usize, target_inode: usize) -> Option<String> {
+    let cur_node = Some(FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
+
+    match &*cur_node.unwrap() {
+        Inode::Dir(d) => {
+
+            let mut target_variable_name: Option<String> = None;
+
+            for entry in d.filename_to_inode_dict.iter() {
+                if entry.value() == &target_inode {
+                    target_variable_name = Some(entry.key().to_owned());
+                    break;
+                }
+            }
+
+            match target_variable_name {
+                Some(name) => return Some(name),
+                None => return None,
+            }
+        }
+        // If we're trying to get a child of a non-directory inode, exit out
+        _ => return None,
+    }
+}
+
 //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
 pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
 

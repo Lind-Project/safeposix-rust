@@ -1027,6 +1027,69 @@ impl Cage {
         }
     }
 
+
+    //------------------------------------FCHDIR SYSCALL------------------------------------
+    
+    pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+        let mut path_string = String::new();
+        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let mut first_iteration = true;
+
+        if let Some(filedesc_enum) = &*unlocked_fd {
+            match filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let mut inodenum = normalfile_filedesc_obj.inode;
+
+                    while let Some(mut thisinode) = FS_METADATA.inodetable.get_mut(&inodenum) {
+                        match *thisinode {
+                            Inode::Dir(ref mut dir_inode) => {
+                                if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
+                                    if *parent_dir_inode == (1 as usize){
+                                        if !first_iteration {
+                                            path_string.insert(0, '/');
+                                            break;
+                                        }
+
+                                        first_iteration = false;
+                                    }
+
+                                    match inodeandparent(*parent_dir_inode, inodenum) {
+                                        Some(name) => {
+                                            let mut new_path_string = String::with_capacity(name.len() + path_string.len() + 1);
+                                            new_path_string.push_str(&name);
+                                            new_path_string.push('/');
+                                            new_path_string.push_str(&path_string);
+                                            path_string = new_path_string;
+                                            inodenum = *parent_dir_inode;
+                                        },
+                                        None => return syscall_error(Errno::ENOTDIR, "fchdir", "path not found"),
+                                    };
+
+                                } else {
+                                    return syscall_error(Errno::ENOTDIR, "fchdir", "data not founded for '..'");
+                                }
+
+                            },
+                            _ => {
+                                return syscall_error(Errno::ENOTDIR, "fchdir", "the last component in fd is not a directory");
+                            }
+                        }
+                    }
+
+                },
+                _ => return syscall_error(Errno::ENOTDIR, "fchdir", "the last component in fd is not a file"),
+            }
+        } else {
+            return syscall_error(Errno::ENOENT, "fchdir", "the directory referred to in path does not exist");
+        }
+
+        let mut cwd_container = self.cwd.write();
+        *cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+
+        0 //fchdir has succeeded!
+    }
+
+
     //------------------------------------CHDIR SYSCALL------------------------------------
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
