@@ -1196,7 +1196,6 @@ impl Cage {
                 Socket(ref mut socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
-                    let path = convpath(sockhandle.localaddr.unwrap().path().clone());
 
                     // we need to do the following if UDS
                     if let Some (ref mut ui) = sockhandle.unix_info {
@@ -1220,6 +1219,7 @@ impl Cage {
                             if sock.refcount == 0 {
                                 if sock.linkcount == 0 {
                                     drop(inodeobj);
+                                    let path = convpath(sockhandle.localaddr.unwrap().path().clone());
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     NET_METADATA.domsock_paths.remove(&path);
                                 }
