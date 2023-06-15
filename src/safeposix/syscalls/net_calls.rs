@@ -236,14 +236,6 @@ impl Cage {
             let newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
             Ok(newremote)
         }
-        // if let addr = &sockhandle.localaddr {
-        //     Ok(addr.clone().unwrap());
-        // } 
-        // else {
-        //     let path = interface::gen_ud_path();
-        //     let newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
-        //     Ok(newremote)
-        // }
     }
 
     fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) -> Result<interface::GenSockaddr, i32> {
@@ -333,7 +325,6 @@ impl Cage {
                             sockhandle.remoteaddr = Some(remoteaddr.clone());
                             sockhandle.unix_info.as_mut().unwrap().pipe = Some(localpipe.clone());
                             sockhandle.unix_info.as_mut().unwrap().remotepipe = Some(remotepipe.clone());
-                            //sockhandle.remotepipe = remotepipe;
     
                             if sockfdobj.flags & O_NONBLOCK != 0 {
                                 //non-block connect
@@ -362,7 +353,6 @@ impl Cage {
                                 return 0;                        
                             }                        
                         }
-                        //}
                         else {
                             //for TCP, actually create the internal socket object and connect it
                             let remoteclone = remoteaddr.clone();
@@ -428,17 +418,13 @@ impl Cage {
     }
 
     fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, options: i32) -> SocketHandle {
-        // let mut fakedomain = domain;
-        // if domain == PF_UNIX {
-        //     fakedomain = PF_INET;
-        // }
 
         SocketHandle {
             innersocket: None,
             options: options,
             state: conn,
             protocol: protocol,
-            //domain: fakedomain,
+
             domain: domain,
             last_peek: interface::RustDeque::new(),
             localaddr: None,
@@ -470,7 +456,6 @@ impl Cage {
                     if socket_type == AF_UNIX {
                         return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
                     }
-                   //} 
 
                     if dest_addr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "sendto", "An address with an invalid family for the given domain was specified");

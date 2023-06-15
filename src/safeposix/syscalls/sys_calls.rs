@@ -119,10 +119,9 @@ impl Cage {
                                 }
                             }
                         }
-                   // }
-                         let sock_tmp = socket_filedesc_obj.handle.clone();
-                         let mut sockhandle = sock_tmp.write();
-                         if let Some(uinfo) = &mut sockhandle.unix_info {
+                        let sock_tmp = socket_filedesc_obj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
+                        if let Some(uinfo) = &mut sockhandle.unix_info {
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
                                 sock.refcount += 1;
                             }
