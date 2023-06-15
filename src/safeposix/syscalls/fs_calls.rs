@@ -372,7 +372,6 @@ impl Cage {
                 0 //unlink has succeeded
             }
         }
-        //NET_METADATA.domsock_paths.remove(&truepath);
     }
 
     //------------------------------------CREAT SYSCALL------------------------------------

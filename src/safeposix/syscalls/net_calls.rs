@@ -541,7 +541,6 @@ impl Cage {
                     // check if this is a domain socket
                     let socket_type = sockhandle.domain;
                     if socket_type == AF_UNIX {
-    
                         match sockhandle.protocol {
                             IPPROTO_TCP => {
     
@@ -559,7 +558,6 @@ impl Cage {
                                             return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");  
                                         }
                                     };
-                                    //let retval = sockinfo.pipe.as_ref().expect("REASON").write_to_pipe(buf, buflen, nonblocking) as i32;
                                     if retval < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
                                     else { 
                                         return retval;
@@ -573,7 +571,6 @@ impl Cage {
                             }
                         }
                     }
-                    //}
 
                     // not a domain socket if we hit here
                     match sockhandle.protocol {
@@ -717,7 +714,6 @@ impl Cage {
                         }
 
                         //if the remoteaddr is set and addr is not, use remoteaddr
-                        // let retval = if addr.is_none() && sockhandle.remoteaddr.is_some() {
                         let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
                             sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
                         } else {
@@ -1275,10 +1271,6 @@ impl Cage {
                             if sockhandle.domain == AF_UNIX {
                                 let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
                                 let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
-
-                               // if sockhandle.state == ConnState::INPROGRESS {
-                                 //   let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
-                                   // let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                 if dsconnobj.is_none() && sockhandle.state == ConnState::INPROGRESS { 
                                     sockhandle.state = ConnState::CONNECTED; 
                                 } 
@@ -1515,11 +1507,7 @@ impl Cage {
                 if sockhandle.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
-                *ret_addr = sockhandle.remoteaddr.unwrap();
-                // will swap if unix
-                //let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
-                // //all of the checks that we had have passed if we are here
-                //*ret_addr = remoteaddr;
+                *ret_addr = sockhandle.remoteaddr.unwrap(); 
                 return 0;
 
             } else {
