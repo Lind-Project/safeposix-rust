@@ -17,7 +17,8 @@ pub use std::sync::{Arc as RustRfc};
 //pub use parking_lot::{RwLock as RustLock, Mutex as RustMutex, Condvar as RustCondvar};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::{mmap, pthread_self, pthread_exit};
+use libc::{mmap, pthread_self, pthread_exit, sched_yield};
+
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -103,6 +104,10 @@ pub fn lind_threadexit() {
 
 pub fn get_pthreadid() -> u64 {
     unsafe { pthread_self() as u64 } 
+}
+
+pub fn lind_yield() {
+    unsafe { sched_yield(); }
 }
 
 // this function checks if a thread is killable and returns that state
