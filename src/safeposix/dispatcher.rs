@@ -95,7 +95,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
@@ -570,6 +570,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 pub extern "C" fn lindrustfinalize() {
 
     interface::cagetable_clear();
+
+    for truepath in NET_METADATA.get_domainsock_paths() {
+        remove_domain_sock(truepath);
+    }
+
 
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);

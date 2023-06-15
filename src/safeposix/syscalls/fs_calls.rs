@@ -1201,7 +1201,6 @@ impl Cage {
                     // we need to do the following if UDS
                     if let Some (ref mut ui) = sockhandle.unix_info {
                         let inodenum = ui.inode;
-                        //let path = convpath(sockhandle.localaddr.unwrap().path().clone());
                         if let Some(pipe) = ui.pipe.as_ref() {
                             pipe.decr_ref(O_WRONLY);
                             // we're closing the last write end, lets set eof

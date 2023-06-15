@@ -390,6 +390,30 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
     newp
 }
 
+pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
+    match metawalkandparent(truepath.as_path()) {
+        //If the file does not exist
+        (None, ..) => { panic!("path does not exist") }
+        //If the file exists but has no parent, it's the root directory
+        (Some(_), None) => { panic!("cannot unlink root directory") }
+
+        //If both the file and the parent directory exists
+        (Some(inodenum), Some(parentinodenum)) => {
+
+            let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&parentinodenum).unwrap();
+            let mut directory_parent_inode_obj = if let Inode::Dir(ref mut x) = *parentinodeobj {x} else {
+                panic!("File was a child of something other than a directory????");
+            };
+            directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
+            directory_parent_inode_obj.linkcount -= 1;
+            //remove reference to file in parent directory
+            drop(parentinodeobj);
+            
+            FS_METADATA.inodetable.remove(&inodenum);
+            NET_METADATA.domsock_paths.remove(&truepath);
+        }
+    }
+}
 
 pub fn incref_root() {
     if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
