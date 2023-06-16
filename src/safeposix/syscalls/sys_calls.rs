@@ -119,6 +119,7 @@ impl Cage {
                                 }
                             }
                         }
+                        drop(sockhandle);
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
                         if let Some(uinfo) = &mut sockhandle.unix_info {
