@@ -311,7 +311,7 @@ impl Cage {
                         // every branch in the domsocks branch terminates with a return so the code after this is for non-domsocks
                         let socket_type = sockhandle.domain;
                         if socket_type == AF_UNIX {
-                            // domain socket
+                            // domain socket 
                             if let None = sockhandle.localaddr {
                                 let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
                                     Ok(a) => a,
