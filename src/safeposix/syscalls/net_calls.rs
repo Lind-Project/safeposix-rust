@@ -648,9 +648,16 @@ impl Cage {
                             if let Some(sockinfo) = &sockhandle.unix_info {
                                 let mut nonblocking = false;
                                 if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                                if let Some (pipe) = &sockinfo.pipe {
-                                    retval = pipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid);
-                                }
+                                let retval = match sockinfo.remotepipe.as_ref() {
+                                        Some(remotepipe) => remotepipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid) as i32,
+                                        None => {
+                                            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");  
+                                        }
+                                };
+
+                                //if let Some (remotepipe) = &sockinfo.remotepipe {
+                                //    retval = remotepipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid);
+                                //}
                             }
                         } 
                         else {

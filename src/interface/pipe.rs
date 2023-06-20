@@ -97,7 +97,7 @@ impl EmulatedPipe {
 
         let pipe_space = write_end.remaining();
         if nonblocking && (pipe_space == 0) {
-            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
+            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
         }
 
         while bytes_written < length {
