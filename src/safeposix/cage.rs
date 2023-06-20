@@ -79,7 +79,7 @@ pub struct Cage {
     pub thread_table: interface::RustHashMap<u64, bool>,
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
     pub sigset: interface::RustAtomicU64,
-    pub pending_signal: interface::RustAtomicBool,
+    pub pending_signal: interface::RustHashSet<u64>,
     pub main_threadid: interface::RustAtomicU64
 }
 

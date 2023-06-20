@@ -134,7 +134,8 @@ pub fn cancelpoint(cageid: u64) {
 
 pub fn sigcheck(cageid: u64) -> bool {
     let cage = cagetable_getref(cageid);
-    cage.pending_signal.load(RustAtomicOrdering::Relaxed)
+    let pthread_id = get_pthreadid();
+    cage.pending_signal.contains(&pthread_id)
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
