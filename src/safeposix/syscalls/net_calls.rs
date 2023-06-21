@@ -311,17 +311,18 @@ impl Cage {
                         let socket_type = sockhandle.domain;
                         if socket_type == AF_UNIX {
                             // domain socket 
-                            let remotepathbuf = convpath(remoteaddr.path().clone());
                             if let None = sockhandle.localaddr {
                                 let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
                                     Ok(a) => a,
                                     Err(e) => return e,
                                 };
-                                self.bind_inner_socket(&mut *sockhandle, &localaddr, false);
+                                self.bind_inner_socket(&mut *sockhandle, &localaddr, false); 
                             }
+                            let remotepathbuf = normpath(convpath(remoteaddr.path().clone()), self);
                             if !NET_METADATA.domsock_paths.contains(&remotepathbuf) {
                                 return syscall_error(Errno::ENOENT, "connect", "not valid unix domain path");
                             }
+
                             let (pipe1, pipe2) = create_unix_sockpipes();
     
                             sockhandle.remoteaddr = Some(remoteaddr.clone());
@@ -338,7 +339,6 @@ impl Cage {
                                 send_pipe: Some(pipe2.clone()).unwrap(),
                                 cond_var: connvar.clone(),
                             };
-
                             NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
                             sockhandle.state = ConnState::CONNECTED;
                             if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
@@ -1003,7 +1003,7 @@ impl Cage {
                                 let receivepipenumber;
     
                                 loop {
-                                    let localpathbuf = convpath(sockhandle.localaddr.unwrap().path().clone());
+                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
     
                                     if let Some(ds) = dsconnobj {
