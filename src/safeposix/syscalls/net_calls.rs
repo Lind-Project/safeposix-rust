@@ -143,7 +143,7 @@ impl Cage {
             // Unix Sockets
             let path = localaddr.path();
             //Check that path is not empty
-            if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+            if path.len() == 0 {return syscall_error(Errno::ENOENT, "bind", "given path was null");}
             let truepath = normpath(convpath(path), self);
 
             match metawalkandparent(truepath.as_path()) {
@@ -171,10 +171,9 @@ impl Cage {
                         dir.filename_to_inode_dict.insert(filename.clone(), newinodenum);
                         dir.linkcount += 1;
                     } else {
-                       return syscall_error(Errno::ENOTDIR, "socket", "unix domain socket path made socket address child of non-directory file");
+                       return syscall_error(Errno::ENOTDIR, "bind", "unix domain socket path made socket address child of non-directory file");
                     }
-
-                    sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, sendpipe: None, path: truepath.clone(), receivepipe: None, inode: newinodenum});
+                    sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, sendpipe: None, path: truepath.clone(), receivepipe: None, inode: newinodenum});  
                     NET_METADATA.domsock_paths.insert(truepath);
                     FS_METADATA.inodetable.insert(newinodenum, newinode);
                 }
@@ -312,6 +311,7 @@ impl Cage {
                         let socket_type = sockhandle.domain;
                         if socket_type == AF_UNIX {
                             // domain socket 
+                            let remotepathbuf = convpath(remoteaddr.path().clone());
                             if let None = sockhandle.localaddr {
                                 let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
                                     Ok(a) => a,
@@ -319,39 +319,57 @@ impl Cage {
                                 };
                                 self.bind_inner_socket(&mut *sockhandle, &localaddr, false);
                             }
-    
+                            if !NET_METADATA.domsock_paths.contains(&remotepathbuf) {
+                                return syscall_error(Errno::ENOENT, "connect", "not valid unix domain path");
+                            }
                             let (pipe1, pipe2) = create_unix_sockpipes();
     
                             sockhandle.remoteaddr = Some(remoteaddr.clone());
                             sockhandle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
                             sockhandle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
     
-                            if sockfdobj.flags & O_NONBLOCK != 0 {
+                            let connvar = if sockfdobj.flags & O_NONBLOCK != 0 { 
+                                Some(interface::RustRfc::new(ConnCondVar::new()))
+                            } else { None };
+    
+                            let entry = DomsockTableEntry {
+                                sockaddr: sockhandle.localaddr.unwrap().clone(),
+                                receive_pipe: Some(pipe1.clone()).unwrap(),
+                                send_pipe: Some(pipe2.clone()).unwrap(),
+                                cond_var: connvar.clone(),
+                            };
+
+                            NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
+                            sockhandle.state = ConnState::CONNECTED;
+                            if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
+                            return 0; 
+
+                           // if sockfdobj.flags & O_NONBLOCK != 0 {
                                 //non-block connect
-                                let remotepathbuf = convpath(remoteaddr.path().clone());
-                                let entry = DomsockTableEntry {
-                                    sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                    receive_pipe: Some(pipe1.clone()).unwrap(),
-                                    send_pipe: Some(pipe2.clone()).unwrap(),
-                                    cond_var: None,
-                                };
-                                NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
-                                sockhandle.state = ConnState::INPROGRESS;
-                                return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
-                            } else {
-                                let connvar = interface::RustRfc::new(ConnCondVar::new());
-                                let entry = DomsockTableEntry {
-                                    sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                    receive_pipe: Some(pipe1.clone()).unwrap(),
-                                    send_pipe: Some(pipe2.clone()).unwrap(),
-                                    cond_var: Some(connvar.clone()),
-                                };
-                                let remotepathbuf = convpath(remoteaddr.path().clone());
-                                NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
-                                connvar.wait();
-                                sockhandle.state = ConnState::CONNECTED;
-                                return 0;                        
-                            }                        
+                           //         let remotepathbuf = convpath(remoteaddr.path().clone());
+                           //         let entry = DomsockTableEntry {
+                          //          sockaddr: sockhandle.localaddr.unwrap().clone(),
+                           //         receive_pipe: Some(pipe1.clone()).unwrap(),
+                           //         send_pipe: Some(pipe2.clone()).unwrap(),
+                           //         cond_var: None,
+                           //     };
+                           //     NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
+                           //     sockhandle.state = ConnState::INPROGRESS;
+                           //     return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
+                           // } else {
+                           //     let connvar = interface::RustRfc::new(ConnCondVar::new());
+                           //     let entry = DomsockTableEntry {
+                           //         sockaddr: sockhandle.localaddr.unwrap().clone(),
+                           //         receive_pipe: Some(pipe1.clone()).unwrap(),
+                           //         send_pipe: Some(pipe2.clone()).unwrap(),
+                           //         cond_var: Some(connvar.clone()),
+                           //     };
+                           //     let remotepathbuf = convpath(remoteaddr.path().clone());
+                           //     NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
+                           //     connvar.wait();
+                           //     sockhandle.state = ConnState::CONNECTED;
+                           //     return 0;                        
+                           // }                        
                         }
                         else {
                             //for TCP, actually create the internal socket object and connect it
@@ -849,6 +867,8 @@ impl Cage {
     }
 
     pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
+    // we need to do a bunch of actual socket cleanup for INET sockets
+    if sockhandle.domain != AF_UNIX { 
         let mut releaseflag = false;
         if let Some(ref sobj) = sockhandle.innersocket {
             if shutdown {
@@ -864,15 +884,12 @@ impl Cage {
                 match how {
                     SHUT_RD => {
                         if sockhandle.state == ConnState::CONNRDONLY { releaseflag = true; }
-                        sockhandle.state = ConnState::CONNWRONLY;
                     }
                     SHUT_WR => {
                         if sockhandle.state == ConnState::CONNWRONLY { releaseflag = true; }
-                        sockhandle.state = ConnState::CONNRDONLY;
                     }
                     SHUT_RDWR => {
                         releaseflag = true;
-                        sockhandle.state = ConnState::NOTCONNECTED;
                     }
                     _ => {
                         //See http://linux.die.net/man/2/shutdown for nuance to this error
@@ -893,8 +910,27 @@ impl Cage {
                 let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                 sockhandle.localaddr = None;
                 if let Err(e) = release_ret_val {return e;}
+                }
             }
-        }
+        }  
+
+        // now change the connections for all socket types
+        match how {
+            SHUT_RD => {
+                sockhandle.state = ConnState::CONNWRONLY;
+            }
+            SHUT_WR => {
+                sockhandle.state = ConnState::CONNRDONLY;
+            }
+            SHUT_RDWR => {
+                sockhandle.state = ConnState::NOTCONNECTED;
+            }
+            _ => {
+              //See http://linux.die.net/man/2/shutdown for nuance to this error
+                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+            }
+        }      
+
         return 0;
     }
 
