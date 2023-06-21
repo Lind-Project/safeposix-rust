@@ -125,6 +125,8 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
+    if TEST.load(RustAtomicOrdering::Relaxed) { return; }
+    
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
         let cage = cagetable_getref(cageid);
