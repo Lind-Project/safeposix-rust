@@ -144,6 +144,12 @@ pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) ->
 }
 
 #[no_mangle]
+pub extern "C" fn lind_setmainthreadid(cageid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.main_threadid.store(interface::get_pthreadid(), interface::RustAtomicOrdering::Relaxed);
+}
+
+#[no_mangle]
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists

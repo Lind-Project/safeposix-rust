@@ -293,7 +293,12 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        interface::lind_kill(cage_id as u64, sig)
+        if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
+            interface::lind_threadkill(cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed), sig);
+            return 0;
+        } else {
+            return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
+        }
     }
 
     pub fn sigprocmask_syscall(&self, how: i32, set: Option<& interface::SigsetType>, oldset: Option<&mut interface::SigsetType>) -> i32 {

@@ -51,6 +51,13 @@ pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
 }
 
+pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
+    unsafe { match CAGE_TABLE[cageid as usize].as_ref() {
+        Some(cage) => Some(cage.clone()),
+        None => None
+    }}
+}
+
 pub fn cagetable_clear() {
     let mut exitvec = Vec::new();
     unsafe {
