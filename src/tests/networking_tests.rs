@@ -979,7 +979,8 @@ pub mod net_tests {
 
         let mut buf2 = sizecbuf(15);
         cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
+        let mut str2 = cbuf2str(&buf2);
+        assert_eq!(str2, "Socketpair Test");
 
         thread.join().unwrap();
 
