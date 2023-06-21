@@ -23,6 +23,7 @@ mod main_tests {
     pub fn tests() {
         lindrustinit(0);
         {
+            interface::TEST.store(true, interface::RustAtomicOrdering::Relaxed);
             let cage = interface::cagetable_getref(1);
             crate::lib_fs_utils::lind_deltree(&cage, "/");
             assert_eq!(cage.mkdir_syscall("/dev", S_IRWXA), 0);

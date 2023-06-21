@@ -27,6 +27,11 @@ pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice 
 
 use crate::interface::errnos::{VERBOSE};
 use std::time::Duration;
+use std::sync::LazyLock;
+
+pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+    RustAtomicBool::new(false)
+});
 
 const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
