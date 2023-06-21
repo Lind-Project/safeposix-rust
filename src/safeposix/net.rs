@@ -71,9 +71,9 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 #[derive(Debug)]
 pub struct UnixSocketInfo {
     pub mode: i32,
-    pub pipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
+    pub sendpipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
     pub path: interface::RustPathBuf,
-    pub remotepipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
+    pub receivepipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
     pub inode: usize,
 }
 
@@ -141,8 +141,8 @@ impl ConnCondVar {
 
 pub struct DomsockTableEntry {
     pub sockaddr: interface::GenSockaddr,
-    pub remote_pipe: interface::RustRfc<interface::EmulatedPipe>,
-    pub local_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub receive_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub send_pipe: interface::RustRfc<interface::EmulatedPipe>,
     pub cond_var: Option<interface::RustRfc<ConnCondVar>>,
 }
 
@@ -153,11 +153,11 @@ impl DomsockTableEntry {
     pub fn get_sockaddr(&self) -> &interface::GenSockaddr {
         &self.sockaddr
     }
-    pub fn get_local_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
-        &self.local_pipe
+    pub fn get_send_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+        &self.send_pipe
     }
-    pub fn get_remote_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
-        &self.remote_pipe
+    pub fn get_receive_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+        &self.receive_pipe
     }
 }
 
@@ -349,14 +349,16 @@ impl NetMetadata {
                 if addr.is_unspecified() {
                     for portuser in userarr.clone() {
                         if portuser.1 <= 1 {
-                            drop(portuser);
+                            //drop(portuser);
+                            let _ = portuser;
                             userarr.swap_remove(index);
                         } else { //if it's rebindable and there are others bound to it
                             userarr[index].1 -= 1;
                         }
                     }
                     if userarr.len() == 0 {
-                        drop(userarr);
+                        //drop(userarr);
+                        let _ = userarr;
                         userentry.remove();
                     }
                     return Ok(());
@@ -365,9 +367,11 @@ impl NetMetadata {
                         if portuser.0 == muxed.0 {
                             //if it's rebindable and we're removing the last bound port or it's just not rebindable
                             if portuser.1 <= 1 {
-                                drop(portuser);
+                                //drop(portuser);
+                                let _ = portuser;
                                 if userarr.len() == 1 {
-                                    drop(userarr);
+                                    //drop(userarr);
+                                    let _ = userarr;
                                     userentry.remove();
                                 } else {
                                     userarr.swap_remove(index);

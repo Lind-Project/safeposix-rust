@@ -1133,11 +1133,11 @@ impl Cage {
                 let socket_type = sockhandle.domain;
                 if socket_type == AF_UNIX {
                     if let Some(sockinfo) = &sockhandle.unix_info {
-                        if let Some(pipe) = sockinfo.pipe.as_ref() {
-                            pipe.incr_ref(O_WRONLY);
+                        if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
+                            sendpipe.incr_ref(O_WRONLY);
                         }
-                        if let Some(remotepipe) = sockinfo.remotepipe.as_ref() {
-                            remotepipe.incr_ref(O_RDONLY);
+                        if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                            receivepipe.incr_ref(O_RDONLY);
                         }
                     }
                 }
@@ -1198,17 +1198,17 @@ impl Cage {
                     // we need to do the following if UDS
                     if let Some (ref mut ui) = sockhandle.unix_info {
                         let inodenum = ui.inode;
-                        if let Some(pipe) = ui.pipe.as_ref() {
-                            pipe.decr_ref(O_WRONLY);
+                        if let Some(sendpipe) = ui.sendpipe.as_ref() {
+                            sendpipe.decr_ref(O_WRONLY);
                             // we're closing the last write end, lets set eof
-                            if pipe.get_write_ref() == 0 { pipe.set_eof(); }
+                            if sendpipe.get_write_ref() == 0 { sendpipe.set_eof(); }
                             //last reference, lets remove it
-                            if (pipe.get_write_ref() as u64)  + (pipe.get_read_ref() as u64)  == 0 { ui.pipe = None; }
+                            if (sendpipe.get_write_ref() as u64)  + (sendpipe.get_read_ref() as u64)  == 0 { ui.sendpipe = None; }
                         }
-                        if let Some(remotepipe) = ui.remotepipe.as_ref() {
-                            remotepipe.decr_ref(O_RDONLY);
+                        if let Some(receivepipe) = ui.receivepipe.as_ref() {
+                            receivepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
-                            if (remotepipe.get_write_ref() as u64) + (remotepipe.get_read_ref() as u64)  == 0 { ui.pipe = None; }
+                            if (receivepipe.get_write_ref() as u64) + (receivepipe.get_read_ref() as u64)  == 0 { ui.receivepipe = None; }
 
                         }
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
@@ -1374,7 +1374,8 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    drop(filedesc_enum);
+                    //drop(filedesc_enum);
+                    let _ = filedesc_enum;
                     self._dup2_helper(fd, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
@@ -1788,7 +1789,8 @@ impl Cage {
                     fileobject.close().unwrap();
                 }
 
-                drop(fileobject);
+                //drop(fileobject);
+                let _ = fileobject;
                 drop(maybe_fileobject);
 
                 normalfile_inode_obj.size = ulength;
