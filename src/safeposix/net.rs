@@ -210,7 +210,7 @@ impl NetMetadata {
             true
         }
     }
-    
+
     pub fn _get_available_udp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));

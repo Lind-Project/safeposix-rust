@@ -1374,7 +1374,6 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    //drop(filedesc_enum);
                     let _ = filedesc_enum;
                     self._dup2_helper(fd, arg, false)
                 }
@@ -1789,7 +1788,6 @@ impl Cage {
                     fileobject.close().unwrap();
                 }
 
-                //drop(fileobject);
                 let _ = fileobject;
                 drop(maybe_fileobject);
 

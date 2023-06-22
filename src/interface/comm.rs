@@ -78,7 +78,7 @@ impl GenSockaddr {
             GenSockaddr::V4(_) => panic!("Invalid function called for this type of Sockaddr."),
             GenSockaddr::V6(_) => panic!("Invalid function called for this type of Sockaddr.")
         }
-    } 
+    }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
