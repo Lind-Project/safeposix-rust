@@ -1136,7 +1136,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
- 
+
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -1170,7 +1170,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
- 
+
     pub fn ut_lind_net_dns_rootserver_ping() {
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
@@ -1253,8 +1253,6 @@ pub mod net_tests {
         let record = unsafe{&*recordptr};
         let addr = u32::from_be(record.addr.s_addr);
         assert_eq!(addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-        //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-
         lindrustfinalize();
     }
 }
