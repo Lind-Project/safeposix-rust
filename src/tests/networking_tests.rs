@@ -968,7 +968,13 @@ pub mod net_tests {
 
         let thread = interface::helper_thread(move || {
             let mut buf = sizecbuf(10);
-            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            loop {
+                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -978,7 +984,13 @@ pub mod net_tests {
         assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
         let mut buf2 = sizecbuf(15);
-        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+        loop {
+            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+            if result == -libc::EINTR {
+                continue; // if the error was EINTR, retry the syscall
+            }
+            break;
+        }
         let mut str2 = cbuf2str(&buf2);
         assert_eq!(str2, "Socketpair Test");
 
