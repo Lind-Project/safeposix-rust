@@ -342,34 +342,7 @@ impl Cage {
                             NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
                             sockhandle.state = ConnState::CONNECTED;
                             if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
-                            return 0; 
-
-                           // if sockfdobj.flags & O_NONBLOCK != 0 {
-                                //non-block connect
-                           //         let remotepathbuf = convpath(remoteaddr.path().clone());
-                           //         let entry = DomsockTableEntry {
-                          //          sockaddr: sockhandle.localaddr.unwrap().clone(),
-                           //         receive_pipe: Some(pipe1.clone()).unwrap(),
-                           //         send_pipe: Some(pipe2.clone()).unwrap(),
-                           //         cond_var: None,
-                           //     };
-                           //     NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
-                           //     sockhandle.state = ConnState::INPROGRESS;
-                           //     return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");                            
-                           // } else {
-                           //     let connvar = interface::RustRfc::new(ConnCondVar::new());
-                           //     let entry = DomsockTableEntry {
-                           //         sockaddr: sockhandle.localaddr.unwrap().clone(),
-                           //         receive_pipe: Some(pipe1.clone()).unwrap(),
-                           //         send_pipe: Some(pipe2.clone()).unwrap(),
-                           //         cond_var: Some(connvar.clone()),
-                           //     };
-                           //     let remotepathbuf = convpath(remoteaddr.path().clone());
-                           //     NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
-                           //     connvar.wait();
-                           //     sockhandle.state = ConnState::CONNECTED;
-                           //     return 0;                        
-                           // }                        
+                            return 0;                        
                         }
                         else {
                             //for TCP, actually create the internal socket object and connect it
@@ -388,7 +361,6 @@ impl Cage {
                                     Err(e) => return e,
                                 };
                                 let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
-                                //let bindret = sockfdobj.0.bind(&localaddr);
                                 if bindret < 0 {
                                     sockhandle.localaddr = Some(localaddr);
                                     match Errno::from_discriminant(interface::get_errno()) {
@@ -556,7 +528,7 @@ impl Cage {
                                     let mut nonblocking = false;
                                     if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                                     let retval = match sockinfo.sendpipe.as_ref() {
-                                        Some(pipe) => pipe.write_to_pipe(buf, buflen, nonblocking) as i32,
+                                        Some(sendpipe) => sendpipe.write_to_pipe(buf, buflen, nonblocking) as i32,
                                         None => {
                                             return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");  
                                         }
@@ -672,10 +644,6 @@ impl Cage {
                                             return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");  
                                         }
                                 };
-
-                                //if let Some (remotepipe) = &sockinfo.remotepipe {
-                                //    retval = remotepipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid);
-                                //}
                             }
                         } 
                         else {
@@ -1211,9 +1179,7 @@ impl Cage {
                                 } 
 
                                 if sockhandle.state == ConnState::CONNECTED {
-                                    //drop(sockfdobj);
                                     let _ = sockfdobj;
-                                    //drop(filedesc_enum);
                                     let _ = filedesc_enum;
                                     drop(unlocked_fd);
                                     drop(sockhandle);
@@ -1256,7 +1222,6 @@ impl Cage {
                                         new_readfds.insert(*fd);
                                         retval += 1;
                                     } else {
-                                        //drop(sockfdobj);
                                         let _ = sockfdobj;
                                         drop(sockhandle);
                                         drop(unlocked_fd);
@@ -1306,9 +1271,7 @@ impl Cage {
                                     sockhandle.state = ConnState::CONNECTED; 
                                 } 
                                 if sockhandle.state == ConnState::CONNECTED {                                    
-                                    //drop(sockfdobj);
                                     let _ = sockfdobj;
-                                    //drop(filedesc_enum);
                                     let _ = filedesc_enum;
                                     drop(unlocked_fd);
                                     drop(sockhandle);

@@ -349,7 +349,6 @@ impl NetMetadata {
                 if addr.is_unspecified() {
                     for portuser in userarr.clone() {
                         if portuser.1 <= 1 {
-                            //drop(portuser);
                             let _ = portuser;
                             userarr.swap_remove(index);
                         } else { //if it's rebindable and there are others bound to it
@@ -357,7 +356,6 @@ impl NetMetadata {
                         }
                     }
                     if userarr.len() == 0 {
-                        //drop(userarr);
                         let _ = userarr;
                         userentry.remove();
                     }
@@ -367,10 +365,8 @@ impl NetMetadata {
                         if portuser.0 == muxed.0 {
                             //if it's rebindable and we're removing the last bound port or it's just not rebindable
                             if portuser.1 <= 1 {
-                                //drop(portuser);
                                 let _ = portuser;
                                 if userarr.len() == 1 {
-                                    //drop(userarr);
                                     let _ = userarr;
                                     userentry.remove();
                                 } else {
@@ -391,7 +387,7 @@ impl NetMetadata {
             }
         }
     }
- 
+
     pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
         let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
         for domainsocks in self.domsock_paths.iter() { domainsock_paths.push(domainsocks.clone()); } // get vector of domain sock table keys

@@ -165,7 +165,6 @@ impl Cage {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
         }
-        //drop(shmtable);
         let _ = shmtable;
         interface::cagetable_insert(child_cageid, cageobj);
 
