@@ -13,6 +13,7 @@ pub mod ipc_tests {
         //ut_lind_ipc_pipefile();
         //ut_lind_ipc_pipe();
         ut_lind_ipc_domain_socket();
+        ut_lind_ipc_socketpair(); 
     }
 
 
@@ -240,4 +241,34 @@ pub mod ipc_tests {
         lindrustfinalize();
     } 
     
+     pub fn ut_lind_ipc_socketpair() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair), 0);
+        let cage2 = cage.clone();
+
+        let thread = interface::helper_thread(move || {
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15);
+        });
+
+        assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
+
+        let mut buf2 = sizecbuf(15);
+        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    } 
 }
