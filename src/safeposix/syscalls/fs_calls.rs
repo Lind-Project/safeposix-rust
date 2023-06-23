@@ -1217,7 +1217,7 @@ impl Cage {
                             if sock.refcount == 0 {
                                 if sock.linkcount == 0 {
                                     drop(inodeobj);
-                                    let path = convpath(sockhandle.localaddr.unwrap().path().clone());
+                                    let path = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     NET_METADATA.domsock_paths.remove(&path);
                                 }
