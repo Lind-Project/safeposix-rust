@@ -1327,8 +1327,8 @@ pub mod net_tests {
         let recordptr = dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
         let record = unsafe{&*recordptr};
         let addr = u32::from_be(record.addr.s_addr);
-        //assert_eq!(addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-        assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+        assert_eq!(addr, 0x23ac5973); //check that what is returned is the actual ip, 35.172.89.115
+        //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
 
         lindrustfinalize();
     }
