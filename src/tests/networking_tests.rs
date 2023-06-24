@@ -1303,7 +1303,14 @@ pub mod net_tests {
         let mut dnsresp = [0u8; 512];
 
         //recieve DNS response
-        let _resplen = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
+        loop {
+            let result = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
+
+            if result == -libc::EINTR {
+                continue; // if the error was EINTR, retry the syscall
+            }
+            break;
+        }
 
         //extract packet header
         let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader)};
