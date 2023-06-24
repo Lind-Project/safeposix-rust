@@ -510,9 +510,16 @@ pub mod net_tests {
                         }
                     } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                         let mut buf = sizecbuf(4);
-                        let recres = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
-                        assert_eq!(recres & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for recieving or it's closed
-                        if recres == 4 {
+                        let mut result :i32 = 0;
+                        loop {
+                            result = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
+                            if result == -libc::EINTR {
+                                continue; // if the error was EINTR, retry the syscall
+                            }
+                            assert_eq!(result & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for recieving or it's closed
+                            break;
+                        }
+                        if result == 4 {
                             assert_eq!(cbuf2str(&buf), "test");
                             //This socket is ready for writing, modify the socket descriptor to be in read-write mode. This socket can write data out to network 
                             for polledfile in &mut polled {
@@ -728,7 +735,15 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(1));
 
             let mut buf = sizecbuf(4);
-            assert_eq!(cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0), 4);
+            let mut result :i32 = 0;
+            loop {
+                result = cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
+            assert_eq!(result, 4);
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
@@ -759,7 +774,14 @@ pub mod net_tests {
                     inputs.remove(&sock);
                 } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                     let mut buf = sizecbuf(4);
-                    let recvresult = cage.recv_syscall(sock, buf.as_mut_ptr(), 4, 0);
+                    let mut recvresult :i32 = 0;
+                    loop {
+                        recvresult = cage.recv_syscall(sock, buf.as_mut_ptr(), 4, 0);
+                        if recvresult == -libc::EINTR {
+                            continue; // if the error was EINTR, retry the syscall
+                        }
+                        break;
+                    }
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
                             outputs.insert(sock);
@@ -1007,7 +1029,13 @@ pub mod net_tests {
         let cage2 = cage.clone();
         let thread = interface::helper_thread(move || {
             let mut buf = sizecbuf(10);
-            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            loop {
+                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -1017,7 +1045,13 @@ pub mod net_tests {
         assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
         let mut buf2 = sizecbuf(15);
-        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+        loop {
+            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+            if result == -libc::EINTR {
+                continue; // if the error was EINTR, retry the syscall
+            }
+            break;
+        }
         assert_eq!(cbuf2str(&buf2), "Socketpair Test");
 
         thread.join().unwrap();
@@ -1075,11 +1109,24 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(30));
             
             let mut buf = sizecbuf(10);
-            cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+            loop {
+                let result = cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
             interface::sleep(interface::RustDuration::from_millis(30));
-            assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 5);
+            loop {
+                let result = cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                assert_eq!(result, 5);
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
             assert_eq!(cage2.close_syscall(serverfd), 0);
@@ -1133,7 +1180,14 @@ pub mod net_tests {
             
             interface::sleep(interface::RustDuration::from_millis(20));
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0), 16);
+            loop {
+                let result = cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                assert_eq!(result, 16);
+                break;
+            }
             assert_ne!(buf, sizecbuf(16));
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
