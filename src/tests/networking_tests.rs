@@ -1309,6 +1309,7 @@ pub mod net_tests {
             if result == -libc::EINTR {
                 continue; // if the error was EINTR, retry the syscall
             }
+            assert!(result >= 0);
             break;
         }
 
