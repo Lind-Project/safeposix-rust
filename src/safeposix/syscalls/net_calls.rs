@@ -645,29 +645,47 @@ impl Cage {
                                         }
                                 };
                             }
-                        } 
-                        else {
-                             if sockfdobj.flags & O_NONBLOCK != 0 {
-                                retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
-                            } else {
-                                retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
-                            }
-                       }
-    
-                        if retval < 0 {
-                            //If we have already read from a peek but have failed to read more, exit!
-                            if buflen != buflenleft {
-                                return (buflen - buflenleft) as i32;
-                            }
 
-                            if sockhandle.domain == AF_UNIX {
+                            if retval < 0 {
+                                //If we have already read from a peek but have failed to read more, exit!
+                                if buflen != buflenleft { retval = (buflen - buflenleft) as i32; }
                                 return retval;
                             }
-                            else {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");},
-                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                };
+                        } else {
+                            loop { // recv loop for blocking sockets
+                                if sockfdobj.flags & O_NONBLOCK != 0 {
+                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
+                                } else {
+                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
+                                }
+
+                                if retval < 0 {
+                                    //If we have already read from a peek but have failed to read more, exit!
+                                    if buflen != buflenleft { return (buflen - buflenleft) as i32; }
+
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {
+                                            //We have the recieve timeout set to every one second, so
+                                            //if our blocking socket ever returns EAGAIN, it must be
+                                            //the case that this recv timeout was exceeded, and we
+                                            //should thus not treat this as a failure in our emulated
+                                            //socket; see comment in Socket::new in interface/comm.rs
+                                            if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                                    // until the individual thread is signaled to cancel itself
+                                                    loop { interface::cancelpoint(self.cageid); }
+                                                }
+                                    
+                                                continue; // try again on EAGAIN
+                                            }
+    
+                                            return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
+                                        },
+                                        Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                    };
+                                }
+                                break; // if we get this far we can continue
                             }
                         }
 
