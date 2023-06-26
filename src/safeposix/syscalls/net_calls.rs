@@ -709,21 +709,34 @@ impl Cage {
                             return ibindret;
                         }
 
-                        //if the remoteaddr is set and addr is not, use remoteaddr
-                        let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
-                            sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
-                        } else {
-                            sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
-                        };
-
-                        if retval < 0 {
-                            match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {return syscall_error(i, "recvfrom", "syscall error from libc recvfrom");},
-                                Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                        loop { // loop for blocking sockets
+                            //if the remoteaddr is set and addr is not, use remoteaddr
+                            //unwrap is ok because of implicit bind
+                            let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
+                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
+                            } else {
+                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
                             };
 
-                        } else {
-                            return retval;
+                            if retval < 0 {
+                                match Errno::from_discriminant(interface::get_errno()) {
+                                    Ok(i) => {
+                                        if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                // if the cancel status is set in the cage, we trap around a cancel point
+                                                // until the individual thread is signaled to cancel itself
+                                                loop { interface::cancelpoint(self.cageid); }
+                                            }
+                                            continue; //received EAGAIN on blocking socket, try again
+                                        }
+                                        return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
+                                    },
+                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                };
+                                
+                            } else {
+                                return retval; // we can proceed
+                            }
                         }
                     }
 
