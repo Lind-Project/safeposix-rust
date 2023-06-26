@@ -620,7 +620,6 @@ impl Cage {
                                         },
                                         Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                                     };
-
                                 }
                                 break; // we're okay to move on
                             }
