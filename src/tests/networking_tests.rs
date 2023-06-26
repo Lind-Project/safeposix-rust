@@ -15,16 +15,16 @@ pub mod net_tests {
         ut_lind_net_listen();
         ut_lind_net_poll();
         ut_lind_net_recvfrom();
-        //ut_lind_net_select();
+        ut_lind_net_select(); // <--
         ut_lind_net_shutdown();
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
-        //ut_lind_net_socketpair();
+        ut_lind_net_socketpair(); // <--
         ut_lind_net_udp_bad_bind();
-        //ut_lind_net_udp_simple();
-        //ut_lind_net_udp_connect();
+        ut_lind_net_udp_simple(); // <--
+        ut_lind_net_udp_connect(); // <--
         ut_lind_net_gethostname();
-        //ut_lind_net_dns_rootserver_ping();
+        ut_lind_net_dns_rootserver_ping(); // <--
     }
 
     pub fn ut_lind_net_bind() {
@@ -510,9 +510,16 @@ pub mod net_tests {
                         }
                     } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                         let mut buf = sizecbuf(4);
-                        let recres = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
-                        assert_eq!(recres & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for recieving or it's closed
-                        if recres == 4 {
+                        let mut result :i32 = 0;
+                        loop {
+                            result = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
+                            if result == -libc::EINTR {
+                                continue; // if the error was EINTR, retry the syscall
+                            }
+                            assert_eq!(result & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for recieving or it's closed
+                            break;
+                        }
+                        if result == 4 {
                             assert_eq!(cbuf2str(&buf), "test");
                             //This socket is ready for writing, modify the socket descriptor to be in read-write mode. This socket can write data out to network 
                             for polledfile in &mut polled {
@@ -728,7 +735,15 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(1));
 
             let mut buf = sizecbuf(4);
-            assert_eq!(cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0), 4);
+            let mut result :i32 = 0;
+            loop {
+                result = cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
+            assert_eq!(result, 4);
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
@@ -759,7 +774,14 @@ pub mod net_tests {
                     inputs.remove(&sock);
                 } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                     let mut buf = sizecbuf(4);
-                    let recvresult = cage.recv_syscall(sock, buf.as_mut_ptr(), 4, 0);
+                    let mut recvresult :i32 = 0;
+                    loop {
+                        recvresult = cage.recv_syscall(sock, buf.as_mut_ptr(), 4, 0);
+                        if recvresult == -libc::EINTR {
+                            continue; // if the error was EINTR, retry the syscall
+                        }
+                        break;
+                    }
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
                             outputs.insert(sock);
@@ -968,7 +990,13 @@ pub mod net_tests {
 
         let thread = interface::helper_thread(move || {
             let mut buf = sizecbuf(10);
-            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            loop {
+                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -978,8 +1006,15 @@ pub mod net_tests {
         assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
         let mut buf2 = sizecbuf(15);
-        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
+        loop {
+            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+            if result == -libc::EINTR {
+                continue; // if the error was EINTR, retry the syscall
+            }
+            break;
+        }
+        let mut str2 = cbuf2str(&buf2);
+        assert_eq!(str2, "Socketpair Test");
 
         thread.join().unwrap();
 
@@ -994,7 +1029,13 @@ pub mod net_tests {
         let cage2 = cage.clone();
         let thread = interface::helper_thread(move || {
             let mut buf = sizecbuf(10);
-            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            loop {
+                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -1004,7 +1045,13 @@ pub mod net_tests {
         assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
         let mut buf2 = sizecbuf(15);
-        cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+        loop {
+            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+            if result == -libc::EINTR {
+                continue; // if the error was EINTR, retry the syscall
+            }
+            break;
+        }
         assert_eq!(cbuf2str(&buf2), "Socketpair Test");
 
         thread.join().unwrap();
@@ -1062,11 +1109,24 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(30));
             
             let mut buf = sizecbuf(10);
-            cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+            loop {
+                let result = cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
             
             interface::sleep(interface::RustDuration::from_millis(30));
-            assert_eq!(cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0), 5);
+            loop {
+                let result = cage2.recv_syscall(serverfd, buf.as_mut_ptr(), 10, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                assert_eq!(result, 5);
+                break;
+            }
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
             assert_eq!(cage2.close_syscall(serverfd), 0);
@@ -1120,7 +1180,14 @@ pub mod net_tests {
             
             interface::sleep(interface::RustDuration::from_millis(20));
             let mut buf = sizecbuf(16);
-            assert_eq!(cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0), 16);
+            loop {
+                let result = cage2.recv_syscall(listenfd, buf.as_mut_ptr(), 16, 0);
+                if result == -libc::EINTR {
+                    continue; // if the error was EINTR, retry the syscall
+                }
+                assert_eq!(result, 16);
+                break;
+            }
             assert_ne!(buf, sizecbuf(16));
             assert_eq!(cbuf2str(&buf), "UDP Connect Test");
 
@@ -1136,7 +1203,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-
+ 
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -1170,7 +1237,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-
+    
     pub fn ut_lind_net_dns_rootserver_ping() {
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
@@ -1236,7 +1303,15 @@ pub mod net_tests {
         let mut dnsresp = [0u8; 512];
 
         //recieve DNS response
-        let _resplen = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
+        loop {
+            let result = cage.recvfrom_syscall(dnssocket, dnsresp.as_mut_ptr(), 512, 0, &mut Some(&mut dnsaddr));
+
+            if result == -libc::EINTR {
+                continue; // if the error was EINTR, retry the syscall
+            }
+            assert!(result >= 0);
+            break;
+        }
 
         //extract packet header
         let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader)};
@@ -1252,7 +1327,9 @@ pub mod net_tests {
         let recordptr = dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
         let record = unsafe{&*recordptr};
         let addr = u32::from_be(record.addr.s_addr);
-        assert_eq!(addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+        assert_eq!(addr, 0x23ac5973); //check that what is returned is the actual ip, 35.172.89.115
+        //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+
         lindrustfinalize();
     }
 }
