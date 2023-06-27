@@ -1027,9 +1027,8 @@ impl Cage {
         }
     }
 
-
     //------------------------------------FCHDIR SYSCALL------------------------------------
-    
+
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
         let mut path_string = String::new();
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
@@ -1040,7 +1039,9 @@ impl Cage {
                 File(normalfile_filedesc_obj) => {
                     let mut inodenum = normalfile_filedesc_obj.inode;
 
-                    while let Some(mut thisinode) = FS_METADATA.inodetable.get_mut(&inodenum) {
+                    loop{
+                        let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                
                         match *thisinode {
                             Inode::Dir(ref mut dir_inode) => {
                                 if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
@@ -1075,12 +1076,11 @@ impl Cage {
                             }
                         }
                     }
-
                 },
                 _ => return syscall_error(Errno::ENOTDIR, "fchdir", "the last component in fd is not a file"),
             }
         } else {
-            return syscall_error(Errno::ENOENT, "fchdir", "the directory referred to in path does not exist");
+            return syscall_error(Errno::ENOENT, "fchdir", "invalid file descriptor");
         }
 
         let mut cwd_container = self.cwd.write();
@@ -1088,7 +1088,6 @@ impl Cage {
 
         0 //fchdir has succeeded!
     }
-
 
     //------------------------------------CHDIR SYSCALL------------------------------------
     
