@@ -676,7 +676,8 @@ impl Cage {
                                                     // until the individual thread is signaled to cancel itself
                                                     loop { interface::cancelpoint(self.cageid); }
                                                 }
-                                    
+                                                drop(sockhandle); // release sockhandle temporarily
+                                                sockhandle = sock_tmp.write();
                                                 continue; // try again on EAGAIN
                                             }
     
@@ -727,6 +728,8 @@ impl Cage {
                                                 // until the individual thread is signaled to cancel itself
                                                 loop { interface::cancelpoint(self.cageid); }
                                             }
+                                            drop(sockhandle); // release sockhandle temporarily
+                                            sockhandle = sock_tmp.write();
                                             continue; //received EAGAIN on blocking socket, try again
                                         }
                                         return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
