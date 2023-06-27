@@ -612,6 +612,8 @@ impl Cage {
                                                     // until the individual thread is signaled to cancel itself
                                                     loop { interface::cancelpoint(self.cageid); }
                                                 }
+                                                drop(sockhandle);
+                                                sockhandle = sock_tmp.write();
                                     
                                                 continue; // EAGAIN, try again
                                             }
