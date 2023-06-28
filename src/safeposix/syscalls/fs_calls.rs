@@ -633,9 +633,20 @@ impl Cage {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
 
-                    let mut nonblocking = false;
-                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    return pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking, self.cageid) as i32  
+                    loop {
+                        let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count) as i32;
+
+                        if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == Errno::EAGAIN as i32 {
+                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                // if the cancel status is set in the cage, we trap around a cancel point
+                                // until the individual thread is signaled to cancel itself
+                                loop { interface::cancelpoint(self.cageid); }
+                            }
+                            continue; //received EAGAIN on blocking pipe, try again
+                        }
+
+                        return ret; // otherwise return value
+                    }
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }

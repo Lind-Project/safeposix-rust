@@ -121,7 +121,7 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool, cageid: u64) -> i32 {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize) -> i32 {
 
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -129,25 +129,11 @@ impl EmulatedPipe {
         };
 
         let mut read_end = self.read_end.lock();
-        let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
+        let pipe_space = read_end.len();
+        if pipe_space == 0 {
+            if self.eof.load(Ordering::SeqCst) { return 0; } // break on EOF
+            interface::lind_yield(); // yield on an empty pipe
             return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
-        }
-
-        // wait for something to be in the pipe, but break on eof
-        // check cancel point after 2^20 cycles just in case
-        let mut count = 0;
-        while pipe_space == 0 {
-            if self.eof.load(Ordering::SeqCst) { return 0; }
-
-            if count == CANCEL_CHECK_INTERVAL { 
-                interface::cancelpoint(cageid); 
-                count = 0;
-            }
-            
-            pipe_space = read_end.len();
-            count = count + 1;
-            if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
         }
 
         let bytes_to_read = min(length, pipe_space);
