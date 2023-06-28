@@ -702,7 +702,7 @@ impl Cage {
 
                         if flags & MSG_PEEK != 0 {
                             //extend from the point after we read our previously peeked bytes
-                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
+                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle_write.last_peek);
                         }
 
                         return totalbyteswritten;
