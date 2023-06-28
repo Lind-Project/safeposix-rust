@@ -321,7 +321,8 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
 }
 
-pub fn inodeandparent(dir_inode_no: usize, target_inode: usize) -> Option<String> {
+// Find the file by the given inode number in the given directory
+pub fn filenamefrominode(dir_inode_no: usize, target_inode: usize) -> Option<String> {
     let cur_node = Some(FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
 
     match &*cur_node.unwrap() {
@@ -335,11 +336,7 @@ pub fn inodeandparent(dir_inode_no: usize, target_inode: usize) -> Option<String
                     break;
                 }
             }
-
-            match target_variable_name {
-                Some(name) => return Some(name),
-                None => return None,
-            }
+            return target_variable_name;
         }
         // If we're trying to get a child of a non-directory inode, exit out
         _ => return None,

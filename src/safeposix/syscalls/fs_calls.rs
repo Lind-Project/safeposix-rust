@@ -1028,8 +1028,8 @@ impl Cage {
     }
 
     //------------------------------------FCHDIR SYSCALL------------------------------------
-
-    pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+    
+   pub fn fchdir_syscall(&self, fd: i32) -> i32 {
         let mut path_string = String::new();
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         let mut first_iteration = true;
@@ -1038,10 +1038,15 @@ impl Cage {
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let mut inodenum = normalfile_filedesc_obj.inode;
-
                     loop{
-                        let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                
+                    let mut thisinode = match FS_METADATA.inodetable.get_mut(&inodenum) {
+                        Some(inode) => inode,
+                        None => {
+                            return syscall_error(Errno::ENOTDIR, "fchdir", "valid inodenum");
+                        },
+                    };
+                        
+                    
                         match *thisinode {
                             Inode::Dir(ref mut dir_inode) => {
                                 if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
@@ -1054,13 +1059,9 @@ impl Cage {
                                         first_iteration = false;
                                     }
 
-                                    match inodeandparent(*parent_dir_inode, inodenum) {
+                                    match filenamefrominode(*parent_dir_inode, inodenum) {
                                         Some(name) => {
-                                            let mut new_path_string = String::with_capacity(name.len() + path_string.len() + 1);
-                                            new_path_string.push_str(&name);
-                                            new_path_string.push('/');
-                                            new_path_string.push_str(&path_string);
-                                            path_string = new_path_string;
+                                            path_string = name + "/" + &path_string;
                                             inodenum = *parent_dir_inode;
                                         },
                                         None => return syscall_error(Errno::ENOTDIR, "fchdir", "path not found"),
