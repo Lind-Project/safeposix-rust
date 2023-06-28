@@ -598,10 +598,10 @@ impl Cage {
         match &mut *filedesc_enum {
             Socket(ref mut sockfdobj) => {
                 let sock_tmp = sockfdobj.handle.clone();
-                let mut sockhandle = sock_tmp.write();
-                match sockhandle.protocol {
+                let mut sockhandle_write = sock_tmp.write();
+                match sockhandle_write.protocol {
                     IPPROTO_TCP => {
-                        if sockhandle.state != ConnState::CONNECTED {
+                        if sockhandle_write.state != ConnState::CONNECTED {
                             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                         }
 
@@ -609,9 +609,9 @@ impl Cage {
                         let mut newbufptr = buf;
 
                         //if we have peeked some data before, fill our buffer with that data before moving on
-                        if !sockhandle.last_peek.is_empty() {
-                            let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
-                            interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
+                        if !sockhandle_write.last_peek.is_empty() {
+                            let bytecount = interface::rust_min(sockhandle_write.last_peek.len(), newbuflen);
+                            interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle_write.last_peek);
                             newbuflen -= bytecount;
                             newbufptr = newbufptr.wrapping_add(bytecount);
 
@@ -619,8 +619,8 @@ impl Cage {
                             //and if the bytecount is more than the length of the peeked data, then we remove the entire
                             //buffer
                             if flags & MSG_PEEK == 0 {
-                                let len = sockhandle.last_peek.len();
-                                sockhandle.last_peek.drain(..(
+                                let len = sockhandle_write.last_peek.len();
+                                sockhandle_write.last_peek.drain(..(
                                     if bytecount > len {len} 
                                     else {bytecount}
                                 ));
@@ -632,13 +632,16 @@ impl Cage {
                             }
                         }
 
+                        drop(sockhandle_write);
+                        let sockhandle_read = sock_tmp.read();
+
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
                         let mut retval = 0;
                         // check if this is a domain socket
-                        if sockhandle.domain  == AF_UNIX {
+                        if sockhandle_read.domain  == AF_UNIX {
                             // get the remote socket pipe, read from it, and return bytes read
-                            if let Some(sockinfo) = &sockhandle.unix_info {
+                            if let Some(sockinfo) = &sockhandle_read.unix_info {
                                 let mut nonblocking = false;
                                 if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                                 match sockinfo.receivepipe.as_ref() {
@@ -657,9 +660,9 @@ impl Cage {
                         } else {
                             loop { // recv loop for blocking sockets
                                 if sockfdobj.flags & O_NONBLOCK != 0 {
-                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
+                                    retval = sockhandle_read.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
                                 } else {
-                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
+                                    retval = sockhandle_read.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
                                 }
 
                                 if retval < 0 {
@@ -679,8 +682,7 @@ impl Cage {
                                                     // until the individual thread is signaled to cancel itself
                                                     loop { interface::cancelpoint(self.cageid); }
                                                 }
-                                                drop(sockhandle); // release sockhandle temporarily
-                                                sockhandle = sock_tmp.write();
+
                                                 continue; // try again on EAGAIN
                                             }
     
@@ -695,6 +697,9 @@ impl Cage {
 
                         let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
 
+                        drop(sockhandle_read);
+                        sockhandle_write = sock_tmp.write();
+
                         if flags & MSG_PEEK != 0 {
                             //extend from the point after we read our previously peeked bytes
                             interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
@@ -708,18 +713,21 @@ impl Cage {
                         if let Some(baddr) = addr {
                             binddomain = baddr.get_family() as i32;
                         } else { binddomain = AF_INET }
-                        let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
+                        let ibindret = self._implicit_bind(&mut *sockhandle_write, binddomain);
                         if ibindret < 0 {
                             return ibindret;
                         }
 
+                        drop(sockhandle_write);
+                        let sockhandle_read = sock_tmp.read();
+
                         loop { // loop for blocking sockets
                             //if the remoteaddr is set and addr is not, use remoteaddr
                             //unwrap is ok because of implicit bind
-                            let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
-                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
+                            let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle_read.remoteaddr) {
+                                sockhandle_read.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
                             } else {
-                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
+                                sockhandle_read.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
                             };
 
                             if retval < 0 {
@@ -731,8 +739,7 @@ impl Cage {
                                                 // until the individual thread is signaled to cancel itself
                                                 loop { interface::cancelpoint(self.cageid); }
                                             }
-                                            drop(sockhandle); // release sockhandle temporarily
-                                            sockhandle = sock_tmp.write();
+
                                             continue; //received EAGAIN on blocking socket, try again
                                         }
                                         return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
