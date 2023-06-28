@@ -716,17 +716,7 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(1));
 
             let mut buf = sizecbuf(4);
-            //assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
-            let mut result :i32 = 0;
-            loop {
-                result = cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0);
-                if result == -libc::EINTR {
-                    continue; // if the error was EINTR, retry the syscall
-                }
-                break;
-            }
-            assert_eq!(result, 4);
-
+            assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
             assert_eq!(cbuf2str(&buf), "test");
 
             assert_eq!(cage2.close_syscall(clientsockfd1), 0);

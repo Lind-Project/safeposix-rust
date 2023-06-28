@@ -103,6 +103,7 @@ impl Cage {
             _ => {
                 return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to use an unimplemented socket type");
             }
+
         }
     }
 
@@ -127,7 +128,7 @@ impl Cage {
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
-
+    
     fn bind_inner_socket(&self, sockhandle: &mut SocketHandle, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if localaddr.get_family() != sockhandle.domain as u16 {
             return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
@@ -207,7 +208,7 @@ impl Cage {
         sockhandle.localaddr = Some(newsockaddr);
 
         0
-    }
+    } 
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
@@ -234,7 +235,7 @@ impl Cage {
             let path = interface::gen_ud_path();
             let newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
             Ok(newremote)
-        }
+        } 
     }
 
     fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) -> Result<interface::GenSockaddr, i32> {
@@ -405,8 +406,8 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "connect", "invalid file descriptor");
         }
-    }
-
+    } 
+ 
     fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, options: i32) -> SocketHandle {
 
         SocketHandle {
@@ -414,7 +415,7 @@ impl Cage {
             options: options,
             state: conn,
             protocol: protocol,
-
+            
             domain: domain,
             last_peek: interface::RustDeque::new(),
             localaddr: None,
@@ -446,6 +447,7 @@ impl Cage {
                     if socket_type == AF_UNIX {
                         return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
                     }
+                   //} 
 
                     if dest_addr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "sendto", "An address with an invalid family for the given domain was specified");
@@ -500,6 +502,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
         }
     }
+
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -518,11 +521,11 @@ impl Cage {
                     if socket_type == AF_UNIX {
                         match sockhandle.protocol {
                             IPPROTO_TCP => {
-    
+
                                 if sockhandle.state != ConnState::CONNECTED {
                                     return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
                                 }
-    
+
                                 // get the socket pipe, write to it, and return bytes written
                                 if let Some(sockinfo) = &sockhandle.unix_info {
                                     let mut nonblocking = false;
@@ -530,11 +533,11 @@ impl Cage {
                                     let retval = match sockinfo.sendpipe.as_ref() {
                                         Some(sendpipe) => sendpipe.write_to_pipe(buf, buflen, nonblocking) as i32,
                                         None => {
-                                            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");  
+                                            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
                                         }
                                     };
                                     if retval < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
-                                    else { 
+                                    else {
                                         return retval;
                                     }
                                 }
@@ -867,8 +870,7 @@ impl Cage {
             }
         }
     }
-
-    pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
+pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
     // we need to do a bunch of actual socket cleanup for INET sockets
     if sockhandle.domain != AF_UNIX { 
         let mut releaseflag = false;
@@ -950,7 +952,7 @@ impl Cage {
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
 
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
-        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
             if inner_result < 0 {
                 return inner_result;
@@ -970,7 +972,7 @@ impl Cage {
     
     //calls accept on the socket object with value depending on ipv4 or ipv6
     //There may be a bug with nonblocking accept with fds not being removed on error
-    pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
+   pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
 
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -1149,7 +1151,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
     }
-
+   
     fn _nonblock_peek_read(&self, fd: i32) -> bool{
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
@@ -1176,186 +1178,180 @@ impl Cage {
     }
 
     //TODO: handle pipes
-    pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
-        //exceptfds and writefds are not really implemented at the current moment.
-        //They both always return success. However we have some intention of making
-        //writefds work at some point for pipes? We have no such intention for exceptfds
-        let new_readfds = interface::RustHashSet::<i32>::new();
-        let new_writefds = interface::RustHashSet::<i32>::new();
-        //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
-    
-        if nfds < STARTINGFD || nfds >= MAXFD {
-            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
-        }
-    
-        let start_time = interface::starttimer();
-    
-        let end_time = match timeout {
-            Some(time) => time,
-            None => interface::RustDuration::MAX
-        };
+     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+       //exceptfds and writefds are not really implemented at the current moment.
+       //They both always return success. However we have some intention of making
+       //writefds work at some point for pipes? We have no such intention for exceptfds
+       let new_readfds = interface::RustHashSet::<i32>::new();
+       let new_writefds = interface::RustHashSet::<i32>::new();
+       //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
+   
+       if nfds < STARTINGFD || nfds >= MAXFD {
+           return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
+       }
+   
+       let start_time = interface::starttimer();
+   
+       let end_time = match timeout {
+           Some(time) => time,
+           None => interface::RustDuration::MAX
+       };
  
-        let mut retval = 0; 
-        loop { //we must block manually
-            for fd in readfds.iter() {
-                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
-                if let Some(filedesc_enum) = &mut *unlocked_fd {
-                    match filedesc_enum {
-                        Socket(ref mut sockfdobj) => {
-                            let sock_tmp = sockfdobj.handle.clone();
-                            let mut sockhandle = sock_tmp.write();
+       let mut retval = 0; 
+       loop { //we must block manually
+           for fd in readfds.iter() {
+               let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+               if let Some(filedesc_enum) = &mut *unlocked_fd {
+                   match filedesc_enum {
+                       Socket(ref mut sockfdobj) => {
+                           let sock_tmp = sockfdobj.handle.clone();
+                           let mut sockhandle = sock_tmp.write();
 
-                            if sockhandle.domain == AF_UNIX {
-                                if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
-                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
-                                    if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
-                                } 
+                           if sockhandle.domain == AF_UNIX {
+                               if sockhandle.state == ConnState::INPROGRESS {
+                                   let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                   let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
+                                   if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
+                               } 
 
-                                if sockhandle.state == ConnState::CONNECTED {
-                                    let _ = sockfdobj;
-                                    let _ = filedesc_enum;
-                                    drop(unlocked_fd);
-                                    drop(sockhandle);
-                                    if self._nonblock_peek_read(*fd) {
-                                        new_readfds.insert(*fd);
-                                        retval += 1;
-                                    }
-                                }
-                            }
-                            else {
-                                if sockhandle.state == ConnState::LISTEN {
-                                    if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
+                               if sockhandle.state == ConnState::CONNECTED {
+                                   let _ = sockfdobj;
+                                   let _ = filedesc_enum;
+                                   drop(sockhandle);
+                                   drop(unlocked_fd);
+                                   if self._nonblock_peek_read(*fd) {
+                                       new_readfds.insert(*fd);
+                                       retval += 1;
+                                   }
+                               }
+                           }
+                           else {
+                               if sockhandle.state == ConnState::LISTEN {
+                                   if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
 
-                                        //innersock unwrap ok because sockhandle is listening
-                                        let listeningsocket = match sockhandle.domain {
-                                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                            _ => panic!("Unknown domain in accepting socket"),
-                                        };
-                                        drop(sockhandle);
-                                        if let Ok(_) = listeningsocket.0 {
-                                            //save the pending connection for accept to do something with it
-                                            vacant.insert(vec!(listeningsocket));
-                                        } else {
-                                            //if it returned an error, then don't insert it into new_readfds
-                                        continue;
-                                        }
-                                    } //if it's already got a pending connection, add it!
+                                       //innersock unwrap ok because sockhandle is listening
+                                       let listeningsocket = match sockhandle.domain {
+                                           PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                           PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                           _ => panic!("Unknown domain in accepting socket"),
+                                       };
+                                       drop(sockhandle);
+                                       if let Ok(_) = listeningsocket.0 {
+                                           //save the pending connection for accept to do something with it
+                                           vacant.insert(vec!(listeningsocket));
+                                       } else {
+                                           //if it returned an error, then don't insert it into new_readfds
+                                       continue;
+                                       }
+                                   } //if it's already got a pending connection, add it!
 
-                                    //if we reach here there is a pending connection
-                                    new_readfds.insert(*fd);
-                                    retval += 1;
-                                    //sockhandle innersocket unwrap ok if INPROGRESS
-                                } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                        sockhandle.state = ConnState::CONNECTED;
-                                        new_readfds.insert(*fd);
-                                        retval += 1;
-                                } else {
-                                    if sockhandle.protocol == IPPROTO_UDP {
-                                        new_readfds.insert(*fd);
-                                        retval += 1;
-                                    } else {
-                                        let _ = sockfdobj;
-                                        drop(sockhandle);
-                                        drop(unlocked_fd);
-                                        if self._nonblock_peek_read(*fd) {
-                                            new_readfds.insert(*fd);
-                                            retval += 1;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                                   //if we reach here there is a pending connection
+                                   new_readfds.insert(*fd);
+                                   retval += 1;
+                                   //sockhandle innersocket unwrap ok if INPROGRESS
+                               } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
+                                       sockhandle.state = ConnState::CONNECTED;
+                                       new_readfds.insert(*fd);
+                                       retval += 1;
+                               } else {
+                                   if sockhandle.protocol == IPPROTO_UDP {
+                                       new_readfds.insert(*fd);
+                                       retval += 1;
+                                   } else {
+                                       let _ = sockfdobj;
+                                       drop(sockhandle);
+                                       drop(unlocked_fd);
+                                       if self._nonblock_peek_read(*fd) {
+                                           new_readfds.insert(*fd);
+                                           retval += 1;
+                                       }
+                                   }
+                               }
+                           }
+                       }
 
-                        //we don't support selecting streams
-                        Stream(_) => {continue;}
 
-                        //not supported yet
-                        Pipe(pipefdobj) => {
-                            if pipefdobj.pipe.check_select_read() {
-                                new_readfds.insert(*fd);
-                                retval += 1;
-                            }
-                        }
+                       //we don't support selecting streams
+                       Stream(_) => {continue;}
 
-                        //these file reads never block
-                        _ => {
-                            new_readfds.insert(*fd);
-                            retval += 1;
-                        }
-                    }
-                } else {
-                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
-                }
-            }
+                       //not supported yet
+                       Pipe(pipefdobj) => {
+                           if pipefdobj.pipe.check_select_read() {
+                               new_readfds.insert(*fd);
+                               retval += 1;
+                           }
+                       }
 
-            for fd in writefds.iter() {
-                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
-                if let Some(filedesc_enum) = &mut *unlocked_fd {
-                    match filedesc_enum {
-                        Socket(ref mut sockfdobj) => {
-                            // check if we've made an in progress connection first
-                            let sock_tmp = sockfdobj.handle.clone();
-                            let mut sockhandle = sock_tmp.write();                                                  
-                            if sockhandle.domain == AF_UNIX {
-                                let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
-                                let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
-                                if dsconnobj.is_none() && sockhandle.state == ConnState::INPROGRESS { 
-                                    sockhandle.state = ConnState::CONNECTED; 
-                                } 
-                                if sockhandle.state == ConnState::CONNECTED {                                    
-                                    let _ = sockfdobj;
-                                    let _ = filedesc_enum;
-                                    drop(unlocked_fd);
-                                    drop(sockhandle);
-                                    new_writefds.insert(*fd);
-                                    retval += 1;
-                                }
-                            }
-                        }
-                        //we always say streams are writable?
-                        Stream(_) => {
-                            new_writefds.insert(*fd);
-                            retval += 1;
-                        }
+                       //these file reads never block
+                       _ => {
+                           new_readfds.insert(*fd);
+                           retval += 1;
+                       }
+                   }
+               } else {
+                   return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+               }
+           }
 
-                        //not supported yet
-                        Pipe(pipefdobj) => {
-                            if pipefdobj.pipe.check_select_write() {
-                                new_writefds.insert(*fd);
-                                retval += 1;
-                            }
-                        }
+           for fd in writefds.iter() {
+               let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+               if let Some(filedesc_enum) = &mut *unlocked_fd {
+                   match filedesc_enum {
+                       Socket(ref mut sockfdobj) => {
+                           // check if we've made an in progress connection first
+                           let sock_tmp = sockfdobj.handle.clone();
+                           let mut sockhandle = sock_tmp.write();
+                           if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
+                               sockhandle.state = ConnState::CONNECTED;
+                           } 
+                           
+                           //we always say sockets are writable? Even though this is not true
+                           new_writefds.insert(*fd);
+                           retval += 1;
+                       }
 
-                        //these file writes never block
-                        _ => {
-                            new_writefds.insert(*fd);
-                            retval += 1;
-                        }
-                    }
-                } else {
-                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
-                }
+                       //we always say streams are writable?
+                       Stream(_) => {
+                           new_writefds.insert(*fd);
+                           retval += 1;
+                       }
 
-            }
-            
-            for fd in exceptfds.iter() {
-                //we say none of them ever have exceptional conditions
-                let unlocked_fd = self.filedescriptortable[*fd as usize].read();
-                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
-            }
+                       //not supported yet
+                       Pipe(pipefdobj) => {
+                           if pipefdobj.pipe.check_select_write() {
+                               new_writefds.insert(*fd);
+                               retval += 1;
+                           }
+                       }
 
-            if retval != 0 || interface::readtimer(start_time) > end_time {
-                break;
-            } else {
-                interface::sleep(BLOCK_TIME);
-            }
-        }
-        *readfds = new_readfds;
-        *writefds = new_writefds;
-        return retval;
-    }
+                       //these file writes never block
+                       _ => {
+                           new_writefds.insert(*fd);
+                           retval += 1;
+                       }
+                   }
+               } else {
+                   return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+               }
+
+           }
+           
+           for fd in exceptfds.iter() {
+               //we say none of them ever have exceptional conditions
+               let unlocked_fd = self.filedescriptortable[*fd as usize].read();
+               if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+           }
+
+           if retval != 0 || interface::readtimer(start_time) > end_time {
+               break;
+           } else {
+               interface::sleep(BLOCK_TIME);
+           }
+       }
+       *readfds = new_readfds;
+       *writefds = new_writefds;
+       return retval;
+   }
 
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
         
@@ -1537,7 +1533,11 @@ impl Cage {
                 if sockhandle.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
-                *ret_addr = sockhandle.remoteaddr.unwrap(); 
+                *ret_addr = sockhandle.remoteaddr.unwrap();
+                // will swap if unix
+                //let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
+                // //all of the checks that we had have passed if we are here
+                //*ret_addr = remoteaddr;
                 return 0;
 
             } else {
@@ -1547,7 +1547,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid");
         }
     }
-
+    
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         if let Some(filedesc_enum) = &*unlocked_fd {
@@ -1587,7 +1587,89 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
         }
-    }
+    } 
+                //                if sockhandle.domain == AF_UNIX {
+//                    if sockhandle.localaddr == None {
+//                        let null_path: &[u8] = &[];
+//                        *ret_addr = interface::GenSockaddr::Unix(new_sockaddr_unix(sockhandle.domain as u16, null_path));
+//                        return 0;
+//                    }
+//                    //if the socket is not none, then return the socket
+//                    *ret_addr = sockhandle.localaddr.unwrap();
+//                    return 0;
+//                }
+//                else {
+//                    if sockhandle.localaddr == None {
+//                        //sets the address to 0.0.0.0 if the address is not initialized yet
+//                        //setting the family as well based on the domain
+//                        let addr = match sockhandle.domain {
+//                            AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
+//                            AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
+//                            _ => { unreachable!() }
+//                        };
+//                        ret_addr.set_addr(addr);
+//                        ret_addr.set_port(0);
+//                        ret_addr.set_family(sockhandle.domain as u16);
+//                        return 0;
+//                    }
+//                    *ret_addr = sockhandle.localaddr.unwrap();
+//                    return 0;
+//                }
+//            } else {
+//                return syscall_error(Errno::ENOTSOCK, "getsockname", "the provided file is not a socket");
+//            }
+//        } else {
+//            return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
+//        }
+//    }
+//
+  //  pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+  //      let unlocked_fd = self.filedescriptortable[fd as usize].read();
+  //      if let Some(filedesc_enum) = &*unlocked_fd {
+  //          if let Socket(sockfdobj) = filedesc_enum {
+  //              let sock_tmp = sockfdobj.handle.clone();
+  //              let sockhandle = sock_tmp.read();
+
+  //              // domainsock
+  //              if sockhandle.domain == AF_UNIX {
+  //                  if sockhandle.localaddr == None {
+  //                      //ret_addr.set_path_null();
+  //                      ret_addr.set_family(sockhandle.domain as u16);
+  //                      return 0;
+  //                  }
+
+  //                  //if the socket is not none, then return the socket
+  //                  *ret_addr = sockhandle.localaddr.unwrap();
+  //                  return 0;
+  //              }
+
+
+  //              if sockhandle.localaddr == None {
+  //                  
+  //                  //sets the address to 0.0.0.0 if the address is not initialized yet
+  //                  //setting the family as well based on the domain
+  //                  let addr = match sockhandle.domain {
+  //                      AF_INET => { interface::GenIpaddr::V4(interface::V4Addr::default()) }
+  //                      AF_INET6 => { interface::GenIpaddr::V6(interface::V6Addr::default()) }
+  //                      _ => { unreachable!() }
+  //                  };
+  //                  ret_addr.set_addr(addr);
+  //                  ret_addr.set_port(0);
+  //                  ret_addr.set_family(sockhandle.domain as u16);
+  //                  return 0;
+  //              }
+ 
+  //              //if the socket is not none, then return the socket
+  //              *ret_addr = sockhandle.localaddr.unwrap();
+  //              return 0;
+
+  //          } else {
+  //              return syscall_error(Errno::ENOTSOCK, "getsockname", "the provided file is not a socket");
+  //          }
+  //      } else {
+  //          return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
+  //      }
+  //  }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
@@ -1945,3 +2027,4 @@ impl Cage {
         }
     }
 }
+
