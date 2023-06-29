@@ -593,7 +593,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
         }
     }
-
+    
     fn recv_common_inner(&self, filedesc_enum: &mut FileDescriptor, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         match &mut *filedesc_enum {
             Socket(ref mut sockfdobj) => {
