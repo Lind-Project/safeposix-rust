@@ -632,17 +632,21 @@ impl Cage {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-
+                    let mut count = 0;
                     loop {
                         let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count) as i32;
 
                         if ret == -(Errno::EAGAIN as i32) {
                             if pipe_filedesc_obj.flags & O_NONBLOCK == 0 {
-                                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                    // if the cancel status is set in the cage, we trap around a cancel point
-                                    // until the individual thread is signaled to cancel itself
-                                    loop { interface::cancelpoint(self.cageid); }
+                                if count > interface::CANCEL_CHECK_INTERVAL {
+                                    if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                        // if the cancel status is set in the cage, we trap around a cancel point
+                                        // until the individual thread is signaled to cancel itself
+                                        loop { interface::cancelpoint(self.cageid); }
+                                    }
+                                    count = 0;
                                 }
+                                count = count + 1;
                                 continue; //received EAGAIN on blocking pipe, try again
                             } else { syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later"); }
                         } 
