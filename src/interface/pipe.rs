@@ -133,7 +133,7 @@ impl EmulatedPipe {
         if pipe_space == 0 {
             if self.eof.load(Ordering::SeqCst) { return 0; } // break on EOF
             interface::lind_yield(); // yield on an empty pipe
-            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
+            return -(Errno::EAGAIN as i32);
         }
 
         let bytes_to_read = min(length, pipe_space);

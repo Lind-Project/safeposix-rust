@@ -636,14 +636,16 @@ impl Cage {
                     loop {
                         let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count) as i32;
 
-                        if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == Errno::EAGAIN as i32 {
-                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                // if the cancel status is set in the cage, we trap around a cancel point
-                                // until the individual thread is signaled to cancel itself
-                                loop { interface::cancelpoint(self.cageid); }
-                            }
-                            continue; //received EAGAIN on blocking pipe, try again
-                        }
+                        if ret == -(Errno::EAGAIN as i32) {
+                            if pipe_filedesc_obj.flags & O_NONBLOCK == 0 {
+                                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                    // until the individual thread is signaled to cancel itself
+                                    loop { interface::cancelpoint(self.cageid); }
+                                }
+                                continue; //received EAGAIN on blocking pipe, try again
+                            } else { syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later"); }
+                        } 
 
                         return ret; // otherwise return value
                     }
