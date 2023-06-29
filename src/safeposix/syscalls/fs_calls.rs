@@ -1029,7 +1029,7 @@ impl Cage {
 
     //------------------------------------FCHDIR SYSCALL------------------------------------
     
-   pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+    pub fn fchdir_syscall(&self, fd: i32) -> i32 {
         let mut path_string = String::new();
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         let mut first_iteration = true;
@@ -1038,15 +1038,15 @@ impl Cage {
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let mut inodenum = normalfile_filedesc_obj.inode;
+
                     loop{
-                    let mut thisinode = match FS_METADATA.inodetable.get_mut(&inodenum) {
-                        Some(inode) => inode,
-                        None => {
-                            return syscall_error(Errno::ENOTDIR, "fchdir", "valid inodenum");
-                        },
-                    };
-                        
-                    
+                        let mut thisinode = match FS_METADATA.inodetable.get_mut(&inodenum) {
+                            Some(inode) => inode,
+                            None => {
+                                return syscall_error(Errno::EBADF, "fchdir", "invalid inodenum");
+                            },
+                        };
+
                         match *thisinode {
                             Inode::Dir(ref mut dir_inode) => {
                                 if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
@@ -1055,7 +1055,6 @@ impl Cage {
                                             path_string.insert(0, '/');
                                             break;
                                         }
-
                                         first_iteration = false;
                                     }
 
@@ -1064,11 +1063,11 @@ impl Cage {
                                             path_string = name + "/" + &path_string;
                                             inodenum = *parent_dir_inode;
                                         },
-                                        None => return syscall_error(Errno::ENOTDIR, "fchdir", "path not found"),
+                                        None => return syscall_error(Errno::EACCES, "fchdir", "path not found"),
                                     };
 
                                 } else {
-                                    return syscall_error(Errno::ENOTDIR, "fchdir", "data not founded for '..'");
+                                    return syscall_error(Errno::EACCES, "fchdir", "data not founded for '..'");
                                 }
 
                             },
@@ -1078,10 +1077,10 @@ impl Cage {
                         }
                     }
                 },
-                _ => return syscall_error(Errno::ENOTDIR, "fchdir", "the last component in fd is not a file"),
+                _ => return syscall_error(Errno::EACCES, "fchdir", "cannot change working directory on this file descriptor"),
             }
         } else {
-            return syscall_error(Errno::ENOENT, "fchdir", "invalid file descriptor");
+            return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor");
         }
 
         let mut cwd_container = self.cwd.write();
