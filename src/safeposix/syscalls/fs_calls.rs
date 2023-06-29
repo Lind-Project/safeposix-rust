@@ -632,7 +632,6 @@ impl Cage {
                     
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-
                     loop { // loop over pipe reads so we can periodically check for cancellation
                         let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
                         if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == -(Errno::EAGAIN as i32) {

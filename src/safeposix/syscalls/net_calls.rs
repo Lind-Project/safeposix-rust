@@ -237,8 +237,7 @@ impl Cage {
             Ok(newremote)
         } 
     }
-
-    fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) -> Result<interface::GenSockaddr, i32> {
+fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) -> Result<interface::GenSockaddr, i32> {
         if let Some(addr) = &sockhandle.localaddr {
             Ok(addr.clone())
         } else {
@@ -406,8 +405,8 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "connect", "invalid file descriptor");
         }
-    } 
- 
+    }  
+
     fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, options: i32) -> SocketHandle {
 
         SocketHandle {
@@ -503,7 +502,7 @@ impl Cage {
         }
     }
 
-    pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
+pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -631,53 +630,40 @@ impl Cage {
                                 return bytecount as i32;
                             }
                         }
-                        
+
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
                         let mut retval = 0;
                         // check if this is a domain socket
                         if sockhandle.domain  == AF_UNIX {
-                        // get the remote socket pipe, read from it, and return bytes read
-                            if let Some(sockinfo) = &sockhandle.unix_info {
-                                let mut nonblocking = false;
-                                if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;} 
-                           // loop {
-                           //     if let Some(sockinfo) = &sockhandle.unix_info {
-                           //         if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
-                           //             retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
-                           //         } else {
-                           //              return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");   
-                           //         }
-                           //     };
-                           //     if retval < 0 {
-                           //         //If we have already read from a peek but have failed to read more, exit!
-                           //         if buflen != buflenleft { retval = (buflen - buflenleft) as i32; }
-                           //         if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
-                           //             if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                           //             // if the cancel status is set in the cage, we trap around a cancel point
-                           //             // until the individual thread is signaled to cancel itself
-                           //                 loop{interface::cancelpoint(self.cageid)};
-                           //             }
-                           //             drop(sockhandle);
-                           //             sockhandle = sock_tmp.write();
-                           //             continue;
-                           //         }
-                           //         return retval;
-                           //     }
-                           // }
+                            // get the remote socket pipe, read from it, and return bytes read
+                            loop {
+                                if let Some(sockinfo) = &sockhandle.unix_info {
+                                    let mut nonblocking = false;
+                                    if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
 
-                                match sockinfo.receivepipe.as_ref() {
-                                        Some(receivepipe) => retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking, self.cageid) as i32,
-                                        None => {
-                                            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");  
-                                        }
+                                    if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                                        retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
+                                    } else {
+                                        return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");   
+                                    }
                                 };
-                            }
-                            if retval < 0 {
-                                //If we have already read from a peek but have failed to read more, exit!
-                                if buflen != buflenleft { retval = (buflen - buflenleft) as i32; }
-                                return retval;
-                            }
+                                if retval < 0 {
+                                  //If we have already read from a peek but have failed to read more, exit!
+                                    if buflen != buflenleft { retval = (buflen - buflenleft) as i32; }
+                                    if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
+                                        if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                        // if the cancel status is set in the cage, we trap around a cancel point
+                                        // until the individual thread is signaled to cancel itself
+                                            loop{interface::cancelpoint(self.cageid)};
+                                        }
+                                        drop(sockhandle);
+                                        sockhandle = sock_tmp.write();
+                                        continue;
+                                    }
+                              }
+                            break;
+                          }
                         } else {
                             loop { // recv loop for blocking sockets
                                 if sockfdobj.flags & O_NONBLOCK != 0 {
@@ -703,7 +689,8 @@ impl Cage {
                                                     // until the individual thread is signaled to cancel itself
                                                     loop { interface::cancelpoint(self.cageid); }
                                                 }
-
+                                                drop(sockhandle); // release sockhandle temporarily
+                                                sockhandle = sock_tmp.write();
                                                 continue; // try again on EAGAIN
                                             }
     
@@ -754,7 +741,8 @@ impl Cage {
                                                 // until the individual thread is signaled to cancel itself
                                                 loop { interface::cancelpoint(self.cageid); }
                                             }
-
+                                            drop(sockhandle); // release sockhandle temporarily
+                                            sockhandle = sock_tmp.write();
                                             continue; //received EAGAIN on blocking socket, try again
                                         }
                                         return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
@@ -777,7 +765,7 @@ impl Cage {
                 return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
             }
         }
-    }
+    } 
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
@@ -1172,8 +1160,8 @@ pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shu
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
-    }
-   
+    } 
+
     fn _nonblock_peek_read(&self, fd: i32) -> bool{
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
@@ -1610,7 +1598,6 @@ pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shu
             return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
         }
     } 
-    
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
         if length < 0 {
@@ -1823,7 +1810,7 @@ pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shu
     // along with the main thread, need to access the cage to call methods (syscalls) of it, and because rust's threading model states that
     // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
     // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
-  pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
+    pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
         if domain == AF_UNIX && socktype != SOCK_STREAM && protocol != IPPROTO_TCP {
             return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Unix domain sockets are only supported for TCP")
         }
@@ -1953,7 +1940,8 @@ pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shu
             unreachable!();
         }
         return 0;
-    } 
+    }
+
     // all this does is send the net_devs data in a string to libc, where we will later parse and 
     // alloc into getifaddrs structs
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
