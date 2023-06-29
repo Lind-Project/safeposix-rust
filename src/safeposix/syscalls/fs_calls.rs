@@ -629,10 +629,10 @@ impl Cage {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
                     }
-
+                    
                     let mut nonblocking = false;
-                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    return pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking, self.cageid) as i32  
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}         
+                    return pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking, self.cageid) as i32
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
