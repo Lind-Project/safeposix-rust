@@ -597,91 +597,147 @@ pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -
         match &mut *filedesc_enum {
             Socket(ref mut sockfdobj) => {
                 let sock_tmp = sockfdobj.handle.clone();
-                let mut sockhandle = sock_tmp.write();
-                match sockhandle.protocol {
-                    IPPROTO_TCP => {
-                        if sockhandle.state != ConnState::CONNECTED {
-                            return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
-                        }
-
-                        let mut newbuflen = buflen;
-                        let mut newbufptr = buf;
-
-                        //if we have peeked some data before, fill our buffer with that data before moving on
-                        if !sockhandle.last_peek.is_empty() {
-                            let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
-                            interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
-                            newbuflen -= bytecount;
-                            newbufptr = newbufptr.wrapping_add(bytecount);
-
-                            //if we're not still peeking data, consume the data we peeked from our peek buffer
-                            //and if the bytecount is more than the length of the peeked data, then we remove the entire
-                            //buffer
-                            if flags & MSG_PEEK == 0 {
-                                let len = sockhandle.last_peek.len();
-                                sockhandle.last_peek.drain(..(
-                                    if bytecount > len {len} 
-                                    else {bytecount}
-                                ));
+                loop {
+                    let mut sockhandle = sock_tmp.write();
+                    match sockhandle.protocol {
+                        IPPROTO_TCP => {
+                            if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
+                                return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
                             }
 
-                            if newbuflen == 0 {
-                                //if we've filled all of the buffer with peeked data, return
-                                return bytecount as i32;
-                            }
-                        }
+                            let mut newbuflen = buflen;
+                            let mut newbufptr = buf;
 
-                        let bufleft = newbufptr;
-                        let buflenleft = newbuflen;
-                        let mut retval;
-                        // check if this is a domain socket
-                        if sockhandle.domain  == AF_UNIX {
-                            // get the remote socket pipe, read from it, and return bytes read
-                            let mut nonblocking = false;
-                            if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}  
-                            loop {
-                                let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
-                                let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
-                                retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;   
-                                if retval < 0 {
-                                    //If we have already read from a peek but have failed to read more, exit!
-                                    if buflen != buflenleft { return (buflen - buflenleft) as i32; }
-                                    if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
-                                        if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                            // if the cancel status is set in the cage, we trap around a cancel point
-                                            // until the individual thread is signaled to cancel itself
-                                            loop{interface::cancelpoint(self.cageid)};
+                            //if we have peeked some data before, fill our buffer with that data before moving on
+                            if !sockhandle.last_peek.is_empty() {
+                                let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
+                                interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
+                                newbuflen -= bytecount;
+                                newbufptr = newbufptr.wrapping_add(bytecount);
+
+                                //if we're not still peeking data, consume the data we peeked from our peek buffer
+                                //and if the bytecount is more than the length of the peeked data, then we remove the entire
+                                //buffer
+                                if flags & MSG_PEEK == 0 {
+                                    let len = sockhandle.last_peek.len();
+                                    sockhandle.last_peek.drain(..(
+                                        if bytecount > len {len} else {bytecount}
+                                    ));
+                                }
+
+                                if newbuflen == 0 {
+                                    //if we've filled all of the buffer with peeked data, return
+                                    return bytecount as i32;
+                                }
+                            }
+
+                            let bufleft = newbufptr;
+                            let buflenleft = newbuflen;
+                            let mut retval;
+
+                            if sockhandle.domain == AF_UNIX {
+                                 // get the remote socket pipe, read from it, and return bytes read
+                                let mut nonblocking = false;
+                                if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}  
+                                loop {
+                                    let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
+                                    retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;   
+                                    if retval < 0 {
+                                        //If we have already read from a peek but have failed to read more, exit!
+                                        if buflen != buflenleft { return (buflen - buflenleft) as i32; }
+                                        if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
+                                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                // if the cancel status is set in the cage, we trap around a cancel point
+                                                // until the individual thread is signaled to cancel itself
+                                                loop{interface::cancelpoint(self.cageid)};
+                                            }
+                                            drop(sockhandle);
+                                            sockhandle = sock_tmp.write();
+                                            continue;
                                         }
-                                        drop(sockhandle);
-                                        sockhandle = sock_tmp.write();
-                                        continue;
+                                        else {
+                                            //if not EAGAIN, return the error
+                                            return retval;
+                                        }
                                     }
-                                    else {
-                                        //if not EAGAIN, return the error
-                                        return retval;
-                                    }
+                                    break;
                                 }
-                                break;
                             }
-                        } else {
-                            loop { // recv loop for blocking sockets
-                                if sockfdobj.flags & O_NONBLOCK != 0 {
-                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
-                                } else {
-                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
+                            else {
+                                loop { // we loop here so we can cancel blocking recvs
+                                    //socket must be connected so unwrap ok
+                                    if sockfdobj.flags & O_NONBLOCK != 0 {
+                                        retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
+                                    } else {
+                                        retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
+                                    }
+
+                                    if retval < 0 {
+                                        //If we have already read from a peek but have failed to read more, exit!
+                                        if buflen != buflenleft {
+                                            return (buflen - buflenleft) as i32;
+                                        }
+
+                                        match Errno::from_discriminant(interface::get_errno()) {
+                                            Ok(i) => {
+                                                //We have the recieve timeout set to every one second, so
+                                                //if our blocking socket ever returns EAGAIN, it must be
+                                                //the case that this recv timeout was exceeded, and we
+                                                //should thus not treat this as a failure in our emulated
+                                                //socket; see comment in Socket::new in interface/comm.rs
+                                                if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                                    if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                        // if the cancel status is set in the cage, we trap around a cancel point
+                                                        // until the individual thread is signaled to cancel itself
+                                                        loop { interface::cancelpoint(self.cageid); }
+                                                    }
+                                                    drop(sockhandle); // release sockhandle temporarily
+                                                    sockhandle = sock_tmp.write();
+                                    
+                                                    continue; // EAGAIN, try again
+                                                }
+
+                                                return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
+                                            },
+                                            Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                        };
+                                    }
+                                    break; // we're okay to move on
                                 }
+                            }
+                            let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
+
+                            if flags & MSG_PEEK != 0 {
+                                //extend from the point after we read our previously peeked bytes
+                                interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
+                            }
+
+                            return totalbyteswritten;
+
+                        }
+                        IPPROTO_UDP => {
+                            let binddomain = if let Some(baddr) = addr {
+                                 baddr.get_family() as i32
+                            } else { AF_INET };
+                            
+                            let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
+                            if ibindret < 0 {
+                                return ibindret;
+                            }
+
+                            loop { // loop for blocking sockets
+                                //if the remoteaddr is set and addr is not, use remoteaddr
+                                //unwrap is ok because of implicit bind
+                                let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
+                                    sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
+                                } else {
+                                    sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
+                                };
 
                                 if retval < 0 {
-                                    //If we have already read from a peek but have failed to read more, exit!
-                                    if buflen != buflenleft { return (buflen - buflenleft) as i32; }
-
                                     match Errno::from_discriminant(interface::get_errno()) {
                                         Ok(i) => {
-                                            //We have the recieve timeout set to every one second, so
-                                            //if our blocking socket ever returns EAGAIN, it must be
-                                            //the case that this recv timeout was exceeded, and we
-                                            //should thus not treat this as a failure in our emulated
-                                            //socket; see comment in Socket::new in interface/comm.rs
                                             if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
                                                 if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
                                                     // if the cancel status is set in the cage, we trap around a cancel point
@@ -690,73 +746,22 @@ pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -
                                                 }
                                                 drop(sockhandle); // release sockhandle temporarily
                                                 sockhandle = sock_tmp.write();
-                                                continue; // try again on EAGAIN
+                                                continue; //received EAGAIN on blocking socket, try again
                                             }
-    
                                             return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
                                         },
                                         Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                                     };
+                                    
+                                } else {
+                                    return retval; // we can proceed
                                 }
-                                break; // if we get this far we can continue
                             }
                         }
 
-                        let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
-
-                        if flags & MSG_PEEK != 0 {
-                            //extend from the point after we read our previously peeked bytes
-                            interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
+                        _ => {
+                            return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
                         }
-
-                        return totalbyteswritten;
-
-                    }
-                    IPPROTO_UDP => {
-                        let binddomain : i32;
-                        if let Some(baddr) = addr {
-                            binddomain = baddr.get_family() as i32;
-                        } else { binddomain = AF_INET }
-                        let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
-                        if ibindret < 0 {
-                            return ibindret;
-                        }
-
-                        loop { // loop for blocking sockets
-                            //if the remoteaddr is set and addr is not, use remoteaddr
-                            //unwrap is ok because of implicit bind
-                            let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
-                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
-                            } else {
-                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
-                            };
-
-                            if retval < 0 {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {
-                                        if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
-                                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                                // if the cancel status is set in the cage, we trap around a cancel point
-                                                // until the individual thread is signaled to cancel itself
-                                                loop { interface::cancelpoint(self.cageid); }
-                                            }
-                                            drop(sockhandle); // release sockhandle temporarily
-                                            sockhandle = sock_tmp.write();
-                                            continue; //received EAGAIN on blocking socket, try again
-                                        }
-                                        return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
-                                    },
-                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                };
-                                
-                            } else {
-                                return retval; // we can proceed
-                            }
-                        }
-                    }
-
-                    _ => {
-                        return syscall_error(Errno::EOPNOTSUPP, "recvfrom", "Unkown protocol in recvfrom");
                     }
                 }
             }
@@ -764,7 +769,7 @@ pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -
                 return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
             }
         }
-    } 
+    }   
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
