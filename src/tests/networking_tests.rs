@@ -510,7 +510,7 @@ pub mod net_tests {
                         }
                     } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                         let mut buf = sizecbuf(4);
-                        let mut result :i32 = 0;
+                        let mut result :i32;
                         loop {
                             result = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
                             if result == -libc::EINTR {
@@ -735,7 +735,7 @@ pub mod net_tests {
             interface::sleep(interface::RustDuration::from_millis(1));
 
             let mut buf = sizecbuf(4);
-            let mut result :i32 = 0;
+            let mut result :i32;
             loop {
                 result = cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0);
                 if result == -libc::EINTR {
@@ -774,7 +774,7 @@ pub mod net_tests {
                     inputs.remove(&sock);
                 } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                     let mut buf = sizecbuf(4);
-                    let mut recvresult :i32 = 0;
+                    let mut recvresult :i32;
                     loop {
                         recvresult = cage.recv_syscall(sock, buf.as_mut_ptr(), 4, 0);
                         if recvresult == -libc::EINTR {
@@ -1013,7 +1013,7 @@ pub mod net_tests {
             }
             break;
         }
-        let mut str2 = cbuf2str(&buf2);
+        let str2 = cbuf2str(&buf2);
         assert_eq!(str2, "Socketpair Test");
 
         thread.join().unwrap();
