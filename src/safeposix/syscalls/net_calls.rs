@@ -633,37 +633,45 @@ pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -
 
                         let bufleft = newbufptr;
                         let buflenleft = newbuflen;
-                        let mut retval = 0;
+                        let mut retval;
                         // check if this is a domain socket
                         if sockhandle.domain  == AF_UNIX {
                             // get the remote socket pipe, read from it, and return bytes read
-                            loop {
-                                if let Some(sockinfo) = &sockhandle.unix_info {
-                                    let mut nonblocking = false;
-                                    if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-
-                                    if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
-                                        retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
-                                    } else {
-                                        return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");   
-                                    }
-                                };
+                            let mut nonblocking = false;
+                            if sockfdobj.flags & O_NONBLOCK != 0 { nonblocking = true;} 
+                            let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                            let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
+                          //  if let Some(sockinfo) = &sockhandle.unix_info {
+                          //      if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                          //          
+                          //      }
+                          //      else {
+                          //          return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
+                          //      }
+                          //  }
+                            //let receivepipe = sockinfo.receivepipe.as_ref().unwrap(); 
+                            loop { 
+                                retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;  
                                 if retval < 0 {
-                                  //If we have already read from a peek but have failed to read more, exit!
-                                    if buflen != buflenleft { retval = (buflen - buflenleft) as i32; }
+                                    //If we have already read from a peek but have failed to read more, exit!
+                                    if buflen != buflenleft { return (buflen - buflenleft) as i32; }
                                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
                                         if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                        // if the cancel status is set in the cage, we trap around a cancel point
-                                        // until the individual thread is signaled to cancel itself
+                                            // if the cancel status is set in the cage, we trap around a cancel point
+                                            // until the individual thread is signaled to cancel itself
                                             loop{interface::cancelpoint(self.cageid)};
                                         }
                                         drop(sockhandle);
                                         sockhandle = sock_tmp.write();
                                         continue;
                                     }
-                              }
-                            break;
-                          }
+                                    else {
+                                        //if not EAGAIN, return the error
+                                        return retval;
+                                    }
+                                }
+                                break;
+                            }
                         } else {
                             loop { // recv loop for blocking sockets
                                 if sockfdobj.flags & O_NONBLOCK != 0 {
