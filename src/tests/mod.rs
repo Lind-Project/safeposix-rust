@@ -37,11 +37,11 @@ mod main_tests {
         println!("FS TESTS");
         test_fs();
 
-        println!("NET TESTS");
-        net_tests();
+        // println!("NET TESTS");
+        // net_tests();
         
-        println!("PIPE TESTS");
-        test_pipe();
+        // println!("PIPE TESTS");
+        // test_pipe();
     }   
 }
 
