@@ -10,6 +10,8 @@ use crate::interface::errnos::{Errno, syscall_error};
 use crate::interface::types::{ClippedDirent, CLIPPED_DIRENT_SIZE};
 use crate::interface;
 
+const LINUX_MAX_RW_COUNT: usize = 0x7FFFF000;
+
 //we currently handle symlinks as normal files
 
 pub fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
@@ -176,9 +178,9 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
 
     let veclen = filecontents.len();
     let mut writtenlen: usize = 0;
+    
     //on Linux, write() (and similar system calls) will transfer at most 0x7ffff000 (2,147,479,552) bytes
-    const LINUX_MAX_RW_COUNT: usize = 2147479552;
-    //dividing filecontents into chunks of 2,147,479,552 bytes and writing each chunk
+    //dividing filecontents into chunks of 0x7ffff000 (2,147,479,552) bytes and writing each chunk
     for chunk in filecontents.chunks(LINUX_MAX_RW_COUNT) {
         writtenlen += cage.write_syscall(lindfd, chunk.as_ptr(), chunk.len()) as usize;
     }
