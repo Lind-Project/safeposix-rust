@@ -827,7 +827,7 @@ pub mod fs_tests {
         let fd = cage.open_syscall("/", O_RDONLY, 0);
         assert!(fd >= 0);
         // fstatfs
-        assert_eq!(cage.fstatfs_syscall("/", &mut fsdata), 0);
+        assert_eq!(cage.fstatfs_syscall(fd, &mut fsdata), 0);
         // Check the output
         assert_eq!(fsdata.f_type, 0xBEEFC0DE);
         assert_eq!(fsdata.f_bsize, 4096);
