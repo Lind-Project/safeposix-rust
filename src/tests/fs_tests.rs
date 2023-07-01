@@ -834,7 +834,7 @@ pub mod fs_tests {
         // Close the file
         assert_eq!(cage.close_syscall(fd), 0);
         
-        assert_eq!(cage.exec_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
