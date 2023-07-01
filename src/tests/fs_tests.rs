@@ -33,6 +33,7 @@ pub mod fs_tests {
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
+        ut_lind_fs_fstatfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
@@ -821,7 +822,7 @@ pub mod fs_tests {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
-        
+
         // Get fd
         let fd = cage.open_syscall("/", O_RDONLY, 0);
         assert!(fd >= 0);
