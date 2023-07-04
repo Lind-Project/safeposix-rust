@@ -237,7 +237,8 @@ impl Cage {
             Ok(newremote)
         } 
     }
-fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) -> Result<interface::GenSockaddr, i32> {
+
+    fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) -> Result<interface::GenSockaddr, i32> {
         if let Some(addr) = &sockhandle.localaddr {
             Ok(addr.clone())
         } else {
@@ -335,7 +336,7 @@ fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) 
     
                             let entry = DomsockTableEntry {
                                 sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                receive_pipe: Some(pipe1.clone()).unwrap(),
+                                    receive_pipe: Some(pipe1.clone()).unwrap(),
                                 send_pipe: Some(pipe2.clone()).unwrap(),
                                 cond_var: connvar.clone(),
                             };
@@ -445,8 +446,7 @@ fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) 
                     let socket_type = sockhandle.domain;
                     if socket_type == AF_UNIX {
                         return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
-                    }
-                   //} 
+                    } 
 
                     if dest_addr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "sendto", "An address with an invalid family for the given domain was specified");
@@ -502,7 +502,7 @@ fn assign_new_addr(sockhandle: &SocketHandle, domain: i32, rebindability: bool) 
         }
     }
 
-pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
+    pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -694,7 +694,6 @@ pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -
                                                     }
                                                     drop(sockhandle); // release sockhandle temporarily
                                                     sockhandle = sock_tmp.write();
-                                    
                                                     continue; // EAGAIN, try again
                                                 }
 
@@ -884,72 +883,73 @@ pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -
             }
         }
     }
-pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
-    // we need to do a bunch of actual socket cleanup for INET sockets
-    if sockhandle.domain != AF_UNIX { 
-        let mut releaseflag = false;
-        if let Some(ref sobj) = sockhandle.innersocket {
-            if shutdown {
-                let shutresult = sobj.shutdown(how);
+    
+    pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
+        // we need to do a bunch of actual socket cleanup for INET sockets
+        if sockhandle.domain != AF_UNIX { 
+            let mut releaseflag = false;
+            if let Some(ref sobj) = sockhandle.innersocket {
+                if shutdown {
+                    let shutresult = sobj.shutdown(how);
 
-                if shutresult < 0 {
-                    match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
-                        Err(()) => panic!("Unknown errno value from setsockopt returned!"),
-                    };
-                }
+                    if shutresult < 0 {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "shutdown", "The libc call to setsockopt failed!");},
+                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                        };
+                    }
 
-                match how {
-                    SHUT_RD => {
-                        if sockhandle.state == ConnState::CONNRDONLY { releaseflag = true; }
+                    match how {
+                        SHUT_RD => {
+                            if sockhandle.state == ConnState::CONNRDONLY { releaseflag = true; }
+                        }
+                        SHUT_WR => {
+                            if sockhandle.state == ConnState::CONNWRONLY { releaseflag = true; }
+                        }
+                        SHUT_RDWR => {
+                            releaseflag = true;
+                        }
+                        _ => {
+                            //See http://linux.die.net/man/2/shutdown for nuance to this error
+                            return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+                        }
                     }
-                    SHUT_WR => {
-                        if sockhandle.state == ConnState::CONNWRONLY { releaseflag = true; }
-                    }
-                    SHUT_RDWR => {
-                        releaseflag = true;
-                    }
-                    _ => {
-                        //See http://linux.die.net/man/2/shutdown for nuance to this error
-                        return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
-                    }
-                }
-            } else {
-                //Reaching this means that the socket is closed. Removing the sockobj
-                //indicates that the sockobj will drop, and therefore close
-                releaseflag = true;
-                sockhandle.innersocket = None;
-            }
-        }
-
-        if releaseflag {
-            if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                //move to end
-                let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
-                sockhandle.localaddr = None;
-                if let Err(e) = release_ret_val {return e;}
+                } else {
+                    //Reaching this means that the socket is closed. Removing the sockobj
+                    //indicates that the sockobj will drop, and therefore close
+                    releaseflag = true;
+                    sockhandle.innersocket = None;
                 }
             }
-        }  
 
-        // now change the connections for all socket types
-        match how {
-            SHUT_RD => {
-                sockhandle.state = ConnState::CONNWRONLY;
-            }
-            SHUT_WR => {
-                sockhandle.state = ConnState::CONNRDONLY;
-            }
-            SHUT_RDWR => {
-                sockhandle.state = ConnState::NOTCONNECTED;
-            }
-            _ => {
-              //See http://linux.die.net/man/2/shutdown for nuance to this error
-                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
-            }
-        }      
+            if releaseflag {
+                if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
+                    //move to end
+                    let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
+                    sockhandle.localaddr = None;
+                    if let Err(e) = release_ret_val {return e;}
+                    }
+                }
+            }     
 
-        return 0;
+            // now change the connections for all socket types
+            match how {
+                SHUT_RD => {
+                    sockhandle.state = ConnState::CONNWRONLY;
+                }
+                SHUT_WR => {
+                    sockhandle.state = ConnState::CONNRDONLY;
+                }
+                SHUT_RDWR => {
+                    sockhandle.state = ConnState::NOTCONNECTED;
+                }
+                _ => {
+                    //See http://linux.die.net/man/2/shutdown for nuance to this error
+                    return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+                }
+            }      
+
+            return 0;
     }
 
     pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
@@ -986,7 +986,7 @@ pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shu
     
     //calls accept on the socket object with value depending on ipv4 or ipv6
     //There may be a bug with nonblocking accept with fds not being removed on error
-   pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
+    pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
 
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -1602,6 +1602,7 @@ pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shu
             return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
         }
     } 
+
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
         if length < 0 {
