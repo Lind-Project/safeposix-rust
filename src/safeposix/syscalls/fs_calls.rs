@@ -1030,84 +1030,23 @@ impl Cage {
     //------------------------------------FCHDIR SYSCALL------------------------------------
    
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
-        // Initialize path_string to hold the absolute path.
-        let mut path_string = String::new();
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
 
-        // Set a flag for the first iteration in the upcoming loop.
-        let mut first_iteration = true;
-
-        if let Some(filedesc_enum) = &*unlocked_fd {
-            match filedesc_enum {
-                File(normalfile_filedesc_obj) => {
-                    let mut inodenum = normalfile_filedesc_obj.inode;
-
-                    // Start loop to navigate the file hierarchy.
-                    loop{
-                        // Try to get the inode from the inode table.
-                        let mut thisinode = match FS_METADATA.inodetable.get_mut(&inodenum) {
-                            // If inode exists.
-                            Some(inode) => inode,
-                            // If not, return an error indicating an invalid inode number.
-                            None => {
-                                return syscall_error(Errno::EBADF, "fchdir", "invalid inodenum");
-                            },
-                        };
-
-                        // Handle different inode types.
-                        match *thisinode {
-                            Inode::Dir(ref mut dir_inode) => {
-                                // Get the parent directory's inode.
-                                if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
-                                    
-                                    // The if statement is executed twice during the run of the application. The first time, it signifies that we've reached the root directory (inode number 1). 
-                                    // Here, the first_iteration flag is toggled, and the program continues to locate the filename within the root directory. 
-                                    // Subsequently, the program attempts to find the parent of the '/' directory, causing it to encounter the value 1 (root directory) again and enter the if statement for the second time.
-                                    // On this second entry, the string "/" is prepended to the path_string, thereby constructing the absolute path. Following this, the loop is exited.
-                                    if *parent_dir_inode == (1 as usize){
-                                        // Insert a '/' at the beginning of the path string unless it's the first iteration.
-                                        if !first_iteration {
-                                            path_string.insert(0, '/');
-                                            break;
-                                        }
-                                        // Here, the value is set to false when the root directory is found. 
-                                        first_iteration = false;
-                                    }
-
-                                    // Get the filename from the inode.
-                                    match filenamefrominode(*parent_dir_inode, inodenum) {
-                                        // If filename exists.
-                                        Some(name) => {
-                                            // Concatenate the filename and current path string.
-                                            path_string = name + "/" + &path_string;
-                                            // Update the inode number to the parent directory's.
-                                            inodenum = *parent_dir_inode;
-                                        },
-                                        // If filename not found, return an error.
-                                        None => return syscall_error(Errno::EACCES, "fchdir", "path not found"),
-                                    };
-
-                                } else {
-                                    return syscall_error(Errno::EACCES, "fchdir", "data not founded for '..'");
-                                }
-
-                            },
-                            _ => {
-                                return syscall_error(Errno::ENOTDIR, "fchdir", "the last component in fd is not a directory");
-                            }
-                        }
-                    }
-                },
-                _ => return syscall_error(Errno::EACCES, "fchdir", "cannot change working directory on this file descriptor"),
-            }
-        } else {
-            return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor");
-        }
+        let path_string = match &*unlocked_fd {
+            Some(File(normalfile_filedesc_obj)) => {
+                let inodenum = normalfile_filedesc_obj.inode;
+                match pathnamefrominodenum(inodenum) {
+                    Some(name) => name,
+                    None => return syscall_error(Errno::ENOTDIR, "fchdir", "the file descriptor does not refer to a directory"),
+                }
+            },
+            Some(_) => return syscall_error(Errno::EACCES, "fchdir", "cannot change working directory on this file descriptor"),
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+        };
 
         let mut cwd_container = self.cwd.write();
-
-        // Change the current working directory to the new path.
-        *cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+        
+	*cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
 
         0 // fchdir success
     }
