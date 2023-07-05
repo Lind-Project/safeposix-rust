@@ -333,10 +333,14 @@ impl Cage {
                             let connvar = if sockfdobj.flags & O_NONBLOCK != 0 { 
                                 Some(interface::RustRfc::new(ConnCondVar::new()))
                             } else { None };
-    
+
+                            // receive_pipe and send_pipe need to be swapped here
+                            // because the receive_pipe and send_pipe are opposites for either the
+                            // server or client. Swapping here also means we do not need to swap in
+                            // accept.
                             let entry = DomsockTableEntry {
                                 sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                    receive_pipe: Some(pipe1.clone()).unwrap(),
+                                receive_pipe: Some(pipe1.clone()).unwrap(),
                                 send_pipe: Some(pipe2.clone()).unwrap(),
                                 cond_var: connvar.clone(),
                             };
