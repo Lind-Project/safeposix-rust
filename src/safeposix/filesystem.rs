@@ -321,7 +321,22 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
 }
 
-// This function, returns the absolute path of a directory, given its inode number. It constructs the path string by recursively tracing back and collecting the names of the parent directories until it reaches the root directory.
+/// This function resolves the absolute path of a directory from its inode number in a filesystem. 
+/// Here's how it operates:
+///
+/// - Starts from the given inode and fetches its associated metadata from the filesystem's inode table.
+///
+/// - Verifies that the inode represents a directory.
+///
+/// - Attempts to find the parent directory by looking for the ".." entry in the current directory's entries.
+///
+/// - Retrieves the directory name associated with the current inode using the `filenamefrominode` function and prepends it to the `path_string`.
+///
+/// - Continues this process recursively, updating the current inode to the parent inode, and accumulating directory names in the `path_string`.
+///
+/// - Stops when it reaches the root directory, where it prepends a "/" to the `path_string` and returns the complete path.
+///
+/// This function effectively constructs the absolute path by backtracking the parent directories. However, if any issues arise during this process, such as missing metadata or inability to find the parent directory, it returns `None`.
 pub fn pathnamefrominodenum(inodenum: usize) -> Option<String>{
     let mut path_string = String::new();
     let mut first_iteration = true;
