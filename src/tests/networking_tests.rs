@@ -1436,11 +1436,11 @@ pub mod net_tests {
 
         let mut event_list = vec![
             EpollEvent {
-                events: EPOLLIN,
+                events: EPOLLIN as u32,
                 fd: serversockfd,
             },
             EpollEvent {
-                events: EPOLLIN,
+                events: EPOLLIN as u32,
                 fd: filefd,
             },
         ];
