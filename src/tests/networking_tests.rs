@@ -26,6 +26,7 @@ pub mod net_tests {
         ut_lind_net_gethostname();
         ut_lind_net_dns_rootserver_ping();
         ut_lind_net_domain_socket();
+        ut_lind_net_epoll();
     }
 
     pub fn ut_lind_net_bind() {
@@ -1433,18 +1434,16 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
 
-        // Bind and listen on the server socket
-        let serverpoll = interface::PollStruct {
-            fd: serversockfd,
-            events: POLLIN,
-            revents: 0,
-        };
-        let filepoll = interface::PollStruct {
-            fd: filefd,
-            events: POLLIN,
-            revents: 0,
-        };
-        let mut polled = vec![serverpoll, filepoll];
+        let mut event_list = vec![
+            EpollEvent {
+                events: EPOLLIN,
+                fd: serversockfd,
+            },
+            EpollEvent {
+                events: EPOLLIN,
+                fd: filefd,
+            },
+        ];
 
         // Create a vector of PollStruct to track the events to be polled 
         cage.fork_syscall(2);
@@ -1481,23 +1480,19 @@ pub mod net_tests {
         let thread3 = interface::helper_thread(move || {
             let epfd = cage.epoll_create_syscall(0);
             assert!(epfd > 0);
-            // Create epoll instance
-            let mut event = libc::epoll_event {
-                events: libc::EPOLLIN,
-                u64: 0,
-            };
+
             assert_eq!(
-                cage.epoll_ctl_syscall(epfd, libc::EPOLL_CTL_ADD, serversockfd, &mut event),
+                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, serversockfd, &mut event_list[0]),
                 0
             );
             assert_eq!(
-                cage.epoll_ctl_syscall(epfd, libc::EPOLL_CTL_ADD, filefd, &mut event),
+                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, filefd, &mut event_list[1]),
                 0
             );
             // Event processing loop
             for _counter in 0..600 {
                 
-                let num_events = cage.epoll_wait_syscall(epfd, &mut polled, 1, Some(interface::RustDuration::ZERO));
+                let num_events = cage.epoll_wait_syscall(epfd, &mut event_list, 1, Some(interface::RustDuration::ZERO));
                 assert!(num_events >= 0);
     
                 // Wait for events using epoll_wait_syscall
