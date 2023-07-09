@@ -1496,11 +1496,11 @@ pub mod net_tests {
                 assert!(num_events >= 0);
     
                 // Wait for events using epoll_wait_syscall
-                for polledfile in &mut polled[..num_events as usize] {
+                for event in &mut event_list[..num_events as usize] {
                     // Check for any activity in the input socket and if there are events ready for reading
-                    if polledfile.revents & POLLIN != 0 {
+                    if event.events & EPOLLIN != 0 {
                         // If the socket returned was listener socket, then there's a new connection
-                        if polledfile.fd == serversockfd {
+                        if event.fd == serversockfd {
                             // Handle new connections
                             let port: u16 = 53009;
                             let sockaddr = interface::SockaddrV4 {
@@ -1522,28 +1522,28 @@ pub mod net_tests {
                                 cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, newsockfd, &event),
                                 0
                             );
-                        } else if polledfile.fd == filefd { // Handle writing to the file
+                        } else if event.fd == filefd { // Handle writing to the file
                             // Update 
                             assert_eq!(cage.write_syscall(filefd, str2cbuf("test"), 4), 4);
                             assert_eq!(cage.lseek_syscall(filefd, 0, SEEK_SET), 0);
-                            polledfile.events = POLLOUT;
+                            event.events = EPOLLOUT as u32;
                         } else {
                             // Handle receiving data from established connections
                             let mut buf = sizecbuf(4);
-                            let recres = cage.recv_syscall(polledfile.fd, buf.as_mut_ptr(), 4, 0);
+                            let recres = cage.recv_syscall(event.fd, buf.as_mut_ptr(), 4, 0);
                             assert_eq!(recres & !4, 0);
                             if recres == 4 {
                                 assert_eq!(cbuf2str(&buf), "test");
-                                polledfile.events = POLLOUT;
+                                event.events = EPOLLOUT as u32;
                             } else {
-                                assert_eq!(cage.close_syscall(polledfile.fd), 0);
+                                assert_eq!(cage.close_syscall(event.fd), 0);
                             }
                         }
                     }
     
-                    if polledfile.revents & POLLOUT != 0 {
+                    if event.events & EPOLLOUT != 0 {
                         // Check if there are events ready for writing
-                        if polledfile.fd == filefd {
+                        if event.fd == filefd {
                             // Handle reading from the file
                             let mut read_buf1 = sizecbuf(4);
                             assert_eq!(cage.read_syscall(filefd, read_buf1.as_mut_ptr(), 4), 4);
@@ -1551,7 +1551,7 @@ pub mod net_tests {
                         } else {
                             // Handle sending data over connections
                             assert_eq!(cage.send_syscall(polledfile.fd, str2cbuf(&"test"), 4, 0), 4);
-                            polledfile.events = POLLIN;
+                            event.events = EPOLLIN as u32;
                         }
                     }
                 }
