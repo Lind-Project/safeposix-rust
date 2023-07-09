@@ -1567,7 +1567,8 @@ pub mod net_tests {
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
 
-        thread1.join().unwrapthread2.join().unwrap();
+        thread1.join().unwrap();
+        thread2.join().unwrap();
         thread3.join().unwrap();
 
         lindrustfinalize();
