@@ -1498,7 +1498,7 @@ pub mod net_tests {
                 // Wait for events using epoll_wait_syscall
                 for event in &mut event_list[..num_events as usize] {
                     // Check for any activity in the input socket and if there are events ready for reading
-                    if event.events & EPOLLIN != 0 {
+                    if event.events & (EPOLLIN as u32) != 0 {
                         // If the socket returned was listener socket, then there's a new connection
                         if event.fd == serversockfd {
                             // Handle new connections
@@ -1541,7 +1541,7 @@ pub mod net_tests {
                         }
                     }
     
-                    if event.events & EPOLLOUT != 0 {
+                    if event.events & (EPOLLOUT as u32) != 0 {
                         // Check if there are events ready for writing
                         if event.fd == filefd {
                             // Handle reading from the file
