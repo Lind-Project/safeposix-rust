@@ -1550,7 +1550,7 @@ pub mod net_tests {
                             assert_eq!(cbuf2str(&read_buf1), "test");
                         } else {
                             // Handle sending data over connections
-                            assert_eq!(cage.send_syscall(polledfile.fd, str2cbuf(&"test"), 4, 0), 4);
+                            assert_eq!(cage.send_syscall(event.fd, str2cbuf(&"test"), 4, 0), 4);
                             event.events = EPOLLIN as u32;
                         }
                     }
