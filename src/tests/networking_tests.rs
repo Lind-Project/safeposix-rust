@@ -1478,7 +1478,7 @@ pub mod net_tests {
         
         // Acting as the server and processing the request
         let thread3 = interface::helper_thread(move || {
-            let epfd = cage.epoll_create_syscall(0);
+            let epfd = cage.epoll_create_syscall(1);
             assert!(epfd > 0);
 
             assert_eq!(
