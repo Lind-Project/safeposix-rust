@@ -179,11 +179,24 @@ pub struct AdvisoryLock {
     advisory_condvar: Condvar
 }
 
+/*
+* AdvisoryLock is used to implement advisory locking for files.
+* Specifically, it is used by the flock syscall.
+* If works as follows: The underying mutex has a guard value associated with it.
+* A guard value of zero indicates that it is unlocked.
+* In case an exclusive lock is held, the guard value is set to -1.
+* In case a shared lock is held, the guard value is incremented by 1.
+*/
 impl AdvisoryLock {
     pub fn new() -> Self {
-        Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
+        Self {
+            advisory_lock: RustRfc::new(Mutex::new(0)),
+            advisory_condvar: Condvar::new(),
+        }
     }
 
+    // lock_ex is used to acquire an exclusive lock
+    // if the lock cannot be obtained, it waits
     pub fn lock_ex(&self) {
         let mut waitedguard = self.advisory_lock.lock();
         while *waitedguard != 0 {
@@ -192,6 +205,8 @@ impl AdvisoryLock {
         *waitedguard = -1;
     }
 
+    // lock_sh is used to acquire a shared lock
+    // if the lock cannot be obtained, it waits
     pub fn lock_sh(&self) {
         let mut waitedguard = self.advisory_lock.lock();
         while *waitedguard < 0 {
@@ -199,41 +214,60 @@ impl AdvisoryLock {
         }
         *waitedguard += 1;
     }
+    // try_lock_ex is used to try to acquire an exclusive lock
+    // if the lock cannot be obtained, it returns false
     pub fn try_lock_ex(&self) -> bool {
         if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard == 0 {
-              *guard = -1;
-              return true
+                *guard = -1;
+                return true;
             }
         }
         false
     }
+    // try_lock_sh is used to try to acquire a shared lock
+    // if the lock cannot be obtained, it returns false
     pub fn try_lock_sh(&self) -> bool {
         if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard >= 0 {
-              *guard += 1;
-              return true
+                *guard += 1;
+                return true;
             }
         }
         false
     }
 
+    /*
+     * unlock is used to release a lock
+     * If a shared lock was held(guard value > 0), it decrements the guard value by one
+     * if no more shared locks are held (i.e. the guard value is now zero), then it notifies a waiting writer
+     * If an exclusive lock was held, it sets the guard value to zero and notifies all waiting readers and writers
+     */
     pub fn unlock(&self) -> bool {
         let mut guard = self.advisory_lock.lock();
 
+        // check if a shared lock is held
         if *guard > 0 {
+            // release one shared lock by decrementing the guard value
             *guard -= 1;
-  
-            //only a writer could be waiting at this point
-            if *guard == 0 {self.advisory_condvar.notify_one();}
+
+            // if no more shared locks are held, notify a waiting writer and return
+            // only a writer could be waiting at this point
+            if *guard == 0 {
+                self.advisory_condvar.notify_one();
+            }
             true
         } else if *guard == -1 {
-            if *guard != -1 {return false;}
+            // check if an exclusive lock is held
+            // release the exclusive lock by setting guard to 0
             *guard = 0;
-  
-            self.advisory_condvar.notify_all(); //in case readers are waiting
+
+            // notify any waiting reads or writers and return
+            self.advisory_condvar.notify_all();
             true
-        } else {false}
+        } else {
+            false
+        }
     }
 }
 
