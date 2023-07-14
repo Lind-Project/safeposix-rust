@@ -33,7 +33,7 @@ pub mod fs_tests {
         // ut_lind_fs_stat_file_complex();
         // ut_lind_fs_stat_file_mode();
         // ut_lind_fs_statfs();
-        // ut_lind_fs_fstatfs();
+        ut_lind_fs_fstatfs();
         // ut_lind_fs_ftruncate();
         // ut_lind_fs_truncate();
         // ut_lind_fs_getdents();
