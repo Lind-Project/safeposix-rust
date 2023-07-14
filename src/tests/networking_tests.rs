@@ -7,25 +7,25 @@ pub mod net_tests {
 
     pub fn net_tests() {
         ut_lind_net_bind();
-        // ut_lind_net_bind_multiple();
-        // ut_lind_net_bind_on_zero();
-        // ut_lind_net_connect_basic_udp();
-        // ut_lind_net_getpeername();
-        // ut_lind_net_getsockname();
-        // ut_lind_net_listen();
-        // ut_lind_net_poll();
-        // ut_lind_net_recvfrom();
-        // ut_lind_net_select();
-        // ut_lind_net_shutdown();
-        // ut_lind_net_socket();
-        // ut_lind_net_socketoptions();
-        // ut_lind_net_socketpair();
-        // ut_lind_net_udp_bad_bind();
-        // ut_lind_net_udp_simple();
-        // ut_lind_net_udp_connect();
-        // ut_lind_net_gethostname();
-        // ut_lind_net_dns_rootserver_ping();
-        // ut_lind_net_domain_socket();
+        ut_lind_net_bind_multiple();
+        ut_lind_net_bind_on_zero();
+        ut_lind_net_connect_basic_udp();
+        ut_lind_net_getpeername();
+        ut_lind_net_getsockname();
+        ut_lind_net_listen();
+        ut_lind_net_poll();
+        ut_lind_net_recvfrom();
+        ut_lind_net_select();
+        ut_lind_net_shutdown();
+        ut_lind_net_socket();
+        ut_lind_net_socketoptions();
+        ut_lind_net_socketpair();
+        ut_lind_net_udp_bad_bind();
+        ut_lind_net_udp_simple();
+        ut_lind_net_udp_connect();
+        ut_lind_net_gethostname();
+        ut_lind_net_dns_rootserver_ping();
+        ut_lind_net_domain_socket();
         ut_lind_net_epoll();
     }
 
@@ -1407,7 +1407,7 @@ pub mod net_tests {
     }
     
     /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using 
-    epoll_wait_syscall(). It handles the events based on their types (POLLIN or POLLOUT) and performs the necessary operations
+    epoll_wait_syscall(). It handles the events based on their types (EPOLLIN or EPOLLOUT) and performs the necessary operations
     like accepting new connections, sending/receiving data, and modifying the event flags */
     pub fn ut_lind_net_epoll() {
         lindrustinit(0);
