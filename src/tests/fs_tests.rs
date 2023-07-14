@@ -11,8 +11,8 @@ pub mod fs_tests {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_broken_close();
-        // ut_lind_fs_chmod();
-        // ut_lind_fs_fchmod();
+        ut_lind_fs_chmod();
+        ut_lind_fs_fchmod();
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dir_mode();
         ut_lind_fs_dir_multiple();
@@ -34,15 +34,15 @@ pub mod fs_tests {
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
         ut_lind_fs_fstatfs();
-        // ut_lind_fs_ftruncate();
-        // ut_lind_fs_truncate();
-        // ut_lind_fs_getdents();
-        // ut_lind_fs_dir_chdir_getcwd();
-        // rdwrtest();
-        // prdwrtest();
-        // chardevtest();
-        // ut_lind_fs_exec_cloexec();
-        // ut_lind_fs_shm();
+        ut_lind_fs_ftruncate();
+        ut_lind_fs_truncate();
+        ut_lind_fs_getdents();
+        ut_lind_fs_dir_chdir_getcwd();
+        rdwrtest();
+        prdwrtest();
+        chardevtest();
+        ut_lind_fs_exec_cloexec();
+        ut_lind_fs_shm();
     }
 
 
