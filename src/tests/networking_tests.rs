@@ -1,3 +1,4 @@
+#[allow(unused_parens)]
 #[cfg(test)]
 pub mod net_tests {
     use crate::interface;
@@ -31,8 +32,7 @@ pub mod net_tests {
 
     pub fn ut_lind_net_bind() {
         lindrustinit(0);
-        // let cage = interface::cagetable_getref(1);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4{ sin_family: AF_INET as u16, sin_port: 50102u16.to_be(), sin_addr: interface::V4Addr{ s_addr: u32::from_ne_bytes([127, 0, 0, 1]) }, padding: 0}); //127.0.0.1
