@@ -1004,4 +1004,28 @@ pub mod fs_tests {
         
         lindrustfinalize();
     }
+
+    pub fn ut_lind_fs_getpid_getppid() {
+        lindrustinit(0);
+        
+        let cage1 = interface::cagetable_getref(1);
+        let pid1 = cage1.getpid_syscall();
+    
+        assert_eq!(cage1.fork_syscall(2), 0);
+        
+        let child = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(2);
+            let pid2 = cage2.getpid_syscall();
+            let ppid2 = cage2.getppid_syscall();
+            
+            assert_ne!(pid2, pid1); // make sure the child and the parent have different pids
+            assert_eq!(ppid2, pid1); // make sure the child's getppid is correct
+            
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+        
+        child.join().unwrap();
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 }
