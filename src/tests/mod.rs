@@ -10,8 +10,8 @@ use crate::safeposix::{cage::*, filesystem::*};
 
 #[cfg(test)]
 mod main_tests {
-    use crate::tests::networking_tests::net_tests::net_tests;
-    // use crate::tests::fs_tests::fs_tests::test_fs;
+    // use crate::tests::networking_tests::net_tests::net_tests;
+    use crate::tests::fs_tests::fs_tests::test_fs;
     // use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
@@ -34,11 +34,11 @@ mod main_tests {
         }
         lindrustfinalize();
 
-        // println!("FS TESTS");
-        // test_fs();
+        println!("FS TESTS");
+        test_fs();
 
-        println!("NET TESTS");
-        net_tests();
+        // println!("NET TESTS");
+        // net_tests();
         
         // println!("PIPE TESTS");
         // test_pipe();
