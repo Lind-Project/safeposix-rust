@@ -42,6 +42,7 @@ pub mod fs_tests {
         chardevtest();
         ut_lind_fs_exec_cloexec();
         ut_lind_fs_shm();
+        ut_lind_fs_getpid_getppid()
     }
 
 
