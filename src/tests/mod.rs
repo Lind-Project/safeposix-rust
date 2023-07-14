@@ -12,7 +12,7 @@ use crate::safeposix::{cage::*, filesystem::*};
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
     use crate::tests::fs_tests::fs_tests::test_fs;
-    // use crate::tests::pipe_tests::pipe_tests::test_pipe;
+    use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
     use crate::interface;
@@ -40,8 +40,8 @@ mod main_tests {
         println!("NET TESTS");
         net_tests();
         
-        // println!("PIPE TESTS");
-        // test_pipe();
+        println!("PIPE TESTS");
+        test_pipe();
     }   
 }
 
