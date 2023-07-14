@@ -1513,7 +1513,7 @@ pub mod net_tests {
                             };
                             let mut addr = interface::GenSockaddr::V4(sockaddr); // 127.0.0.1 from bytes above
                             let newsockfd = cage.accept_syscall(serversockfd, &mut addr);
-                            let mut event = interface::EpollEvent {
+                            let event = interface::EpollEvent {
                                 events: EPOLLIN as u32,
                                 fd: newsockfd,
                             };
