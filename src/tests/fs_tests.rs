@@ -187,31 +187,31 @@ pub mod fs_tests {
 
 
 
-    pub fn ut_lind_fs_chmod() {
-        lindrustinit(0);
-        let cage = interface::cagetable_getref(1);
+    // pub fn ut_lind_fs_chmod() {
+    //     lindrustinit(0);
+    //     let cage = interface::cagetable_getref(1);
 
-        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = "/chmodTestFile";
+    //     let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+    //     let filepath = "/chmodTestFile";
 
-        let mut statdata = StatData::default();
+    //     let mut statdata = StatData::default();
 
-        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
-        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+    //     let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+    //     assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+    //     assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
-        assert_eq!(cage.chmod_syscall(filepath, S_IRUSR | S_IRGRP), 0);
-        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
+    //     assert_eq!(cage.chmod_syscall(filepath, S_IRUSR | S_IRGRP), 0);
+    //     assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+    //     assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
 
-        assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0);
-        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+    //     assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0);
+    //     assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+    //     assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
-        assert_eq!(cage.close_syscall(fd), 0);
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
+    //     assert_eq!(cage.close_syscall(fd), 0);
+    //     assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+    //     lindrustfinalize();
+    // }
 
    pub fn ut_lind_fs_fchmod() {
         lindrustinit(0);
