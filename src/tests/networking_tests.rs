@@ -1445,7 +1445,6 @@ pub mod net_tests {
             },
         ];
 
-        // Create a vector of PollStruct to track the events to be polled 
         cage.fork_syscall(2);
         // Client 1 connects to the server to send and recv data
         let thread1 = interface::helper_thread(move || {
