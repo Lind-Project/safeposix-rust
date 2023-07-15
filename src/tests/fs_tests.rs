@@ -42,6 +42,7 @@ pub mod fs_tests {
         chardevtest();
         ut_lind_fs_exec_cloexec();
         ut_lind_fs_shm();
+        ut_lind_fs_getpid_getppid()
     }
 
 
@@ -1002,6 +1003,30 @@ pub mod fs_tests {
 
         assert_eq!(shmdtret, shmid); //NaCl requires shmdt to return the shmid, so this is non-posixy
         
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_getpid_getppid() {
+        lindrustinit(0);
+        
+        let cage1 = interface::cagetable_getref(1);
+        let pid1 = cage1.getpid_syscall();
+    
+        assert_eq!(cage1.fork_syscall(2), 0);
+        
+        let child = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(2);
+            let pid2 = cage2.getpid_syscall();
+            let ppid2 = cage2.getppid_syscall();
+            
+            assert_ne!(pid2, pid1); // make sure the child and the parent have different pids
+            assert_eq!(ppid2, pid1); // make sure the child's getppid is correct
+            
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+        
+        child.join().unwrap();
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }
