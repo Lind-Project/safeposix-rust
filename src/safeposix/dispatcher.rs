@@ -488,6 +488,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         FTRUNCATE_SYSCALL => {
             check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
         }
+        MKNOD_SYSCALL => {
+            check_and_dispatch!(cage.mknod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2), interface::get_ulong(arg3))
+        }
 
         _ => {//unknown syscall
             -1
