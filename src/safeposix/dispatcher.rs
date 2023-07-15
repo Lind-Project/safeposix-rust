@@ -92,7 +92,6 @@ const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
 const GETIFADDRS_SYSCALL: i32 = 146;
 
-const MKNOD_SYSCALL: i32 = 160;
 const FCHDIR_SYSCALL: i32 = 161;
 
 use crate::interface;
@@ -488,9 +487,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         FTRUNCATE_SYSCALL => {
             check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
-        }
-        MKNOD_SYSCALL => {
-            check_and_dispatch!(cage.mknod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2), interface::get_ulong(arg3))
         }
 
         _ => {//unknown syscall
