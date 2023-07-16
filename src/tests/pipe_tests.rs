@@ -105,5 +105,4 @@ pub mod pipe_tests {
 
         lindrustfinalize();
     }
-    
 }
