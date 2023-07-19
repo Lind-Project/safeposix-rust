@@ -285,122 +285,123 @@ impl Cage {
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
-
-                    //for UDP, just set the addresses and return
-                    if sockhandle.protocol == IPPROTO_UDP {
-                        //we don't need to check connection state for UDP, it's connectionless!
-                        sockhandle.remoteaddr = Some(remoteaddr.clone());
-                        match sockhandle.localaddr {
-                            Some(_) => return 0,
-                            None => {
-                                let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.domain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
-                                    Ok(a) => a,
-                                    Err(e) => return e,
-                                };
-
-                                return self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
-                            }
-                        };
-                    } else if sockhandle.protocol == IPPROTO_TCP {
-                        
-                        if sockhandle.state != ConnState::NOTCONNECTED {
-                            return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
-                        }
-
-                        // every branch in the domsocks branch terminates with a return so the code after this is for non-domsocks
-                        // check whether this is a domain socket or not:
-                        let socket_type = sockhandle.domain;
-                        if socket_type == AF_UNIX {
-                            // domain socket 
-                            if let None = sockhandle.localaddr {
-                                let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
-                                    Ok(a) => a,
-                                    Err(e) => return e,
-                                };
-                                self.bind_inner_socket(&mut *sockhandle, &localaddr, false); 
-                            }
-                            let remotepathbuf = normpath(convpath(remoteaddr.path().clone()), self);
-                            if !NET_METADATA.domsock_paths.contains(&remotepathbuf) {
-                                return syscall_error(Errno::ENOENT, "connect", "not valid unix domain path");
-                            }
-
-                            let (pipe1, pipe2) = create_unix_sockpipes();
-    
+                    match sockhandle.protocol {
+                        IPPROTO_UDP => {
+                            //for UDP, just set the addresses and return
+                            //we don't need to check connection state for UDP, it's connectionless!
                             sockhandle.remoteaddr = Some(remoteaddr.clone());
-                            sockhandle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
-                            sockhandle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
-    
-                            let connvar = if sockfdobj.flags & O_NONBLOCK != 0 { 
-                                Some(interface::RustRfc::new(ConnCondVar::new()))
-                            } else { None };
+                            match sockhandle.localaddr {
+                                Some(_) => return 0,
+                                None => {
+                                    let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.domain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
+                                        Ok(a) => a,
+                                        Err(e) => return e,
+                                    };
 
-                            // receive_pipe and send_pipe need to be swapped here
-                            // because the receive_pipe and send_pipe are opposites between the 
-                            // sender and receiver. Swapping here also means we do not need to swap in
-                            // accept.
-                            let entry = DomsockTableEntry {
-                                sockaddr: sockhandle.localaddr.unwrap().clone(),
-                                receive_pipe: Some(pipe1.clone()).unwrap(),
-                                send_pipe: Some(pipe2.clone()).unwrap(),
-                                cond_var: connvar.clone(),
+                                    return self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
+                                }
                             };
-                            NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
-                            sockhandle.state = ConnState::CONNECTED;
-                            if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
-                            return 0;                        
                         }
-                        else {
-                            //for TCP, actually create the internal socket object and connect it
-                            let remoteclone = remoteaddr.clone();
-
+                        IPPROTO_TCP => {
                             if sockhandle.state != ConnState::NOTCONNECTED {
                                 return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
                             }
 
-
-                            if let None = sockhandle.localaddr {
-                                Self::force_innersocket(&mut sockhandle);
-
-                                let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.domain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
-                                    Ok(a) => a,
-                                    Err(e) => return e,
-                                };
-                                let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
-                                if bindret < 0 {
-                                    sockhandle.localaddr = Some(localaddr);
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
-                                        Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                            // every branch in the domsocks branch terminates with a return so the code after this is for non-domsocks
+                            // check whether this is a domain socket or not:
+                            let socket_type = sockhandle.domain;
+                            if socket_type == AF_UNIX {
+                                // domain socket 
+                                if let None = sockhandle.localaddr {
+                                    let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
+                                        Ok(a) => a,
+                                        Err(e) => return e,
                                     };
+                                    self.bind_inner_socket(&mut *sockhandle, &localaddr, false); 
                                 }
-                            } 
+                                let remotepathbuf = normpath(convpath(remoteaddr.path().clone()), self);
+                                if !NET_METADATA.domsock_paths.contains(&remotepathbuf) {
+                                    return syscall_error(Errno::ENOENT, "connect", "not valid unix domain path");
+                                }
 
-                            let mut inprogress = false;
-                            let connectret = sockhandle.innersocket.as_ref().unwrap().connect(&remoteclone);
-                            if connectret < 0 {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {
-                                        if i == Errno::EINPROGRESS { inprogress = true; }
-                                        else { return syscall_error(i, "connect", "The libc call to connect failed!") };
-                                    },
-                                    Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                                let (pipe1, pipe2) = create_unix_sockpipes();
+    
+                                sockhandle.remoteaddr = Some(remoteaddr.clone());
+                                sockhandle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
+                                sockhandle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
+    
+                                let connvar = if sockfdobj.flags & O_NONBLOCK != 0 { 
+                                    Some(interface::RustRfc::new(ConnCondVar::new()))
+                                } else { None };
+
+                                // receive_pipe and send_pipe need to be swapped here
+                                // because the receive_pipe and send_pipe are opposites between the 
+                                // sender and receiver. Swapping here also means we do not need to swap in
+                                // accept.
+                                let entry = DomsockTableEntry {
+                                    sockaddr: sockhandle.localaddr.unwrap().clone(),
+                                    receive_pipe: Some(pipe1.clone()).unwrap(),
+                                    send_pipe: Some(pipe2.clone()).unwrap(),
+                                    cond_var: connvar.clone(),
                                 };
-                            }
-
-                            sockhandle.state = ConnState::CONNECTED;
-                            sockhandle.remoteaddr = Some(remoteaddr.clone());
-                            sockhandle.errno = 0;
-                            if inprogress {
-                                sockhandle.state = ConnState::INPROGRESS;
-                                return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
+                                NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
+                                sockhandle.state = ConnState::CONNECTED;
+                                if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
+                                return 0; 
                             }
                             else {
-                                return 0;
+                                //for TCP, actually create the internal socket object and connect it
+                                let remoteclone = remoteaddr.clone();
+
+                                if sockhandle.state != ConnState::NOTCONNECTED {
+                                    return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
+                                }
+
+
+                                if let None = sockhandle.localaddr {
+                                    Self::force_innersocket(&mut sockhandle);
+
+                                    let localaddr = match Self::assign_new_addr(&*sockhandle, sockhandle.domain, sockhandle.protocol & (1 << SO_REUSEPORT) != 0) {
+                                        Ok(a) => a,
+                                        Err(e) => return e,
+                                    };
+                                    let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
+                                    if bindret < 0 {
+                                        sockhandle.localaddr = Some(localaddr);
+                                        match Errno::from_discriminant(interface::get_errno()) {
+                                            Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
+                                            Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                                        };
+                                    }
+                                } 
+
+                                let mut inprogress = false;
+                                let connectret = sockhandle.innersocket.as_ref().unwrap().connect(&remoteclone);
+                                if connectret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {
+                                            if i == Errno::EINPROGRESS { inprogress = true; }
+                                            else { return syscall_error(i, "connect", "The libc call to connect failed!") };
+                                        },
+                                        Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                                    };
+                                }
+
+                                sockhandle.state = ConnState::CONNECTED;
+                                sockhandle.remoteaddr = Some(remoteaddr.clone());
+                                sockhandle.errno = 0;
+                                if inprogress {
+                                    sockhandle.state = ConnState::INPROGRESS;
+                                    return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
+                                }
+                                else {
+                                    return 0;
+                                }
                             }
                         }
-                }
-                else {
-                        return syscall_error(Errno::EOPNOTSUPP, "connect", "Unkown protocol in connect");
+                        _=> {
+                            return syscall_error(Errno::EOPNOTSUPP, "connect", "Unkown protocol in connect");
+                        }
                     }
                 }
                 _ => {
@@ -887,7 +888,7 @@ impl Cage {
             }
         }
     }
- 
+
     pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
         // we need to do a bunch of actual socket cleanup for INET sockets
         if sockhandle.domain != AF_UNIX { 
@@ -1448,7 +1449,7 @@ impl Cage {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
-                //checking that we recieved SOL_SOCKET\
+                //checking that we recieved SOL_SOCKET
                 match level {
                     SOL_UDP => {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
