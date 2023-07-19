@@ -1082,10 +1082,8 @@ impl Cage {
                             }
                         }
                     }
-                    
-                    //put all below into an else
-                        else {
-                            match sockhandle.protocol {
+                    else {
+                        match sockhandle.protocol {
                             IPPROTO_UDP => {
                                 return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
                             }
@@ -1153,13 +1151,13 @@ impl Cage {
                                 *addr = remote_addr; //populate addr with what address it connected to
 
                                 return newfd;
-                        }
-                        _ => {
-                            return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+                            }
+                            _ => {
+                                return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+                            }
                         }
                     }
                 }
-            }
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "listen", "file descriptor refers to something other than a socket");
                 }
