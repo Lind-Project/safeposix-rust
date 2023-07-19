@@ -33,6 +33,7 @@ pub mod fs_tests {
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
+        ut_lind_fs_fstatfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
@@ -42,6 +43,7 @@ pub mod fs_tests {
         chardevtest();
         ut_lind_fs_exec_cloexec();
         ut_lind_fs_shm();
+        ut_lind_fs_getpid_getppid()
     }
 
 
@@ -816,6 +818,27 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+
+    pub fn ut_lind_fs_fstatfs() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut fsdata = FSData::default();
+
+        // Get fd
+        let fd = cage.open_syscall("/", O_RDONLY, 0);
+        assert!(fd >= 0);
+        // fstatfs
+        assert_eq!(cage.fstatfs_syscall(fd, &mut fsdata), 0);
+        // Check the output
+        assert_eq!(fsdata.f_type, 0xBEEFC0DE);
+        assert_eq!(fsdata.f_bsize, 4096);
+        // Close the file
+        assert_eq!(cage.close_syscall(fd), 0);
+        
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
     
     
     pub fn ut_lind_fs_rename() {
@@ -1002,6 +1025,30 @@ pub mod fs_tests {
 
         assert_eq!(shmdtret, shmid); //NaCl requires shmdt to return the shmid, so this is non-posixy
         
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_getpid_getppid() {
+        lindrustinit(0);
+        
+        let cage1 = interface::cagetable_getref(1);
+        let pid1 = cage1.getpid_syscall();
+    
+        assert_eq!(cage1.fork_syscall(2), 0);
+        
+        let child = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(2);
+            let pid2 = cage2.getpid_syscall();
+            let ppid2 = cage2.getppid_syscall();
+            
+            assert_ne!(pid2, pid1); // make sure the child and the parent have different pids
+            assert_eq!(ppid2, pid1); // make sure the child's getppid is correct
+            
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+        
+        child.join().unwrap();
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }

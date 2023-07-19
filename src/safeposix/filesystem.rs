@@ -321,6 +321,91 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
 }
 
+/// This function resolves the absolute path of a directory from its inode number in a filesystem. 
+/// Here's how it operates:
+///
+/// - Starts from the given inode and fetches its associated metadata from the filesystem's inode table.
+///
+/// - Verifies that the inode represents a directory.
+///
+/// - Attempts to find the parent directory by looking for the ".." entry in the current directory's entries.
+///
+/// - Retrieves the directory name associated with the current inode using the `filenamefrominode` function and prepends it to the `path_string`.
+///
+/// - Continues this process recursively, updating the current inode to the parent inode, and accumulating directory names in the `path_string`.
+///
+/// - Stops when it reaches the root directory, where it prepends a "/" to the `path_string` and returns the complete path.
+///
+/// This function effectively constructs the absolute path by backtracking the parent directories. However, if any issues arise during this process, such as missing metadata or inability to find the parent directory, it returns `None`.
+pub fn pathnamefrominodenum(inodenum: usize) -> Option<String>{
+    let mut path_string = String::new();
+    let mut first_iteration = true;
+    let mut current_inodenum = inodenum;
+
+    loop{
+        let mut thisinode = match FS_METADATA.inodetable.get_mut(&current_inodenum) {
+            Some(inode) => inode,
+            None => {
+                return None;
+            },
+        };
+
+        match *thisinode {
+            Inode::Dir(ref mut dir_inode) => {
+                // We try to get the parent directory inode.
+                if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
+
+                    // If the parent node is 1 (indicating the root directory) and this is not the first iteration, this indicates that we have arrived at the root directory. Here we add a '/' to the beginning of the path string and return it.
+                    if *parent_dir_inode == (1 as usize){
+                        if !first_iteration {
+                            path_string.insert(0, '/');
+                            return Some(path_string);
+                        }
+                        first_iteration = false;
+                    }
+
+                    match filenamefrominode(*parent_dir_inode, current_inodenum) {
+                        Some(filename) => {
+                            path_string = filename + "/" + &path_string;
+                            current_inodenum = *parent_dir_inode;
+                        },
+                        None => return None,
+                    };
+
+                } else {
+                    return None;
+                }
+
+            },
+            _ => {
+                return None;
+            }
+        }
+    }
+}
+
+
+// Find the file by the given inode number in the given directory
+pub fn filenamefrominode(dir_inode_no: usize, target_inode: usize) -> Option<String> {
+    let cur_node = Some(FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
+
+    match &*cur_node.unwrap() {
+        Inode::Dir(d) => {
+
+            let mut target_variable_name: Option<String> = None;
+
+            for entry in d.filename_to_inode_dict.iter() {
+                if entry.value() == &target_inode {
+                    target_variable_name = Some(entry.key().to_owned());
+                    break;
+                }
+            }
+            return target_variable_name;
+        }
+        _ => return None,
+    }
+}
+
 //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
 pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
 
