@@ -570,7 +570,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 pub extern "C" fn lindrustfinalize() {
 
     interface::cagetable_clear();
-    
+ 
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
