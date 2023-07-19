@@ -33,6 +33,7 @@ pub mod fs_tests {
         ut_lind_fs_stat_file_complex();
         ut_lind_fs_stat_file_mode();
         ut_lind_fs_statfs();
+        ut_lind_fs_fstatfs();
         ut_lind_fs_ftruncate();
         ut_lind_fs_truncate();
         ut_lind_fs_getdents();
@@ -813,6 +814,27 @@ pub mod fs_tests {
         assert_eq!(fsdata.f_type, 0xBEEFC0DE);
         assert_eq!(fsdata.f_bsize, 4096);
 
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+
+    pub fn ut_lind_fs_fstatfs() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut fsdata = FSData::default();
+
+        // Get fd
+        let fd = cage.open_syscall("/", O_RDONLY, 0);
+        assert!(fd >= 0);
+        // fstatfs
+        assert_eq!(cage.fstatfs_syscall(fd, &mut fsdata), 0);
+        // Check the output
+        assert_eq!(fsdata.f_type, 0xBEEFC0DE);
+        assert_eq!(fsdata.f_bsize, 4096);
+        // Close the file
+        assert_eq!(cage.close_syscall(fd), 0);
+        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
