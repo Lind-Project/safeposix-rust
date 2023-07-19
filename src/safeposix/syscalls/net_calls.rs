@@ -128,7 +128,7 @@ impl Cage {
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
-    
+ 
     fn bind_inner_socket(&self, sockhandle: &mut SocketHandle, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         if localaddr.get_family() != sockhandle.domain as u16 {
             return syscall_error(Errno::EINVAL, "bind", "An address with an invalid family for the given domain was specified");
@@ -208,7 +208,7 @@ impl Cage {
         sockhandle.localaddr = Some(newsockaddr);
 
         0
-    } 
+    }
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
@@ -303,12 +303,12 @@ impl Cage {
                         };
                     } else if sockhandle.protocol == IPPROTO_TCP {
                         
-                        // check whether this is a domain socket or not:
                         if sockhandle.state != ConnState::NOTCONNECTED {
                             return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
                         }
 
                         // every branch in the domsocks branch terminates with a return so the code after this is for non-domsocks
+                        // check whether this is a domain socket or not:
                         let socket_type = sockhandle.domain;
                         if socket_type == AF_UNIX {
                             // domain socket 
@@ -335,8 +335,8 @@ impl Cage {
                             } else { None };
 
                             // receive_pipe and send_pipe need to be swapped here
-                            // because the receive_pipe and send_pipe are opposites for either the
-                            // server or client. Swapping here also means we do not need to swap in
+                            // because the receive_pipe and send_pipe are opposites between the 
+                            // sender and receiver. Swapping here also means we do not need to swap in
                             // accept.
                             let entry = DomsockTableEntry {
                                 sockaddr: sockhandle.localaddr.unwrap().clone(),
@@ -410,7 +410,7 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "connect", "invalid file descriptor");
         }
-    }  
+    }
 
     fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, options: i32) -> SocketHandle {
 
@@ -596,7 +596,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
         }
     }
-    
+ 
     fn recv_common_inner(&self, filedesc_enum: &mut FileDescriptor, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         match &mut *filedesc_enum {
             Socket(ref mut sockfdobj) => {
@@ -772,7 +772,7 @@ impl Cage {
                 return syscall_error(Errno::ENOTSOCK, "recvfrom", "file descriptor refers to something other than a socket");
             }
         }
-    }   
+    }
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
@@ -887,7 +887,7 @@ impl Cage {
             }
         }
     }
-    
+ 
     pub fn _cleanup_socket_inner_helper(sockhandle: &mut SocketHandle, how: i32, shutdown: bool) -> i32 {
         // we need to do a bunch of actual socket cleanup for INET sockets
         if sockhandle.domain != AF_UNIX { 
@@ -986,8 +986,6 @@ impl Cage {
         return 0;
     }
 
-
-    
     //calls accept on the socket object with value depending on ipv4 or ipv6
     //There may be a bug with nonblocking accept with fds not being removed on error
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
@@ -1196,7 +1194,7 @@ impl Cage {
     }
 
     //TODO: handle pipes
-     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
        //exceptfds and writefds are not really implemented at the current moment.
        //They both always return success. However we have some intention of making
        //writefds work at some point for pipes? We have no such intention for exceptfds
@@ -1551,11 +1549,7 @@ impl Cage {
                 if sockhandle.remoteaddr == None {
                     return syscall_error(Errno::ENOTCONN, "getpeername", "the socket is not connected");
                 }
-                *ret_addr = sockhandle.remoteaddr.unwrap();
-                // will swap if unix
-                //let remoteaddr = Self::swap_unixaddr(&sockhandle.remoteaddr.unwrap().clone());
-                // //all of the checks that we had have passed if we are here
-                //*ret_addr = remoteaddr;
+                *ret_addr = sockhandle.remoteaddr.unwrap(); 
                 return 0;
 
             } else {
@@ -1565,7 +1559,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid");
         }
     }
-    
+ 
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         if let Some(filedesc_enum) = &*unlocked_fd {
@@ -1605,7 +1599,7 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "getsockname", "the provided file descriptor is not valid");
         }
-    } 
+    }
 
     //we only return the default host name because we do not allow for the user to change the host name right now
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
@@ -1963,4 +1957,3 @@ impl Cage {
         }
     }
 }
-

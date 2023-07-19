@@ -147,7 +147,7 @@ impl EmulatedPipe {
             
             pipe_space = read_end.len();
             count = count + 1;
-            if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
+//            if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
         }
 
         let bytes_to_read = min(length, pipe_space);

@@ -628,8 +628,7 @@ impl Cage {
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
-                    }
-                    
+                    } 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
                     loop { // loop over pipe reads so we can periodically check for cancellation
