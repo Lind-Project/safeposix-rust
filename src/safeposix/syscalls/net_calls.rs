@@ -597,7 +597,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
         }
     }
- 
+
     fn recv_common_inner(&self, filedesc_enum: &mut FileDescriptor, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         match &mut *filedesc_enum {
             Socket(ref mut sockfdobj) => {
@@ -1167,7 +1167,7 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
-    } 
+    }
 
     fn _nonblock_peek_read(&self, fd: i32) -> bool{
         let flags = MSG_PEEK;
@@ -1560,7 +1560,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "getpeername", "the provided file descriptor is not valid");
         }
     }
- 
+
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
         let unlocked_fd = self.filedescriptortable[fd as usize].read();
         if let Some(filedesc_enum) = &*unlocked_fd {

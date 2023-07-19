@@ -4,7 +4,7 @@ pub mod net_tests {
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::mem::size_of;
-    //commented tests receive weird EINTR when running in RR
+    
     pub fn net_tests() {
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
@@ -15,16 +15,16 @@ pub mod net_tests {
         ut_lind_net_listen();
         ut_lind_net_poll();
         ut_lind_net_recvfrom();
-        ut_lind_net_select(); // <--
+        ut_lind_net_select(); 
         ut_lind_net_shutdown();
         ut_lind_net_socket();
         ut_lind_net_socketoptions();
-        ut_lind_net_socketpair(); // <--
+        ut_lind_net_socketpair(); 
         ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple(); // <--
-        ut_lind_net_udp_connect(); // <--
+        ut_lind_net_udp_simple(); 
+        ut_lind_net_udp_connect(); 
         ut_lind_net_gethostname();
-        ut_lind_net_dns_rootserver_ping(); // <--
+        ut_lind_net_dns_rootserver_ping();
     }
 
     pub fn ut_lind_net_bind() {
@@ -1237,7 +1237,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+ 
     pub fn ut_lind_net_dns_rootserver_ping() {
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
