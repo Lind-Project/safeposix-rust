@@ -1046,6 +1046,30 @@ impl Cage {
         }
     }
 
+    //------------------------------------FCHDIR SYSCALL------------------------------------
+   
+    pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+
+        let path_string = match &*unlocked_fd {
+            Some(File(normalfile_filedesc_obj)) => {
+                let inodenum = normalfile_filedesc_obj.inode;
+                match pathnamefrominodenum(inodenum) {
+                    Some(name) => name,
+                    None => return syscall_error(Errno::ENOTDIR, "fchdir", "the file descriptor does not refer to a directory"),
+                }
+            },
+            Some(_) => return syscall_error(Errno::EACCES, "fchdir", "cannot change working directory on this file descriptor"),
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+        };
+
+        let mut cwd_container = self.cwd.write();
+        
+	*cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+
+        0 // fchdir success
+    }
+
     //------------------------------------CHDIR SYSCALL------------------------------------
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
