@@ -123,7 +123,7 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool, cageid: u64) -> i32 {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -143,9 +143,7 @@ impl EmulatedPipe {
             if self.eof.load(Ordering::SeqCst) { return 0; }
 
             if count == CANCEL_CHECK_INTERVAL { 
-                interface::cancelpoint(cageid);
-                if interface::sigcheck(cageid) { return syscall_error(Errno::EINTR, "read", "interrupted function call"); }
-                count = 0;
+                return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
             }
             
             pipe_space = read_end.len();
