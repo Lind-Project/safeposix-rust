@@ -152,8 +152,8 @@ pub extern "C" fn rustposix_thread_init(cageid: u64) {
     let inheritedsigset = cage.sigset.remove(&0);
     if inheritedsigset.is_some() { 
         cage.sigset.insert(pthreadid, inheritedsigset.unwrap().1);
-    }
-    
+    } else { cage.sigset.insert(pthreadid, interface::RustAtomicU64::new(0)); }
+
     cage.pendingsigset.insert(pthreadid, interface::RustAtomicU64::new(0));
 }
 
