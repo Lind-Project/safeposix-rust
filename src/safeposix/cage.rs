@@ -123,7 +123,7 @@ impl Cage {
     }
 
     pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {
-        for signo in 0..SIGNAL_MAX {
+        for signo in 1..SIGNAL_MAX {
             if interface::lind_sigismember(sigset, signo) {
                 interface::lind_threadkill(pthreadid, signo);
             }
