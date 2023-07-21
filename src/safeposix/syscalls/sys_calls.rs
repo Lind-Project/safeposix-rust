@@ -338,7 +338,7 @@ impl Cage {
                 },
                 1 => { // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
-                    let pendingsignals = !(curr_sigset & newset);
+                    let pendingsignals = curr_sigset & some_set;
                     sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
                     self.send_pending_signals(pendingsignals, pthreadid);
                     0
