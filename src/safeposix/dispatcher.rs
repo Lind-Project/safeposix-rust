@@ -557,19 +557,20 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     let sigset = cage.sigset.get(&pthreadid).unwrap();
     let pendingset = cage.sigset.get(&pthreadid).unwrap();
 
-    return match cage.signalhandler.get(&signo) {
-        Some(action_struct) => {
-            if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
-                action_struct.sa_handler // if we have a handler and its not blocked return it
-            } else { 
-                let mutpendingset = sigset.load(interface::RustAtomicOrdering::Relaxed);
-                sigset.store(interface::lind_sigaddset(mutpendingset, signo), interface::RustAtomicOrdering::Relaxed);
-                1 // if its blocked add the signal to the pending set and return 1 to indicated it was blocked
-                //  a signal handler cant be located at address 0x1 so this value is fine to return and check
-            }
-        },
-        None => 0, // if we dont have a handler return 0
-    };
+    if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
+        return match cage.signalhandler.get(&signo) {
+            Some(action_struct) => {
+                    action_struct.sa_handler // if we have a handler and its not blocked return it
+
+            },
+            None => 0, // if we dont have a handler return 0
+        };
+    } else { 
+        let mutpendingset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+        sigset.store(interface::lind_sigaddset(mutpendingset, signo), interface::RustAtomicOrdering::Relaxed);
+        1 // if its blocked add the signal to the pending set and return 1 to indicated it was blocked
+        //  a signal handler cant be located at address 0x1 so this value is fine to return and check
+    }
 }
 
 #[no_mangle]
