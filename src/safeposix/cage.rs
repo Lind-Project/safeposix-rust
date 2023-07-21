@@ -78,7 +78,8 @@ pub struct Cage {
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
     pub thread_table: interface::RustHashMap<u64, bool>,
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
-    pub sigset: interface::RustAtomicU64,
+    pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     pub pending_signal: interface::RustHashSet<u64>,
     pub main_threadid: interface::RustAtomicU64
 }
@@ -120,6 +121,15 @@ impl Cage {
             }
         }
     }
+
+    pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {
+        for signo in 0..SIGNAL_MAX {
+            if interface::lind_sigismember(sigset, signo) {
+                interface::lind_threadkill(pthreadid, signo);
+            }
+        }
+    }
+
 }
 
 pub fn init_fdtable() -> FdTable {

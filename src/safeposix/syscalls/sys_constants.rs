@@ -15,6 +15,8 @@ pub const DEFAULT_GID : u32 = 1000;
 
 // RESOURCE LIMITS
 
+pub const SIGNAL_MAX : i32 = 64;
+
 pub const NOFILE_CUR : u64 = 1024;
 pub const NOFILE_MAX : u64 = 4*1024;
 

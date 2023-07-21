@@ -145,9 +145,16 @@ pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) ->
 }
 
 #[no_mangle]
-pub extern "C" fn lind_setmainthreadid(cageid: u64) {
+pub extern "C" fn rustposix_thread_init(cageid: u64) {
     let cage = interface::cagetable_getref(cageid);
-    cage.main_threadid.store(interface::get_pthreadid(), interface::RustAtomicOrdering::Relaxed);
+    let pthreadid = interface::get_pthreadid();
+    cage.main_threadid.store(pthreadid, interface::RustAtomicOrdering::Relaxed);
+    let inheritedsigset = cage.sigset.remove(&0);
+    if inheritedsigset.is_some() { 
+        cage.sigset.insert(pthreadid, inheritedsigset.unwrap().1);
+    }
+    
+    cage.pendingsigset.insert(pthreadid, interface::RustAtomicU64::new(0));
 }
 
 #[no_mangle]
@@ -546,14 +553,22 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
 #[no_mangle]
 pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     let cage = interface::cagetable_getref(cageid);
-    if !interface::lind_sigismember(cage.sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
-        return match cage.signalhandler.get(&signo) {
-            Some(action_struct) => action_struct.sa_handler,
-            None => 0,
-        };
-    }
-    //TODO: properly handle sigprocmask later
-    return 0;
+    let pthreadid = interface::get_pthreadid();
+    let sigset = cage.sigset.get(&pthreadid).unwrap();
+    let pendingset = cage.sigset.get(&pthreadid).unwrap();
+
+    return match cage.signalhandler.get(&signo) {
+        Some(action_struct) => {
+            if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
+                action_struct.sa_handler // if we have a handler and its not blocked return it
+            } else { 
+                let mutpendingset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+                sigset.store(interface::lind_sigaddset(mutpendingset, signo), interface::RustAtomicOrdering::Relaxed);
+                0 // if its blocked add the signal to the pending set and return 0
+            }
+        },
+        None => 0, // if we dont have a handler return 0
+    };
 }
 
 #[no_mangle]
@@ -593,7 +608,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
-        sigset: interface::RustAtomicU64::new(0), 
+        sigset: interface::RustHashMap::new(), 
+        pendingsigset: interface::RustHashMap::new(),
         pending_signal: interface::RustHashSet::new(),
         main_threadid: interface::RustAtomicU64::new(0)
     };
@@ -615,7 +631,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cv_table: interface::RustLock::new(vec!()),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
-        sigset: interface::RustAtomicU64::new(0),
+        sigset: interface::RustHashMap::new(),
+        pendingsigset: interface::RustHashMap::new(),
         pending_signal: interface::RustHashSet::new(),
         main_threadid: interface::RustAtomicU64::new(0)
     };
