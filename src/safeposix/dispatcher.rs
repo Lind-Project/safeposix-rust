@@ -564,7 +564,8 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
             } else { 
                 let mutpendingset = sigset.load(interface::RustAtomicOrdering::Relaxed);
                 sigset.store(interface::lind_sigaddset(mutpendingset, signo), interface::RustAtomicOrdering::Relaxed);
-                0 // if its blocked add the signal to the pending set and return 0
+                1 // if its blocked add the signal to the pending set and return 1 to indicated it was blocked
+                //  a signal handler cant be located at address 0x1 so this value is fine to return and check
             }
         },
         None => 0, // if we dont have a handler return 0
