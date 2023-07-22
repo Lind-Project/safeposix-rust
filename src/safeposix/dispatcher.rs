@@ -145,7 +145,7 @@ pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) ->
 }
 
 #[no_mangle]
-pub extern "C" fn rustposix_thread_init(cageid: u64) {
+pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
     let cage = interface::cagetable_getref(cageid);
     let pthreadid = interface::get_pthreadid();
     cage.main_threadid.store(pthreadid, interface::RustAtomicOrdering::Relaxed);
@@ -155,6 +155,9 @@ pub extern "C" fn rustposix_thread_init(cageid: u64) {
     } else { cage.sigset.insert(pthreadid, interface::RustAtomicU64::new(0)); }
 
     cage.pendingsigset.insert(pthreadid, interface::RustAtomicU64::new(0));
+
+
+    cage.trusted_signal_flag.insert(pthreadid, interface::convert_sigflag(signalflag));
 }
 
 #[no_mangle]
@@ -574,19 +577,6 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 }
 
 #[no_mangle]
-pub extern "C" fn lindsetpendingsignal(cageid: u64, pthreadid: u64, toggle: bool) {
-    let cage = interface::cagetable_getref(cageid);
-    if toggle { cage.pending_signal.insert(pthreadid); }
-    else { cage.pending_signal.remove(&pthreadid); }
-}
-
-#[no_mangle]
-pub extern "C" fn lindgetpendingsignal(cageid: u64, pthreadid: u64) -> bool {
-    let cage = interface::cagetable_getref(cageid);
-    cage.pending_signal.contains(&pthreadid)
-}
-
-#[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
@@ -612,7 +602,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(), 
         pendingsigset: interface::RustHashMap::new(),
-        pending_signal: interface::RustHashSet::new(),
+        trusted_signal_flag: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0)
     };
     interface::cagetable_insert(0, utilcage);
@@ -635,7 +625,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
         pendingsigset: interface::RustHashMap::new(),
-        pending_signal: interface::RustHashSet::new(),
+        trusted_signal_flag: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0)
     };
     interface::cagetable_insert(1, initcage);

@@ -122,7 +122,7 @@ fn main() {
                         signalhandler: interface::RustHashMap::new(),
                         sigset: interface::RustHashMap::new(),
                         pendingsigset: interface::RustHashMap::new(),
-                        pending_signal: interface::RustHashSet::new(),
+                        trusted_signal_flag: interface::RustHashMap::new(),
                         main_threadid: interface::RustAtomicU64::new(0)
                     };
 
