@@ -139,19 +139,6 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
-pub fn convert_sigflag(flag: u64) -> bool {
-    let boolptr = flag as *const bool;
-    let sigbool = unsafe { *boolptr };
-    sigbool
-}
-
-pub fn sigcheck(cageid: u64) -> bool {
-    let cage = cagetable_getref(cageid);
-    let pthread_id = get_pthreadid();
-    let sigbool = cage.trusted_signal_flag.get(&pthread_id).unwrap();
-    *sigbool
-}
-
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe{std::slice::from_raw_parts_mut(bufptr, count)};
     let mut f = std::fs::OpenOptions::new().read(true).write(false).open("/dev/urandom").unwrap();

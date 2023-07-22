@@ -640,9 +640,6 @@ impl Cage {
                     loop { // loop over pipe reads so we can periodically check for cancellation
                         let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
                         if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == -(Errno::EAGAIN as i32) {
-                            //first check if we got a signal on a blocking pipe
-                            if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "read", "interrupted function call"); }
-
                             if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
                                 // if the cancel status is set in the cage, we trap around a cancel point
                                 // until the individual thread is signaled to cancel itself
