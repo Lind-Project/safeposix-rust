@@ -147,7 +147,7 @@ pub struct ShmidsStruct {
 
 pub type SigsetType = u64;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(C)]
 pub struct SigactionStruct {
   pub sa_handler: u32,
