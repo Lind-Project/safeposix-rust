@@ -291,7 +291,9 @@ impl Cage {
 
             if let Some(entry) = old_sigactionstruct {
                 some_oact.clone_from(entry.value());
-            } 
+            } else {
+                some_oact.clone_from(0); // leave handler field as NULL
+            }
         }
 
         if let Some(some_act) = act {
