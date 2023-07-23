@@ -291,9 +291,7 @@ impl Cage {
 
             if let Some(entry) = old_sigactionstruct {
                 some_oact.clone_from(entry.value());
-            } else {
-                return syscall_error(Errno::EINVAL, "sigaction", "Signal action unmodified in lind")
-            }
+            } 
         }
 
         if let Some(some_act) = act {
