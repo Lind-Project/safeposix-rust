@@ -1120,7 +1120,6 @@ pub mod net_tests {
                     break;
                 }
             }
-
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
             assert_eq!(cage2.close_syscall(serverfd), 0);
