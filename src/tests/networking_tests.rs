@@ -1120,6 +1120,7 @@ pub mod net_tests {
                     break;
                 }
             }
+
             assert_eq!(cbuf2str(&buf), "test2\0\0\0\0\0");
 
             assert_eq!(cage2.close_syscall(serverfd), 0);
@@ -1302,7 +1303,6 @@ pub mod net_tests {
                 break;
             } 
         }
-
         //extract packet header
         let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader)};
         assert_eq!(u16::from_be(response_header.flags) & 0xf, 0);
