@@ -2,6 +2,8 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
+use std::ptr::null;
+
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
@@ -796,7 +798,9 @@ impl Cage {
         }
     }
 
-    pub fn recv_common_inner_tcp(&self, sockhandle: interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+    pub fn recv_common_inner_tcp(&self, sockhandleref: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+
+        let mut sockhandle: interface::RustLockGuard<SocketHandle> = *sockhandleref;
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
         }
@@ -849,7 +853,7 @@ impl Cage {
                             loop{interface::cancelpoint(self.cageid)};
                         }
                         // <<<<<<<<<<<<<<<<<<<<<<<< CALLL OUT, HERE!! <<<<<<<<<<<<<<<<<<<<<<<<
-                        sockhandle.
+                        sockhandle.bump();
                         continue;
                     }
                     else {
@@ -888,8 +892,7 @@ impl Cage {
                                     // until the individual thread is signaled to cancel itself
                                     loop { interface::cancelpoint(self.cageid); }
                                 }
-                                drop(sockhandle); // release sockhandle temporarily
-                                sockhandle = &mut sock_tmp.write();
+                                sockhandle.bump();
                                 continue; // EAGAIN, try again
                             }
 
