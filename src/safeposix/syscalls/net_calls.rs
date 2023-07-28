@@ -798,9 +798,8 @@ impl Cage {
         }
     }
 
-    pub fn recv_common_inner_tcp(&self, sockhandleref: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+    pub fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
 
-        let mut sockhandle: interface::RustLockGuard<SocketHandle> = *sockhandleref;
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
         }
@@ -853,7 +852,7 @@ impl Cage {
                             loop{interface::cancelpoint(self.cageid)};
                         }
                         // <<<<<<<<<<<<<<<<<<<<<<<< CALLL OUT, HERE!! <<<<<<<<<<<<<<<<<<<<<<<<
-                        interface::RustLockGuard::<SocketHandle>::bump(&mut sockhandle);
+                        interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
                         continue;
                     }
                     else {
@@ -892,7 +891,7 @@ impl Cage {
                                     // until the individual thread is signaled to cancel itself
                                     loop { interface::cancelpoint(self.cageid); }
                                 }
-                                interface::RustLockGuard::<SocketHandle>::bump(&mut sockhandle);
+                                interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
                                 continue; // EAGAIN, try again
                             }
 
