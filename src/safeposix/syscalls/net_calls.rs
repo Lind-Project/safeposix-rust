@@ -853,7 +853,7 @@ impl Cage {
                             loop{interface::cancelpoint(self.cageid)};
                         }
                         // <<<<<<<<<<<<<<<<<<<<<<<< CALLL OUT, HERE!! <<<<<<<<<<<<<<<<<<<<<<<<
-                        sockhandle.bump();
+                        interface::RustLockGuard::<SocketHandle>::bump(&mut sockhandle);
                         continue;
                     }
                     else {
@@ -892,7 +892,7 @@ impl Cage {
                                     // until the individual thread is signaled to cancel itself
                                     loop { interface::cancelpoint(self.cageid); }
                                 }
-                                sockhandle.bump();
+                                interface::RustLockGuard::<SocketHandle>::bump(&mut sockhandle);
                                 continue; // EAGAIN, try again
                             }
 
