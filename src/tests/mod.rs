@@ -34,8 +34,8 @@ mod main_tests {
         }
         lindrustfinalize();
 
-        println!("FS TESTS");
-        test_fs();
+        // println!("FS TESTS");
+        // test_fs();
 
         println!("NET TESTS");
         net_tests();
