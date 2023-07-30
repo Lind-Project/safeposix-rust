@@ -735,6 +735,7 @@ impl Cage {
                             // until the individual thread is signaled to cancel itself
                             loop{interface::cancelpoint(self.cageid)};
                         }
+                        // in order to prevent deadlock
                         interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
                         continue;
                     }
@@ -824,8 +825,7 @@ impl Cage {
                                // until the individual thread is signaled to cancel itself
                                loop { interface::cancelpoint(self.cageid); }
                            }
-                           drop(sockhandle); // release sockhandle temporarily
-                           sockhandle = sock_tmp.write();
+                           interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
                            continue; //received EAGAIN on blocking socket, try again
                        }
                        return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
@@ -837,7 +837,6 @@ impl Cage {
                return retval; // we can proceed
            }
        }
-   }
     }
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
