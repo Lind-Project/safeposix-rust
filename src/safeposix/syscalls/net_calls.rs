@@ -798,7 +798,7 @@ impl Cage {
         }
     }
 
-    pub fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+    pub fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
 
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
@@ -851,7 +851,6 @@ impl Cage {
                             // until the individual thread is signaled to cancel itself
                             loop{interface::cancelpoint(self.cageid)};
                         }
-                        // <<<<<<<<<<<<<<<<<<<<<<<< CALLL OUT, HERE!! <<<<<<<<<<<<<<<<<<<<<<<<
                         interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
                         continue;
                     }
@@ -1127,6 +1126,7 @@ impl Cage {
 
     //calls accept on the socket object with value depending on ipv4 or ipv6
     //There may be a bug with nonblocking accept with fds not being removed on error
+    // NEED REFACTOR
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
 
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
@@ -1331,6 +1331,7 @@ impl Cage {
     }
 
     //TODO: handle pipes
+    // NEED REFACTOR
     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
        //exceptfds and writefds are not really implemented at the current moment.
        //They both always return success. However we have some intention of making
