@@ -303,7 +303,7 @@ impl Cage {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
                     match sockhandle.protocol {
-                        IPPROTO_UDP => return self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr),
+                        IPPROTO_UDP => return self.connect_udp(&mut *sockhandle, remoteaddr),
                         IPPROTO_TCP => return self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
                         _ => return syscall_error(Errno::EOPNOTSUPP, "connect", "Unknown protocol in connect"),
                     }
@@ -317,7 +317,7 @@ impl Cage {
         }
     }
     
-    fn connect_udp(&self, sockhandle: &mut SocketHandle, sockfdobj: &mut SocketDesc, remoteaddr: &interface::GenSockaddr) -> i32 {
+    fn connect_udp(&self, sockhandle: &mut SocketHandle, remoteaddr: &interface::GenSockaddr) -> i32 {
         //for UDP, just set the addresses and return
         //we don't need to check connection state for UDP, it's connectionless!
         sockhandle.remoteaddr = Some(remoteaddr.clone());
@@ -342,7 +342,7 @@ impl Cage {
     
         match sockhandle.domain {
             AF_UNIX => self.connect_tcp_unix(&mut *sockhandle, sockfdobj, remoteaddr),
-            _ => self.connect_tcp_inet(&mut *sockhandle, sockfdobj, remoteaddr),
+            _ => self.connect_tcp_inet(&mut *sockhandle, remoteaddr),
         }
     }
     
