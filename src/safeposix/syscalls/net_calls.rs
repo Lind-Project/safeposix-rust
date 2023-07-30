@@ -796,6 +796,50 @@ impl Cage {
         return totalbyteswritten;
     }
 
+    fn recv_common_inner_udp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+        let binddomain = if let Some(baddr) = addr {
+            baddr.get_family() as i32
+       } else { AF_INET };
+       
+       let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
+       if ibindret < 0 {
+           return ibindret;
+       }
+
+       loop { // loop for blocking sockets
+           //if the remoteaddr is set and addr is not, use remoteaddr
+           //unwrap is ok because of implicit bind
+           let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
+               sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
+           } else {
+               sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
+           };
+
+           if retval < 0 {
+               match Errno::from_discriminant(interface::get_errno()) {
+                   Ok(i) => {
+                       if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                           if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                               // if the cancel status is set in the cage, we trap around a cancel point
+                               // until the individual thread is signaled to cancel itself
+                               loop { interface::cancelpoint(self.cageid); }
+                           }
+                           drop(sockhandle); // release sockhandle temporarily
+                           sockhandle = sock_tmp.write();
+                           continue; //received EAGAIN on blocking socket, try again
+                       }
+                       return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
+                   },
+                   Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+               };
+               
+           } else {
+               return retval; // we can proceed
+           }
+       }
+   }
+    }
+
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
