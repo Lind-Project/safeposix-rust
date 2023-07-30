@@ -386,7 +386,7 @@ impl Cage {
         return 0; 
     }
     
-    fn connect_tcp_inet(&self, sockhandle: &mut SocketHandle, sockfdobj: &mut SocketDesc, remoteaddr: &interface::GenSockaddr) -> i32 {
+    fn connect_tcp_inet(&self, sockhandle: &mut SocketHandle, remoteaddr: &interface::GenSockaddr) -> i32 {
         // TCP inet domain logic
         //for TCP, actually create the internal socket object and connect it
         let remoteclone = remoteaddr.clone();
@@ -798,7 +798,7 @@ impl Cage {
         }
     }
 
-    pub fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+    pub fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
 
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
