@@ -1106,7 +1106,7 @@ impl Cage {
                                 }
                             }
                         }
-                        _ => {
+                        AF_INET | AF_INET6 => {
                             match sockhandle.protocol {
                                 IPPROTO_UDP => {
                                     return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
@@ -1180,7 +1180,8 @@ impl Cage {
                                     return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
                                 }
                             }
-                        }
+                        },
+                        _ => {return syscall_error(Errno::EINVAL, "accept", "Unsupported domain provided")}
                     }
                 }
                 _ => {
@@ -1295,7 +1296,7 @@ impl Cage {
                                     }
                                 }
                             }
-                            _ => {
+                            AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
                                     if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
 
@@ -1337,7 +1338,8 @@ impl Cage {
                                         }
                                     }
                                 }
-                            }
+                            },
+                            _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
                         }
                     }
 
