@@ -2,8 +2,6 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
-use std::ptr::null;
-
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
@@ -12,8 +10,6 @@ use super::sys_constants::*;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
-use crate::interface::new_sockaddr_unix;
-pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
 impl Cage {
     fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool, conn: ConnState) -> SocketDesc {
@@ -145,7 +141,8 @@ impl Cage {
     
         let res = match sockhandle.domain {
             AF_UNIX => self.bind_inner_socket_unix(sockhandle, &mut newsockaddr),
-            _ => self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved),
+            AF_INET | AF_INET6 => self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved),
+            _ => {return syscall_error(Errno::EINVAL, "bind", "Unsupported domain provided");}
         };
     
         match res {
@@ -342,7 +339,8 @@ impl Cage {
     
         match sockhandle.domain {
             AF_UNIX => self.connect_tcp_unix(&mut *sockhandle, sockfdobj, remoteaddr),
-            _ => self.connect_tcp_inet(&mut *sockhandle, remoteaddr),
+            AF_INET | AF_INET6 => self.connect_tcp_inet(&mut *sockhandle, remoteaddr),
+            _ => {return syscall_error(Errno::EINVAL, "connect", "Unsupported domain provided")},
         }
     }
     
@@ -577,7 +575,7 @@ impl Cage {
                             }
                         },
                         // for inet
-                        _ => match sockhandle.protocol {
+                        AF_INET | AF_INET6 => match sockhandle.protocol {
                             IPPROTO_TCP => {
                                 if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNWRONLY) {
                                     return syscall_error(Errno::ENOTCONN, "send", "The descriptor is not connected");
@@ -610,6 +608,7 @@ impl Cage {
                                 return syscall_error(Errno::EOPNOTSUPP, "send", "Unkown protocol in send");
                             }
                         },
+                        _ => {return syscall_error(Errno::EINVAL, "connect", "Unsupported domain provided")},
                     }
                 }
                 _ => {
@@ -1611,7 +1610,7 @@ impl Cage {
                 if sockhandle.domain == AF_UNIX {
                     if sockhandle.localaddr == None {
                         let null_path: &[u8] = &[];
-                        *ret_addr = interface::GenSockaddr::Unix(new_sockaddr_unix(sockhandle.domain as u16, null_path));
+                        *ret_addr = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(sockhandle.domain as u16, null_path));
                         return 0;
                     }
                     //if the socket is not none, then return the socket
