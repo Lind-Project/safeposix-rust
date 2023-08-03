@@ -1393,6 +1393,7 @@ impl Cage {
                                     sockhandle.state = ConnState::CONNECTED;
                                 } 
                             },
+                            _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain")}
                         }
                         
                         //we always say sockets are writable? Even though this is not true
