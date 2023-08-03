@@ -640,7 +640,7 @@ impl Cage {
         }
     }
 
-    fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+    fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
 
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
@@ -694,7 +694,7 @@ impl Cage {
                             loop{interface::cancelpoint(self.cageid)};
                         }
                         // in order to prevent deadlock
-                        interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
+                        interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
                         continue;
                     }
                     else {
@@ -733,7 +733,7 @@ impl Cage {
                                     // until the individual thread is signaled to cancel itself
                                     loop { interface::cancelpoint(self.cageid); }
                                 }
-                                interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
+                                interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
                                 continue; // EAGAIN, try again
                             }
 
@@ -755,7 +755,7 @@ impl Cage {
         return totalbyteswritten;
     }
 
-    fn recv_common_inner_udp(&self, sockhandle: &mut interface::RustLockGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
+    fn recv_common_inner_udp(&self, sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let binddomain = if let Some(baddr) = addr {
             baddr.get_family() as i32
        } else { AF_INET };
@@ -783,7 +783,7 @@ impl Cage {
                                // until the individual thread is signaled to cancel itself
                                loop { interface::cancelpoint(self.cageid); }
                            }
-                           interface::RustLockGuard::<SocketHandle>::bump(sockhandle);
+                           interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
                            continue; //received EAGAIN on blocking socket, try again
                        }
                        return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
@@ -1022,165 +1022,17 @@ impl Cage {
 
             let (newfd, guardopt) = self.get_next_fd(None);
             if newfd < 0 { return fd }
-            let newfdoption = &mut *guardopt.unwrap();
+            let newfdoption: &mut Option<FileDescriptor> = &mut *guardopt.unwrap();
 
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
                     let sock_tmp = sockfdobj.handle.clone();
-                    let sockhandle = sock_tmp.read();
+                    let mut sockhandle = sock_tmp.read();
 
                     // check if domain socket
                     match sockhandle.domain {
-                        AF_UNIX => {
-                            match sockhandle.protocol {
-                                IPPROTO_UDP => {
-                                    return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
-                                }
-                                IPPROTO_TCP => {
-        
-                                    if sockhandle.state != ConnState::LISTEN {
-                                        return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
-                                    }
-                                    let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
-        
-                                    let remote_addr : interface::GenSockaddr;
-                                    let sendpipenumber;
-                                    let receivepipenumber;
-        
-                                    loop {
-                                        let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
-                                        let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
-        
-                                        if let Some(ds) = dsconnobj {
-                                            // if its blocking it will have a connvar, signal it
-                                            if let Some(connvar) = ds.get_cond_var() {
-                                                if !connvar.signal() { 
-                                                    drop(ds);
-                                                    continue;
-                                                }
-                                            }
-                                            let addr = ds.get_sockaddr().clone();
-                                            remote_addr = addr.clone();
-                                            receivepipenumber = ds.get_receive_pipe().clone();
-                                            sendpipenumber = ds.get_send_pipe().clone();
-                                            drop(ds);
-                                            NET_METADATA.domsock_accept_table.remove(&localpathbuf);
-                                            break;
-                                        } else {
-                                            if 0 != (sockfdobj.flags & O_NONBLOCK) {
-                                                // if non block return EAGAIN
-                                                return syscall_error(Errno::EAGAIN, "accept", "host system accept call failed");
-                                            }
-                                        }
-                                    }
-
-                                    let newsock_tmp = newsockfd.handle.clone();
-                                    let mut newsockhandle = newsock_tmp.write();
-
-                                    let pathclone = normpath(convpath(remote_addr.path().clone()), self);
-                                    if let Some(inodenum) = metawalk(pathclone.as_path()) {                   
-                                        newsockhandle.unix_info = Some(UnixSocketInfo {
-                                            path: pathclone,
-                                            inode: inodenum.clone(),
-                                            mode: sockhandle.unix_info.as_ref().unwrap().mode,
-                                            sendpipe: Some(sendpipenumber.clone()),
-                                            receivepipe: Some(receivepipenumber.clone()),
-                                        });
-                                        if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
-                                            sock.refcount += 1; 
-                                        } 
-                                    }; 
-                                    
-                                    newsockhandle.localaddr = Some(sockhandle.localaddr.unwrap().clone());
-                                    newsockhandle.remoteaddr = Some(remote_addr.clone());
-                                    newsockhandle.state = ConnState::CONNECTED;
-                                    let _insertval = newfdoption.insert(Socket(newsockfd));
-                                    *addr = remote_addr; //populate addr with what address it connected to
-                                    
-
-                                    
-                                    return newfd;
-                                }
-                                _ => {
-                                    return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
-                                }
-                            }
-                        }
-                        AF_INET | AF_INET6 => {
-                            match sockhandle.protocol {
-                                IPPROTO_UDP => {
-                                    return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
-                                }
-                                IPPROTO_TCP => {
-                                    if sockhandle.state != ConnState::LISTEN {
-                                        return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
-                                    }
-                                    let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
-
-                                    let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port()) {
-                                        //if we got a pending connection in select/poll/whatever, return that here instead
-                                        let tup = vec.pop().unwrap(); //pending connection tuple recieved
-                                        if vec.is_empty() {
-                                            drop(vec);
-                                            NET_METADATA.pending_conn_table.remove(&sockhandle.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
-                                        }
-                                        tup
-                                    } else {
-                                        //unwrap ok because listening
-                                        if 0 == (sockfdobj.flags & O_NONBLOCK) {
-                                            match sockhandle.domain {
-                                                PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
-                                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
-                                                _ => panic!("Unknown domain in accepting socket"),
-                                            }
-                                        } else {
-                                            match sockhandle.domain {
-                                                PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                                _ => panic!("Unknown domain in accepting socket"),
-                                            }
-                                        }
-                                    };
-
-                                    if let Err(_) = acceptedresult {
-                                        match Errno::from_discriminant(interface::get_errno()) {
-                                            Ok(e) => {
-                                                return syscall_error(e, "accept", "host system accept call failed");
-                                            },
-                                            Err(()) => panic!("Unknown errno value from socket send returned!"),
-                                        };
-                                    }
-
-                                    let acceptedsock = acceptedresult.unwrap();
-
-                                    let mut newaddr = sockhandle.localaddr.unwrap().clone();
-                                    let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockhandle.protocol, sockhandle.domain, false) {
-                                        Ok(portnum) => portnum,
-                                        Err(errnum) => {
-                                            return errnum;
-                                        }
-                                    };
-                                    newaddr.set_port(newport);
-
-                                    let newsock_tmp = newsockfd.handle.clone();
-                                    let mut newsockhandle = newsock_tmp.write();
-
-                                    newsockhandle.localaddr = Some(newaddr);
-                                    newsockhandle.remoteaddr = Some(remote_addr.clone());
-
-                                    //create socket object for new connected socket
-                                    newsockhandle.innersocket = Some(acceptedsock);
-                                    
-                                    let _insertval = newfdoption.insert(Socket(newsockfd));
-                                    *addr = remote_addr; //populate addr with what address it connected to
-
-                                    return newfd;
-                                }
-                                _ => {
-                                    return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
-                                }
-                            }
-                        },
+                        AF_UNIX => return self.accept_unix(&mut sockhandle, sockfdobj, newfd, newfdoption, addr),
+                        AF_INET | AF_INET6 => return self.accept_inet(&mut sockhandle, sockfdobj, newfd, newfdoption, addr),
                         _ => {return syscall_error(Errno::EINVAL, "accept", "Unsupported domain provided")}
                     }
                 }
@@ -1190,6 +1042,158 @@ impl Cage {
             }
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
+        }
+    }
+
+    fn accept_unix(&self, sockhandle: &mut interface::RustLockReadGuard<SocketHandle>, sockfdobj: &mut SocketDesc, newfd: i32, newfdoption: &mut Option<FileDescriptor>, addr: &mut interface::GenSockaddr) -> i32 {
+        match sockhandle.protocol {
+            IPPROTO_UDP => {
+                return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
+            }
+            IPPROTO_TCP => {
+
+                if sockhandle.state != ConnState::LISTEN {
+                    return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
+                }
+                let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+
+                let remote_addr : interface::GenSockaddr;
+                let sendpipenumber;
+                let receivepipenumber;
+
+                loop {
+                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
+                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
+
+                    if let Some(ds) = dsconnobj {
+                        // if its blocking it will have a connvar, signal it
+                        if let Some(connvar) = ds.get_cond_var() {
+                            if !connvar.signal() { 
+                                drop(ds);
+                                continue;
+                            }
+                        }
+                        let addr = ds.get_sockaddr().clone();
+                        remote_addr = addr.clone();
+                        receivepipenumber = ds.get_receive_pipe().clone();
+                        sendpipenumber = ds.get_send_pipe().clone();
+                        drop(ds);
+                        NET_METADATA.domsock_accept_table.remove(&localpathbuf);
+                        break;
+                    } else {
+                        if 0 != (sockfdobj.flags & O_NONBLOCK) {
+                            // if non block return EAGAIN
+                            return syscall_error(Errno::EAGAIN, "accept", "host system accept call failed");
+                        }
+                    }
+                }
+
+                let newsock_tmp = newsockfd.handle.clone();
+                let mut newsockhandle = newsock_tmp.write();
+
+                let pathclone = normpath(convpath(remote_addr.path().clone()), self);
+                if let Some(inodenum) = metawalk(pathclone.as_path()) {                   
+                    newsockhandle.unix_info = Some(UnixSocketInfo {
+                        path: pathclone,
+                        inode: inodenum.clone(),
+                        mode: sockhandle.unix_info.as_ref().unwrap().mode,
+                        sendpipe: Some(sendpipenumber.clone()),
+                        receivepipe: Some(receivepipenumber.clone()),
+                    });
+                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
+                        sock.refcount += 1; 
+                    } 
+                }; 
+                
+                newsockhandle.localaddr = Some(sockhandle.localaddr.unwrap().clone());
+                newsockhandle.remoteaddr = Some(remote_addr.clone());
+                newsockhandle.state = ConnState::CONNECTED;
+                let _insertval = newfdoption.insert(Socket(newsockfd));
+                *addr = remote_addr; //populate addr with what address it connected to
+                
+
+                
+                return newfd;
+            }
+            _ => {
+                return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+            }
+        }
+    }
+
+    fn accept_inet(&self, sockhandle: &mut interface::RustLockReadGuard<SocketHandle>, sockfdobj: &mut SocketDesc, newfd: i32, newfdoption: &mut Option<FileDescriptor>, addr: &mut interface::GenSockaddr) -> i32 {
+        match sockhandle.protocol {
+            IPPROTO_UDP => {
+                return syscall_error(Errno::EOPNOTSUPP, "accept", "Protocol does not support listening");
+            }
+            IPPROTO_TCP => {
+                if sockhandle.state != ConnState::LISTEN {
+                    return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
+                }
+                let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+
+                let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port()) {
+                    //if we got a pending connection in select/poll/whatever, return that here instead
+                    let tup = vec.pop().unwrap(); //pending connection tuple recieved
+                    if vec.is_empty() {
+                        drop(vec);
+                        NET_METADATA.pending_conn_table.remove(&sockhandle.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
+                    }
+                    tup
+                } else {
+                    //unwrap ok because listening
+                    if 0 == (sockfdobj.flags & O_NONBLOCK) {
+                        match sockhandle.domain {
+                            PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
+                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
+                            _ => panic!("Unknown domain in accepting socket"),
+                        }
+                    } else {
+                        match sockhandle.domain {
+                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                            _ => panic!("Unknown domain in accepting socket"),
+                        }
+                    }
+                };
+
+                if let Err(_) = acceptedresult {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(e) => {
+                            return syscall_error(e, "accept", "host system accept call failed");
+                        },
+                        Err(()) => panic!("Unknown errno value from socket send returned!"),
+                    };
+                }
+
+                let acceptedsock = acceptedresult.unwrap();
+
+                let mut newaddr = sockhandle.localaddr.unwrap().clone();
+                let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockhandle.protocol, sockhandle.domain, false) {
+                    Ok(portnum) => portnum,
+                    Err(errnum) => {
+                        return errnum;
+                    }
+                };
+                newaddr.set_port(newport);
+
+                let newsock_tmp = newsockfd.handle.clone();
+                let mut newsockhandle = newsock_tmp.write();
+
+                newsockhandle.localaddr = Some(newaddr);
+                newsockhandle.remoteaddr = Some(remote_addr.clone());
+
+                //create socket object for new connected socket
+                newsockhandle.innersocket = Some(acceptedsock);
+                
+                let _insertval = newfdoption.insert(Socket(newsockfd));
+                *addr = remote_addr; //populate addr with what address it connected to
+
+                return newfd;
+            }
+            _ => {
+                return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
+            }
         }
     }
 
@@ -1283,7 +1287,7 @@ impl Cage {
                                     let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                     if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
-                                } 
+                                }
 
                                 if sockhandle.state == ConnState::CONNECTED {
                                     let _ = sockfdobj;
@@ -1376,9 +1380,20 @@ impl Cage {
                         // check if we've made an in progress connection first
                         let sock_tmp = sockfdobj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
-                        if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                            sockhandle.state = ConnState::CONNECTED;
-                        } 
+                        match sockhandle.domain {
+                            AF_UNIX => {
+                                if sockhandle.state == ConnState::INPROGRESS {
+                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
+                                    if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
+                                }
+                            },
+                            AF_INET => {
+                                if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
+                                    sockhandle.state = ConnState::CONNECTED;
+                                } 
+                            },
+                        }
                         
                         //we always say sockets are writable? Even though this is not true
                         new_writefds.insert(*fd);
