@@ -127,9 +127,11 @@ impl Cage {
         // we grab the parent cages main threads sigset and store it at 0
         // this way the child can initialize the sigset properly when it establishes its own mainthreadid
         let newsigset = interface::RustHashMap::new();
-        let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
-        let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
-        newsigset.insert(0, mainsigset);
+        if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+            let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
+            let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
+            newsigset.insert(0, mainsigset);
+        }
 
 
         let cageobj = Cage {
@@ -191,9 +193,11 @@ impl Cage {
         // we grab the parent cages main threads sigset and store it at 0
         // this way the child can initialize the sigset properly when it establishes its own mainthreadid
         let newsigset = interface::RustHashMap::new();
-        let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
-        let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
-        newsigset.insert(0, mainsigset);
+        if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+            let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
+            let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
+            newsigset.insert(0, mainsigset);
+        }
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
             parent: self.parent, 
@@ -240,8 +244,10 @@ impl Cage {
         interface::cagetable_remove(self.cageid);
         
         // Trigger SIGCHLD
-        if self.cageid != self.parent {
-            interface::lind_kill(self.parent, SIGCHLD);
+        if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
+            if self.cageid != self.parent {
+                interface::lind_kill(self.parent, SIGCHLD);
+            }
         }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc

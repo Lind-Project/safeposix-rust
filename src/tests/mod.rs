@@ -21,6 +21,8 @@ mod main_tests {
 
     #[test]
     pub fn tests() {
+        interface::TEST.store(true, interface::RustAtomicOrdering::Relaxed);
+        
         lindrustinit(0);
         {
             let cage = interface::cagetable_getref(1);
