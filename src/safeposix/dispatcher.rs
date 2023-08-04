@@ -157,7 +157,7 @@ pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
     } else { cage.sigset.insert(pthreadid, interface::RustAtomicU64::new(0)); }
 
     cage.pendingsigset.insert(pthreadid, interface::RustAtomicU64::new(0));
-    cage.trusted_signal_flag.insert(pthreadid, interface::convert_sigflag(signalflag));
+    cage.trusted_signal_flag.insert(pthreadid, signalflag);
 }
 
 #[no_mangle]

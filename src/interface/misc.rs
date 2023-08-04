@@ -146,19 +146,16 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
-pub fn convert_sigflag(flag: u64) -> bool {
-    let boolptr = flag as *const bool;
-    let sigbool = unsafe { *boolptr };
-    sigbool
-}
-
 pub fn sigcheck(cageid: u64) -> bool {
     if TEST.load(RustAtomicOrdering::Relaxed) { return false; }
 
     let cage = cagetable_getref(cageid);
     let pthread_id = get_pthreadid();
-    let sigbool = cage.trusted_signal_flag.get(&pthread_id).unwrap();
-    *sigbool
+    let boolu64 = cage.trusted_signal_flag.get(&pthread_id).unwrap();
+    let boolptr = *boolu64 as *const bool;
+    let sigbool = unsafe { *boolptr };
+
+    sigbool
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {

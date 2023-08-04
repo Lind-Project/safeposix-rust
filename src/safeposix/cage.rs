@@ -81,7 +81,7 @@ pub struct Cage {
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     pub main_threadid: interface::RustAtomicU64,
-    pub trusted_signal_flag: interface::RustHashMap<u64, bool>,
+    pub trusted_signal_flag: interface::RustHashMap<u64, u64>,
     pub interval_timer: interface::IntervalTimer
 }
 
