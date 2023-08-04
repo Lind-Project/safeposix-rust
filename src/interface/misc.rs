@@ -27,9 +27,14 @@ pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice 
 use crate::interface::errnos::{VERBOSE};
 use crate::interface::types::{SigsetType};
 use std::time::Duration;
+pub use std::sync::LazyLock;
 
 const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
+
+pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+    RustAtomicBool::new(false)
+});
 
 use crate::safeposix::cage::{Cage};
 
@@ -137,6 +142,19 @@ pub fn cancelpoint(cageid: u64) {
         cage.thread_table.insert(pthread_id, false); 
         lind_threadexit(); 
     }
+}
+
+pub fn convert_sigflag(flag: u64) -> bool {
+    let boolptr = flag as *const bool;
+    let sigbool = unsafe { *boolptr };
+    sigbool
+}
+
+pub fn sigcheck(cageid: u64) -> bool {
+    let cage = cagetable_getref(cageid);
+    let pthread_id = get_pthreadid();
+    let sigbool = cage.trusted_signal_flag.get(&pthread_id).unwrap();
+    *sigbool
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {

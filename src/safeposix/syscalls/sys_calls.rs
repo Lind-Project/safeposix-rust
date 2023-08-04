@@ -148,6 +148,7 @@ impl Cage {
             signalhandler: self.signalhandler.clone(),
             sigset: newsigset,
             pendingsigset: interface::RustHashMap::new(),
+            trusted_signal_flag: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid)
         };
@@ -209,6 +210,7 @@ impl Cage {
             signalhandler: interface::RustHashMap::new(),
             sigset: newsigset,
             pendingsigset: interface::RustHashMap::new(),
+            trusted_signal_flag: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid)
         };
