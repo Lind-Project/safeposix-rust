@@ -1461,12 +1461,13 @@ impl Cage {
                 let mut mask: i16 = 0;
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
-                if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO)) > 0 {
+                let selectret = Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO));
+                if selectret > 0 {
                     mask += if !reads.is_empty() {POLLIN} else {0};
                     mask += if !writes.is_empty() {POLLOUT} else {0};
                     mask += if !errors.is_empty() {POLLERR} else {0};
                     return_code += 1;
-                }
+                } else if selectret < 0 { return selectret; }
                 structpoll.revents = mask;
             }
 
@@ -1587,7 +1588,8 @@ impl Cage {
                   num_events += 1;
                 } 
                 let poll_fds_slice = &mut poll_fds_vec[..];
-                Self::poll_syscall(&self, poll_fds_slice, timeout);
+                let pollret = Self::poll_syscall(&self, poll_fds_slice, timeout);
+                if pollret < 0 { return pollret; }
                 let mut count = 0;
                 let end_idx: usize = interface::rust_min(num_events, maxevents as usize);
                 for result in poll_fds_slice[..end_idx].iter() {
