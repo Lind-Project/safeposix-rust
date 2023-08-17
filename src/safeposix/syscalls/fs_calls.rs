@@ -1246,7 +1246,7 @@ impl Cage {
                             if (receivepipe.get_write_ref() as u64) + (receivepipe.get_read_ref() as u64)  == 0 { ui.receivepipe = None; }
 
                         } else {
-                            return syscall_error(Errno::EINVAl, "close", "pipe not read and not write");
+                            return syscall_error(Errno::EINVAL, "close", "pipe not read and not write");
                         }
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {
