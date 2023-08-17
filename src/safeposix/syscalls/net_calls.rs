@@ -144,11 +144,12 @@ impl Cage {
             AF_INET | AF_INET6 => self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved),
             _ => {return syscall_error(Errno::EINVAL, "bind", "Unsupported domain provided");}
         };
-    
-        match res {
-            0 => sockhandle.localaddr = Some(newsockaddr),
-            _ => return res, // error occured
+
+        if res != 0 {
+            return res; // some error occured
         }
+
+        sockhandle.localaddr = Some(newsockaddr);
     
         0
     }
@@ -242,13 +243,13 @@ impl Cage {
         }
     }
 
-    fn assign_new_addr_unix(sockhandle: &SocketHandle) -> Result<interface::GenSockaddr, i32> {
+    fn assign_new_addr_unix(sockhandle: &SocketHandle) -> interface::GenSockaddr {
         if let Some(addr) = sockhandle.localaddr.clone() {
-            Ok(addr)
+            addr
         } else {
             let path = interface::gen_ud_path();
             let newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
-            Ok(newremote)
+            newremote
         } 
     }
 
@@ -347,14 +348,15 @@ impl Cage {
     fn connect_tcp_unix(&self, sockhandle: &mut SocketHandle, sockfdobj: &mut SocketDesc, remoteaddr: &interface::GenSockaddr) -> i32 {
         // TCP domain socket logic
         if let None = sockhandle.localaddr {
-            let localaddr = match Self::assign_new_addr_unix(&sockhandle) {
-                Ok(a) => a,
-                Err(e) => return e,
-            };
+            let localaddr = Self::assign_new_addr_unix(&sockhandle);
             self.bind_inner_socket(&mut *sockhandle, &localaddr, false); 
         }
         let remotepathbuf = normpath(convpath(remoteaddr.path().clone()), self);
-        if !NET_METADATA.domsock_paths.contains(&remotepathbuf) {
+
+        // try to get and hold reference to the key-value pair, so other process can't alter it
+        let path_ref = NET_METADATA.domsock_paths.get(&remotepathbuf);
+        // if the entry doesn't exist, return an error.
+        if path_ref.is_none() {
             return syscall_error(Errno::ENOENT, "connect", "not valid unix domain path");
         }
     
@@ -470,8 +472,7 @@ impl Cage {
                     let mut sockhandle = sock_tmp.write();
 
                     // check if this is a domain socket
-                    let socket_type = sockhandle.domain;
-                    if socket_type == AF_UNIX {
+                    if sockhandle.domain == AF_UNIX {
                         return syscall_error(Errno::EISCONN, "sendto", "The descriptor is connection-oriented");
                     } 
 
@@ -1066,9 +1067,11 @@ impl Cage {
                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
 
                     if let Some(ds) = dsconnobj {
-                        // if its blocking it will have a connvar, signal it
+                        // we loop here to accept the connection
+                        // if we get a connection object from the accept table, we complete the connection and set up the address and pipes
+                        // if theres no object, we retry, except in the case of non-blocking accept where we return EAGAIN
                         if let Some(connvar) = ds.get_cond_var() {
-                            if !connvar.signal() { 
+                            if !connvar.broadcast() { 
                                 drop(ds);
                                 continue;
                             }
@@ -1290,8 +1293,6 @@ impl Cage {
                                 }
 
                                 if sockhandle.state == ConnState::CONNECTED {
-                                    let _ = sockfdobj;
-                                    let _ = filedesc_enum;
                                     drop(sockhandle);
                                     drop(unlocked_fd);
                                     if self._nonblock_peek_read(*fd) {
@@ -1333,7 +1334,6 @@ impl Cage {
                                         new_readfds.insert(*fd);
                                         *retval += 1;
                                     } else {
-                                        let _ = sockfdobj;
                                         drop(sockhandle);
                                         drop(unlocked_fd);
                                         if self._nonblock_peek_read(*fd) {

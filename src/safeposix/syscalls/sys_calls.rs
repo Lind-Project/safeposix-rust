@@ -108,9 +108,10 @@ impl Cage {
                             if let Some(sockinfo) = &sockhandle.unix_info {
                                 if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
                                     sendpipe.incr_ref(O_WRONLY);
-                                }
-                                if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                                }else if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
                                     receivepipe.incr_ref(O_RDONLY);
+                                } else {
+                                    return syscall_error(Errno::EINVAL, "fork", "socket not send and not read")
                                 }
                                 if let Some(uinfo) = &mut sockhandle.unix_info {    
                                     if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
@@ -165,7 +166,6 @@ impl Cage {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
         }
-        let _ = shmtable;
         interface::cagetable_insert(child_cageid, cageobj);
 
         0

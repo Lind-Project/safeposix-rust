@@ -484,16 +484,8 @@ pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
 
         //If both the file and the parent directory exists
         (Some(inodenum), Some(parentinodenum)) => {
+            Cage::remove_from_parent_dir(parentinodenum, &truepath);
 
-            let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&parentinodenum).unwrap();
-            let directory_parent_inode_obj = if let Inode::Dir(ref mut x) = *parentinodeobj {x} else {
-                panic!("File was a child of something other than a directory????");
-            };
-            directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
-            directory_parent_inode_obj.linkcount -= 1;
-            //remove reference to file in parent directory
-            drop(parentinodeobj);
-            
             FS_METADATA.inodetable.remove(&inodenum);
             NET_METADATA.domsock_paths.remove(&truepath);
         }

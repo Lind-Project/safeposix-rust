@@ -69,11 +69,9 @@ pub mod ipc_tests {
 
             while bytes_read != 0 {
                 bytes_read = cage2.read_syscall(0, bufptr, byte_chunk) as usize;
-                unsafe {
-                    bufptr = bufptr.add(bytes_read);
-                    buf.set_len(buflen + bytes_read);
-                    buflen += bytes_read;
-                }
+                unsafe {bufptr = bufptr.add(bytes_read);}
+                buf.resize(buflen + bytes_read, 0);
+                buflen += bytes_read;
             }
             assert_eq!(cage2.close_syscall(0), 0);
 
@@ -91,7 +89,7 @@ pub mod ipc_tests {
 
             let mut buf: Vec<u8> = Vec::with_capacity(byte_chunk);
             let bufptr = buf.as_mut_ptr();
-            unsafe { buf.set_len(byte_chunk); }
+            buf.resize(byte_chunk, 0);
 
             cage1.read_syscall(filefd, bufptr, byte_chunk);
             cage1.write_syscall(1, bufptr, byte_chunk);

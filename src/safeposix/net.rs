@@ -130,7 +130,7 @@ impl ConnCondVar {
         self.cv.wait(&mut guard);
     }
 
-    pub fn signal(&self) -> bool {
+    pub fn broadcast(&self) -> bool {
         let guard = self.lock.lock();
         if *guard == 1 {
             self.cv.notify_all();
@@ -349,14 +349,12 @@ impl NetMetadata {
                 if addr.is_unspecified() {
                     for portuser in userarr.clone() {
                         if portuser.1 <= 1 {
-                            let _ = portuser;
                             userarr.swap_remove(index);
                         } else { //if it's rebindable and there are others bound to it
                             userarr[index].1 -= 1;
                         }
                     }
                     if userarr.len() == 0 {
-                        let _ = userarr;
                         userentry.remove();
                     }
                     return Ok(());
@@ -365,9 +363,7 @@ impl NetMetadata {
                         if portuser.0 == muxed.0 {
                             //if it's rebindable and we're removing the last bound port or it's just not rebindable
                             if portuser.1 <= 1 {
-                                let _ = portuser;
                                 if userarr.len() == 1 {
-                                    let _ = userarr;
                                     userentry.remove();
                                 } else {
                                     userarr.swap_remove(index);
@@ -390,7 +386,7 @@ impl NetMetadata {
 
     pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
         let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
-        for domainsocks in self.domsock_paths.iter() { domainsock_paths.push(domainsocks.clone()); } // get vector of domain sock table keys
+        for ds_path in self.domsock_paths.iter() { domainsock_paths.push(ds_path.clone()); } // get vector of domain sock table keys
         domainsock_paths
     }
 }

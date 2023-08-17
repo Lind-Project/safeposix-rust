@@ -364,7 +364,8 @@ impl Cage {
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
                 NET_METADATA.domsock_paths.remove(&truepath);
-                // we don't log domain sockets
+
+                // the log boolean will be false if we are workign on a domain socket
                 if log {
                     log_metadata(&FS_METADATA, parentinodenum);
                     log_metadata(&FS_METADATA, inodenum);
@@ -1169,9 +1170,10 @@ impl Cage {
                     if let Some(sockinfo) = &sockhandle.unix_info {
                         if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
                             sendpipe.incr_ref(O_WRONLY);
-                        }
-                        if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                        } else if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
                             receivepipe.incr_ref(O_RDONLY);
+                        } else {
+                            syscall_error(Errno::EINVAL, "dup or dup2", "socket not read and not write");
                         }
                     }
                 }
@@ -1238,12 +1240,13 @@ impl Cage {
                             if sendpipe.get_write_ref() == 0 { sendpipe.set_eof(); }
                             //last reference, lets remove it
                             if (sendpipe.get_write_ref() as u64)  + (sendpipe.get_read_ref() as u64)  == 0 { ui.sendpipe = None; }
-                        }
-                        if let Some(receivepipe) = ui.receivepipe.as_ref() {
+                        } else if let Some(receivepipe) = ui.receivepipe.as_ref() {
                             receivepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
                             if (receivepipe.get_write_ref() as u64) + (receivepipe.get_read_ref() as u64)  == 0 { ui.receivepipe = None; }
 
+                        } else {
+                            return syscall_error(Errno::EINVAl, "close", "pipe not read and not write");
                         }
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {
@@ -1258,8 +1261,6 @@ impl Cage {
                             }
                         }
                     }
-
-                    drop(sockhandle); // drop the sockhandle regardless of socket type
                 }
                 Pipe(ref pipe_filedesc_obj) => {   
                     let pipe = &pipe_filedesc_obj.pipe;
@@ -1408,7 +1409,6 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    let _ = filedesc_enum;
                     self._dup2_helper(fd, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
@@ -1762,8 +1762,8 @@ impl Cage {
                     drop(pardir_inodeobj);
                     log_metadata(&FS_METADATA, parent_inodenum);       
                 }
-                NET_METADATA.domsock_paths.remove(&true_oldpath);
                 NET_METADATA.domsock_paths.insert(true_newpath);
+                NET_METADATA.domsock_paths.remove(&true_oldpath);
                 0 // success
             }
         }
@@ -1822,7 +1822,6 @@ impl Cage {
                     fileobject.close().unwrap();
                 }
 
-                let _ = fileobject;
                 drop(maybe_fileobject);
 
                 normalfile_inode_obj.size = ulength;
