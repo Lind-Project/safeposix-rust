@@ -1170,10 +1170,9 @@ impl Cage {
                     if let Some(sockinfo) = &sockhandle.unix_info {
                         if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
                             sendpipe.incr_ref(O_WRONLY);
-                        } else if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                        }
+                        if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
                             receivepipe.incr_ref(O_RDONLY);
-                        } else {
-                            syscall_error(Errno::EINVAL, "dup or dup2", "socket not read and not write");
                         }
                     }
                 }
@@ -1240,13 +1239,12 @@ impl Cage {
                             if sendpipe.get_write_ref() == 0 { sendpipe.set_eof(); }
                             //last reference, lets remove it
                             if (sendpipe.get_write_ref() as u64)  + (sendpipe.get_read_ref() as u64)  == 0 { ui.sendpipe = None; }
-                        } else if let Some(receivepipe) = ui.receivepipe.as_ref() {
+                        }
+                        if let Some(receivepipe) = ui.receivepipe.as_ref() {
                             receivepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
                             if (receivepipe.get_write_ref() as u64) + (receivepipe.get_read_ref() as u64)  == 0 { ui.receivepipe = None; }
 
-                        } else {
-                            return syscall_error(Errno::EINVAL, "close", "pipe not read and not write");
                         }
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {
