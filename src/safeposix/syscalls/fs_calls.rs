@@ -1991,7 +1991,6 @@ impl Cage {
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
         if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
-        if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
         let shmid: i32;
         let metadata = &SHM_METADATA;
 
@@ -2006,6 +2005,9 @@ impl Cage {
                 if 0 == (shmflg & IPC_CREAT) {
                     return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
                 }
+
+                if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
+
                 shmid = metadata.new_keyid();
                 vacant.insert(shmid);
                 let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
