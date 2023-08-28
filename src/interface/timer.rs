@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 pub use std::time::Instant as RustInstant;
 pub use std::time::Duration as RustDuration;
 
-use crate::interface::lind_kill;
+use crate::interface::lind_kill_from_id;
 
 pub fn timestamp() -> u64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
@@ -104,7 +104,7 @@ impl IntervalTimer {
                     let remaining_seconds = guard.curr_duration.saturating_sub(guard.start_instant.elapsed());
 
                     if remaining_seconds == RustDuration::ZERO {
-                        lind_kill(guard.cageid, 14);
+                        lind_kill_from_id(guard.cageid, 14);
                         
                         let new_curr_duration = guard.next_duration;
                         // Repeat the intervals until user cancel it

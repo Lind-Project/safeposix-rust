@@ -230,10 +230,12 @@ pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
 }
 
 // Signals
-pub fn lind_kill(cage_id: u64, sig: i32) -> i32 {
-    let cage_main_thread_id = cagetable_getref(cage_id).main_threadid.load(RustAtomicOrdering::Relaxed);
-    assert!(cage_main_thread_id != 0);
-    lind_threadkill(cage_main_thread_id, sig)
+pub fn lind_kill_from_id(cage_id: u64, sig: i32) {
+    if let Some(cage) = cagetable_getref_opt(cage_id as u64) {
+        let cage_main_thread_id = cage.main_threadid.load(RustAtomicOrdering::Relaxed);
+        assert!(cage_main_thread_id != 0);
+        lind_threadkill(cage_main_thread_id, sig);
+    } 
 }
 
 #[derive(Debug)]

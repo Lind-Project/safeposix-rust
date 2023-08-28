@@ -246,7 +246,7 @@ impl Cage {
         // Trigger SIGCHLD
         if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
             if self.cageid != self.parent {
-                interface::lind_kill(self.parent, SIGCHLD);
+                interface::lind_kill_from_id(self.parent, SIGCHLD);
             }
         }
 
