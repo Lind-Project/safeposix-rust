@@ -319,7 +319,7 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        if cage_id >= interface::MAXCAGEID {
+        if (cage_id < 0) || (cage_id >= interface::MAXCAGEID) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
 
