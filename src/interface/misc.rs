@@ -29,7 +29,7 @@ use crate::interface::types::{SigsetType};
 use std::time::Duration;
 pub use std::sync::LazyLock;
 
-const MAXCAGEID: i32 = 1024;
+pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
 
 pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {

@@ -319,10 +319,10 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        if cage_id > MAXCAGEID {
+        if cage_id >= interface::MAXCAGEID {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
-        
+
         if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
             interface::lind_threadkill(cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed), sig);
             return 0;
