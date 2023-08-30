@@ -239,7 +239,8 @@ impl Cage {
     }
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let mut tmp = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = tmp.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {

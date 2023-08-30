@@ -116,6 +116,14 @@ impl Cage {
             }
         }
     }
+
+    pub fn get_filedescriptor(&self, fd: i32) -> Result<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>, ()> {
+        if (fd < 0) || (fd >= MAXFD) {
+            Err(())
+        } else {
+            Ok(self.filedescriptortable[fd as usize].clone())
+        }
+    }
 }
 
 pub fn init_fdtable() -> FdTable {
