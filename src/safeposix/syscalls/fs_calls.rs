@@ -1130,8 +1130,7 @@ impl Cage {
 
         let (dupfd, mut dupfdguard) = if fromdup2 {
             if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
-            let tmp2 = self.get_filedescriptor(newfd).unwrap();
-            let mut fdguard = tmp2.write();
+            let mut fdguard = self.filedescriptortable[newfd as usize].write();
             if fdguard.is_some() {
                 drop(fdguard);
                 //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
@@ -1140,8 +1139,7 @@ impl Cage {
                     return close_result;
                 }
             } else { drop(fdguard); }
-            let tmp3 = self.get_filedescriptor(newfd).unwrap();
-            fdguard = tmp3.write();
+            fdguard = self.filedescriptortable[newfd as usize].write();
 
             (newfd, fdguard)
         } else {
