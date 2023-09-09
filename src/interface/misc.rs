@@ -378,7 +378,7 @@ pub struct RustSemaphore {
 
 impl RustSemaphore {
     pub fn lock(&self) {
-        while true {
+        loop {
             // Get value of semaphore
             let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
             // Do decrement if value > 0, wait if value == 0
@@ -393,7 +393,7 @@ impl RustSemaphore {
     pub fn unlock(&self) -> bool {
         let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
         let mut changevalue = semvalue + 1;
-        if changevalue > SEM_VALUE_MAX {
+        if changevalue > 2147483647 {
             return false;
         }
         self.value.fetch_add(1, RustAtomicOrdering::Relaxed);
