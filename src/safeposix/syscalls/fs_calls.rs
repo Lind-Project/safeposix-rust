@@ -2404,7 +2404,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
         }
         // Iterate semaphore table, if semaphore is already initialzed return error
-        let mut semtable = self.sem_table;
+        let mut semtable = &self.sem_table;
 
         if !semtable.contains_key(&sem_handle) {
             let is_shared = pshared != 0;
@@ -2421,9 +2421,9 @@ impl Cage {
     }
 
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = self.sem_table;
+        let semtable = &self.sem_table;
         // Check whether semaphore exists
-        if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
+        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
@@ -2432,8 +2432,8 @@ impl Cage {
     }
 
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = self.sem_table;
-        if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
+        let semtable = &self.sem_table;
+        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
             if !semaphore.unlock() {
                 return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
             }
@@ -2442,8 +2442,8 @@ impl Cage {
     }
 
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = self.sem_table;
-        if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
+        let semtable = &self.sem_table;
+        if semtable.contains_key(&sem_handle) {
             semtable.remove(&sem_handle).unwrap();
             return 0;
         }

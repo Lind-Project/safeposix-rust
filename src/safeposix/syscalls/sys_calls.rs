@@ -131,8 +131,8 @@ impl Cage {
         *  only if pshared != 0
         */
 
-        let semtable = self.sem_table;
-        let mut new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
+        let semtable = &self.sem_table;
+        let new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
         for pair in semtable.iter() {
             let key = *pair.key();
             let semaphore = pair.value();

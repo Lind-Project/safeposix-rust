@@ -392,7 +392,7 @@ impl RustSemaphore {
 
     pub fn unlock(&self) -> bool {
         let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
-        let mut changevalue = semvalue + 1;
+        let changevalue = semvalue + 1;
         if changevalue > 2147483647 {
             return false;
         }
