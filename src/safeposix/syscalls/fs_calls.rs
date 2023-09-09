@@ -2424,8 +2424,7 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(semaphore) = semtable.get_mut(&sem_handle) {
-            let ret = semaphore.lock();
-            return ret;
+            semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
         }
@@ -2451,4 +2450,12 @@ impl Cage {
         return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
     }
 
+    pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+            let sval = semaphore.value.load(RustAtomicOrdering::Relaxed);
+            return sval as i32;
+        }
+        return {syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")}
+    }
 }

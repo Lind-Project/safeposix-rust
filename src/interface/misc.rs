@@ -377,17 +377,15 @@ pub struct RustSemaphore {
 }
 
 impl RustSemaphore {
-    pub fn lock(&self) -> i32 {
+    pub fn lock(&self) {
         loop {
             // Get value of semaphore
             let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
             // Do decrement if value > 0, wait if value == 0
             if semvalue > 0 {
                 self.value.fetch_sub(1, RustAtomicOrdering::Relaxed);
-                return 1;
             } else {
                 // interface::lind_yield();
-                return 2;
             }
         }
     }

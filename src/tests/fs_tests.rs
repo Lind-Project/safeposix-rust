@@ -1061,7 +1061,7 @@ pub mod fs_tests {
         // which is already allocated in a certain memory area when cage initialized
         let ret_init = cage1.sem_init_syscall(1 as u32, 0, 1);
         assert_eq!(ret_init, 0);
-        
+        assert_eq!(cage1.sem_getvalue_syscall(1 as u32), 8);
         assert_eq!(cage1.sem_wait_syscall(1 as u32), 0);
         // assert_eq!("FF", "");
         assert_eq!(cage1.sem_post_syscall(1 as u32), 0);

@@ -130,17 +130,19 @@ impl Cage {
         *  Construct a new semaphore table in child cage which equals to the one in the parent cage 
         *  only if pshared != 0
         */
-
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
+        // Loop all pairs
         for pair in semtable.iter() {
             let key = *pair.key();
             let semaphore = pair.value();
             let shared = semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed);
+            // Retrieve values of RustSemaphore for future copying
             let cloneshared = interface::RustAtomicBool::new(false);
             cloneshared.store(semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
             let cloneval = interface::RustAtomicU32::new(0);
             cloneval.store(semaphore.value.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
+            // Semaphore will only be copied if it's marked "shared"
             if shared {
                 let new_semaphore = RustSemaphore{
                     value: cloneval,

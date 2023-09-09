@@ -508,6 +508,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SEM_DESTROY_SYSCALL => {
             check_and_dispatch!(cage.sem_destroy_syscall, interface::get_uint(arg1))
         }
+        SEM_GETVALUE_SYSCALL => {
+            check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1))
+        }
 
         _ => {//unknown syscall
             -1
