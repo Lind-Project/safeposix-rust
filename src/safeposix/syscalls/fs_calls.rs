@@ -2,7 +2,7 @@
 
 // File system related system calls
 use crate::interface;
-use crate::interface::misc::*;
+use crate::interface::misc::{RustSemaphore};
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
@@ -2400,7 +2400,7 @@ impl Cage {
     */
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value_handle: u32) -> i32 {
         // Check validation of value
-        if value_handle > SEM_VALUE_MAX && value_handle < 0 { 
+        if value_handle > 2147483647 && value_handle < 0 { 
             return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
         }
         // Iterate semaphore table, if semaphore is already initialzed return error

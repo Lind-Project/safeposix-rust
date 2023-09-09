@@ -2,6 +2,7 @@
 
 // System related system calls
 use crate::interface;
+use crate::interface::misc::{RustSemaphore};
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
@@ -144,11 +145,6 @@ impl Cage {
                 };
                 new_semtable.insert(key, new_semaphore);
             }
-        }
-        
-        if shared {
-            // Only copy when shared is mentioned
-            
         }
 
         let cageobj = Cage {
