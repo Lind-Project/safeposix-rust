@@ -1063,7 +1063,7 @@ pub mod fs_tests {
         assert_eq!(ret_init, 0);
         
         assert_eq!(cage1.sem_wait_syscall(1 as u32), 0);
-        assert_eq!("FF", "");
+        // assert_eq!("FF", "");
         assert_eq!(cage1.sem_post_syscall(1 as u32), 0);
         assert_eq!(cage1.sem_destroy_syscall(1 as u32), 0);
 
