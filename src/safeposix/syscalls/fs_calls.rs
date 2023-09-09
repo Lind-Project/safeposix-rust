@@ -2456,6 +2456,6 @@ impl Cage {
             let sval = semaphore.value.load(RustAtomicOrdering::Relaxed);
             return sval as i32;
         }
-        return {syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")}
+        return syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")
     }
 }
