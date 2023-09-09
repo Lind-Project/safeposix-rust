@@ -384,8 +384,9 @@ impl RustSemaphore {
             // Do decrement if value > 0, wait if value == 0
             if semvalue > 0 {
                 self.value.fetch_sub(1, RustAtomicOrdering::Relaxed);
+                break;
             } else {
-                // interface::lind_yield();
+                interface::lind_yield();
             }
         }
     }
