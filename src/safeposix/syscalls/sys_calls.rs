@@ -138,6 +138,7 @@ impl Cage {
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
+            sem_table: interface::RustHashMap::new(self.sem_table.load(interface::RustAtomicOrdering::Relaxed)),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -187,6 +188,7 @@ impl Cage {
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
             thread_table: interface::RustHashMap::new(),
+            sem_table: interface::RustHashMap::new(),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
