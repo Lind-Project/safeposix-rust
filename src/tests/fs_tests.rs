@@ -1059,12 +1059,12 @@ pub mod fs_tests {
         let cage1 = interface::cagetable_getref(1);
         // sem_init is used to initialize an existing semaphore structure, 
         // which is already allocated in a certain memory area when cage initialized
-        let ret_init = cage1.sem_init_syscall(0xfffff000 as u32, 0, 1);
+        let ret_init = cage1.sem_init_syscall(1 as u32, 0, 1);
         assert_eq!(ret_init, 0);
         
-        assert_eq!(cage1.sem_wait_syscall(0xfffff000 as u32), 0);
-        assert_eq!(cage1.sem_post_syscall(0xfffff000 as u32), 0);
-        assert_eq!(cage1.sem_destroy_syscall(0xfffff000 as u32), 0);
+        assert_eq!(cage1.sem_wait_syscall(1 as u32), 0);
+        assert_eq!(cage1.sem_post_syscall(1 as u32), 0);
+        assert_eq!(cage1.sem_destroy_syscall(1 as u32), 0);
 
         /* create sem - init - sem_wait - sem_post*/
         // assert_eq!(cage1.fork_syscall(2), 0);
@@ -1079,7 +1079,7 @@ pub mod fs_tests {
         // child.join().unwrap();
         // assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         
-        
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
 
     }
