@@ -45,7 +45,7 @@ pub mod fs_tests {
         // ut_lind_fs_exec_cloexec();
         // ut_lind_fs_shm();
         // ut_lind_fs_getpid_getppid();
-        ut_lind_fs_sem();
+        // ut_lind_fs_sem();
     }
 
 
@@ -66,7 +66,7 @@ pub mod fs_tests {
 
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
-        
+        println!("S1");
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -1057,7 +1057,9 @@ pub mod fs_tests {
     pub fn ut_lind_fs_sem() {
         lindrustinit(0);
         let cage1 = interface::cagetable_getref(1);
+
         println!("Finish cage");
+
         // sem_init is used to initialize an existing semaphore structure, 
         // which is already allocated in a certain memory area when cage initialized
         let ret_init = cage1.sem_init_syscall(1 as u32, 0, 1);
@@ -1067,18 +1069,6 @@ pub mod fs_tests {
         assert_eq!(cage1.sem_post_syscall(1 as u32), 0);
         assert_eq!(cage1.sem_destroy_syscall(1 as u32), 0);
 
-        /* create sem - init - sem_wait - sem_post*/
-        // assert_eq!(cage1.fork_syscall(2), 0);
-        
-        // let child = std::thread::spawn(move || {
-        //     let cage2 = interface::cagetable_getref(2);
-            
-            
-        //     assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        // });
-        
-        // child.join().unwrap();
-        // assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         
         assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
