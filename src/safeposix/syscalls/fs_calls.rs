@@ -2,7 +2,7 @@
 
 // File system related system calls
 use crate::interface;
-use crate::misc;
+use crate::interface::misc;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
