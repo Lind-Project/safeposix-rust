@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
@@ -361,5 +361,39 @@ impl Drop for RawCondvar {
 impl std::fmt::Debug for RawCondvar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("<condvar>")
+    }
+}
+
+/*
+* RustSemaphore is the rust version of sem_t
+* 
+*/
+pub struct RustSemaphore {
+    value: RustAtomicU32,
+    isShared: RustAtomicBool
+}
+
+impl RustSemaphore {
+    pub fn lock(&self) {
+        while(1) {
+            // Get value of semaphore
+            let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
+            // Do decrement if value > 0, wait if value == 0
+            if semvalue > 0 {
+                semaphore.value.fetch_sub(1, RustAtomicOrdering::Relaxed);
+                return true;
+            } else {
+                interface::lind_yield();
+            }
+        }
+    }
+
+    pub fn unlock() -> bool {
+        let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
+        let mut changevalue = semvalue + 1;
+        if changevalue > SEM_VALUE_MAX {
+            return false;
+        }
+        true
     }
 }

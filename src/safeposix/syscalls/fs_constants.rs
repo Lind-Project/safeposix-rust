@@ -139,6 +139,8 @@ pub const SHMMAX: u32 =  4278190079; // (ULONG_MAX - (1UL << 24))
 pub const SHMALL: u32 =  4278190079; // (ULONG_MAX - (1UL << 24));
 pub const SHMSEG: u32 =  SHMMNI;
 
+pub const SEM_VALUE_MAX: u32 = 2147483647;
+
 //device info for char files
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
 pub struct DevNo {

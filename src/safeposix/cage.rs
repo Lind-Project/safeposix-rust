@@ -76,7 +76,8 @@ pub struct Cage {
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
-    pub thread_table: interface::RustHashMap<u64, bool>
+    pub thread_table: interface::RustHashMap<u64, bool>,
+    pub sem_table: interface::RustHashMap<u32, interface::RustSemaphore>
 }
 
 impl Cage {

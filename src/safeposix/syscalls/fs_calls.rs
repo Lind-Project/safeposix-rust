@@ -2388,4 +2388,64 @@ impl Cage {
             syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
         }
     }
+
+    //------------------SEMAPHORE SYSCALLS------------------
+    /* 
+    *  Initialize semaphore object SEM to value
+    *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
+    *  or shared between processes (when nonzero)
+    */
+    pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value_handle: u32) -> i32 {
+        // Check validation of value
+        if value_handle > SEM_VALUE_MAX && value_handle < 0 { 
+            return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
+        }
+        // Iterate semaphore table, if semaphore is already initialzed return error
+        let mut semtable = self.sem_table.write();
+
+        if !semtable.contains_key(&sem_handle) {
+            let is_shared = pshared != 0;
+            let new_semaphore = RustSemaphore {
+                value: RustAtomicU32::new(value_handle),
+                isShared: RustAtomicBool::new(is_shared)
+            };
+            semtable.insert(sem_handle, new_semaphore);
+            drop(semtable);
+            return 0;
+        }
+
+        return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
+    }
+
+    pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = self.sem_table.write();
+        // Check whether semaphore exists
+        if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
+            semaphore.lock();
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = self.sem_table.write();
+        if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
+            if !semaphore.unlock() {
+                return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
+            }
+        }
+        return 0;
+    }
+
+    pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = self.sem_table.write();
+        if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
+            semtable.remove(&sem_handle).unwrap();
+            return 0;
+        }
+        return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
+    }
+
+
 }
