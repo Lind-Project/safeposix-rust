@@ -370,7 +370,7 @@ impl std::fmt::Debug for RawCondvar {
 * RustSemaphore is the rust version of sem_t
 * 
 */
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RustSemaphore {
     value: RustAtomicU32,
     isShared: RustAtomicBool

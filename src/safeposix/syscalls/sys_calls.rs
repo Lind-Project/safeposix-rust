@@ -125,6 +125,32 @@ impl Cage {
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
 
+        /* 
+        *  Construct a new semaphore table in child cage which equals to the one in the parent cage 
+        *  only if pshared != 0
+        */
+
+        let semtable = self.sem_table;
+        let mut new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
+        for pair in semtable.iter() {
+            let key = *pair.key();
+            let semaphore = pair.value();
+            let shared = semaphore.isShared.load(interface::RustAtomicOrdering::Relaxed);
+            let cloneval = semaphore.value.load(interface::RustAtomicOrdering::Relaxed);
+            if shared {
+                let new_semaphore = RustSemaphore{
+                    value: cloneval,
+                    isShared: shared
+                };
+                new_semtable.insert(key, new_semaphore);
+            }
+        }
+        
+        if shared {
+            // Only copy when shared is mentioned
+            
+        }
+
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
@@ -138,7 +164,7 @@ impl Cage {
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
-            sem_table: self.sem_table.clone(),
+            sem_table: new_semtable,
         };
 
         let shmtable = &SHM_METADATA.shmtable;

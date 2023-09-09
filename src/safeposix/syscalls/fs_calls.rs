@@ -2,12 +2,14 @@
 
 // File system related system calls
 use crate::interface;
-use crate::interface::misc;
+use crate::interface::misc::*;
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
 use super::fs_constants::*;
+
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU32 as RustAtomicU32};
 
 impl Cage {
 
@@ -2402,7 +2404,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
         }
         // Iterate semaphore table, if semaphore is already initialzed return error
-        let mut semtable = self.sem_table.unwrap();
+        let mut semtable = self.sem_table;
 
         if !semtable.contains_key(&sem_handle) {
             let is_shared = pshared != 0;
@@ -2419,7 +2421,7 @@ impl Cage {
     }
 
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = self.sem_table.unwrap();
+        let semtable = self.sem_table;
         // Check whether semaphore exists
         if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
             semaphore.lock();
@@ -2430,7 +2432,7 @@ impl Cage {
     }
 
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = self.sem_table.unwrap();
+        let semtable = self.sem_table;
         if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
             if !semaphore.unlock() {
                 return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
@@ -2440,7 +2442,7 @@ impl Cage {
     }
 
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = self.sem_table.unwrap();
+        let semtable = self.sem_table;
         if let Some(mut semaphore) = semtable.get_mut(&sem_handle) {
             semtable.remove(&sem_handle).unwrap();
             return 0;
