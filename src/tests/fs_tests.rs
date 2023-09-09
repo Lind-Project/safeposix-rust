@@ -1074,7 +1074,6 @@ pub mod fs_tests {
 
         assert_eq!(cage1.sem_destroy_syscall(1 as u32), 0);
 
-        
         assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
 

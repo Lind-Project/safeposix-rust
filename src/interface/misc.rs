@@ -26,7 +26,7 @@ pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice 
 
 use crate::interface::errnos::{VERBOSE};
 use crate::interface;
-use crate::safeposix::syscalls::fs_constants;
+use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
 
 const MAXCAGEID: i32 = 1024;
@@ -368,7 +368,6 @@ impl std::fmt::Debug for RawCondvar {
 
 /*
 * RustSemaphore is the rust version of sem_t
-* 
 */
 #[derive(Debug)]
 pub struct RustSemaphore {
@@ -394,7 +393,8 @@ impl RustSemaphore {
     pub fn unlock(&self) -> bool {
         let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
         let changevalue = semvalue + 1;
-        if changevalue > 2147483647 {
+        // Boundary check
+        if changevalue > SEM_VALUE_MAX {
             return false;
         }
         self.value.fetch_add(1, RustAtomicOrdering::Relaxed);

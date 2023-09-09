@@ -2399,13 +2399,13 @@ impl Cage {
     *  or shared between processes (when nonzero)
     */
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value_handle: u32) -> i32 {
-        // Check validation of value
-        if value_handle > 2147483647 { 
+        // Boundary check
+        if value_handle > SEM_VALUE_MAX { 
             return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
         }
         // Iterate semaphore table, if semaphore is already initialzed return error
         let semtable = &self.sem_table;
-
+        // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
             let is_shared = pshared != 0;
             let new_semaphore = RustSemaphore {
@@ -2450,6 +2450,9 @@ impl Cage {
         return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
     }
 
+    /*
+    * Take only sem_t *sem as argument, and return int *sval
+    */
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         if let Some(semaphore) = semtable.get_mut(&sem_handle) {
