@@ -136,15 +136,15 @@ impl Cage {
         for pair in semtable.iter() {
             let key = *pair.key();
             let semaphore = pair.value();
-            let shared = semaphore.isShared.load(interface::RustAtomicOrdering::Relaxed);
+            let shared = semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed);
             let cloneshared = interface::RustAtomicBool::new(false);
-            cloneshared.store(semaphore.isShared.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
+            cloneshared.store(semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
             let cloneval = interface::RustAtomicU32::new(0);
             cloneval.store(semaphore.value.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
             if shared {
                 let new_semaphore = RustSemaphore{
                     value: cloneval,
-                    isShared: cloneshared
+                    isshared: cloneshared
                 };
                 new_semtable.insert(key, new_semaphore);
             }

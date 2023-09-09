@@ -373,7 +373,7 @@ impl std::fmt::Debug for RawCondvar {
 #[derive(Debug)]
 pub struct RustSemaphore {
     pub value: RustAtomicU32,
-    pub isShared: RustAtomicBool
+    pub isshared: RustAtomicBool
 }
 
 impl RustSemaphore {
