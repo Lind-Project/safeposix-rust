@@ -137,7 +137,7 @@ impl Cage {
             let key = *pair.key();
             let semaphore = pair.value();
             let shared = semaphore.isShared.load(interface::RustAtomicOrdering::Relaxed);
-            let cloneshared = interface::RustAtomicBool::new();
+            let cloneshared = interface::RustAtomicBool::new(false);
             cloneshared.store(semaphore.isShared.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
             let cloneval = interface::RustAtomicU32::new(0);
             cloneval.store(semaphore.value.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
