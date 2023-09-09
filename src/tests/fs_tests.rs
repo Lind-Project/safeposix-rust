@@ -66,7 +66,6 @@ pub mod fs_tests {
 
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
-        println!("S1");
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -1058,7 +1057,7 @@ pub mod fs_tests {
         lindrustinit(0);
         let cage1 = interface::cagetable_getref(1);
 
-        println!("Finish cage");
+        assert_eq!("FF", "");
 
         // sem_init is used to initialize an existing semaphore structure, 
         // which is already allocated in a certain memory area when cage initialized
