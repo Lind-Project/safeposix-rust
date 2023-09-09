@@ -138,7 +138,7 @@ impl Cage {
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
-            sem_table: interface::RustHashMap::new(self.sem_table.load(interface::RustAtomicOrdering::Relaxed)),
+            sem_table: self.sem_table.clone(),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
