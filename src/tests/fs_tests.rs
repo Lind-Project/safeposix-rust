@@ -1057,6 +1057,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_sem() {
         lindrustinit(0);
         let cage1 = interface::cagetable_getref(1);
+        println!("Finish cage");
         // sem_init is used to initialize an existing semaphore structure, 
         // which is already allocated in a certain memory area when cage initialized
         let ret_init = cage1.sem_init_syscall(1 as u32, 0, 1);
