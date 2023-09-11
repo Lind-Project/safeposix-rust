@@ -2,7 +2,6 @@
 
 // System related system calls
 use crate::interface;
-use crate::interface::misc::{RustSemaphore};
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
@@ -133,10 +132,10 @@ impl Cage {
         *  only if pshared != 0
         */
         let semtable = &self.sem_table;
-        let new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
+        let new_semtable: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>> = interface::RustHashMap::new();
         // Loop all pairs
         for pair in semtable.iter() {
-            lnew_semtable.insert(*pair.key().clone(), pair.value().cloned_sem.clone());
+            new_semtable.insert(*pair.key().clone(), pair.value().clone());
         }
 
         let cageobj = Cage {
