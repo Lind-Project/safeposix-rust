@@ -376,16 +376,19 @@ pub struct RustSemaphore {
 }
 
 impl RustSemaphore {
-    pub fn lock(&self) {
-        self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+    pub fn lock(&self) -> bool{
+        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
             if x > 0 {
                 Some(x-1)
             } else {
                 Some(0)
             }
         });
-
-        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     pub fn unlock(&self) -> bool {
