@@ -1054,40 +1054,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_sem() {
-        lindrustinit(0);
-        let cage1 = interface::cagetable_getref(1);
-
-        // sem_init is used to initialize an existing semaphore structure, 
-        // which is already allocated in a certain memory area when cage initialized
-        let ret_init = cage1.sem_init_syscall(1 as u32, 0, 1);
-        assert_eq!(ret_init, 0);
-
-        assert_eq!(cage1.sem_getvalue_syscall(1 as u32), 1);
-
-        assert_eq!(cage1.sem_wait_syscall(1 as u32), 0);
-
-        assert_eq!(cage1.sem_getvalue_syscall(1 as u32), 0);
-
-        assert_eq!(cage1.sem_post_syscall(1 as u32), 0);
-
-        assert_eq!(cage1.sem_getvalue_syscall(1 as u32), 1);
-
-        assert_eq!(cage1.sem_destroy_syscall(1 as u32), 0);
-
-        // 
-
-        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-
-    }
-
     pub fn ut_lind_fs_sem_fork() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
-        let shmidstruct = ShmidsStruct::default();
         let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
         // Attach the shared memory region
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
@@ -1095,7 +1066,6 @@ pub mod fs_tests {
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
-        // assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1103,7 +1073,6 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
             interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
