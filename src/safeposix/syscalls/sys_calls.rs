@@ -143,7 +143,7 @@ impl Cage {
             if shared {
                 // Clone the shared data using Arc
                 let cloned_sem = interface::RustRfc::new(semaphore);
-                new_semtable.insert(key.clone(), cloned_sem.clone());
+                new_semtable.insert(key.clone(), *cloned_sem.clone());
             }
         }
 
