@@ -11,6 +11,8 @@ use super::sys_constants::*;
 use super::net_constants::*;
 use super::fs_constants::*;
 
+use std::sync::{Arc as RustRfc};
+
 impl Cage {
     fn unmap_shm_mappings(&self) {
         //unmap shm mappings on exit or exec
@@ -133,13 +135,15 @@ impl Cage {
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
         // Loop all pairs
-        for (key, semaphore) in semtable.iter() {
-            let shared = semaphore.isshared.load(Ordering::Relaxed);
+        for pair in semtable.iter() {
+            let key = *pair.key();
+            let semaphore = pair.value();
+            let shared = semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed);
         
             if shared {
                 // Clone the shared data using Arc
-                let cloned_value = Arc::clone(&semaphore.value);
-                let cloned_isshared = Arc::clone(&semaphore.isshared);
+                let cloned_value = interface::RustRfc::clone(&semaphore.value);
+                let cloned_isshared = interface::RustRfc::clone(&semaphore.isshared);
         
                 let new_semaphore = interface::RustSemaphore::new(cloned_value, cloned_isshared);
         
