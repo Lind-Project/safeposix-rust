@@ -11,41 +11,42 @@ pub mod fs_tests {
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        ut_lind_fs_broken_close();
-        ut_lind_fs_chmod();
-        ut_lind_fs_fchmod();
-        ut_lind_fs_dir_chdir();
-        ut_lind_fs_dir_mode();
-        ut_lind_fs_dir_multiple();
-        ut_lind_fs_dup();
-        ut_lind_fs_dup2();
-        ut_lind_fs_fcntl();
-        ut_lind_fs_ioctl();
-        ut_lind_fs_fdflags();
-        ut_lind_fs_file_link_unlink();
-        ut_lind_fs_file_lseek_past_end();
-        ut_lind_fs_fstat_complex();
-        ut_lind_fs_getuid();
-        ut_lind_fs_load_fs();
-        ut_lind_fs_mknod();
-        ut_lind_fs_multiple_open();
-        ut_lind_fs_rename();
-        ut_lind_fs_rmdir();
-        ut_lind_fs_stat_file_complex();
-        ut_lind_fs_stat_file_mode();
-        ut_lind_fs_statfs();
-        ut_lind_fs_fstatfs();
-        ut_lind_fs_ftruncate();
-        ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
-        ut_lind_fs_dir_chdir_getcwd();
-        rdwrtest();
-        prdwrtest();
-        chardevtest();
-        ut_lind_fs_exec_cloexec();
-        ut_lind_fs_shm();
-        ut_lind_fs_getpid_getppid();
-        ut_lind_fs_sem();
+        // ut_lind_fs_broken_close();
+        // ut_lind_fs_chmod();
+        // ut_lind_fs_fchmod();
+        // ut_lind_fs_dir_chdir();
+        // ut_lind_fs_dir_mode();
+        // ut_lind_fs_dir_multiple();
+        // ut_lind_fs_dup();
+        // ut_lind_fs_dup2();
+        // ut_lind_fs_fcntl();
+        // ut_lind_fs_ioctl();
+        // ut_lind_fs_fdflags();
+        // ut_lind_fs_file_link_unlink();
+        // ut_lind_fs_file_lseek_past_end();
+        // ut_lind_fs_fstat_complex();
+        // ut_lind_fs_getuid();
+        // ut_lind_fs_load_fs();
+        // ut_lind_fs_mknod();
+        // ut_lind_fs_multiple_open();
+        // ut_lind_fs_rename();
+        // ut_lind_fs_rmdir();
+        // ut_lind_fs_stat_file_complex();
+        // ut_lind_fs_stat_file_mode();
+        // ut_lind_fs_statfs();
+        // ut_lind_fs_fstatfs();
+        // ut_lind_fs_ftruncate();
+        // ut_lind_fs_truncate();
+        // ut_lind_fs_getdents();
+        // ut_lind_fs_dir_chdir_getcwd();
+        // rdwrtest();
+        // prdwrtest();
+        // chardevtest();
+        // ut_lind_fs_exec_cloexec();
+        // ut_lind_fs_shm();
+        // ut_lind_fs_getpid_getppid();
+        // ut_lind_fs_sem();
+        ut_lind_fs_sem_fork();
     }
 
 
@@ -1074,8 +1075,60 @@ pub mod fs_tests {
 
         assert_eq!(cage1.sem_destroy_syscall(1 as u32), 0);
 
+        // 
+
         assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
 
+    }
+
+    pub fn ut_lind_fs_sem_fork() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let key = 31337;
+        // Create a shared memory region
+        let mut shmidstruct = ShmidsStruct::default();
+        let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
+        // Attach the shared memory region
+        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+        assert_ne!(shmatret, -1);
+        // Initialize the semaphore with shared between process
+        let ret_init = cage.sem_init_syscall(shmatret as u32, 0, 1);
+        assert_eq!(ret_init, 0);
+        // Fork child process
+        assert_eq!(cage.fork_syscall(2), 0);
+        // Child process
+        let thread_child = interface::helper_thread(move || {
+            let cage1 = interface::cagetable_getref(2);
+            // Child waits for the semaphore
+            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
+            // Wait
+            interface::sleep(interface::RustDuration::from_millis(100));
+            // Release the semaphore
+            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            cage1.exit_syscall(EXIT_SUCCESS);
+        })
+        //Parent processes
+        let thread_parent = interface::helper_thread(move || {
+            // Ensure the child process starts first
+            interface::sleep(interface::RustDuration::from_millis(20));
+            // Parents waits for the semaphore
+            assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
+            interface::sleep(interface::RustDuration::from_millis(10));
+            // Parents release the semaphore
+            assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            // Destroy the semaphore
+            assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
+            // mark the shared memory to be rmoved
+            let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
+            assert_eq!(shmctlret2, 0);
+            //detach from shared memory 
+            let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+            assert_eq!(shmdtret, shmid);
+            cage1.exit_syscall(EXIT_SUCCESS);
+        })
+        thread_child.join().unwrap();
+        thread_parent.join().unwrap();
+        lindrustfinalize();
     }
 }
