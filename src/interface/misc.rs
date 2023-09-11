@@ -414,4 +414,8 @@ impl RustSemaphore {
         }
 
     }
+
+    pub fn get(&self) -> i32 {
+        self.value.load(RustAtomicOrdering::Relaxed)
+    }
 }

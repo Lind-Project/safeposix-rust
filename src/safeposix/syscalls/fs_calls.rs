@@ -8,8 +8,6 @@ use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
 use super::fs_constants::*;
 
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU32 as RustAtomicU32};
-
 impl Cage {
 
     //------------------------------------OPEN SYSCALL------------------------------------
@@ -2408,7 +2406,6 @@ impl Cage {
         if !semtable.contains_key(&sem_handle) {
             let new_semaphore = interface::RustSemaphore::new(sem_handle, pshared);
             semtable.insert(sem_handle, interface::RustRfc::new(new_semaphore));
-            drop(semtable);
             return 0;
         }
 
@@ -2453,8 +2450,7 @@ impl Cage {
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         if let Some(semaphore) = semtable.get_mut(&sem_handle) {
-            let sval = semaphore.value.load(RustAtomicOrdering::Relaxed);
-            return sval as i32;
+            return semaphore.get();
         }
         return syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")
     }
