@@ -377,27 +377,30 @@ pub struct RustSemaphore {
 
 impl RustSemaphore {
     pub fn lock(&self) {
-        loop {
-            // Get value of semaphore
-            let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
-            // Do decrement if value > 0, wait if value == 0
-            if semvalue > 0 {
-                self.value.fetch_sub(1, RustAtomicOrdering::Relaxed);
-                break;
+        self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x > 0 {
+                Some(x-1)
             } else {
-                interface::lind_yield();
+                0
             }
-        }
+        });
+
+        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
     }
 
     pub fn unlock(&self) -> bool {
-        let semvalue = self.value.load(RustAtomicOrdering::Relaxed);
-        let changevalue = semvalue + 1;
-        // Boundary check
-        if changevalue > SEM_VALUE_MAX {
-            return false;
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x < (SEM_VALUE_MAX - 1) {
+                Some(x+1)
+            } else {
+                0
+            }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
         }
-        self.value.fetch_add(1, RustAtomicOrdering::Relaxed);
-        true
+
     }
 }
