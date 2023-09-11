@@ -136,15 +136,7 @@ impl Cage {
         let new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
         // Loop all pairs
         for pair in semtable.iter() {
-            let key = *pair.key();
-            let semaphore = pair.value();
-            let shared = semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed);
-        
-            if shared {
-                // Clone the shared data using Arc
-                let cloned_sem = interface::RustRfc::new(semaphore);
-                new_semtable.insert(key.clone(), &cloned_sem.clone());
-            }
+            lnew_semtable.insert(*pair.key().clone(), pair.value().cloned_sem.clone());
         }
 
         let cageobj = Cage {

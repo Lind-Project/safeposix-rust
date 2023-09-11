@@ -77,7 +77,7 @@ pub struct Cage {
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
     pub thread_table: interface::RustHashMap<u64, bool>,
-    pub sem_table: interface::RustHashMap<u32, interface::RustSemaphore>
+    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>
 }
 
 impl Cage {

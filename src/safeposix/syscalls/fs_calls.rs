@@ -2,7 +2,6 @@
 
 // File system related system calls
 use crate::interface;
-use crate::interface::misc::{RustSemaphore};
 use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
@@ -2407,7 +2406,7 @@ impl Cage {
         let semtable = &self.sem_table;
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
-            let new_semaphore = RustSemaphore::new(sem_handle, pshared);
+            let new_semaphore = interface::RustSemaphore::new(sem_handle, pshared);
             semtable.insert(sem_handle, new_semaphore);
             drop(semtable);
             return 0;

@@ -6,7 +6,7 @@
 mod comm;
 mod file;
 mod pipe;
-pub mod misc;
+mod misc;
 mod timer;
 pub mod errnos;
 pub mod types;
