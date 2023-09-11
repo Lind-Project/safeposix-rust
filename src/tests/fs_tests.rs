@@ -1107,7 +1107,7 @@ pub mod fs_tests {
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
-        })
+        });
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
             // Ensure the child process starts first
@@ -1125,8 +1125,8 @@ pub mod fs_tests {
             //detach from shared memory 
             let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
             assert_eq!(shmdtret, shmid);
-            cage1.exit_syscall(EXIT_SUCCESS);
-        })
+            cage.exit_syscall(EXIT_SUCCESS);
+        });
         thread_child.join().unwrap();
         thread_parent.join().unwrap();
         lindrustfinalize();
