@@ -416,6 +416,6 @@ impl RustSemaphore {
     }
 
     pub fn get(&self) -> i32 {
-        self.value.load(RustAtomicOrdering::Relaxed).try_into().unwrap()
+        self.value.load(RustAtomicOrdering::Relaxed) as i32
     }
 }
