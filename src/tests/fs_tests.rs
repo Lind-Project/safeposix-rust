@@ -1095,6 +1095,7 @@ pub mod fs_tests {
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1102,6 +1103,7 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
+            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
             interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
