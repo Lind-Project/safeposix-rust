@@ -2425,7 +2425,7 @@ impl Cage {
         // Check whether semaphore exists
         if let Some(semaphore) = semtable.get_mut(&sem_handle) {
             if !semaphore.lock() {
-                return syscall_error(Errno:EINVAL, "sem_wait", "sem wait failed");
+                return syscall_error(Errno::EINVAL, "sem_wait", "sem wait failed");
             }
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
