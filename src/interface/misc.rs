@@ -381,7 +381,7 @@ impl RustSemaphore {
             if x > 0 {
                 Some(x-1)
             } else {
-                0
+                Some(0)
             }
         });
 
@@ -393,7 +393,7 @@ impl RustSemaphore {
             if x < (SEM_VALUE_MAX - 1) {
                 Some(x+1)
             } else {
-                0
+                Some(0)
             }
         });
 
