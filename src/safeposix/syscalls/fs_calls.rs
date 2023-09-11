@@ -2407,11 +2407,7 @@ impl Cage {
         let semtable = &self.sem_table;
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
-            let is_shared = pshared != 0;
-            let new_semaphore = RustSemaphore {
-                value: RustAtomicU32::new(value_handle),
-                isshared: RustAtomicBool::new(is_shared)
-            };
+            let new_semaphore = RustSemaphore::new(sem_handle, pshared);
             semtable.insert(sem_handle, new_semaphore);
             drop(semtable);
             return 0;

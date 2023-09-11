@@ -376,6 +376,14 @@ pub struct RustSemaphore {
 }
 
 impl RustSemaphore {
+    pub fn new(value_handle: u32, shared_handle: i32) -> Self {
+        let is_shared = shared_handle != 0;
+        Self {
+            value: RustAtomicU32::new(value_handle),
+            isshared: RustAtomicBool::new(is_shared),
+        }
+    }
+
     pub fn lock(&self) -> bool{
         while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
         let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {

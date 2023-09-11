@@ -133,22 +133,17 @@ impl Cage {
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<u32, interface::RustSemaphore> = interface::RustHashMap::new();
         // Loop all pairs
-        for pair in semtable.iter() {
-            let key = *pair.key();
-            let semaphore = pair.value();
-            let shared = semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed);
-            // Retrieve values of RustSemaphore for future copying
-            let cloneshared = interface::RustAtomicBool::new(false);
-            cloneshared.store(semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
-            let cloneval = interface::RustAtomicU32::new(0);
-            cloneval.store(semaphore.value.load(interface::RustAtomicOrdering::Relaxed), interface::RustAtomicOrdering::Relaxed);
-            // Semaphore will only be copied if it's marked "shared"
+        for (key, semaphore) in semtable.iter() {
+            let shared = semaphore.isshared.load(Ordering::Relaxed);
+        
             if shared {
-                let new_semaphore = RustSemaphore{
-                    value: cloneval,
-                    isshared: cloneshared
-                };
-                new_semtable.insert(key, new_semaphore);
+                // Clone the shared data using Arc
+                let cloned_value = Arc::clone(&semaphore.value);
+                let cloned_isshared = Arc::clone(&semaphore.isshared);
+        
+                let new_semaphore = interface::RustSemaphore::new(cloned_value, cloned_isshared);
+        
+                new_semtable.insert(key.clone(), new_semaphore);
             }
         }
 
