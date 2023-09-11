@@ -2440,11 +2440,12 @@ impl Cage {
 
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        if semtable.contains_key(&sem_handle) {
-            semtable.remove(&sem_handle).unwrap();
-            return 0;
+        if semtable.remove(&sem_handle).unwrap() == None {
+            return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
         }
-        return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
+
+        return 0;
+        
     }
 
     /*
