@@ -2015,8 +2015,8 @@ impl Cage {
 
     pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec<u32> {
 
-        let addrvec = Vec::new();
-        for (index, val) in rev_shm.iter().enumerate() {
+        let mut addrvec = Vec::new();
+        for (_index, val) in rev_shm.iter().enumerate() {
             if val.1 == shmid as i32 {
                 addrvec.push(val.0);
             }
@@ -2027,10 +2027,10 @@ impl Cage {
 
     pub fn search_for_addr_in_region(rev_shm: &Vec<(u32, i32)>, search_addr: u32) -> Option<(u32, i32)> {
         let metadata = &SHM_METADATA;
-        for (index, val) in rev_shm.iter().enumerate() {
+        for (_index, val) in rev_shm.iter().enumerate() {
             let addr = val.0;
             let shmid = val.1;
-            if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+            if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                 let range = addr..(addr + segment.size as u32);
                 if range.contains(&search_addr) { return Some((addr, shmid)); }
             }
@@ -2088,10 +2088,10 @@ impl Cage {
             if !segment.semaphor_offsets.is_empty() {
                 // lets just look at the first cage in the set, since we only need to grab the ref from one
                 let cage2 = interface::cagetable_getref(segment.attached_cages.into_iter().next().unwrap()); 
-                let mut cage2_rev_shm = cage2.rev_shm.lock();
-                let addrs = cage2::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
+                let cage2_rev_shm = cage2.rev_shm.lock();
+                let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
                 for offset in segment.semaphor_offsets.iter() {
-                    let sementry = cage2.sem_table.get(addrs[0] + offset).unwrap(); //add  semaphors into semtable at addr + offsets
+                    let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap(); //add  semaphors into semtable at addr + offsets
                     self.sem_table.insert(shmaddr as u32 + *offset, *sementry);
                 }
             }
@@ -2117,7 +2117,7 @@ impl Cage {
 
                     // update semaphores
                     for offset in segment.semaphor_offsets.iter() {
-                        self.sem_table.remove(shmaddr as u32+ *offset);
+                        self.sem_table.remove(&(shmaddr as u32 + *offset));
                     }
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
@@ -2460,11 +2460,11 @@ impl Cage {
             semtable.insert(sem_handle, new_semaphore);
 
             if is_shared {
-                let mut rev_shm = self.rev_shm.lock();
+                let rev_shm = self.rev_shm.lock();
 
                 if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) {
                     let offset = mapaddr - sem_handle;
-                    if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.iter() {
                             let cage = interface::cagetable_getref(*cageid);
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
@@ -2511,15 +2511,15 @@ impl Cage {
         let semtable = &self.sem_table;
         if let Some(sementry) = semtable.remove(&sem_handle) {
             if sementry.1.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
-                let mut rev_shm = self.rev_shm.lock();
-                let (mapaddr, shmid) = Self::rev_shm_find_index_by_addr(&rev_shm, sem_handle);
+                let rev_shm = self.rev_shm.lock();
+                let (mapaddr, shmid) = Self::search_for_addr_in_region(&rev_shm, sem_handle).unwrap();
                 let offset = mapaddr - sem_handle;
-                if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+                if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                     for cageid in segment.attached_cages.iter() {
                         let cage = interface::cagetable_getref(*cageid);
                         let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
                         for addr in addrs.iter() {
-                            cage.sem_table.remove(addr + offset);
+                            cage.sem_table.remove(&(addr + offset));
                         }
                     } 
                 }

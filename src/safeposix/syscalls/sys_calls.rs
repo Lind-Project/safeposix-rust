@@ -136,7 +136,7 @@ impl Cage {
         // Loop all pairs
         for pair in semtable.iter() {
             let semaphore = pair.value();
-            if semaphore.isshared.load(interface::RustAtomicOrdering::Relaxed) {
+            if semaphore.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
                 new_semtable.insert((*pair.key()).clone(), pair.value().clone());
             }
         }
