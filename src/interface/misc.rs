@@ -372,15 +372,14 @@ impl std::fmt::Debug for RawCondvar {
 #[derive(Debug)]
 pub struct RustSemaphore {
     pub value: RustAtomicU32,
-    pub isshared: RustAtomicBool
+    pub is_shared: RustAtomicBool,
 }
 
 impl RustSemaphore {
-    pub fn new(value_handle: u32, shared_handle: i32) -> Self {
-        let is_shared = shared_handle != 0;
+    pub fn new(value_handle: u32, is_shared: bool) -> Self {
         Self {
             value: RustAtomicU32::new(value_handle),
-            isshared: RustAtomicBool::new(is_shared),
+            is_shared: RustAtomicBool::new(is_shared),
         }
     }
 
@@ -415,7 +414,7 @@ impl RustSemaphore {
 
     }
 
-    pub fn get(&self) -> i32 {
+    pub fn get_value(&self) -> i32 {
         self.value.load(RustAtomicOrdering::Relaxed) as i32
     }
 }
