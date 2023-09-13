@@ -2087,12 +2087,13 @@ impl Cage {
             // update semaphores
             if !segment.semaphor_offsets.is_empty() {
                 // lets just look at the first cage in the set, since we only need to grab the ref from one
-                let cage2 = interface::cagetable_getref(segment.attached_cages.into_iter().next().unwrap()); 
+                let cageid = segment.attached_cages.iter().next().unwrap();
+                let cage2 = interface::cagetable_getref(*cageid); 
                 let cage2_rev_shm = cage2.rev_shm.lock();
                 let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
                 for offset in segment.semaphor_offsets.iter() {
-                    let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap(); //add  semaphors into semtable at addr + offsets
-                    self.sem_table.insert(shmaddr as u32 + *offset, *sementry);
+                    let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
+                    self.sem_table.insert(shmaddr as u32 + *offset, sementry);
                 }
             }
 
@@ -2457,7 +2458,7 @@ impl Cage {
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
             let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(sem_handle, is_shared));
-            semtable.insert(sem_handle, new_semaphore);
+            semtable.insert(sem_handle, new_semaphore.clone());
 
             if is_shared {
                 let rev_shm = self.rev_shm.lock();
