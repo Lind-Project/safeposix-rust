@@ -384,14 +384,12 @@ impl RustSemaphore {
     }
 
     pub fn lock(&self) -> bool{
-        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
         let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 {
-                Some(x-1)
-            } else {
-                Some(0)
-            }
+            if x > 0 { Some(x - 1) } else { Some(0) }
         });
+
+        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
+
         match result {
             Ok(_) => true,
             Err(_) => false,
@@ -400,11 +398,7 @@ impl RustSemaphore {
 
     pub fn unlock(&self) -> bool {
         let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x < (SEM_VALUE_MAX - 1) {
-                Some(x+1)
-            } else {
-                Some(0)
-            }
+            if x < (SEM_VALUE_MAX - 1) { Some(x + 1) } else { Some(SEM_VALUE_MAX) }
         });
 
         match result {

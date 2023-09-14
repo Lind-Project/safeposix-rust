@@ -2502,6 +2502,8 @@ impl Cage {
             if !semaphore.unlock() {
                 return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
             }
+         }else {
+            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
         }
         return 0;
     }
