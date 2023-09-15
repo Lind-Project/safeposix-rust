@@ -2443,9 +2443,9 @@ impl Cage {
     *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
     *  or shared between processes (when nonzero)
     */
-    pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value_handle: u32) -> i32 {
+    pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
-        if value_handle > SEM_VALUE_MAX { 
+        if value > SEM_VALUE_MAX { 
             return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
         }
 
@@ -2457,7 +2457,7 @@ impl Cage {
 
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
-            let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(sem_handle, is_shared));
+            let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
             semtable.insert(sem_handle, new_semaphore.clone());
 
             if is_shared {
