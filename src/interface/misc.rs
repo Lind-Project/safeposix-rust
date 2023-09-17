@@ -384,13 +384,11 @@ impl RustSemaphore {
     }
 
     pub fn lock(&self) -> bool{
-
         while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
 
         let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
             if x > 0 { Some(x - 1) } else { Some(0) }
         });
-
 
         match result {
             Ok(_) => true,
@@ -412,5 +410,38 @@ impl RustSemaphore {
 
     pub fn get_value(&self) -> i32 {
         self.value.load(RustAtomicOrdering::Relaxed) as i32
+    }
+
+    pub fn trylock(&self) -> bool {
+        if self.value.load(RustAtomicOrdering::Relaxed) == 0 { return false; }
+
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x > 0 { Some(x - 1) } else { Some(0) }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
+    pub fn timedlock(&self, timeout: Duration) -> {
+        let start_time = interface::starttimer();
+        while self.value.load(RustAtomicOrdering::Relaxed) == 0 {
+            let elapsed_time = interface::readtimer(start_time);
+            if elapsed_time > timeout {
+                return false;
+            }
+            interface::lind_yield();
+        }
+        
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x > 0 { Some(x - 1) } else { Some(0) }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }

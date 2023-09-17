@@ -511,6 +511,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SEM_GETVALUE_SYSCALL => {
             check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1))
         }
+        SEM_TRYWAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1))
+        }
+        SEM_TIMEDWAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1), interface::duration_fromtimespec(arg2))
+        }
 
         _ => {//unknown syscall
             -1

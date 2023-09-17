@@ -2543,4 +2543,37 @@ impl Cage {
         }
         return syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")
     }
+
+    pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+            if !semaphore.trylock() {
+                return syscall_error(Errno::EAGAIN, "sem_trywait", "The operation could not be performed without blocking");
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
+        let abstime = libc::timespec {
+            tv_sec: time.as_secs() as i64,
+            tv_nsec: (time.as_nanos() % 1000000000) as i64
+        };
+        if abstime.tv_nsec < 0 {
+            return syscall_error(Errno::EINVAL, "sem_timedwait", "Invalid timedout");
+        }
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+            if !semaphore.timedlock(time) {
+                return syscall_error(Errno::ETIMEDOUT, "sem_timedwait", "The call timed out before the semaphore could be locked");
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_timedwait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
 }
