@@ -425,7 +425,7 @@ impl RustSemaphore {
         }
     }
 
-    pub fn timedlock(&self, timeout: Duration) -> {
+    pub fn timedlock(&self, timeout: Duration) -> bool {
         let start_time = interface::starttimer();
         while self.value.load(RustAtomicOrdering::Relaxed) == 0 {
             let elapsed_time = interface::readtimer(start_time);
@@ -434,7 +434,7 @@ impl RustSemaphore {
             }
             interface::lind_yield();
         }
-        
+
         let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
             if x > 0 { Some(x - 1) } else { Some(0) }
         });
