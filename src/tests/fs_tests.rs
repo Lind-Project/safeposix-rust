@@ -47,7 +47,7 @@ pub mod fs_tests {
         ut_lind_fs_getpid_getppid();
         ut_lind_fs_sem_fork();
         ut_lind_fs_sem_trytimed();
-        // ut_lind_fs_sem_test();
+        ut_lind_fs_sem_test();
     }
 
 
@@ -1076,10 +1076,14 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             // Wait
             interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
@@ -1088,9 +1092,13 @@ pub mod fs_tests {
             interface::sleep(interface::RustDuration::from_millis(20));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             interface::sleep(interface::RustDuration::from_millis(10));
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
             // mark the shared memory to be rmoved
@@ -1119,6 +1127,8 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         // assert_eq!(shmatret as u32, 0);
         assert_eq!(ret_init, 0);
+        let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+        assert!(ret_get >= 0, "Wrong sem_getvalue");
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1126,10 +1136,14 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             // Wait
             interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
@@ -1138,9 +1152,13 @@ pub mod fs_tests {
             interface::sleep(interface::RustDuration::from_millis(20));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             interface::sleep(interface::RustDuration::from_millis(10));
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            assert!(ret_get >= 0, "Wrong sem_getvalue");
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
             // mark the shared memory to be rmoved
@@ -1169,7 +1187,7 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
         assert_eq!(ret_init, 0);
         // Should never return
-        assert_eq!(cage.sem_trywait_syscall(shmatret as u32), 0);
+        assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), 0);
         lindrustfinalize();
     }
 }
