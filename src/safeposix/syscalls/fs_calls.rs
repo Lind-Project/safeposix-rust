@@ -2520,16 +2520,17 @@ impl Cage {
             if sementry.1.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
                 // if its shared we'll need to remove it from other attachments
                 let rev_shm = self.rev_shm.lock();
-                let (mapaddr, shmid) = Self::search_for_addr_in_region(&rev_shm, sem_handle).unwrap(); // find all segments that contain semaphore
-                let offset = mapaddr - sem_handle;
-                if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
-                    for cageid in segment.attached_cages.clone().into_read_only().keys() { // iterate through all cages containing segment
-                        let cage = interface::cagetable_getref(*cageid);
-                        let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid); 
-                        for addr in addrs.iter() {
-                            cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
-                        }
-                    } 
+                if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) { // find all segments that contain semaphore
+                    let offset = mapaddr - sem_handle;
+                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        for cageid in segment.attached_cages.clone().into_read_only().keys() { // iterate through all cages containing segment
+                            let cage = interface::cagetable_getref(*cageid);
+                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid); 
+                            for addr in addrs.iter() {
+                                cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
+                            }
+                        } 
+                    }
                 }
             }
             return 0;
