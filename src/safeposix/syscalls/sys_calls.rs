@@ -23,6 +23,7 @@ impl Cage {
                     let segment = occupied.get_mut();
                     segment.shminfo.shm_nattch -= 1;
                     segment.shminfo.shm_dtime = interface::timestamp() as isize;
+                    segment.attached_cages.remove(&self.cageid);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         let key = segment.key;
@@ -162,6 +163,8 @@ impl Cage {
         for rev_mapping in cageobj.rev_shm.lock().iter() {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
+            let refs = shment.attached_cages.get(&self.cageid).unwrap();
+            shment.attached_cages.insert(child_cageid, *refs);
         }
         drop(shmtable);
         interface::cagetable_insert(child_cageid, cageobj);

@@ -2087,13 +2087,14 @@ impl Cage {
             // update semaphores
             if !segment.semaphor_offsets.is_empty() {
                 // lets just look at the first cage in the set, since we only need to grab the ref from one
-                let cageid = segment.attached_cages.iter().next().unwrap();
-                let cage2 = interface::cagetable_getref(*cageid); 
-                let cage2_rev_shm = cage2.rev_shm.lock();
-                let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
-                for offset in segment.semaphor_offsets.iter() {
-                    let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
-                    self.sem_table.insert(shmaddr as u32 + *offset, sementry);
+                if let Some(cageid) = segment.attached_cages.clone().into_read_only().keys().next() {
+                    let cage2 = interface::cagetable_getref(*cageid); 
+                    let cage2_rev_shm = cage2.rev_shm.lock();
+                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
+                    for offset in segment.semaphor_offsets.iter() {
+                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
+                        self.sem_table.insert(shmaddr as u32 + *offset, sementry);
+                    }
                 }
             }
 
@@ -2114,12 +2115,13 @@ impl Cage {
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
-                    segment.unmap_shm(shmaddr, self.cageid);
 
                     // update semaphores
                     for offset in segment.semaphor_offsets.iter() {
                         self.sem_table.remove(&(shmaddr as u32 + *offset));
                     }
+
+                    segment.unmap_shm(shmaddr, self.cageid);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
                     rev_shm.swap_remove(index);
@@ -2466,7 +2468,7 @@ impl Cage {
                 if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) {
                     let offset = mapaddr - sem_handle;
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
-                        for cageid in segment.attached_cages.iter() {
+                        for cageid in segment.attached_cages.clone().into_read_only().keys() {
                             let cage = interface::cagetable_getref(*cageid);
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
                             for addr in addrs.iter() {
@@ -2512,17 +2514,19 @@ impl Cage {
         let metadata = &SHM_METADATA;
 
         let semtable = &self.sem_table;
+        // remove entry from semaphore table
         if let Some(sementry) = semtable.remove(&sem_handle) {
             if sementry.1.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
+                // if its shared we'll need to remove it from other attachments
                 let rev_shm = self.rev_shm.lock();
-                let (mapaddr, shmid) = Self::search_for_addr_in_region(&rev_shm, sem_handle).unwrap();
+                let (mapaddr, shmid) = Self::search_for_addr_in_region(&rev_shm, sem_handle).unwrap(); // find all segments that contain semaphore
                 let offset = mapaddr - sem_handle;
                 if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
-                    for cageid in segment.attached_cages.iter() {
+                    for cageid in segment.attached_cages.clone().into_read_only().keys() { // iterate through all cages containing segment
                         let cage = interface::cagetable_getref(*cageid);
-                        let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                        let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid); 
                         for addr in addrs.iter() {
-                            cage.sem_table.remove(&(addr + offset));
+                            cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
                         }
                     } 
                 }

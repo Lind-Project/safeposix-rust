@@ -375,6 +375,9 @@ pub struct RustSemaphore {
     pub is_shared: RustAtomicBool,
 }
 
+// Semaphore implementation
+// we busy wait on lock if value is 0, otherwise we decrease the value
+// unlock will increase value up to SEM_VALUE_MAX
 impl RustSemaphore {
     pub fn new(value_handle: u32, is_shared: bool) -> Self {
         Self {
