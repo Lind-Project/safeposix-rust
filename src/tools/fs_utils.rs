@@ -124,7 +124,8 @@ fn main() {
                         pendingsigset: interface::RustHashMap::new(),
                         trusted_signal_flag: interface::RustHashMap::new(),
                         main_threadid: interface::RustAtomicU64::new(0),
-                        interval_timer: interface::IntervalTimer::new(0)
+                        interval_timer: interface::IntervalTimer::new(0),
+                        sem_table: interface::RustHashMap::new(),
                     };
 
     args.next();//first arg is executable, we don't care

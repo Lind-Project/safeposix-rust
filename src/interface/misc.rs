@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32, AtomicU64 as RustAtomicU64};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
@@ -26,6 +26,8 @@ pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice 
 
 use crate::interface::errnos::{VERBOSE};
 use crate::interface::types::{SigsetType};
+use crate::interface;
+use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
 pub use std::sync::LazyLock;
 
@@ -427,5 +429,88 @@ impl Drop for RawCondvar {
 impl std::fmt::Debug for RawCondvar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("<condvar>")
+    }
+}
+
+/*
+* RustSemaphore is the rust version of sem_t
+*/
+#[derive(Debug)]
+pub struct RustSemaphore {
+    pub value: RustAtomicU32,
+    pub is_shared: RustAtomicBool,
+}
+
+// Semaphore implementation
+// we busy wait on lock if value is 0, otherwise we decrease the value
+// unlock will increase value up to SEM_VALUE_MAX
+impl RustSemaphore {
+    pub fn new(value_handle: u32, is_shared: bool) -> Self {
+        Self {
+            value: RustAtomicU32::new(value_handle),
+            is_shared: RustAtomicBool::new(is_shared),
+        }
+    }
+
+    pub fn lock(&self) -> bool{
+        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
+
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x > 0 { Some(x - 1) } else { Some(0) }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
+    pub fn unlock(&self) -> bool {
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x < (SEM_VALUE_MAX - 1) { Some(x + 1) } else { Some(SEM_VALUE_MAX) }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+
+    }
+
+    pub fn get_value(&self) -> i32 {
+        self.value.load(RustAtomicOrdering::Relaxed) as i32
+    }
+
+    pub fn trylock(&self) -> bool {
+        if self.value.load(RustAtomicOrdering::Relaxed) == 0 { return false; }
+
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x > 0 { Some(x - 1) } else { Some(0) }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
+    pub fn timedlock(&self, timeout: Duration) -> bool {
+        let start_time = interface::starttimer();
+        while self.value.load(RustAtomicOrdering::Relaxed) == 0 {
+            let elapsed_time = interface::readtimer(start_time);
+            if elapsed_time > timeout {
+                return false;
+            }
+            interface::lind_yield();
+        }
+
+        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
+            if x > 0 { Some(x - 1) } else { Some(0) }
+        });
+
+        match result {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
