@@ -397,6 +397,7 @@ impl RustSemaphore {
     }
 
     pub fn unlock(&self) -> bool {
+        if self.value.load(RustAtomicOrdering::Relaxed) < 0 { return false; }
         let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
             if x < (SEM_VALUE_MAX - 1) { Some(x + 1) } else { Some(SEM_VALUE_MAX) }
         });
