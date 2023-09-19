@@ -1171,7 +1171,9 @@ pub mod fs_tests {
         // Attach the shared memory region
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
-        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
+        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), -22);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), -22);
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), -22);
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
         assert_eq!(ret_init, 0);
