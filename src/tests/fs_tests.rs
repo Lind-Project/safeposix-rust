@@ -1089,7 +1089,7 @@ pub mod fs_tests {
             // Parents waits for the semaphore
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-            // interface::sleep(interface::RustDuration::from_millis(40));
+            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
