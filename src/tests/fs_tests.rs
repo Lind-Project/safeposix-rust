@@ -47,6 +47,7 @@ pub mod fs_tests {
         ut_lind_fs_getpid_getppid();
         ut_lind_fs_sem_fork();
         ut_lind_fs_sem_trytimed();
+        ut_lind_fs_sem_test();
     }
 
 
@@ -1066,6 +1067,7 @@ pub mod fs_tests {
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1073,21 +1075,24 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            // Wait
-            interface::sleep(interface::RustDuration::from_millis(100));
+            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
+            interface::sleep(interface::RustDuration::from_millis(40));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
             // Ensure the child process starts first
-            interface::sleep(interface::RustDuration::from_millis(20));
+            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
-            interface::sleep(interface::RustDuration::from_millis(10));
+            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
+            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
             // mark the shared memory to be rmoved
@@ -1114,7 +1119,9 @@ pub mod fs_tests {
         assert_ne!(shmatret, -1);
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
+        // assert_eq!(shmatret as u32, 0);
         assert_eq!(ret_init, 0);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1122,21 +1129,25 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
+            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
-            interface::sleep(interface::RustDuration::from_millis(100));
+            interface::sleep(interface::RustDuration::from_millis(20));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
             // Ensure the child process starts first
-            interface::sleep(interface::RustDuration::from_millis(20));
+            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), 0);
+            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
             interface::sleep(interface::RustDuration::from_millis(10));
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
             // mark the shared memory to be rmoved
@@ -1149,6 +1160,27 @@ pub mod fs_tests {
         });
         thread_child.join().unwrap();
         thread_parent.join().unwrap();
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_sem_test() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let key = 31337;
+        // Create a shared memory region
+        let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
+        // Attach the shared memory region
+        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+        assert_ne!(shmatret, -1);
+        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), -22);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), -22);
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), -22);
+        // Initialize the semaphore with shared between process
+        let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
+        assert_eq!(ret_init, 0);
+        // Should return errno
+        assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), -110);
+        assert_eq!(cage.sem_trywait_syscall(shmatret as u32), -11);
         lindrustfinalize();
     }
 }
