@@ -1186,8 +1186,9 @@ pub mod fs_tests {
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
         assert_eq!(ret_init, 0);
-        // Should never return
-        assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), 0);
+        // Should return errno
+        assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), -ETIMEDOUT);
+        assert_eq!(cage.sem_trywait_syscall(shmatret as u32), -EAGAIN);
         lindrustfinalize();
     }
 }
