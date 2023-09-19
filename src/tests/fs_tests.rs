@@ -1085,7 +1085,7 @@ pub mod fs_tests {
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
             // Ensure the child process starts first
-            interface::sleep(interface::RustDuration::from_millis(20));
+            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
