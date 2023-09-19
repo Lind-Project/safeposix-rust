@@ -2457,7 +2457,7 @@ impl Cage {
 
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
-            let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(sem_handle, is_shared));
+            let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
             semtable.insert(sem_handle, new_semaphore.clone());
 
             if is_shared {
