@@ -1076,8 +1076,6 @@ pub mod fs_tests {
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
-            // Wait
-            // interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
@@ -1132,7 +1130,7 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
-            interface::sleep(interface::RustDuration::from_millis(100));
+            // interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
@@ -1173,6 +1171,7 @@ pub mod fs_tests {
         // Attach the shared memory region
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
+        assert_eq!(cage.sem_destroy_syscall(shmatret as u32));
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
         assert_eq!(ret_init, 0);
