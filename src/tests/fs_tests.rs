@@ -1076,13 +1076,13 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            let ret_get = cage1.sem_getvalue_syscall(shmatret as u32);
             assert!(ret_get >= 0, "Wrong sem_getvalue");
             // Wait
             interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            let ret_get = cage1.sem_getvalue_syscall(shmatret as u32);
             assert!(ret_get >= 0, "Wrong sem_getvalue");
             cage1.exit_syscall(EXIT_SUCCESS);
         });
@@ -1136,13 +1136,13 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
-            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            let ret_get = cage1.sem_getvalue_syscall(shmatret as u32);
             assert!(ret_get >= 0, "Wrong sem_getvalue");
             // Wait
             interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            let ret_get = cage.sem_getvalue_syscall(shmatret as u32);
+            let ret_get = cage1.sem_getvalue_syscall(shmatret as u32);
             assert!(ret_get >= 0, "Wrong sem_getvalue");
             cage1.exit_syscall(EXIT_SUCCESS);
         });
