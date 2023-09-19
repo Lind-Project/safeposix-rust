@@ -2464,11 +2464,12 @@ impl Cage {
 
             if is_shared {
                 let rev_shm = self.rev_shm.lock();
-
+                // if its shared and exists in an existing mapping we need to add it to other cages
                 if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) {
                     let offset = mapaddr - sem_handle;
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
+                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
                             let cage = interface::cagetable_getref(*cageid);
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
                             for addr in addrs.iter() {
