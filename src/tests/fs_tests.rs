@@ -1167,7 +1167,7 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
         assert_eq!(ret_init, 0);
         // Should never return
-        assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
+        assert_eq!(cage.sem_trywait_syscall(shmatret as u32), 0);
         lindrustfinalize();
     }
 }
