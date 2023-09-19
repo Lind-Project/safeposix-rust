@@ -47,6 +47,7 @@ pub mod fs_tests {
         ut_lind_fs_getpid_getppid();
         ut_lind_fs_sem_fork();
         ut_lind_fs_sem_trytimed();
+        ut_lind_fs_sem_test();
     }
 
 
@@ -1114,7 +1115,7 @@ pub mod fs_tests {
         assert_ne!(shmatret, -1);
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
-        assert_eq!(shmatret as u32, 0);
+        // assert_eq!(shmatret as u32, 0);
         assert_eq!(ret_init, 0);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
@@ -1150,6 +1151,23 @@ pub mod fs_tests {
         });
         thread_child.join().unwrap();
         thread_parent.join().unwrap();
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_sem_test() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let key = 31337;
+        // Create a shared memory region
+        let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
+        // Attach the shared memory region
+        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+        assert_ne!(shmatret, -1);
+        // Initialize the semaphore with shared between process
+        let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
+        assert_eq!(ret_init, 0);
+        // Should never return
+        assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
         lindrustfinalize();
     }
 }
