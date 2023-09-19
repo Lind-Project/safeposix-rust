@@ -1077,10 +1077,10 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
-            interface::sleep(interface::RustDuration::from_millis(100));
+            // interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            // assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
+            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
@@ -1132,7 +1132,7 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
-            interface::sleep(interface::RustDuration::from_millis(100));
+            // interface::sleep(interface::RustDuration::from_millis(100));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
