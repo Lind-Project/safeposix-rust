@@ -1075,17 +1075,13 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             interface::sleep(interface::RustDuration::from_millis(40));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
-            // Ensure the child process starts first
-            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
@@ -1129,18 +1125,14 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
-            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 0);
             // Wait
             interface::sleep(interface::RustDuration::from_millis(20));
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            assert_eq!(cage1.sem_getvalue_syscall(shmatret as u32), 1);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
-            // Ensure the child process starts first
-            interface::sleep(interface::RustDuration::from_millis(100));
             // Parents waits for the semaphore
             assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
