@@ -129,17 +129,13 @@ impl Cage {
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
 
         /* 
-        *  Construct a new semaphore table in child cage which equals to the one in the parent cage 
-        *  only if pshared != 0
+        *  Construct a new semaphore table in child cage which equals to the one in the parent cage
         */
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>> = interface::RustHashMap::new();
         // Loop all pairs
         for pair in semtable.iter() {
-            let semaphore = pair.value();
-            if semaphore.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
-                new_semtable.insert((*pair.key()).clone(), pair.value().clone());
-            }
+            new_semtable.insert((*pair.key()).clone(), pair.value().clone());
         }
 
         let cageobj = Cage {
