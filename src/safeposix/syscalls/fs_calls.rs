@@ -2016,7 +2016,7 @@ impl Cage {
     pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec<u32> {
 
         let mut addrvec = Vec::new();
-        for (_index, val) in rev_shm.iter().enumerate() {
+        for val in rev_shm.iter() {
             if val.1 == shmid as i32 {
                 addrvec.push(val.0);
             }
@@ -2027,7 +2027,7 @@ impl Cage {
 
     pub fn search_for_addr_in_region(rev_shm: &Vec<(u32, i32)>, search_addr: u32) -> Option<(u32, i32)> {
         let metadata = &SHM_METADATA;
-        for (_index, val) in rev_shm.iter().enumerate() {
+        for val in rev_shm.iter() {
             let addr = val.0;
             let shmid = val.1;
             if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
