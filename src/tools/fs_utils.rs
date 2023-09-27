@@ -119,6 +119,7 @@ fn main() {
                         mutex_table: interface::RustLock::new(vec!()),
                         cv_table: interface::RustLock::new(vec!()),
                         thread_table: interface::RustHashMap::new(),
+                        sem_table: interface::RustHashMap::new(),
                     };
 
     args.next();//first arg is executable, we don't care

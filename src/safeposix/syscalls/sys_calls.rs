@@ -10,6 +10,8 @@ use super::sys_constants::*;
 use super::net_constants::*;
 use super::fs_constants::*;
 
+use std::sync::{Arc as RustRfc};
+
 impl Cage {
     fn unmap_shm_mappings(&self) {
         //unmap shm mappings on exit or exec
@@ -21,6 +23,7 @@ impl Cage {
                     let segment = occupied.get_mut();
                     segment.shminfo.shm_nattch -= 1;
                     segment.shminfo.shm_dtime = interface::timestamp() as isize;
+                    segment.attached_cages.remove(&self.cageid);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         let key = segment.key;
@@ -125,6 +128,16 @@ impl Cage {
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
 
+        /* 
+        *  Construct a new semaphore table in child cage which equals to the one in the parent cage
+        */
+        let semtable = &self.sem_table;
+        let new_semtable: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>> = interface::RustHashMap::new();
+        // Loop all pairs
+        for pair in semtable.iter() {
+            new_semtable.insert((*pair.key()).clone(), pair.value().clone());
+        }
+
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
@@ -138,6 +151,7 @@ impl Cage {
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
             thread_table: interface::RustHashMap::new(),
+            sem_table: new_semtable,
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -145,6 +159,8 @@ impl Cage {
         for rev_mapping in cageobj.rev_shm.lock().iter() {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
+            let refs = shment.attached_cages.get(&self.cageid).unwrap();
+            shment.attached_cages.insert(child_cageid, *refs);
         }
         drop(shmtable);
         interface::cagetable_insert(child_cageid, cageobj);
@@ -187,6 +203,7 @@ impl Cage {
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
             thread_table: interface::RustHashMap::new(),
+            sem_table: interface::RustHashMap::new(),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
