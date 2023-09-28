@@ -2053,7 +2053,6 @@ impl Cage {
                 shmid = *occupied.get(); 
                 // A segment for the given key exists, but size is greater than the size of that segment.
                 if let Some(shm) = metadata.shmtable.get(&shmid) {
-                    let segment_size = shm.size;
                     if size > shm.size {
                         return syscall_error(Errno::EINVAL, "shmget", "A segment for the given key exists, but size is greater than the size of that segment");
                     }
