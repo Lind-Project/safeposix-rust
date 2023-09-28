@@ -1187,7 +1187,7 @@ pub mod fs_tests {
         let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
 
         let ret = cage.shmget_syscall(key, 2000, 0666|IPC_CREAT);
-        assert_nq!(ret, -1);
+        assert_eq!(ret, -1);
         
         
         lindrustfinalize();
