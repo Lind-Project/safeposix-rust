@@ -371,7 +371,7 @@ impl std::fmt::Debug for RawCondvar {
 */
 #[derive(Debug)]
 pub struct RustSemaphore {
-    pub value: RustAtomicU32,
+    pub value: Mutex<u32>,
     pub is_shared: RustAtomicBool,
 }
 
@@ -381,70 +381,58 @@ pub struct RustSemaphore {
 impl RustSemaphore {
     pub fn new(value_handle: u32, is_shared: bool) -> Self {
         Self {
-            value: RustAtomicU32::new(value_handle),
+            value: Mutex::new(value_handle),
             is_shared: RustAtomicBool::new(is_shared),
         }
     }
 
-    pub fn lock(&self) -> bool{
-        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
-
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 { Some(x - 1) } else { Some(0) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
+    pub fn lock(&self) {
+        loop {
+            let mut value = self.value.lock();
+            if *value == 0 {
+                interface::lind_yield();
+                continue;
+            }
+                
+            *value = if *value > 0 { *value - 1 } else { 0 };
+            break;
         }
     }
 
-    pub fn unlock(&self) -> bool {
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x < (SEM_VALUE_MAX - 1) { Some(x + 1) } else { Some(SEM_VALUE_MAX) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
-        }
-
+    pub fn unlock(&self) {
+        let mut value = self.value.lock();
+        *value = if *value < (SEM_VALUE_MAX - 1) { *value + 1 } else { SEM_VALUE_MAX };
     }
 
     pub fn get_value(&self) -> i32 {
-        self.value.load(RustAtomicOrdering::Relaxed) as i32
+        *self.value.lock() as i32
     }
 
     pub fn trylock(&self) -> bool {
-        if self.value.load(RustAtomicOrdering::Relaxed) == 0 { return false; }
-
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 { Some(x - 1) } else { Some(0) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
+        let mut value = self.value.lock();
+        if *value == 0 {
+            return false;
         }
+
+        *value = if *value > 0 { *value - 1 } else { 0 };
+        return true;
     }
 
     pub fn timedlock(&self, timeout: Duration) -> bool {
         let start_time = interface::starttimer();
-        while self.value.load(RustAtomicOrdering::Relaxed) == 0 {
-            let elapsed_time = interface::readtimer(start_time);
-            if elapsed_time > timeout {
-                return false;
+        loop {
+            let mut value = self.value.lock();
+            if *value == 0 {
+                let elapsed_time = interface::readtimer(start_time);
+                if elapsed_time > timeout {
+                    return false;
+                }
+                interface::lind_yield();
+                continue;
             }
-            interface::lind_yield();
-        }
 
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 { Some(x - 1) } else { Some(0) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
+            *value = if *value > 0 { *value - 1 } else { 0 };
+            return true;
         }
     }
 }
