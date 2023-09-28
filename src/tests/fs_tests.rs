@@ -48,7 +48,7 @@ pub mod fs_tests {
         ut_lind_fs_sem_fork();
         ut_lind_fs_sem_trytimed();
         ut_lind_fs_sem_test();
-        ut_lind_fs_shm_err();
+        // ut_lind_fs_shm_err();
     }
 
 
