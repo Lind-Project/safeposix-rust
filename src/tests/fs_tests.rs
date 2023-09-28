@@ -48,6 +48,7 @@ pub mod fs_tests {
         ut_lind_fs_sem_fork();
         ut_lind_fs_sem_trytimed();
         ut_lind_fs_sem_test();
+        ut_lind_fs_shm_err();
     }
 
 
@@ -1173,6 +1174,22 @@ pub mod fs_tests {
         // Should return errno
         assert_eq!(cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)), -110);
         assert_eq!(cage.sem_trywait_syscall(shmatret as u32), -11);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_shm_err() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let key = 31337;
+        let mut shmidstruct = ShmidsStruct::default();
+
+        // shmget returns an identifier in shmid
+        let shmid = cage.shmget_syscall(key, 1024, 0666|IPC_CREAT);
+
+        let ret = cage.shmget_syscall(key, 2000, 0666|IPC_CREAT);
+        assert_nq!(ret, -1);
+        
+        
         lindrustfinalize();
     }
 }
