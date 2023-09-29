@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
@@ -26,6 +26,8 @@ pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice 
 
 use crate::interface::errnos::{VERBOSE};
 use crate::interface::types::{SigsetType};
+use crate::interface;
+use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
 pub use std::sync::LazyLock;
 
@@ -427,5 +429,90 @@ impl Drop for RawCondvar {
 impl std::fmt::Debug for RawCondvar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("<condvar>")
+    }
+}
+
+/*
+* RustSemaphore is the rust version of sem_t
+*/
+#[derive(Debug)]
+pub struct RustSemaphore {
+    pub value: Mutex<u32>,
+    pub is_shared: RustAtomicBool,
+}
+
+// Semaphore implementation
+// we busy wait on lock if value is 0, otherwise we decrease the value
+// unlock will increase value up to SEM_VALUE_MAX
+impl RustSemaphore {
+    pub fn new(value_handle: u32, is_shared: bool) -> Self {
+        Self {
+            value: Mutex::new(value_handle),
+            is_shared: RustAtomicBool::new(is_shared),
+        }
+    }
+
+    pub fn lock(&self) {
+        loop {
+            // acquire the mutex lock
+            let mut value = self.value.lock();
+            if *value == 0 {
+                // wait for semaphore to be unlocked by another process/thread
+                interface::lind_yield();
+            } else {
+                // decrement the value
+                *value = if *value > 0 { *value - 1 } else { 0 };
+            }
+        }
+    }
+
+    pub fn unlock(&self) -> bool {
+        // acquire the mutex lock
+        let mut value = self.value.lock();
+        // check if the maximum allowable value for a semaphore has been reached
+        if *value < SEM_VALUE_MAX {
+            // increment the value
+            *value = *value + 1;
+            return true;
+        } else { return false; }
+    }
+
+    pub fn get_value(&self) -> i32 {
+        // returns the value of the semaphore
+        *self.value.lock() as i32
+    }
+
+    pub fn trylock(&self) -> bool {
+        // acquire the mutex lock
+        let mut value = self.value.lock();
+        if *value == 0 {
+            // semaphore is locked by another process/thread
+            return false;
+        } else {
+            // decrement the value
+            *value = if *value > 0 { *value - 1 } else { 0 };
+            return true;
+        }
+    }
+
+    pub fn timedlock(&self, timeout: Duration) -> bool {
+        // start the timer to check for timeout
+        let start_time = interface::starttimer();
+        loop {
+            // acquire the mutex lock
+            let mut value = self.value.lock();
+            if *value == 0 {
+                // check if we have timed out
+                let elapsed_time = interface::readtimer(start_time);
+                if elapsed_time > timeout {
+                    return false;
+                }
+                // if not timed out wait for semaphore to be unlocked by another process/thread
+                interface::lind_yield();
+            } else {
+                *value = if *value > 0 { *value - 1 } else { 0 };
+                return true;
+            }
+        }
     }
 }

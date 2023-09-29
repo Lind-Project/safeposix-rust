@@ -77,6 +77,14 @@ const COND_BROADCAST_SYSCALL: i32 = 78;
 const COND_SIGNAL_SYSCALL: i32 = 79;
 const COND_TIMEDWAIT_SYSCALL: i32 = 80;
 
+const SEM_INIT_SYSCALL: i32 = 91;
+const SEM_WAIT_SYSCALL: i32 = 92;
+const SEM_TRYWAIT_SYSCALL: i32 = 93;
+const SEM_TIMEDWAIT_SYSCALL: i32 = 94;
+const SEM_POST_SYSCALL: i32 = 95;
+const SEM_DESTROY_SYSCALL: i32 = 96;
+const SEM_GETVALUE_SYSCALL: i32 = 97;
+
 const GETHOSTNAME_SYSCALL: i32 = 125;
 const PREAD_SYSCALL: i32 = 126;
 const PWRITE_SYSCALL: i32 = 127;
@@ -519,6 +527,27 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         SETITIMER_SYSCALL => {
             check_and_dispatch!(cage.setitimer_syscall, interface::get_int(arg1), interface::get_constitimerval(arg2), interface::get_itimerval(arg3)) 
         }
+        SEM_INIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_init_syscall, interface::get_uint(arg1), interface::get_int(arg2), interface::get_uint(arg3))
+        }
+        SEM_WAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_wait_syscall, interface::get_uint(arg1))
+        }
+        SEM_POST_SYSCALL => {
+            check_and_dispatch!(cage.sem_post_syscall, interface::get_uint(arg1))
+        }
+        SEM_DESTROY_SYSCALL => {
+            check_and_dispatch!(cage.sem_destroy_syscall, interface::get_uint(arg1))
+        }
+        SEM_GETVALUE_SYSCALL => {
+            check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1))
+        }
+        SEM_TRYWAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_trywait_syscall, interface::get_uint(arg1))
+        }
+        SEM_TIMEDWAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_timedwait_syscall, interface::get_uint(arg1), interface::duration_fromtimespec(arg2))
+        }
 
         _ => {//unknown syscall
             -1
@@ -601,6 +630,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        sem_table: interface::RustHashMap::new(),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(), 
@@ -625,6 +655,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        sem_table: interface::RustHashMap::new(),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),

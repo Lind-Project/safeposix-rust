@@ -118,6 +118,7 @@ fn main() {
                         rev_shm: interface::Mutex::new(vec!()),
                         mutex_table: interface::RustLock::new(vec!()),
                         cv_table: interface::RustLock::new(vec!()),
+                        sem_table: interface::RustHashMap::new(),
                         thread_table: interface::RustHashMap::new(),
                         signalhandler: interface::RustHashMap::new(),
                         sigset: interface::RustHashMap::new(),
