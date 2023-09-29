@@ -391,17 +391,18 @@ impl RustSemaphore {
             let mut value = self.value.lock();
             if *value == 0 {
                 interface::lind_yield();
-                continue;
+            } else {
+                *value = if *value > 0 { *value - 1 } else { 0 };
             }
-                
-            *value = if *value > 0 { *value - 1 } else { 0 };
-            break;
         }
     }
 
-    pub fn unlock(&self) {
+    pub fn unlock(&self) -> bool {
         let mut value = self.value.lock();
-        *value = if *value < (SEM_VALUE_MAX - 1) { *value + 1 } else { SEM_VALUE_MAX };
+        if *value < SEM_VALUE_MAX {
+            *value = *value + 1;
+            return true;
+        } else { return false; }
     }
 
     pub fn get_value(&self) -> i32 {
@@ -412,10 +413,10 @@ impl RustSemaphore {
         let mut value = self.value.lock();
         if *value == 0 {
             return false;
+        } else {
+            *value = if *value > 0 { *value - 1 } else { 0 };
+            return true;
         }
-
-        *value = if *value > 0 { *value - 1 } else { 0 };
-        return true;
     }
 
     pub fn timedlock(&self, timeout: Duration) -> bool {
@@ -428,11 +429,10 @@ impl RustSemaphore {
                     return false;
                 }
                 interface::lind_yield();
-                continue;
+            } else {
+                *value = if *value > 0 { *value - 1 } else { 0 };
+                return true;
             }
-
-            *value = if *value > 0 { *value - 1 } else { 0 };
-            return true;
         }
     }
 }
