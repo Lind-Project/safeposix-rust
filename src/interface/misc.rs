@@ -405,7 +405,7 @@ impl std::fmt::Debug for RawCondvar {
 */
 #[derive(Debug)]
 pub struct RustSemaphore {
-    pub value: RustAtomicU32,
+    pub value: Mutex<u32>,
     pub is_shared: RustAtomicBool,
 }
 
@@ -415,70 +415,72 @@ pub struct RustSemaphore {
 impl RustSemaphore {
     pub fn new(value_handle: u32, is_shared: bool) -> Self {
         Self {
-            value: RustAtomicU32::new(value_handle),
+            value: Mutex::new(value_handle),
             is_shared: RustAtomicBool::new(is_shared),
         }
     }
 
-    pub fn lock(&self) -> bool{
-        while self.value.load(RustAtomicOrdering::Relaxed) == 0 { interface::lind_yield(); }
-
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 { Some(x - 1) } else { Some(0) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
+    pub fn lock(&self) {
+        loop {
+            // acquire the mutex lock
+            let mut value = self.value.lock();
+            if *value == 0 {
+                // wait for semaphore to be unlocked by another process/thread
+                interface::lind_yield();
+            } else {
+                // decrement the value
+                *value = if *value > 0 { *value - 1 } else { 0 };
+            }
         }
     }
 
     pub fn unlock(&self) -> bool {
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x < (SEM_VALUE_MAX - 1) { Some(x + 1) } else { Some(SEM_VALUE_MAX) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
-        }
-
+        // acquire the mutex lock
+        let mut value = self.value.lock();
+        // check if the maximum allowable value for a semaphore has been reached
+        if *value < SEM_VALUE_MAX {
+            // increment the value
+            *value = *value + 1;
+            return true;
+        } else { return false; }
     }
 
     pub fn get_value(&self) -> i32 {
-        self.value.load(RustAtomicOrdering::Relaxed) as i32
+        // returns the value of the semaphore
+        *self.value.lock() as i32
     }
 
     pub fn trylock(&self) -> bool {
-        if self.value.load(RustAtomicOrdering::Relaxed) == 0 { return false; }
-
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 { Some(x - 1) } else { Some(0) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
+        // acquire the mutex lock
+        let mut value = self.value.lock();
+        if *value == 0 {
+            // semaphore is locked by another process/thread
+            return false;
+        } else {
+            // decrement the value
+            *value = if *value > 0 { *value - 1 } else { 0 };
+            return true;
         }
     }
 
     pub fn timedlock(&self, timeout: Duration) -> bool {
+        // start the timer to check for timeout
         let start_time = interface::starttimer();
-        while self.value.load(RustAtomicOrdering::Relaxed) == 0 {
-            let elapsed_time = interface::readtimer(start_time);
-            if elapsed_time > timeout {
-                return false;
+        loop {
+            // acquire the mutex lock
+            let mut value = self.value.lock();
+            if *value == 0 {
+                // check if we have timed out
+                let elapsed_time = interface::readtimer(start_time);
+                if elapsed_time > timeout {
+                    return false;
+                }
+                // if not timed out wait for semaphore to be unlocked by another process/thread
+                interface::lind_yield();
+            } else {
+                *value = if *value > 0 { *value - 1 } else { 0 };
+                return true;
             }
-            interface::lind_yield();
-        }
-
-        let result = self.value.fetch_update(RustAtomicOrdering::Relaxed, RustAtomicOrdering::Relaxed, |x| {
-            if x > 0 { Some(x - 1) } else { Some(0) }
-        });
-
-        match result {
-            Ok(_) => true,
-            Err(_) => false,
         }
     }
 }
