@@ -396,6 +396,7 @@ impl RustSemaphore {
             } else {
                 // decrement the value
                 *value = if *value > 0 { *value - 1 } else { 0 };
+                break;
             }
         }
     }
