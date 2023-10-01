@@ -14,7 +14,7 @@ pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{Arc as RustRfc};
-pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
+pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockWriteGuard, RwLockReadGuard as RustLockReadGuard, Mutex, Condvar};
 
 use libc::{mmap, pthread_self, pthread_exit, pthread_kill, sched_yield};
 
@@ -29,7 +29,11 @@ use crate::interface::types::{SigsetType};
 use crate::interface;
 use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
-pub use std::sync::LazyLock;
+use std::sync::LazyLock;
+
+pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+    RustAtomicBool::new(false)
+});
 
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
@@ -139,7 +143,6 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
     if TEST.load(RustAtomicOrdering::Relaxed) { return; }
-
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
         let cage = cagetable_getref(cageid);

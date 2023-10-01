@@ -340,10 +340,10 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj, has_domsock) = match *inodeobj {
-                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, false)},
-                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
-                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
+                let (currefcount, curlinkcount, has_fobj, log) = match *inodeobj {
+                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, true)},
+                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
+                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
@@ -361,20 +361,18 @@ impl Cage {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename).unwrap();
                         }
-                        if has_domsock {
-                            NET_METADATA.domain_socket_table.remove(&truepath);
-                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
-                // we don't log domain sockets
-                if !has_domsock {
+                NET_METADATA.domsock_paths.remove(&truepath);
+
+                // the log boolean will be false if we are workign on a domain socket
+                if log {
                     log_metadata(&FS_METADATA, parentinodenum);
                     log_metadata(&FS_METADATA, inodenum);
                 }
                 0 //unlink has succeeded
             }
-
         }
     }
 
@@ -635,11 +633,9 @@ impl Cage {
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
-                    }
-
+                    } 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-
                     loop { // loop over pipe reads so we can periodically check for cancellation
                         let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
                         if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == -(Errno::EAGAIN as i32) {
@@ -1176,8 +1172,23 @@ impl Cage {
             Pipe(pipe_filedesc_obj) => {
                 pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
-            Socket(_socket_filedesc_obj) => {
-                //we handle the closing of these on drop
+            Socket(ref socket_filedesc_obj) => {
+                //we handle the closing of sockets on drop
+                // checking whether this is a domain socket
+
+                let sock_tmp = socket_filedesc_obj.handle.clone();
+                let sockhandle = sock_tmp.write();
+                let socket_type = sockhandle.domain;
+                if socket_type == AF_UNIX {
+                    if let Some(sockinfo) = &sockhandle.unix_info {
+                        if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
+                            sendpipe.incr_ref(O_WRONLY);
+                        }
+                        if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                            receivepipe.incr_ref(O_RDONLY);
+                        }
+                    }
+                }
             }
             Stream(_normalfile_filedesc_obj) => {
                 // no stream refs
@@ -1196,6 +1207,7 @@ impl Cage {
                 pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
             }
             Socket(ref mut socket_filedesc_obj) => {
+                // can do this for domainsockets and sockets
                 socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
             }
             Stream(ref mut stream_filedesc_obj) => {
@@ -1228,32 +1240,41 @@ impl Cage {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {}
                 Epoll(_) => {} //Epoll closing not implemented yet
-                Socket(ref socket_filedesc_obj) => {
+                Socket(ref mut socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
-                    let sockhandle = sock_tmp.write();
-                    let mut inodeopt = None;
-                    let mut pathopt = None;
-                    if let Some(ui) = &sockhandle.unix_info {
-                        inodeopt = Some(ui.inode);
-                        pathopt = Some(ui.reallocalpath.clone());
-                    }
-                    drop(sockhandle);
-                    if let Some(inodenum) = inodeopt {
-                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                    let mut sockhandle = sock_tmp.write();
+
+                    // we need to do the following if UDS
+                    if let Some (ref mut ui) = sockhandle.unix_info {
+                        let inodenum = ui.inode;
+                        if let Some(sendpipe) = ui.sendpipe.as_ref() {
+                            sendpipe.decr_ref(O_WRONLY);
+                            // we're closing the last write end, lets set eof
+                            if sendpipe.get_write_ref() == 0 { sendpipe.set_eof(); }
+                            //last reference, lets remove it
+                            if (sendpipe.get_write_ref() as u64)  + (sendpipe.get_read_ref() as u64)  == 0 { ui.sendpipe = None; }
+                        }
+                        if let Some(receivepipe) = ui.receivepipe.as_ref() {
+                            receivepipe.decr_ref(O_RDONLY);
+                            //last reference, lets remove it
+                            if (receivepipe.get_write_ref() as u64) + (receivepipe.get_read_ref() as u64)  == 0 { ui.receivepipe = None; }
+
+                        }
+                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
                         if let Inode::Socket(ref mut sock) = *inodeobj {
                             sock.refcount -= 1;
                             if sock.refcount == 0 {
                                 if sock.linkcount == 0 {
                                     drop(inodeobj);
+                                    let path = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
                                     FS_METADATA.inodetable.remove(&inodenum);
-                                    let truepath = pathopt.unwrap();
-                                    NET_METADATA.domain_socket_table.remove(&truepath);
+                                    NET_METADATA.domsock_paths.remove(&path);
                                 }
                             }
                         }
                     }
                 }
-                Pipe(pipe_filedesc_obj) => {   
+                Pipe(ref pipe_filedesc_obj) => {   
                     let pipe = &pipe_filedesc_obj.pipe;
                     pipe.decr_ref(pipe_filedesc_obj.flags);
 
@@ -1262,7 +1283,7 @@ impl Cage {
                         pipe.set_eof();
                     }
                 }
-                File(normalfile_filedesc_obj) => {
+                File(ref normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
@@ -1402,7 +1423,6 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    drop(filedesc_enum);
                     self._dup2_helper(fd, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
@@ -1760,6 +1780,8 @@ impl Cage {
                     drop(pardir_inodeobj);
                     log_metadata(&FS_METADATA, parent_inodenum);       
                 }
+                NET_METADATA.domsock_paths.insert(true_newpath);
+                NET_METADATA.domsock_paths.remove(&true_oldpath);
                 0 // success
             }
         }
@@ -1818,7 +1840,6 @@ impl Cage {
                     fileobject.close().unwrap();
                 }
 
-                drop(fileobject);
                 drop(maybe_fileobject);
 
                 normalfile_inode_obj.size = ulength;

@@ -1,7 +1,7 @@
 #![allow(dead_code)] //suppress warning for these functions not being used in targets other than the tests
 
 mod fs_tests;
-mod pipe_tests;
+mod ipc_tests;
 mod networking_tests;
 
 use crate::interface;
@@ -12,7 +12,7 @@ use crate::safeposix::{cage::*, filesystem::*};
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
     use crate::tests::fs_tests::fs_tests::test_fs;
-    use crate::tests::pipe_tests::pipe_tests::test_pipe;
+    use crate::tests::ipc_tests::ipc_tests::test_ipc;
 
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
     use crate::interface;
@@ -43,7 +43,7 @@ mod main_tests {
         net_tests();
         
         println!("PIPE TESTS");
-        test_pipe();
+        test_ipc();
     }   
 }
 

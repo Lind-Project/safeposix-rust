@@ -8,6 +8,8 @@ use crate::interface;
 pub const DEFAULT_HOSTNAME: &str = "Lind";
 pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
 
+pub const UDSOCK_CAPACITY: usize = 212992;
+
 // Define constants using static or const
 // Imported into net_calls file
 

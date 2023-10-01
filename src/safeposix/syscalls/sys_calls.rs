@@ -104,16 +104,36 @@ impl Cage {
                         pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
+                        // checking whether this is a domain socket
+                        let sock_tmp = socket_filedesc_obj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
+                        let socket_type = sockhandle.domain;
+                        if socket_type == AF_UNIX {
+                            if let Some(sockinfo) = &sockhandle.unix_info {
+                                if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
+                                    sendpipe.incr_ref(O_WRONLY);
+                                }
+                                if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                                    receivepipe.incr_ref(O_RDONLY);
+                                }
+                                if let Some(uinfo) = &mut sockhandle.unix_info {    
+                                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
+                                        sock.refcount += 1;
+                                    }
+                                }
+                            }
+                        }
+                        drop(sockhandle);
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
                         if let Some(uinfo) = &mut sockhandle.unix_info {
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
                                 sock.refcount += 1;
                             }
-                        }
-                    }
-                    _ => {}
+                       }
                 }
+                _ => {}
+            }
                 
                 let newfdobj = filedesc_enum.clone();
 
@@ -179,7 +199,6 @@ impl Cage {
             let childrefs = *refs;
             shment.attached_cages.insert(child_cageid, childrefs);
         }
-        drop(shmtable);
         interface::cagetable_insert(child_cageid, cageobj);
 
         0

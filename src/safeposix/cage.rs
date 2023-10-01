@@ -41,7 +41,7 @@ pub struct StreamDesc {
 pub struct SocketDesc {
     pub flags: i32,
     pub handle: interface::RustRfc<interface::RustLock<SocketHandle>>,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::RustRfc<interface::AdvisoryLock>,
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +88,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockGuard<Option<FileDescriptor>>>) {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockWriteGuard<Option<FileDescriptor>>>) {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -155,4 +155,13 @@ pub fn init_fdtable() -> FdTable {
         fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
     }
     fdtable
+}
+
+pub fn create_unix_sockpipes() -> (interface::RustRfc<interface::EmulatedPipe>, interface::RustRfc<interface::EmulatedPipe>) {
+
+    // do I have to check if the pipe2 failed and delete the first one somehow?
+    let pipe1 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
+    let pipe2 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
+
+    (pipe1, pipe2)
 }
