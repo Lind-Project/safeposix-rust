@@ -1263,13 +1263,14 @@ impl Cage {
             // 2. iterate thru writefds
             res = self.select_writefds(writefds, &mut new_writefds, &mut retval);
             if res != 0 {return res}
-           
-           // 3. iterate thru exceptfds
-           for fd in exceptfds.iter() {
-               //we say none of them ever have exceptional conditions
-               let unlocked_fd = self.filedescriptortable[*fd as usize].read();
-               if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
-           }
+            
+            // 3. iterate thru exceptfds
+            for fd in exceptfds.iter() {
+                //we say none of them ever have exceptional conditions
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let unlocked_fd = checkedfd.read();
+                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+            }
 
            if retval != 0 || interface::readtimer(start_time) > end_time {
                break;
@@ -1430,17 +1431,6 @@ impl Cage {
                         *retval += 1;
                     }
                 }
-            }
-            
-            for fd in exceptfds.iter() {
-                //we say none of them ever have exceptional conditions
-                let checkedfd = self.get_filedescriptor(*fd).unwrap();
-                let unlocked_fd = checkedfd.read();
-                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
-            }
-
-            if retval != 0 || interface::readtimer(start_time) > end_time {
-                break;
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
             }
