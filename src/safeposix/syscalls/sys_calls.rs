@@ -160,7 +160,8 @@ impl Cage {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
             let refs = shment.attached_cages.get(&self.cageid).unwrap();
-            shment.attached_cages.insert(child_cageid, *refs);
+            let childrefs = *refs;
+            shment.attached_cages.insert(child_cageid, childrefs);
         }
         drop(shmtable);
         interface::cagetable_insert(child_cageid, cageobj);
