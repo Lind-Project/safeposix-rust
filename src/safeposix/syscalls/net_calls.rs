@@ -1253,7 +1253,6 @@ impl Cage {
            None => interface::RustDuration::MAX
        };
  
-<<<<<<< HEAD
        let mut retval = 0; 
        loop { //we must block manually
            
@@ -1282,41 +1281,11 @@ impl Cage {
        *writefds = new_writefds;
        return retval;
     }
-=======
-        let mut retval = 0; 
-        loop { //we must block manually
-            for fd in readfds.iter() {
-                let checkedfd = self.get_filedescriptor(*fd).unwrap();
-                let mut unlocked_fd = checkedfd.write();
-                if let Some(filedesc_enum) = &mut *unlocked_fd {
-                    match filedesc_enum {
-                        Socket(ref mut sockfdobj) => {
-                            let sock_tmp = sockfdobj.handle.clone();
-                            let mut sockhandle = sock_tmp.write();
-
-                            if sockhandle.state == ConnState::LISTEN {
-                                if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
-
-                                    //innersock unwrap ok because sockhandle is listening
-                                    let listeningsocket = match sockhandle.domain {
-                                        PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                        PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                        _ => panic!("Unknown domain in accepting socket"),
-                                    };
-                                    drop(sockhandle);
-                                    if let Ok(_) = listeningsocket.0 {
-                                        //save the pending connection for accept to do something with it
-                                        vacant.insert(vec!(listeningsocket));
-                                    } else {
-                                        //if it returned an error, then don't insert it into new_readfds
-                                      continue;
-                                    }
-                                } //if it's already got a pending connection, add it!
->>>>>>> develop
 
     fn select_readfds(&self, readfds: &mut interface::RustHashSet<i32>, new_readfds: &mut interface::RustHashSet<i32>, retval: &mut i32) -> i32 {
         for fd in readfds.iter() {
-            let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+            let checkedfd = self.get_filedescriptor(*fd).unwrap();
+            let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
                 match filedesc_enum {
                     Socket(ref mut sockfdobj) => {
