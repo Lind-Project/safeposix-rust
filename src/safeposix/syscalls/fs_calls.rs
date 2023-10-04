@@ -1103,29 +1103,41 @@ impl Cage {
             None => STARTINGFD,
         };
 
+        if start_fd == fd { return start_fd; } //if the file descriptors are equal (which is not plausible here), return
+
+        // get the filedesc_enum
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let filedesc_enum = checkedfd.write();
+        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
+            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
+        };
+
         //checking whether the fd exists in the file table
-        return Self::_dup2_helper(&self, fd, start_fd, false)
+        return Self::_dup2_helper(&self, filedesc_enum, start_fd, false)
     }
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
-        //if the old fd exists, execute the helper, else return error
-        return Self::_dup2_helper(&self, oldfd, newfd, true);
-    }
-
-    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fromdup2: bool) -> i32 {
-        //checking if the new fd is out of range
-        if newfd >= MAXFD || newfd < 0 {
+         //checking if the new fd is out of range
+         if newfd >= MAXFD || newfd < 0 {
             return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
         }
 
+        if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
+
+        // get the filedesc_enum
         let checkedfd = self.get_filedescriptor(oldfd).unwrap();
         let filedesc_enum = checkedfd.write();
         let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         };
 
+        //if the old fd exists, execute the helper, else return error
+        return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+    }
+
+    pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
+       
         let (dupfd, mut dupfdguard) = if fromdup2 {
-            if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
             if fdguard.is_some() {
                 drop(fdguard);
@@ -1419,7 +1431,7 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    self._dup2_helper(fd, arg, false)
+                    self._dup2_helper(&filedesc_enum, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
