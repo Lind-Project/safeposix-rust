@@ -1409,7 +1409,6 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    drop(filedesc_enum);
                     self._dup2_helper(&filedesc_enum, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
