@@ -1107,13 +1107,11 @@ impl Cage {
             None => STARTINGFD,
         };
 
-        if start_fd == fd { return start_fd; } //if the file descriptors are equal (which is not plausible here), return
-
         // get the filedesc_enum
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let filedesc_enum = checkedfd.write();
         let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
-            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
+            return syscall_error(Errno::EBADF, "dup","Invalid old file descriptor.");
         };
 
         //checking whether the fd exists in the file table
@@ -1123,7 +1121,7 @@ impl Cage {
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
-           return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
+           return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
        }
 
        if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
