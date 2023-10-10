@@ -2522,7 +2522,9 @@ impl Cage {
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
-        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
@@ -2532,7 +2534,9 @@ impl Cage {
 
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
             if !semaphore.unlock() {
                 return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
             }
@@ -2575,7 +2579,9 @@ impl Cage {
     */
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
             return semaphore.get_value();
         }
         return syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")
@@ -2584,7 +2590,9 @@ impl Cage {
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
-        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
             if !semaphore.trylock() {
                 return syscall_error(Errno::EAGAIN, "sem_trywait", "The operation could not be performed without blocking");
             }
@@ -2604,7 +2612,9 @@ impl Cage {
         }
         let semtable = &self.sem_table;
         // Check whether semaphore exists
-        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
             if !semaphore.timedlock(time) {
                 return syscall_error(Errno::ETIMEDOUT, "sem_timedwait", "The call timed out before the semaphore could be locked");
             }
