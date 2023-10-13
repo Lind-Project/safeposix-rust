@@ -1146,7 +1146,7 @@ impl Cage {
                 drop(fdguard);
                 //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
                 let close_result = Self::_close_helper_inner(&self, newfd);
-                // mirror the implementation of linxu, ignore the potential error of the close here
+                // mirror the implementation of linux, ignore the potential error of the close here
             } else { drop(fdguard); }
             fdguard = self.filedescriptortable[newfd as usize].write();
 
