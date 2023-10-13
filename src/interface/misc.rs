@@ -38,10 +38,6 @@ pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
 
-pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
-    RustAtomicBool::new(false)
-});
-
 use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
