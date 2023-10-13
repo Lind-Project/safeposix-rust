@@ -1107,6 +1107,8 @@ impl Cage {
             None => STARTINGFD,
         };
 
+        if start_fd == fd { return start_fd; } //if the file descriptors are equal, return the new one
+
         // get the filedesc_enum
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let filedesc_enum = checkedfd.write();
@@ -1144,9 +1146,7 @@ impl Cage {
                 drop(fdguard);
                 //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
                 let close_result = Self::_close_helper_inner(&self, newfd);
-                if close_result < 0 {
-                    return close_result;
-                }
+                // mirror the implementation of linxu, ignore the potential error of the close here
             } else { drop(fdguard); }
             fdguard = self.filedescriptortable[newfd as usize].write();
 
