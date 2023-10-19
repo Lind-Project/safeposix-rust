@@ -368,7 +368,7 @@ impl Cage {
         sockhandle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
         sockhandle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
     
-        let connvar = if sockfdobj.flags & O_NONBLOCK != 0 { 
+        let connvar = if sockfdobj.flags & O_NONBLOCK == 0 { 
             Some(interface::RustRfc::new(ConnCondVar::new()))
         } else { None };
     
@@ -384,7 +384,7 @@ impl Cage {
         };
         NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
         sockhandle.state = ConnState::CONNECTED;
-        if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
+        if sockfdobj.flags & O_NONBLOCK == 0 { connvar.unwrap().wait(); }
         return 0; 
     }
     
@@ -1295,6 +1295,16 @@ impl Cage {
 
                         match sockhandle.domain {
                             AF_UNIX => {
+                                if sockhandle.state == ConnState::LISTEN {
+                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
+                                    if dsconnobj.is_some() { 
+                                        // we have a connecting domain socket, return as readable to be accepted
+                                        new_readfds.insert(*fd);
+                                        *retval += 1;                
+                                    }
+                                }
+
                                 if sockhandle.state == ConnState::INPROGRESS {
                                     let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
