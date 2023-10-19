@@ -1232,8 +1232,6 @@ impl Cage {
         }
     }
 
-    //TODO: handle pipes
-    // NEED REFACTOR
     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
        //exceptfds and writefds are not really implemented at the current moment.
        //They both always return success. However we have some intention of making
@@ -1296,8 +1294,8 @@ impl Cage {
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
-                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
+                                    let localpathbuf = convpath(sockhandle.localaddr.unwrap().path().clone());
+                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
                                         new_readfds.insert(*fd);
@@ -1369,7 +1367,6 @@ impl Cage {
                     //we don't support selecting streams
                     Stream(_) => {continue;}
 
-                    //not supported yet
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_read() {
                             new_readfds.insert(*fd);
@@ -1427,7 +1424,6 @@ impl Cage {
                         *retval += 1;
                     }
 
-                    //not supported yet
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_write() {
                             new_writefds.insert(*fd);
