@@ -1294,7 +1294,7 @@ impl Cage {
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let localpathbuf = convpath(sockhandle.localaddr.unwrap().path().clone());
+                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
@@ -1304,7 +1304,7 @@ impl Cage {
                                 }
 
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                    let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path().clone()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                     if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
                                 }
