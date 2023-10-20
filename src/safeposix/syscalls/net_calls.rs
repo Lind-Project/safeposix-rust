@@ -368,7 +368,7 @@ impl Cage {
         sockhandle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
         sockhandle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
     
-        let connvar = if sockfdobj.flags & O_NONBLOCK != 0 { 
+        let connvar = if sockfdobj.flags & O_NONBLOCK == 0 { 
             Some(interface::RustRfc::new(ConnCondVar::new()))
         } else { None };
     
@@ -384,7 +384,7 @@ impl Cage {
         };
         NET_METADATA.domsock_accept_table.insert(remotepathbuf, entry);
         sockhandle.state = ConnState::CONNECTED;
-        if sockfdobj.flags & O_NONBLOCK != 0 { connvar.unwrap().wait(); }
+        if sockfdobj.flags & O_NONBLOCK == 0 { connvar.unwrap().wait(); }
         return 0; 
     }
     
@@ -1232,8 +1232,6 @@ impl Cage {
         }
     }
 
-    //TODO: handle pipes
-    // NEED REFACTOR
     pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
        //exceptfds and writefds are not really implemented at the current moment.
        //They both always return success. However we have some intention of making
@@ -1298,8 +1296,18 @@ impl Cage {
 
                         match sockhandle.domain {
                             AF_UNIX => {
+                                if sockhandle.state == ConnState::LISTEN {
+                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
+                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
+                                    if dsconnobj.is_some() { 
+                                        // we have a connecting domain socket, return as readable to be accepted
+                                        new_readfds.insert(*fd);
+                                        *retval += 1;                
+                                    }
+                                }
+
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                    let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path().clone()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                     if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
                                 }
@@ -1362,7 +1370,6 @@ impl Cage {
                     //we don't support selecting streams
                     Stream(_) => {continue;}
 
-                    //not supported yet
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_read() {
                             new_readfds.insert(*fd);
@@ -1420,7 +1427,6 @@ impl Cage {
                         *retval += 1;
                     }
 
-                    //not supported yet
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_write() {
                             new_writefds.insert(*fd);
