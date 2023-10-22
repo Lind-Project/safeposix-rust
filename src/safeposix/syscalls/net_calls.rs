@@ -1906,9 +1906,9 @@ impl Cage {
         
         // create 2 file discriptors
         let sock1fdobj = this._socket_initializer(domain, socktype, protocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-        let sock1fd = this._socket_inserter(Socket(sock1fdobj));
+        let sock1fd = this._socket_inserter(Socket(sock1fdobj.clone()));
         let sock2fdobj = this._socket_initializer(domain, socktype, protocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
-        let sock2fd = this._socket_inserter(Socket(sock2fdobj));
+        let sock2fd = this._socket_inserter(Socket(sock2fdobj.clone()));
 
         // assign local addresses and connect
         let mut sock1handle = sock1fdobj.handle.clone().write();
@@ -1932,6 +1932,9 @@ impl Cage {
         // now they are connected
         sock1handle.state = ConnState::CONNECTED;
         sock2handle.state = ConnState::CONNECTED;
+
+        sv.sock1 = sock1fd;
+        sv.sock2 = sock2fd;
 
         // we need to increment the refcount of the sockets we created
         // reason: in bind_inner_socket, we added entries to the inode table, 
