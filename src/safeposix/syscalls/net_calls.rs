@@ -1914,7 +1914,7 @@ impl Cage {
         let mut sock1handle = sock1fdobj.handle.clone().write();
         let mut sock2handle = sock2fdobj.handle.clone().write();
         let localaddr1 = Self::assign_new_addr_unix(&sock1handle);
-        let localaddr2 = Self::assign_new_addr_unix(&sock2handle)
+        let localaddr2 = Self::assign_new_addr_unix(&sock2handle);
         this.bind_inner_socket(&mut *sock1handle, &localaddr1, false);
         this.bind_inner_socket(&mut *sock2handle, &localaddr2, false);
 
