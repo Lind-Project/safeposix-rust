@@ -1911,8 +1911,10 @@ impl Cage {
         let sock2fd = this._socket_inserter(Socket(sock2fdobj.clone()));
 
         // assign local addresses and connect
-        let mut sock1handle = sock1fdobj.handle.clone().write();
-        let mut sock2handle = sock2fdobj.handle.clone().write();
+        let  sock1tmp = sock1fdobj.handle.clone();
+        let  sock2tmp = sock2fdobj.handle.clone();
+        let mut sock1handle = sock1tmp.write();
+        let mut sock2handle = sock2tmp.write();
         let localaddr1 = Self::assign_new_addr_unix(&sock1handle);
         let localaddr2 = Self::assign_new_addr_unix(&sock2handle);
         this.bind_inner_socket(&mut *sock1handle, &localaddr1, false);
