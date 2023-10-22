@@ -1894,139 +1894,183 @@ impl Cage {
     // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
     // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
     pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
-        if domain == AF_UNIX && socktype != SOCK_STREAM && protocol != IPPROTO_TCP {
-            return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Unix domain sockets are only supported for TCP")
+        // firstly check the parameters
+        if domain != AF_UNIX {
+            return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Linux socketpair only supports AF_UNIX aka AF_LOCAL domain.")
+        } else if socktype & 0x7 != SOCK_STREAM || (protocol != 0 && protocol != IPPROTO_TCP) {
+            return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Socketpair currently only supports SOCK_STREAM TCP.")
         }
 
-        let sock1fd = this.socket_syscall(domain, socktype, protocol);
-        if sock1fd < 0 {return sock1fd;}
+        let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
+        let cloexec = (socktype & SOCK_CLOEXEC) != 0;
+        
+        // create 2 file discriptors
+        let sock1fdobj = this._socket_initializer(domain, socktype, protocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+        let sock1fd = this._socket_inserter(Socket(sock1fdobj));
+        let sock2fdobj = this._socket_initializer(domain, socktype, protocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+        let sock2fd = this._socket_inserter(Socket(sock2fdobj));
 
-        // We set SO_REUSEADDR for socketpair because otherwise, after the sockets are closed, they
-        // can get into a TIME_WAIT state which makes the sockets unusable for 60 seconds--however
-        // because socketpair is local we don't need such a timeout for the peer to tell the socket
-        // has closed, so we set SO_REUSEADDR to allow rebinding--this prevents the case where if
-        // lind closes and is restarted within 60 seconds, it fails to bind a socket created via
-        // socketpair.
-        let setsockopt_res1 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
-        if setsockopt_res1 != 0 { //this should really only happen with ENOMEM/ENOBUFS
-            this.close_syscall(sock1fd);
-            return setsockopt_res1;
-        }
-        let sock2fd = this.socket_syscall(domain, socktype, protocol);
-        if sock2fd < 0 {
-            this.close_syscall(sock1fd);
-            return sock2fd;
-        }
-        let setsockopt_res2 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
-        if setsockopt_res2 != 0 { //this should really only happen with ENOMEM/ENOBUFS
-            this.close_syscall(sock2fd);
-            this.close_syscall(sock1fd);
-            return setsockopt_res2;
-        }
-    
-        let portlessaddr = if domain == AF_INET {
-            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
-            let innersockaddr = interface::SockaddrV4{sin_family: domain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
-            interface::GenSockaddr::V4(innersockaddr)
-        } else if domain == AF_INET6 {
-            let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
-            let innersockaddr = interface::SockaddrV6{sin6_family: domain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
-            interface::GenSockaddr::V6(innersockaddr)
-        } else if domain == AF_UNIX {
-            let path = interface::gen_ud_path();
-            interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()))
-        } else {
-            unreachable!();
-        };
-    
-        match socktype {
-            SOCK_STREAM => {
-                let bindret = this.bind_inner(sock1fd, &portlessaddr, false); //len assigned arbitrarily large value
-                if bindret != 0 {
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return bindret;
-                }
+        // assign local addresses and connect
+        let mut sock1handle = sock1fdobj.handle.clone().write();
+        let mut sock2handle = sock2fdobj.handle.clone().write();
+        let localaddr1 = Self::assign_new_addr_unix(&sock1handle);
+        let localaddr2 = Self::assign_new_addr_unix(&sock2handle)
+        this.bind_inner_socket(&mut *sock1handle, &localaddr1, false);
+        this.bind_inner_socket(&mut *sock2handle, &localaddr2, false);
 
-                let mut bound_addr = portlessaddr.clone();
-                this.getsockname_syscall(sock1fd, &mut bound_addr);
-        
-                let listenret = this.listen_syscall(sock1fd, 1);
-                if listenret != 0 {
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return listenret;
-                }
+        // setup the pipes
+        let (pipe1, pipe2) = create_unix_sockpipes();
+        // one handle's remote address is the other's local address
+        sock1handle.remoteaddr = Some(localaddr2.clone());
+        sock2handle.remoteaddr = Some(localaddr1.clone());
+        // one handle's sendpipe is the other's receivepipe
+        sock1handle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
+        sock1handle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
+        sock2handle.unix_info.as_mut().unwrap().sendpipe = Some(pipe2.clone());
+        sock2handle.unix_info.as_mut().unwrap().receivepipe = Some(pipe1.clone());
 
+        // now they are connected
+        sock1handle.state = ConnState::CONNECTED;
+        sock2handle.state = ConnState::CONNECTED;
 
-                let connret = this.connect_syscall(sock2fd, &bound_addr);
-                if connret < 0 {
-                    let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(i) => i,
-                        Err(()) => panic!("Unknown errno value from connect within socketpair returned!"),
-                    };
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return syscall_error(sockerrno, "socketpair", "The libc call to connect within socketpair failed!");
-                }
-        
-                let mut garbage_addr = portlessaddr.clone();
-                let accret = this.accept_syscall(sock1fd, &mut garbage_addr);
-                if accret < 0 {
-                    let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(i) => i,
-                        Err(()) => panic!("Unknown errno value from accept within socketpair returned!"),
-                    };
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return syscall_error(sockerrno, "socketpair", "The libc call to accept within socketpair failed!");
-                }
-                this.close_syscall(sock1fd);
-        
-                sv.sock1 = sock2fd;
-                sv.sock2 = accret;
-            }
-            SOCK_DGRAM => {
-                let bind1ret = this.bind_inner(sock1fd, &portlessaddr, false); //arbitrarily large length given
-                if bind1ret < 0 {
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return bind1ret;
-                }
-        
-                let bind2ret = this.bind_inner(sock2fd, &portlessaddr, false); //arbitrarily large length given
-                if bind2ret < 0 {
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return bind2ret;
-                }
+        // we need to increment the refcount of the sockets we created
+        // reason: in bind_inner_socket, we added entries to the inode table, 
 
-                let mut bound1addr = portlessaddr.clone();
-                let mut bound2addr = portlessaddr.clone();
-                this.getsockname_syscall(sock1fd, &mut bound1addr);
-                this.getsockname_syscall(sock2fd, &mut bound2addr);
-        
-                let conn1ret = this.connect_syscall(sock1fd, &bound2addr);
-                if conn1ret < 0 {
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return conn1ret;
-                }
-        
-                let conn2ret = this.connect_syscall(sock2fd, &bound1addr);
-                if conn2ret < 0 {
-                    this.close_syscall(sock1fd);
-                    this.close_syscall(sock2fd);
-                    return conn2ret;
-                }
-                sv.sock1 = sock1fd;
-                sv.sock2 = sock2fd;
-            }
-            _ => {
-                unreachable!();
-            }
-        }
         return 0;
+        
+        // if domain == AF_UNIX && socktype != SOCK_STREAM && protocol != IPPROTO_TCP {
+        //     return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Unix domain sockets are only supported for TCP")
+        // }
+
+        // let sock1fd = this.socket_syscall(domain, socktype, protocol);
+        // if sock1fd < 0 {return sock1fd;}
+
+        // // We set SO_REUSEADDR for socketpair because otherwise, after the sockets are closed, they
+        // // can get into a TIME_WAIT state which makes the sockets unusable for 60 seconds--however
+        // // because socketpair is local we don't need such a timeout for the peer to tell the socket
+        // // has closed, so we set SO_REUSEADDR to allow rebinding--this prevents the case where if
+        // // lind closes and is restarted within 60 seconds, it fails to bind a socket created via
+        // // socketpair.
+        // let setsockopt_res1 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
+        // if setsockopt_res1 != 0 { //this should really only happen with ENOMEM/ENOBUFS
+        //     this.close_syscall(sock1fd);
+        //     return setsockopt_res1;
+        // }
+        // let sock2fd = this.socket_syscall(domain, socktype, protocol);
+        // if sock2fd < 0 {
+        //     this.close_syscall(sock1fd);
+        //     return sock2fd;
+        // }
+        // let setsockopt_res2 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
+        // if setsockopt_res2 != 0 { //this should really only happen with ENOMEM/ENOBUFS
+        //     this.close_syscall(sock2fd);
+        //     this.close_syscall(sock1fd);
+        //     return setsockopt_res2;
+        // }
+    
+        // let portlessaddr = if domain == AF_INET {
+        //     let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
+        //     let innersockaddr = interface::SockaddrV4{sin_family: domain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
+        //     interface::GenSockaddr::V4(innersockaddr)
+        // } else if domain == AF_INET6 {
+        //     let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
+        //     let innersockaddr = interface::SockaddrV6{sin6_family: domain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
+        //     interface::GenSockaddr::V6(innersockaddr)
+        // } else if domain == AF_UNIX {
+        //     let path = interface::gen_ud_path();
+        //     interface::GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()))
+        // } else {
+        //     unreachable!();
+        // };
+    
+        // match socktype {
+        //     SOCK_STREAM => {
+        //         let bindret = this.bind_inner(sock1fd, &portlessaddr, false); //len assigned arbitrarily large value
+        //         if bindret != 0 {
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return bindret;
+        //         }
+
+        //         let mut bound_addr = portlessaddr.clone();
+        //         this.getsockname_syscall(sock1fd, &mut bound_addr);
+        
+        //         let listenret = this.listen_syscall(sock1fd, 1);
+        //         if listenret != 0 {
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return listenret;
+        //         }
+
+
+        //         let connret = this.connect_syscall(sock2fd, &bound_addr);
+        //         if connret < 0 {
+        //             let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
+        //                 Ok(i) => i,
+        //                 Err(()) => panic!("Unknown errno value from connect within socketpair returned!"),
+        //             };
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return syscall_error(sockerrno, "socketpair", "The libc call to connect within socketpair failed!");
+        //         }
+        
+        //         let mut garbage_addr = portlessaddr.clone();
+        //         let accret = this.accept_syscall(sock1fd, &mut garbage_addr);
+        //         if accret < 0 {
+        //             let sockerrno = match Errno::from_discriminant(interface::get_errno()) {
+        //                 Ok(i) => i,
+        //                 Err(()) => panic!("Unknown errno value from accept within socketpair returned!"),
+        //             };
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return syscall_error(sockerrno, "socketpair", "The libc call to accept within socketpair failed!");
+        //         }
+        //         this.close_syscall(sock1fd);
+        
+        //         sv.sock1 = sock2fd;
+        //         sv.sock2 = accret;
+        //     }
+        //     SOCK_DGRAM => {
+        //         let bind1ret = this.bind_inner(sock1fd, &portlessaddr, false); //arbitrarily large length given
+        //         if bind1ret < 0 {
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return bind1ret;
+        //         }
+        
+        //         let bind2ret = this.bind_inner(sock2fd, &portlessaddr, false); //arbitrarily large length given
+        //         if bind2ret < 0 {
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return bind2ret;
+        //         }
+
+        //         let mut bound1addr = portlessaddr.clone();
+        //         let mut bound2addr = portlessaddr.clone();
+        //         this.getsockname_syscall(sock1fd, &mut bound1addr);
+        //         this.getsockname_syscall(sock2fd, &mut bound2addr);
+        
+        //         let conn1ret = this.connect_syscall(sock1fd, &bound2addr);
+        //         if conn1ret < 0 {
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return conn1ret;
+        //         }
+        
+        //         let conn2ret = this.connect_syscall(sock2fd, &bound1addr);
+        //         if conn2ret < 0 {
+        //             this.close_syscall(sock1fd);
+        //             this.close_syscall(sock2fd);
+        //             return conn2ret;
+        //         }
+        //         sv.sock1 = sock1fd;
+        //         sv.sock2 = sock2fd;
+        //     }
+        //     _ => {
+        //         unreachable!();
+        //     }
+        // }
+        // return 0;
     }
 
     // all this does is send the net_devs data in a string to libc, where we will later parse and 
