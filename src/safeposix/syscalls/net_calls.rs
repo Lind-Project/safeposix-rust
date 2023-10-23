@@ -1941,11 +1941,11 @@ impl Cage {
         
         // we need to increment the refcount of the sockets we created
         // reason: in bind_inner_socket, we added entries to the inode table
-        let inode1num = sock1handle.unix_info.unwrap().inode;
+        let inode1num = sock1handle.unix_info.as_mut().unwrap().inode;
         if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inode1num).unwrap()) { 
             sock.refcount += 1; 
         }
-        let inode2num = sock2handle.unix_info.unwrap().inode;
+        let inode2num = sock2handle.unix_info.as_mut().unwrap().inode;
         if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inode2num).unwrap()) { 
             sock.refcount += 1; 
         }
