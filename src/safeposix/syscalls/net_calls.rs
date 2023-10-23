@@ -1894,10 +1894,11 @@ impl Cage {
     // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
     // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
     pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
+        let newprotocol = if protocol == 0 {IPPROTO_TCP} else {protocol};
         // firstly check the parameters
         if domain != AF_UNIX {
             return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Linux socketpair only supports AF_UNIX aka AF_LOCAL domain.")
-        } else if socktype & 0x7 != SOCK_STREAM || (protocol != 0 && protocol != IPPROTO_TCP) {
+        } else if socktype & 0x7 != SOCK_STREAM || newprotocol != IPPROTO_TCP {
             return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Socketpair currently only supports SOCK_STREAM TCP.")
         }
 
@@ -1905,9 +1906,9 @@ impl Cage {
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
         
         // create 2 file discriptors
-        let sock1fdobj = this._socket_initializer(domain, socktype, protocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+        let sock1fdobj = this._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
         let sock1fd = this._socket_inserter(Socket(sock1fdobj.clone()));
-        let sock2fdobj = this._socket_initializer(domain, socktype, protocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
+        let sock2fdobj = this._socket_initializer(domain, socktype, newprotocol, nonblocking, cloexec, ConnState::NOTCONNECTED);
         let sock2fd = this._socket_inserter(Socket(sock2fdobj.clone()));
 
         // assign local addresses and connect
@@ -1937,9 +1938,10 @@ impl Cage {
 
         sv.sock1 = sock1fd;
         sv.sock2 = sock2fd;
-
+        
         // we need to increment the refcount of the sockets we created
-        // reason: in bind_inner_socket, we added entries to the inode table, 
+        // reason: in bind_inner_socket, we added entries to the inode table
+
 
         return 0;
         
