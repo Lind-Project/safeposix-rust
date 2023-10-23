@@ -985,7 +985,7 @@ pub mod net_tests {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
-        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
+        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair), 0);
         let cage2 = cage.clone();
 
         let thread = interface::helper_thread(move || {
@@ -1020,44 +1020,7 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
-        // end of the TCP test
-
-        socketpair = interface::SockPair::default();
-        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_DGRAM, 0, &mut socketpair), 0);
-
-        let cage2 = cage.clone();
-        let thread = interface::helper_thread(move || {
-            let mut buf = sizecbuf(10);
-            loop {
-                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
-                if result == -libc::EINTR {
-                    continue; // if the error was EINTR, retry the syscall
-                }
-                break;
-            }
-            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
-
-            interface::sleep(interface::RustDuration::from_millis(30));
-            assert_eq!(cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0), 15);
-        });
-
-        assert_eq!(cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
-
-        let mut buf2 = sizecbuf(15);
-        loop {
-            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-            if result != -libc::EINTR {
-                break; // if the error was EINTR, retry the syscall
-            }
-        }
-        assert_eq!(cbuf2str(&buf2), "Socketpair Test");
-
-        thread.join().unwrap();
-
-        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
-        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
-
-        //end of the UDP test
+        // end of the socket pair test (note we are only supporting AF_UNIX and TCP)
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
