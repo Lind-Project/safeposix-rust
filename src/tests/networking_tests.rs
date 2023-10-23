@@ -985,7 +985,7 @@ pub mod net_tests {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
-        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair), 0);
+        assert_eq!(Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair), 0);
         let cage2 = cage.clone();
 
         let thread = interface::helper_thread(move || {
