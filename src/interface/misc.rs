@@ -30,7 +30,7 @@ use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
 use std::sync::LazyLock;
 
-pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
@@ -126,7 +126,7 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
-    if TEST.load(RustAtomicOrdering::Relaxed) { return; }
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return; } // we don't use this when testing rustposix standalone
     
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
