@@ -34,7 +34,7 @@ pub use std::sync::LazyLock;
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
 
-pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
@@ -138,7 +138,7 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
-    if TEST.load(RustAtomicOrdering::Relaxed) { return; }
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return; }
 
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
@@ -149,7 +149,7 @@ pub fn cancelpoint(cageid: u64) {
 }
 
 pub fn sigcheck(cageid: u64) -> bool {
-    if TEST.load(RustAtomicOrdering::Relaxed) { return false; }
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
 
     let cage = cagetable_getref(cageid);
     let pthread_id = get_pthreadid();

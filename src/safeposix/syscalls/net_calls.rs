@@ -1585,7 +1585,7 @@ impl Cage {
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
 
-                    // check if any of the registered fds were closed, remove them if so
+                    // check if any of the registered fds were closed, add them to remove list
                     let checkedregfd = self.get_filedescriptor(key).unwrap();
                     let unlocked_regfd = checkedregfd.read();
                     if unlocked_regfd.is_none() { 
@@ -1612,7 +1612,7 @@ impl Cage {
                   num_events += 1;
                 }
 
-                for fd in rm_fds_vec.iter() { epollfdobj.registered_fds.remove(fd); }
+                for fd in rm_fds_vec.iter() { epollfdobj.registered_fds.remove(fd); } // remove closed fds
 
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 let pollret = Self::poll_syscall(&self, poll_fds_slice, timeout);
