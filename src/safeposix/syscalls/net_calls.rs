@@ -1580,14 +1580,14 @@ impl Cage {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
                 }
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
-                let rm_fds_vec: Vec<i32> = vec![];
+                let mut rm_fds_vec: Vec<i32> = vec![];
                 let mut num_events: usize = 0;
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
 
                     // check if any of the registered fds were closed, remove them if so
                     let checkedregfd = self.get_filedescriptor(key).unwrap();
-                    let mut unlocked_regfd = checkedfd.read();
+                    let unlocked_regfd = checkedregfd.read();
                     if unlocked_regfd.is_none() { 
                         rm_fds_vec.push(key);
                         continue;
