@@ -446,12 +446,10 @@ impl Cage {
             options: options,
             state: conn,
             protocol: protocol,
-            
             domain: domain,
             last_peek: interface::RustDeque::new(),
             localaddr: None,
             remoteaddr: None,
-
             unix_info: None,
             socktype: socktype,
             sndbuf: 131070, //buffersize, which is only used by getsockopt
@@ -1016,16 +1014,10 @@ impl Cage {
         return 0;
     }
 
-    //calls accept on the socket object with value depending on ipv4 or ipv6
-    //There may be a bug with nonblocking accept with fds not being removed on error
-    // NEED REFACTOR
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-
-            //we need to reserve this fd early to make sure that we don't need to
-            //error out later so we perform get_next_fd, and populate it at the end
 
             let (newfd, guardopt) = self.get_next_fd(None);
             if newfd < 0 { return fd }
