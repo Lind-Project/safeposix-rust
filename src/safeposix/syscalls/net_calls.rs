@@ -57,10 +57,6 @@ impl Cage {
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
-        if nonblocking {
-            return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to create a non-blocking socket, which we don't yet support");
-        }
-
         match real_socktype {
 
             SOCK_STREAM => {
@@ -145,13 +141,9 @@ impl Cage {
             _ => {return syscall_error(Errno::EINVAL, "bind", "Unsupported domain provided");}
         };
 
-        if res != 0 {
-            return res; // some error occured
-        }
-
         sockhandle.localaddr = Some(newsockaddr);
     
-        0
+        res
     }
     
     fn bind_inner_socket_unix(&self, sockhandle: &mut SocketHandle, newsockaddr: &mut interface::GenSockaddr) -> i32 {
