@@ -9,36 +9,11 @@ pub mod ipc_tests {
 
     //#[test]
     pub fn test_ipc() {
-        // These can't really run until we figure out a better testing system/fsutils
-        //ut_lind_ipc_pipefile();
-        //ut_lind_ipc_pipe();
+        ut_lind_ipc_pipe();
         ut_lind_ipc_domain_socket();
         ut_lind_ipc_socketpair(); 
     }
 
-
-    pub fn ut_lind_ipc_pipefile() {
-        let byte_chunk: usize = 131072;
-        let num_writes: usize = 8192;
-
-        lindrustinit(0);
-
-        let cage = interface::cagetable_getref(1);
-
-
-        let filefd = cage.open_syscall("test1gb.txt", O_CREAT | O_WRONLY, S_IRWXA);
-
-        let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
-        let bufptr = buf.as_mut_ptr();
-
-        for _i in 0..num_writes {
-            cage.write_syscall(filefd, bufptr, byte_chunk);
-        }
-
-        assert_eq!(cage.close_syscall(filefd), 0);
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
     pub fn ut_lind_ipc_pipe() {
 
         let byte_chunk: usize = 131072;
@@ -83,18 +58,15 @@ pub mod ipc_tests {
         assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
         assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
 
-        let filefd = cage1.open_syscall("test1gb.txt", O_RDONLY, S_IRWXA);
-
         for _i in 0..num_writes {
 
-            let mut buf: Vec<u8> = Vec::with_capacity(byte_chunk);
+            let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
             let bufptr = buf.as_mut_ptr();
             buf.resize(byte_chunk, 0);
 
             cage1.read_syscall(filefd, bufptr, byte_chunk);
             cage1.write_syscall(1, bufptr, byte_chunk);
         }
-        assert_eq!(cage1.close_syscall(filefd), 0);
 
         assert_eq!(cage1.close_syscall(1), 0);
 

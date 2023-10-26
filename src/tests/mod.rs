@@ -40,7 +40,7 @@ mod main_tests {
         println!("NET TESTS");
         net_tests();
         
-        println!("PIPE TESTS");
+        println!("IPC TESTS");
         test_ipc();
     }   
 }

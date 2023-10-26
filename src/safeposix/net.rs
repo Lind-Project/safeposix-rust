@@ -81,18 +81,14 @@ pub struct UnixSocketInfo {
 #[derive(Debug)]
 pub struct SocketHandle {
     pub innersocket: Option<interface::Socket>,
-
     pub options: i32,
     pub state: ConnState,
     pub protocol: i32,
     pub domain: i32,
-
     pub last_peek: interface::RustDeque<u8>,
     pub localaddr: Option<interface::GenSockaddr>,
     pub remoteaddr: Option<interface::GenSockaddr>,
-
     pub unix_info: Option<UnixSocketInfo>,
-
     pub socktype: i32,
     pub sndbuf: i32,
     pub rcvbuf: i32,
