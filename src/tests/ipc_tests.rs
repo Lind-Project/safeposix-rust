@@ -63,8 +63,6 @@ pub mod ipc_tests {
             let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
             let bufptr = buf.as_mut_ptr();
             buf.resize(byte_chunk, 0);
-
-            cage1.read_syscall(filefd, bufptr, byte_chunk);
             cage1.write_syscall(1, bufptr, byte_chunk);
         }
 
