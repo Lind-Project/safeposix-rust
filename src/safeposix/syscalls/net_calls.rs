@@ -12,8 +12,8 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
 impl Cage {
-    fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool, conn: ConnState) -> SocketDesc {
-        let flags = if blocking {O_NONBLOCK} else {0} | if cloexec {O_CLOEXEC} else {0};
+    fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, nonblocking: bool, cloexec: bool, conn: ConnState) -> SocketDesc {
+        let flags = if nonblocking {O_NONBLOCK} else {0} | if cloexec {O_CLOEXEC} else {0};
 
 
         let sockfd = SocketDesc {
