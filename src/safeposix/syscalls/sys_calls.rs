@@ -365,18 +365,18 @@ impl Cage {
         if let Some(some_set) = set {
             let curr_sigset = sigset.load(interface::RustAtomicOrdering::Relaxed);
             res = match how {
-                0 => { // Block signals in set
+                SIG_BLOCK => { // Block signals in set
                     sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
-                1 => { // Unblock signals in set
+                SIG_UNBLOCK => { // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
                     let pendingsignals = curr_sigset & some_set;
                     sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
                     self.send_pending_signals(pendingsignals, pthreadid);
                     0
                 },
-                2 => { // Set sigset to set
+                SIG_SETMASK => { // Set sigset to set
                     sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
@@ -388,7 +388,7 @@ impl Cage {
 
     pub fn setitimer_syscall(&self, which: i32, new_value: Option<& interface::ITimerVal>, old_value: Option<&mut interface::ITimerVal>) -> i32 {
         match which {
-            0 => { // ITMER_REAL
+            ITIMER_REAL => { 
                 if let Some(some_old_value) = old_value {
                     let (curr_duration, next_duration) = self.interval_timer.get_itimer();
                     some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;

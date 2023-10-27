@@ -119,7 +119,7 @@ impl IntervalTimer {
                 }
             }
 
-            thread::sleep(RustDuration::from_millis(1)); // One jiffy
+            thread::sleep(RustDuration::from_millis(20)); // One jiffy
         }
     }
 
