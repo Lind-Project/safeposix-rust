@@ -16,8 +16,8 @@ pub mod ipc_tests {
 
     pub fn ut_lind_ipc_pipe() {
 
-        let byte_chunk: usize = 131072;
-        let num_writes: usize = 8192;
+        let byte_chunk: usize = 131072; // 128 KB
+        let num_writes: usize = 8192; // 8 KB 
 
         lindrustinit(0);
 

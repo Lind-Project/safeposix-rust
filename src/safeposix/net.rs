@@ -28,8 +28,8 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             pending_conn_table: interface::RustHashMap::new(),
-            domsock_accept_table: interface::RustHashMap::new(),
-            domsock_paths: interface::RustHashSet::new()
+            domsock_accept_table: interface::RustHashMap::new(), // manages domain socket connection process
+            domsock_paths: interface::RustHashSet::new() // set of all currently bound domain sockets
         })
     ); //we want to check if fs exists before doing a blank init, but not for now
 

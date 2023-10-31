@@ -777,10 +777,9 @@ pub mod net_tests {
                     let mut recvresult :i32;
                     loop {
                         recvresult = cage.recv_syscall(sock, buf.as_mut_ptr(), 4, 0);
-                        if recvresult == -libc::EINTR {
-                            continue; // if the error was EINTR, retry the syscall
+                        if recvresult != -libc::EINTR {
+                            break; // if the error was EINTR, retry the syscall
                         }
-                        break;
                     }
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
@@ -1007,10 +1006,9 @@ pub mod net_tests {
         let mut buf2 = sizecbuf(15);
         loop {
             let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-            if result == -libc::EINTR {
-                continue; // if the error was EINTR, retry the syscall
+            if result != -libc::EINTR {
+                break; // if the error was EINTR, retry the syscall
             }
-            break;
         }
         let str2 = cbuf2str(&buf2);
         assert_eq!(str2, "Socketpair Test");

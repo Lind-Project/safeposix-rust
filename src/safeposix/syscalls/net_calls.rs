@@ -683,6 +683,7 @@ impl Cage {
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft { return (buflen - buflenleft) as i32; }
                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
+                        // with blocking sockets, we return EAGAIN here to check for cancellation, then return to reading
                         if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
                             // if the cancel status is set in the cage, we trap around a cancel point
                             // until the individual thread is signaled to cancel itself
