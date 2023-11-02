@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
@@ -25,6 +25,8 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
+use crate::interface;
+use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
 
 const MAXCAGEID: i32 = 1024;
@@ -179,11 +181,24 @@ pub struct AdvisoryLock {
     advisory_condvar: Condvar
 }
 
+/*
+* AdvisoryLock is used to implement advisory locking for files.
+* Specifically, it is used by the flock syscall.
+* If works as follows: The underying mutex has a guard value associated with it.
+* A guard value of zero indicates that it is unlocked.
+* In case an exclusive lock is held, the guard value is set to -1.
+* In case a shared lock is held, the guard value is incremented by 1.
+*/
 impl AdvisoryLock {
     pub fn new() -> Self {
-        Self {advisory_lock: RustRfc::new(Mutex::new(0)), advisory_condvar: Condvar::new()}
+        Self {
+            advisory_lock: RustRfc::new(Mutex::new(0)),
+            advisory_condvar: Condvar::new(),
+        }
     }
 
+    // lock_ex is used to acquire an exclusive lock
+    // if the lock cannot be obtained, it waits
     pub fn lock_ex(&self) {
         let mut waitedguard = self.advisory_lock.lock();
         while *waitedguard != 0 {
@@ -192,6 +207,8 @@ impl AdvisoryLock {
         *waitedguard = -1;
     }
 
+    // lock_sh is used to acquire a shared lock
+    // if the lock cannot be obtained, it waits
     pub fn lock_sh(&self) {
         let mut waitedguard = self.advisory_lock.lock();
         while *waitedguard < 0 {
@@ -199,41 +216,60 @@ impl AdvisoryLock {
         }
         *waitedguard += 1;
     }
+    // try_lock_ex is used to try to acquire an exclusive lock
+    // if the lock cannot be obtained, it returns false
     pub fn try_lock_ex(&self) -> bool {
         if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard == 0 {
-              *guard = -1;
-              return true
+                *guard = -1;
+                return true;
             }
         }
         false
     }
+    // try_lock_sh is used to try to acquire a shared lock
+    // if the lock cannot be obtained, it returns false
     pub fn try_lock_sh(&self) -> bool {
         if let Some(mut guard) = self.advisory_lock.try_lock() {
             if *guard >= 0 {
-              *guard += 1;
-              return true
+                *guard += 1;
+                return true;
             }
         }
         false
     }
 
+    /*
+     * unlock is used to release a lock
+     * If a shared lock was held(guard value > 0), it decrements the guard value by one
+     * if no more shared locks are held (i.e. the guard value is now zero), then it notifies a waiting writer
+     * If an exclusive lock was held, it sets the guard value to zero and notifies all waiting readers and writers
+     */
     pub fn unlock(&self) -> bool {
         let mut guard = self.advisory_lock.lock();
 
-        if *guard < 0 {
+        // check if a shared lock is held
+        if *guard > 0 {
+            // release one shared lock by decrementing the guard value
             *guard -= 1;
-  
-            //only a writer could be waiting at this point
-            if *guard == 0 {self.advisory_condvar.notify_one();}
+
+            // if no more shared locks are held, notify a waiting writer and return
+            // only a writer could be waiting at this point
+            if *guard == 0 {
+                self.advisory_condvar.notify_one();
+            }
             true
         } else if *guard == -1 {
-            if *guard != -1 {return false;}
+            // check if an exclusive lock is held
+            // release the exclusive lock by setting guard to 0
             *guard = 0;
-  
-            self.advisory_condvar.notify_all(); //in case readers are waiting
+
+            // notify any waiting reads or writers and return
+            self.advisory_condvar.notify_all();
             true
-        } else {false}
+        } else {
+            false
+        }
     }
 }
 
@@ -327,5 +363,91 @@ impl Drop for RawCondvar {
 impl std::fmt::Debug for RawCondvar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("<condvar>")
+    }
+}
+
+/*
+* RustSemaphore is the rust version of sem_t
+*/
+#[derive(Debug)]
+pub struct RustSemaphore {
+    pub value: Mutex<u32>,
+    pub is_shared: RustAtomicBool,
+}
+
+// Semaphore implementation
+// we busy wait on lock if value is 0, otherwise we decrease the value
+// unlock will increase value up to SEM_VALUE_MAX
+impl RustSemaphore {
+    pub fn new(value_handle: u32, is_shared: bool) -> Self {
+        Self {
+            value: Mutex::new(value_handle),
+            is_shared: RustAtomicBool::new(is_shared),
+        }
+    }
+
+    pub fn lock(&self) {
+        loop {
+            // acquire the mutex lock
+            let mut value = self.value.lock();
+            if *value == 0 {
+                // wait for semaphore to be unlocked by another process/thread
+                interface::lind_yield();
+            } else {
+                // decrement the value
+                *value = if *value > 0 { *value - 1 } else { 0 };
+                break;
+            }
+        }
+    }
+
+    pub fn unlock(&self) -> bool {
+        // acquire the mutex lock
+        let mut value = self.value.lock();
+        // check if the maximum allowable value for a semaphore has been reached
+        if *value < SEM_VALUE_MAX {
+            // increment the value
+            *value = *value + 1;
+            return true;
+        } else { return false; }
+    }
+
+    pub fn get_value(&self) -> i32 {
+        // returns the value of the semaphore
+        *self.value.lock() as i32
+    }
+
+    pub fn trylock(&self) -> bool {
+        // acquire the mutex lock
+        let mut value = self.value.lock();
+        if *value == 0 {
+            // semaphore is locked by another process/thread
+            return false;
+        } else {
+            // decrement the value
+            *value = if *value > 0 { *value - 1 } else { 0 };
+            return true;
+        }
+    }
+
+    pub fn timedlock(&self, timeout: Duration) -> bool {
+        // start the timer to check for timeout
+        let start_time = interface::starttimer();
+        loop {
+            // acquire the mutex lock
+            let mut value = self.value.lock();
+            if *value == 0 {
+                // check if we have timed out
+                let elapsed_time = interface::readtimer(start_time);
+                if elapsed_time > timeout {
+                    return false;
+                }
+                // if not timed out wait for semaphore to be unlocked by another process/thread
+                interface::lind_yield();
+            } else {
+                *value = if *value > 0 { *value - 1 } else { 0 };
+                return true;
+            }
+        }
     }
 }

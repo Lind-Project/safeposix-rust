@@ -76,7 +76,8 @@ pub struct Cage {
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
-    pub thread_table: interface::RustHashMap<u64, bool>
+    pub thread_table: interface::RustHashMap<u64, bool>,
+    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>
 }
 
 impl Cage {
@@ -114,6 +115,14 @@ impl Cage {
                 let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
                 clonedcv.broadcast();
             }
+        }
+    }
+
+    pub fn get_filedescriptor(&self, fd: i32) -> Result<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>, ()> {
+        if (fd < 0) || (fd >= MAXFD) {
+            Err(())
+        } else {
+            Ok(self.filedescriptortable[fd as usize].clone())
         }
     }
 }

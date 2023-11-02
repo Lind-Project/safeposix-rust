@@ -239,7 +239,8 @@ impl Cage {
     }
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -295,7 +296,8 @@ impl Cage {
     }
 
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -429,7 +431,8 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
-        let unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &*unlocked_fd {
             match filedesc_enum {
                 Socket(sockfdobj) => {
@@ -490,7 +493,8 @@ impl Cage {
         }
     }
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -583,43 +587,47 @@ impl Cage {
 
                             let bufleft = newbufptr;
                             let buflenleft = newbuflen;
+                            let mut retval;
 
-                            let retval;
-                            //socket must be connected so unwrap ok
-                            if sockfdobj.flags & O_NONBLOCK != 0 {
-                                retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
-                            } else {
-                                retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
-                            }
-
-                            if retval < 0 {
-                                //If we have already read from a peek but have failed to read more, exit!
-                                if buflen != buflenleft {
-                                    return (buflen - buflenleft) as i32;
+                            loop { // we loop here so we can cancel blocking recvs
+                                //socket must be connected so unwrap ok
+                                if sockfdobj.flags & O_NONBLOCK != 0 {
+                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom_nonblocking(bufleft, buflenleft, addr);
+                                } else {
+                                    retval = sockhandle.innersocket.as_ref().unwrap().recvfrom(bufleft, buflenleft, addr);
                                 }
 
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {
-                                        //We have the recieve timeout set to every one second, so
-                                        //if our blocking socket ever returns EAGAIN, it must be
-                                        //the case that this recv timeout was exceeded, and we
-                                        //should thus not treat this as a failure in our emulated
-                                        //socket; see comment in Socket::new in interface/comm.rs
-                                        if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
-                                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                                // if the cancel status is set in the cage, we trap around a cancel point
-                                                // until the individual thread is signaled to cancel itself
-                                                loop { interface::cancelpoint(self.cageid); }
+                                if retval < 0 {
+                                    //If we have already read from a peek but have failed to read more, exit!
+                                    if buflen != buflenleft {
+                                        return (buflen - buflenleft) as i32;
+                                    }
+
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {
+                                            //We have the recieve timeout set to every one second, so
+                                            //if our blocking socket ever returns EAGAIN, it must be
+                                            //the case that this recv timeout was exceeded, and we
+                                            //should thus not treat this as a failure in our emulated
+                                            //socket; see comment in Socket::new in interface/comm.rs
+                                            if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                                    // until the individual thread is signaled to cancel itself
+                                                    loop { interface::cancelpoint(self.cageid); }
+                                                }
+                                                drop(sockhandle); // release sockhandle temporarily
+                                                sockhandle = sock_tmp.write();
+                                    
+                                                continue; // EAGAIN, try again
                                             }
-                                
-                                            continue;
-                                        }
 
-                                        return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
-                                    },
-                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
-                                };
-
+                                            return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
+                                        },
+                                        Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                    };
+                                }
+                                break; // we're okay to move on
                             }
 
                             let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
@@ -642,27 +650,36 @@ impl Cage {
                                 return ibindret;
                             }
 
-                            //if the remoteaddr is set and addr is not, use remoteaddr
-                            //unwrap is ok because of implicit bind
-                            let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
-                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
-                            } else {
-                                sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
-                            };
-
-                            if retval < 0 {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {
-                                        if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
-                                            continue;
-                                        }
-                                        return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
-                                    },
-                                    Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                            loop { // loop for blocking sockets
+                                //if the remoteaddr is set and addr is not, use remoteaddr
+                                //unwrap is ok because of implicit bind
+                                let retval = if let (None, Some(ref mut remoteaddr)) =  (&addr, sockhandle.remoteaddr) {
+                                    sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, &mut Some(remoteaddr))
+                                } else {
+                                    sockhandle.innersocket.as_ref().unwrap().recvfrom(buf, buflen, addr)
                                 };
-                                
-                            } else {
-                                return retval;
+
+                                if retval < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {
+                                            if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                                    // until the individual thread is signaled to cancel itself
+                                                    loop { interface::cancelpoint(self.cageid); }
+                                                }
+                                                drop(sockhandle); // release sockhandle temporarily
+                                                sockhandle = sock_tmp.write();
+                                                continue; //received EAGAIN on blocking socket, try again
+                                            }
+                                            return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
+                                        },
+                                        Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
+                                    };
+                                    
+                                } else {
+                                    return retval; // we can proceed
+                                }
                             }
                         }
 
@@ -679,7 +696,8 @@ impl Cage {
     }
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             return self.recv_common_inner(filedesc_enum, buf, buflen, flags, addr);
         } else {
@@ -697,7 +715,8 @@ impl Cage {
 
     //we currently ignore backlog
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -847,8 +866,8 @@ impl Cage {
     }
 
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
-
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
             if inner_result < 0 {
@@ -869,8 +888,8 @@ impl Cage {
     
     //calls accept on the socket object with value depending on ipv4 or ipv6
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
-
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //we need to reserve this fd early to make sure that we don't need to
@@ -993,7 +1012,8 @@ impl Cage {
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let oldflags;
             if let Socket(ref mut sockfdobj) = filedesc_enum {
@@ -1037,7 +1057,8 @@ impl Cage {
         let mut retval = 0; 
         loop { //we must block manually
             for fd in readfds.iter() {
-                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let mut unlocked_fd = checkedfd.write();
                 if let Some(filedesc_enum) = &mut *unlocked_fd {
                     match filedesc_enum {
                         Socket(ref mut sockfdobj) => {
@@ -1110,7 +1131,8 @@ impl Cage {
             }
 
             for fd in writefds.iter() {
-                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let mut unlocked_fd = checkedfd.write();
                 if let Some(filedesc_enum) = &mut *unlocked_fd {
                     match filedesc_enum {
                         Socket(ref mut sockfdobj) => {
@@ -1154,7 +1176,8 @@ impl Cage {
             
             for fd in exceptfds.iter() {
                 //we say none of them ever have exceptional conditions
-                let unlocked_fd = self.filedescriptortable[*fd as usize].read();
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let unlocked_fd = checkedfd.read();
                 if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
             }
 
@@ -1170,8 +1193,8 @@ impl Cage {
     }
 
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
-        
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
                 //checking that we recieved SOL_SOCKET
@@ -1244,8 +1267,8 @@ impl Cage {
     }
 
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
-        
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
                 //checking that we recieved SOL_SOCKET\
@@ -1340,7 +1363,8 @@ impl Cage {
     }
 
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
                 //if the socket is not connected, then we should return an error
@@ -1364,7 +1388,8 @@ impl Cage {
     }
 
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
                 let sock_tmp = sockfdobj.handle.clone();
@@ -1494,12 +1519,14 @@ impl Cage {
     pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
 
         //making sure that the epfd is really an epoll fd
-        let mut unlocked_fd = self.filedescriptortable[epfd as usize].write();
+        let checkedfd = self.get_filedescriptor(epfd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum_epollfd) = &mut *unlocked_fd {
             if let Epoll(epollfdobj) = filedesc_enum_epollfd {
 
                 //check if the other fd is an epoll or not...
-                let unlocked_fd = self.filedescriptortable[fd as usize].read();
+                let checkedfd = self.get_filedescriptor(fd).unwrap();
+                let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
                     if let Epoll(_) = filedesc_enum {
                         return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
@@ -1541,7 +1568,8 @@ impl Cage {
     }
 
     pub fn epoll_wait_syscall(&self, epfd: i32, events: &mut [EpollEvent], maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[epfd as usize].write();
+        let checkedfd = self.get_filedescriptor(epfd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Epoll(epollfdobj) = filedesc_enum {
                 if  maxevents <  0 {

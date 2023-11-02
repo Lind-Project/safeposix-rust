@@ -479,7 +479,8 @@ impl Cage {
     //------------------------------------FSTAT SYSCALL------------------------------------
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
 
             //Delegate populating statbuf to the relevant helper depending on the file type.
@@ -544,7 +545,8 @@ impl Cage {
     //------------------------------------FSTATFS SYSCALL------------------------------------
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             
             //populate the dev id field -- can be done outside of the helper
@@ -581,7 +583,8 @@ impl Cage {
     //------------------------------------READ SYSCALL------------------------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
@@ -635,7 +638,19 @@ impl Cage {
 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    return pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking, self.cageid) as i32  
+
+                    loop { // loop over pipe reads so we can periodically check for cancellation
+                        let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                        if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == -(Errno::EAGAIN as i32) {
+                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                // if the cancel status is set in the cage, we trap around a cancel point
+                                // until the individual thread is signaled to cancel itself
+                                loop { interface::cancelpoint(self.cageid); }
+                            }
+                            continue; //received EAGAIN on blocking socket, try again
+                        }
+                        return ret; // if we get here we can return
+                    }
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -646,7 +661,8 @@ impl Cage {
 
     //------------------------------------PREAD SYSCALL------------------------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match filedesc_enum {
@@ -714,7 +730,8 @@ impl Cage {
     //------------------------------------WRITE SYSCALL------------------------------------
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
@@ -811,7 +828,8 @@ impl Cage {
     //------------------------------------PWRITE SYSCALL------------------------------------
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match filedesc_enum {
@@ -910,7 +928,8 @@ impl Cage {
 
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //confirm fd type is seekable
@@ -1027,6 +1046,31 @@ impl Cage {
         }
     }
 
+    //------------------------------------FCHDIR SYSCALL------------------------------------
+   
+    pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+
+        let path_string = match &*unlocked_fd {
+            Some(File(normalfile_filedesc_obj)) => {
+                let inodenum = normalfile_filedesc_obj.inode;
+                match pathnamefrominodenum(inodenum) {
+                    Some(name) => name,
+                    None => return syscall_error(Errno::ENOTDIR, "fchdir", "the file descriptor does not refer to a directory"),
+                }
+            },
+            Some(_) => return syscall_error(Errno::EACCES, "fchdir", "cannot change working directory on this file descriptor"),
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+        };
+
+        let mut cwd_container = self.cwd.write();
+        
+	*cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+
+        0 // fchdir success
+    }
+
     //------------------------------------CHDIR SYSCALL------------------------------------
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
@@ -1063,36 +1107,46 @@ impl Cage {
             None => STARTINGFD,
         };
 
+        if start_fd == fd { return start_fd; } //if the file descriptors are equal, return the new one
+
+        // get the filedesc_enum
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let filedesc_enum = checkedfd.write();
+        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
+            return syscall_error(Errno::EBADF, "dup","Invalid old file descriptor.");
+        };
+
         //checking whether the fd exists in the file table
-        return Self::_dup2_helper(&self, fd, start_fd, false)
+        return Self::_dup2_helper(&self, filedesc_enum, start_fd, false)
     }
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
-        //if the old fd exists, execute the helper, else return error
-        return Self::_dup2_helper(&self, oldfd, newfd, true);
-    }
-
-    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fromdup2: bool) -> i32 {
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
-            return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
-        }
+           return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
+       }
 
-        let filedesc_enum = self.filedescriptortable[oldfd as usize].write();
-        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
-            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
-        };
+       if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
 
+       // get the filedesc_enum
+       let checkedfd = self.get_filedescriptor(oldfd).unwrap();
+       let filedesc_enum = checkedfd.write();
+       let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
+           return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
+       };
+
+       //if the old fd exists, execute the helper, else return error
+       return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+   }
+
+    pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
         let (dupfd, mut dupfdguard) = if fromdup2 {
-            if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
             if fdguard.is_some() {
                 drop(fdguard);
                 //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
                 let close_result = Self::_close_helper_inner(&self, newfd);
-                if close_result < 0 {
-                    return close_result;
-                }
+                // mirror the implementation of linux, ignore the potential error of the close here
             } else { drop(fdguard); }
             fdguard = self.filedescriptortable[newfd as usize].write();
 
@@ -1168,7 +1222,8 @@ impl Cage {
     }
 
     pub fn _close_helper_inner(&self, fd: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             //Decide how to proceed depending on the fd type.
             //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
@@ -1282,7 +1337,8 @@ impl Cage {
         if inner_result < 0 { return inner_result; }
         
         //removing inode from fd table
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if unlocked_fd.is_some() {
             let _discarded_fd = unlocked_fd.take();
         }
@@ -1292,7 +1348,8 @@ impl Cage {
     //------------------------------------FCNTL SYSCALL------------------------------------
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             let flags = match filedesc_enum {
@@ -1350,8 +1407,7 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    drop(filedesc_enum);
-                    self._dup2_helper(fd, arg, false)
+                    self._dup2_helper(&filedesc_enum, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
@@ -1371,7 +1427,8 @@ impl Cage {
     //------------------------------------IOCTL SYSCALL------------------------------------
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match request {
@@ -1475,7 +1532,8 @@ impl Cage {
      //------------------------------------FCHMOD SYSCALL------------------------------------
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
@@ -1512,7 +1570,8 @@ impl Cage {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
 
-        let mut unlocked_fd = self.filedescriptortable[fildes as usize].write();
+        let checkedfd = self.get_filedescriptor(fildes).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //confirm fd type is mappable
@@ -1567,7 +1626,8 @@ impl Cage {
     //------------------------------------FLOCK SYSCALL------------------------------------
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
 
             let lock = match filedesc_enum {
@@ -1786,7 +1846,8 @@ impl Cage {
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
 
             match filedesc_enum {
@@ -1863,8 +1924,9 @@ impl Cage {
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
-        
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             
             match filedesc_enum {
@@ -1947,11 +2009,47 @@ impl Cage {
         0 //getcwd has succeeded!;
     }
 
+
+    //------------------SHMHELPERS----------------------
+
+    pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+        for (index, val) in rev_shm.iter().enumerate() {
+            if val.0 == shmaddr as u32 {
+                return Some(index);
+            }
+        }
+        None
+    }
+
+    pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec<u32> {
+
+        let mut addrvec = Vec::new();
+        for val in rev_shm.iter() {
+            if val.1 == shmid as i32 {
+                addrvec.push(val.0);
+            }
+        }
+
+        return addrvec;
+    }
+
+    pub fn search_for_addr_in_region(rev_shm: &Vec<(u32, i32)>, search_addr: u32) -> Option<(u32, i32)> {
+        let metadata = &SHM_METADATA;
+        for val in rev_shm.iter() {
+            let addr = val.0;
+            let shmid = val.1;
+            if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                let range = addr..(addr + segment.size as u32);
+                if range.contains(&search_addr) { return Some((addr, shmid)); }
+            }
+        }
+        None
+    }
+
     //------------------SHMGET SYSCALL------------------
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
         if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
-        if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
         let shmid: i32;
         let metadata = &SHM_METADATA;
 
@@ -1966,6 +2064,9 @@ impl Cage {
                 if 0 == (shmflg & IPC_CREAT) {
                     return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
                 }
+
+                if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
+
                 shmid = metadata.new_keyid();
                 vacant.insert(shmid);
                 let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
@@ -1990,32 +2091,45 @@ impl Cage {
             let mut rev_shm = self.rev_shm.lock();
             rev_shm.push((shmaddr as u32, shmid));
             drop(rev_shm);
-            segment.map_shm(shmaddr, prot)
+
+            // update semaphores
+            if !segment.semaphor_offsets.is_empty() {
+                // lets just look at the first cage in the set, since we only need to grab the ref from one
+                if let Some(cageid) = segment.attached_cages.clone().into_read_only().keys().next() {
+                    let cage2 = interface::cagetable_getref(*cageid); 
+                    let cage2_rev_shm = cage2.rev_shm.lock();
+                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
+                    for offset in segment.semaphor_offsets.iter() {
+                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
+                        self.sem_table.insert(shmaddr as u32 + *offset, sementry);
+                    }
+                }
+            }
+
+            segment.map_shm(shmaddr, prot, self.cageid)
         } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
 
-    pub fn rev_shm_find(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
-        for (index, val) in rev_shm.iter().enumerate() {
-            if val.0 == shmaddr as u32 {
-                return Some(index);
-            }
-        }
-        None
-    }
     //------------------SHMDT SYSCALL------------------
 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
         let mut rev_shm = self.rev_shm.lock();
-        let rev_shm_index = Self::rev_shm_find(&rev_shm, shmaddr as u32);
+        let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
 
         if let Some(index) = rev_shm_index {
             let shmid = rev_shm[index].1;
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
-                    segment.unmap_shm(shmaddr);
+
+                    // update semaphores
+                    for offset in segment.semaphor_offsets.iter() {
+                        self.sem_table.remove(&(shmaddr as u32 + *offset));
+                    }
+
+                    segment.unmap_shm(shmaddr, self.cageid);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
                     rev_shm.swap_remove(index);
@@ -2331,5 +2445,157 @@ impl Cage {
             //undefined behavior
             syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
         }
+    }
+
+    //------------------SEMAPHORE SYSCALLS------------------
+    /* 
+    *  Initialize semaphore object SEM to value
+    *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
+    *  or shared between processes (when nonzero)
+    */
+    pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
+        // Boundary check
+        if value > SEM_VALUE_MAX { 
+            return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
+        }
+
+        let metadata = &SHM_METADATA;
+        let is_shared = pshared != 0;
+
+        // Iterate semaphore table, if semaphore is already initialzed return error
+        let semtable = &self.sem_table;
+
+        // Will initialize only it's new
+        if !semtable.contains_key(&sem_handle) {
+            let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
+            semtable.insert(sem_handle, new_semaphore.clone());
+
+            if is_shared {
+                let rev_shm = self.rev_shm.lock();
+                // if its shared and exists in an existing mapping we need to add it to other cages
+                if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) {
+                    let offset = mapaddr - sem_handle;
+                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        for cageid in segment.attached_cages.clone().into_read_only().keys() {
+                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
+                            let cage = interface::cagetable_getref(*cageid);
+                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            for addr in addrs.iter() {
+                                cage.sem_table.insert(addr + offset, new_semaphore.clone());
+                            }
+                        }
+                        segment.semaphor_offsets.insert(offset);
+                    }
+                }
+            }
+            return 0;
+        }
+
+        return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
+    }
+
+    pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            semaphore.lock();
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            if !semaphore.unlock() {
+                return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
+            }
+         } else {
+            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
+        let metadata = &SHM_METADATA;
+
+        let semtable = &self.sem_table;
+        // remove entry from semaphore table
+        if let Some(sementry) = semtable.remove(&sem_handle) {
+            if sementry.1.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
+                // if its shared we'll need to remove it from other attachments
+                let rev_shm = self.rev_shm.lock();
+                if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) { // find all segments that contain semaphore
+                    let offset = mapaddr - sem_handle;
+                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        for cageid in segment.attached_cages.clone().into_read_only().keys() { // iterate through all cages containing segment
+                            let cage = interface::cagetable_getref(*cageid);
+                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid); 
+                            for addr in addrs.iter() {
+                                cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
+                            }
+                        } 
+                    }
+                }
+            }
+            return 0;
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
+        }
+    }
+
+    /*
+    * Take only sem_t *sem as argument, and return int *sval
+    */
+    pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            return semaphore.get_value();
+        }
+        return syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")
+    }
+
+    pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            if !semaphore.trylock() {
+                return syscall_error(Errno::EAGAIN, "sem_trywait", "The operation could not be performed without blocking");
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
+        let abstime = libc::timespec {
+            tv_sec: time.as_secs() as i64,
+            tv_nsec: (time.as_nanos() % 1000000000) as i64
+        };
+        if abstime.tv_nsec < 0 {
+            return syscall_error(Errno::EINVAL, "sem_timedwait", "Invalid timedout");
+        }
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            if !semaphore.timedlock(time) {
+                return syscall_error(Errno::ETIMEDOUT, "sem_timedwait", "The call timed out before the semaphore could be locked");
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_timedwait", "sem is not a valid semaphore");
+        }
+        return 0;
     }
 }
