@@ -37,7 +37,7 @@ use crate::safeposix::cage::{Cage};
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
 
 pub fn check_cageid(cageid: u64) {
-    if (cageid < 0 || cageid >= MAXCAGEID) {
+    if (cageid < 0 || cageid >= MAXCAGEID as u64) {
         panic!("Cage ID is outside of valid range");
     }
 }
