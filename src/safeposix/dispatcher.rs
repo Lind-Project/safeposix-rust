@@ -553,25 +553,26 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
     cage.thread_table.remove(&pthreadid);
 }
 
-#[no_mangle]
-fn cleartmp() {
+fn cleartmp(flag : bool) {
     let path = "tmp";
-
+    //let path = format!("./{}", path_wo); 
     let cage = interface::cagetable_getref(0);
-    if interface::pathexists(path.to_string()) {
+    let mut statdata = StatData::default();
+    if cage.stat_syscall(path, &mut statdata) == 0 {
         lib_fs_utils::visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
             if isdir { lib_fs_utils::lind_deltree(childcage, childpath); }
-            else {childcage.unlink_syscall(childpath);}
+            else { childcage.unlink_syscall(childpath);}
         });
     }
     else {
-        cage.mkdir_syscall(path, S_IRWXA);
+        if flag == true {
+            let int = cage.mkdir_syscall(path, S_IRWXA);
+        } 
     }
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
-
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
     load_fs();
@@ -616,20 +617,21 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean
-    cleartmp();
+    let init:bool = true;
+    cleartmp(init);
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
-
-    //interface::cagetable_clear();
+    
     let path = "tmp";
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
     }
+    let init:bool = false;
     // clear /tmp folder
-    cleartmp();
+    cleartmp(init);
     interface::cagetable_clear();
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
