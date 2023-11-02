@@ -622,7 +622,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
 
-    interface::cagetable_clear();
+    //interface::cagetable_clear();
     let path = "tmp";
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
@@ -630,7 +630,7 @@ pub extern "C" fn lindrustfinalize() {
     }
     // clear /tmp folder
     cleartmp();
-
+    interface::cagetable_clear();
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
