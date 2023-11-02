@@ -555,9 +555,10 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
 
 fn cleartmp(flag : bool) {
     let path = "tmp";
-    //let path = format!("./{}", path_wo); 
+    
     let cage = interface::cagetable_getref(0);
     let mut statdata = StatData::default();
+    
     if cage.stat_syscall(path, &mut statdata) == 0 {
         lib_fs_utils::visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
             if isdir { lib_fs_utils::lind_deltree(childcage, childpath); }
@@ -566,7 +567,7 @@ fn cleartmp(flag : bool) {
     }
     else {
         if flag == true {
-            let int = cage.mkdir_syscall(path, S_IRWXA);
+            cage.mkdir_syscall(path, S_IRWXA);
         } 
     }
 }
@@ -629,6 +630,7 @@ pub extern "C" fn lindrustfinalize() {
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
     }
+    
     let init:bool = false;
     // clear /tmp folder
     cleartmp(init);

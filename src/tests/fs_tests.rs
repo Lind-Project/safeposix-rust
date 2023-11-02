@@ -1178,25 +1178,19 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_tmp_file_test() {
-        // Init
         lindrustinit(0);
-        //let cage = { CAGE_TABLE.get(&1).unwrap().clone() };
         let cage = interface::cagetable_getref(1);
 
         // Check if /tmp is there
         assert_eq!(cage.access_syscall("/tmp", F_OK), 0);
 
-        // Open/create file in /tmp
+        // Open  file in /tmp
         let file_path = "/tmp/testfile";
         let fd = cage.open_syscall(file_path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         
-        // Write some stuff to it
         assert_eq!(cage.write_syscall(fd, str2cbuf("Hello world"), 6), 6);
-
-        // Close it
         assert_eq!(cage.close_syscall(fd), 0);
 
-        // Finalize
         lindrustfinalize();
 
         // Init again
@@ -1208,7 +1202,6 @@ pub mod fs_tests {
         // Check if file is still there (it shouldn't be, assert no)
         assert_eq!(cage.access_syscall(file_path, F_OK), -2);
 
-        // Finalize
         lindrustfinalize();
     }
 
