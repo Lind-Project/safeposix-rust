@@ -1142,12 +1142,12 @@ impl Cage {
     pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
         let (dupfd, mut dupfdguard) = if fromdup2 {
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
-            if fdguard.is_some() {
-                drop(fdguard);
-                //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-                let close_result = Self::_close_helper_inner(&self, newfd);
-                // mirror the implementation of linux, ignore the potential error of the close here
-            } else { drop(fdguard); }
+            let closebool = fdguard.is_some();
+            drop(fdguard);
+            // close the fd in the way of the new fd. mirror the implementation of linux, ignore the potential error of the close here
+            if closebool { let _close_result = Self::_close_helper_inner(&self, newfd); } 
+            
+            // re-grab clean fd
             fdguard = self.filedescriptortable[newfd as usize].write();
 
             (newfd, fdguard)

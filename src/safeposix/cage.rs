@@ -159,7 +159,6 @@ pub fn init_fdtable() -> FdTable {
 
 pub fn create_unix_sockpipes() -> (interface::RustRfc<interface::EmulatedPipe>, interface::RustRfc<interface::EmulatedPipe>) {
 
-    // do I have to check if the pipe2 failed and delete the first one somehow?
     let pipe1 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
     let pipe2 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
 

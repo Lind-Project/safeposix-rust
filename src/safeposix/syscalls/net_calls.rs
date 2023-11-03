@@ -12,8 +12,8 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
 impl Cage {
-    fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, blocking: bool, cloexec: bool, conn: ConnState) -> SocketDesc {
-        let flags = if blocking {O_NONBLOCK} else {0} | if cloexec {O_CLOEXEC} else {0};
+    fn _socket_initializer(&self, domain: i32, socktype: i32, protocol: i32, nonblocking: bool, cloexec: bool, conn: ConnState) -> SocketDesc {
+        let flags = if nonblocking {O_NONBLOCK} else {0} | if cloexec {O_CLOEXEC} else {0};
 
 
         let sockfd = SocketDesc {
@@ -56,10 +56,6 @@ impl Cage {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
-
-        if nonblocking {
-            return syscall_error(Errno::EOPNOTSUPP, "socket", "trying to create a non-blocking socket, which we don't yet support");
-        }
 
         match real_socktype {
 
@@ -145,13 +141,9 @@ impl Cage {
             _ => {return syscall_error(Errno::EINVAL, "bind", "Unsupported domain provided");}
         };
 
-        if res != 0 {
-            return res; // some error occured
-        }
-
         sockhandle.localaddr = Some(newsockaddr);
     
-        0
+        res
     }
     
     fn bind_inner_socket_unix(&self, sockhandle: &mut SocketHandle, newsockaddr: &mut interface::GenSockaddr) -> i32 {
@@ -446,12 +438,10 @@ impl Cage {
             options: options,
             state: conn,
             protocol: protocol,
-            
             domain: domain,
             last_peek: interface::RustDeque::new(),
             localaddr: None,
             remoteaddr: None,
-
             unix_info: None,
             socktype: socktype,
             sndbuf: 131070, //buffersize, which is only used by getsockopt
@@ -693,6 +683,7 @@ impl Cage {
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft { return (buflen - buflenleft) as i32; }
                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
+                        // with blocking sockets, we return EAGAIN here to check for cancellation, then return to reading
                         if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
                             // if the cancel status is set in the cage, we trap around a cancel point
                             // until the individual thread is signaled to cancel itself
@@ -1016,16 +1007,10 @@ impl Cage {
         return 0;
     }
 
-    //calls accept on the socket object with value depending on ipv4 or ipv6
-    //There may be a bug with nonblocking accept with fds not being removed on error
-    // NEED REFACTOR
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-
-            //we need to reserve this fd early to make sure that we don't need to
-            //error out later so we perform get_next_fd, and populate it at the end
 
             let (newfd, guardopt) = self.get_next_fd(None);
             if newfd < 0 { return fd }
