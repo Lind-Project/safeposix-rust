@@ -72,3 +72,8 @@ pub const SIGPWR: i32       = 30;
 // pub const SIGLOST: i32
 pub const SIGSYS: i32       = 31;
 pub const SIGUNUSED: i32    = 31;
+
+pub const SIG_BLOCK: i32    = 0;
+pub const SIG_UNBLOCK: i32  = 1;
+pub const SIG_SETMASK: i32  = 2;
+pub const ITIMER_REAL: i32  = 0;

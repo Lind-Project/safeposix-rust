@@ -150,11 +150,13 @@ macro_rules! check_and_dispatch_socketpair {
 // to increase I/O performance by bypassing the dispatcher and type checker
 #[no_mangle]
 pub extern "C" fn quick_write(fd: i32, buf: *const u8, count: usize, cageid: u64) -> i32 {
-  unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().write_syscall(fd, buf, count) }
+    interface::check_cageid(cageid);
+    unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().write_syscall(fd, buf, count) }
 }
 
 #[no_mangle]
 pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) -> i32 {
+    interface::check_cageid(cageid);
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().read_syscall(fd, buf, size) }
 }
 
@@ -163,7 +165,7 @@ pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
     let cage = interface::cagetable_getref(cageid);
     let pthreadid = interface::get_pthreadid();
     cage.main_threadid.store(pthreadid, interface::RustAtomicOrdering::Relaxed);
-    let inheritedsigset = cage.sigset.remove(&0);
+    let inheritedsigset = cage.sigset.remove(&0); // in cases of a forked cage, we've stored the inherited sigset at entry 0
     if inheritedsigset.is_some() { 
         cage.sigset.insert(pthreadid, inheritedsigset.unwrap().1);
     } else { cage.sigset.insert(pthreadid, interface::RustAtomicU64::new(0)); }
@@ -593,7 +595,7 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
 pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     let cage = interface::cagetable_getref(cageid);
     let pthreadid = interface::get_pthreadid();
-    let sigset = cage.sigset.get(&pthreadid).unwrap();
+    let sigset = cage.sigset.get(&pthreadid).unwrap(); // these lock sigset dashmaps for concurrency
     let pendingset = cage.sigset.get(&pthreadid).unwrap();
 
     if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {

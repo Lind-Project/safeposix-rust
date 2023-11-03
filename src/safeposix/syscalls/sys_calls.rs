@@ -149,9 +149,10 @@ impl Cage {
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
 
         // we grab the parent cages main threads sigset and store it at 0
+        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
         // this way the child can initialize the sigset properly when it establishes its own mainthreadid
         let newsigset = interface::RustHashMap::new();
-        if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
             let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
             let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
             newsigset.insert(0, mainsigset);
@@ -231,7 +232,7 @@ impl Cage {
         // we grab the parent cages main threads sigset and store it at 0
         // this way the child can initialize the sigset properly when it establishes its own mainthreadid
         let newsigset = interface::RustHashMap::new();
-        if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
             let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
             let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
             newsigset.insert(0, mainsigset);
@@ -283,7 +284,7 @@ impl Cage {
         interface::cagetable_remove(self.cageid);
         
         // Trigger SIGCHLD
-        if !interface::TEST.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
             if self.cageid != self.parent {
                 interface::lind_kill_from_id(self.parent, SIGCHLD);
             }
@@ -383,18 +384,18 @@ impl Cage {
         if let Some(some_set) = set {
             let curr_sigset = sigset.load(interface::RustAtomicOrdering::Relaxed);
             res = match how {
-                0 => { // Block signals in set
+                SIG_BLOCK => { // Block signals in set
                     sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
-                1 => { // Unblock signals in set
+                SIG_UNBLOCK => { // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
                     let pendingsignals = curr_sigset & some_set;
                     sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
                     self.send_pending_signals(pendingsignals, pthreadid);
                     0
                 },
-                2 => { // Set sigset to set
+                SIG_SETMASK => { // Set sigset to set
                     sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 },
@@ -406,7 +407,7 @@ impl Cage {
 
     pub fn setitimer_syscall(&self, which: i32, new_value: Option<& interface::ITimerVal>, old_value: Option<&mut interface::ITimerVal>) -> i32 {
         match which {
-            0 => { // ITMER_REAL
+            ITIMER_REAL => { 
                 if let Some(some_old_value) = old_value {
                     let (curr_duration, next_duration) = self.interval_timer.get_itimer();
                     some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;

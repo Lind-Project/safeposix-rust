@@ -31,7 +31,7 @@ use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
 use std::sync::LazyLock;
 
-pub static TEST: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
@@ -42,23 +42,33 @@ use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
 
+pub fn check_cageid(cageid: u64) {
+    if cageid >= MAXCAGEID as u64 {
+        panic!("Cage ID is outside of valid range");
+    }
+}
+
 pub fn cagetable_init() {
    unsafe { for _cage in 0..MAXCAGEID { CAGE_TABLE.push(None); }}
 }
 
 pub fn cagetable_insert(cageid: u64, cageobj: Cage) {
+    check_cageid(cageid);
     let _insertret = unsafe { CAGE_TABLE[cageid as usize].insert(RustRfc::new(cageobj)) };
 }
 
 pub fn cagetable_remove(cageid: u64) {
+    check_cageid(cageid);
     unsafe{ CAGE_TABLE[cageid as usize].take() };
 }
 
 pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
+    check_cageid(cageid);
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
 }
 
 pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
+    check_cageid(cageid);
     unsafe { match CAGE_TABLE[cageid as usize].as_ref() {
         Some(cage) => Some(cage.clone()),
         None => None
@@ -138,7 +148,8 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
-    if TEST.load(RustAtomicOrdering::Relaxed) { return; }
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return; }
+
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
         let cage = cagetable_getref(cageid);
@@ -148,7 +159,7 @@ pub fn cancelpoint(cageid: u64) {
 }
 
 pub fn sigcheck(cageid: u64) -> bool {
-    if TEST.load(RustAtomicOrdering::Relaxed) { return false; }
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
 
     let cage = cagetable_getref(cageid);
     let pthread_id = get_pthreadid();

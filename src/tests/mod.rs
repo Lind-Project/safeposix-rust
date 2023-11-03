@@ -21,7 +21,7 @@ mod main_tests {
 
     #[test]
     pub fn tests() {
-        interface::TEST.store(true, interface::RustAtomicOrdering::Relaxed);
+        interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
         
         lindrustinit(0);
         {

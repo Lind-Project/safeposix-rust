@@ -63,7 +63,7 @@ impl IntervalTimer {
         }
     }
 
-    // Similar to getitimer. Returns (next value, current value)
+    // Similar to getitimer. Returns (current value, next value)
     pub fn get_itimer(&self) -> (RustDuration, RustDuration) {
         let guard = self._ac.lock().unwrap();
 
@@ -119,7 +119,7 @@ impl IntervalTimer {
                 }
             }
 
-            thread::sleep(RustDuration::from_millis(1)); // One jiffy
+            thread::sleep(RustDuration::from_millis(20)); // One jiffy
         }
     }
 
