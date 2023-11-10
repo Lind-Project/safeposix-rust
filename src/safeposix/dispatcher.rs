@@ -553,8 +553,8 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
     cage.thread_table.remove(&pthreadid);
 }
 
-fn cleartmp(flag : bool) {
-    let path = "tmp";
+fn cleartmp(init: bool) {
+    let path = "/tmp";
     
     let cage = interface::cagetable_getref(0);
     let mut statdata = StatData::default();
@@ -566,7 +566,7 @@ fn cleartmp(flag : bool) {
         });
     }
     else {
-        if flag == true {
+        if init  == true {
             cage.mkdir_syscall(path, S_IRWXA);
         } 
     }
@@ -618,8 +618,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean
-    let init:bool = true;
-    cleartmp(init);
+    cleartmp(true);
 }
 
 #[no_mangle]
@@ -631,9 +630,8 @@ pub extern "C" fn lindrustfinalize() {
         remove_domain_sock(truepath);
     }
     
-    let init:bool = false;
     // clear /tmp folder
-    cleartmp(init);
+    cleartmp(false);
     interface::cagetable_clear();
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
