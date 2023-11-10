@@ -51,7 +51,7 @@ pub mod fs_tests {
         ut_lind_fs_tmp_file_test();
     }
 
- 
+
 
     pub fn ut_lind_fs_simple() {
         lindrustinit(0);
