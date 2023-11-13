@@ -48,6 +48,7 @@ pub mod fs_tests {
         ut_lind_fs_sem_fork();
         ut_lind_fs_sem_trytimed();
         ut_lind_fs_sem_test();
+        ut_lind_fs_tmp_file_test();
     }
 
 
@@ -64,7 +65,7 @@ pub mod fs_tests {
         assert_eq!(cage.stat_syscall("/", &mut statdata2), 0);
         //ensure that there are two hard links
 
-        assert_eq!(statdata2.st_nlink, 4); //2 for . and .., one for dev, and one so that it can never be removed
+        assert_eq!(statdata2.st_nlink, 5); //2 for . and .., one for dev, and one so that it can never be removed
 
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
@@ -1175,4 +1176,33 @@ pub mod fs_tests {
         assert_eq!(cage.sem_trywait_syscall(shmatret as u32), -11);
         lindrustfinalize();
     }
+
+    pub fn ut_lind_fs_tmp_file_test() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        // Check if /tmp is there
+        assert_eq!(cage.access_syscall("/tmp", F_OK), 0);
+
+        // Open  file in /tmp
+        let file_path = "/tmp/testfile";
+        let fd = cage.open_syscall(file_path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Hello world"), 6), 6);
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        lindrustfinalize();
+
+        // Init again
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        
+        // Check if /tmp is there
+        assert_eq!(cage.access_syscall("/tmp", F_OK), 0);
+        // Check if file is still there (it shouldn't be, assert no)
+        assert_eq!(cage.access_syscall(file_path, F_OK), -2);
+
+        lindrustfinalize();
+    }
+
 }
