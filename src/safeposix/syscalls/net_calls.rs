@@ -1218,7 +1218,7 @@ impl Cage {
     }
 
     pub fn select_syscall(&self, nfds: i32, readfds: *mut u8, writefds: *mut u8, exceptfds: *mut u8, timeout: Option<interface::RustDuration>) -> i32 {
-        
+
        if nfds < STARTINGFD || nfds >= MAXFD {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
        }
@@ -1254,7 +1254,7 @@ impl Cage {
                     let byte_ptr = exceptfds.wrapping_offset(byte_offset as isize);
                     let bit_offset = i & 0b111;
                     // find the bit and see if it's on
-                    if (unsafe{*byte_ptr}) & (1 << (i / 8)) == 0 {continue}
+                    if (unsafe{*byte_ptr}) & (1 << bit_offset) == 0 {continue}
                     let fd = i;
                     let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();

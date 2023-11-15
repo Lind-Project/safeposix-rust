@@ -356,9 +356,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             }
 
             // we don't use get_mutcbuf here because the pointers might be null
-            let mut readfds = unsafe{arg2.dispatch_mutcbuf};
-            let mut writefds = unsafe{arg3.dispatch_mutcbuf};
-            let mut exceptfds = unsafe{arg4.dispatch_mutcbuf};
+            let readfds = unsafe{arg2.dispatch_mutcbuf};
+            let writefds = unsafe{arg3.dispatch_mutcbuf};
+            let exceptfds = unsafe{arg4.dispatch_mutcbuf};
 
             check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<*mut u8, i32>(readfds), Ok::<*mut u8, i32>(writefds), Ok::<*mut u8, i32>(exceptfds), interface::duration_fromtimeval(arg5))
         }
