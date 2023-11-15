@@ -360,7 +360,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let mut writefds = unsafe{arg3.dispatch_mutcbuf};
             let mut exceptfds = unsafe{arg4.dispatch_mutcbuf};
 
-            check_and_dispatch!(cage.select_syscall, nfds, readfds, writefds, exceptfds, interface::duration_fromtimeval(arg5))
+            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<*mut u8, i32>(readfds), Ok::<*mut u8, i32>(writefds), Ok::<*mut u8, i32>(exceptfds), interface::duration_fromtimeval(arg5))
         }
         POLL_SYSCALL => {
             let nfds = get_onearg!(interface::get_usize(arg2));
