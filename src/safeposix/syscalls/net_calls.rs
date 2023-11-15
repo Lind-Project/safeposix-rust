@@ -1218,11 +1218,7 @@ impl Cage {
     }
 
     pub fn select_syscall(&self, nfds: i32, readfds: *mut u8, writefds: *mut u8, exceptfds: *mut u8, timeout: Option<interface::RustDuration>) -> i32 {
-       //exceptfds is not really implemented at the current moment.
-       //They both always return success.
-       let mut new_readfds = interface::RustHashSet::<i32>::new();
-       let mut new_writefds = interface::RustHashSet::<i32>::new();
-   
+        
        if nfds < STARTINGFD || nfds >= MAXFD {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
        }
@@ -1734,24 +1730,35 @@ impl Cage {
                 let fd = structpoll.fd;
                 let events = structpoll.events;
 
-                let mut reads = interface::RustHashSet::<i32>::new();
-                let mut writes = interface::RustHashSet::<i32>::new();
-                let mut errors = interface::RustHashSet::<i32>::new();
+                let mut reads_chunk: [u8; 128] = [0; 128];
+                let mut writes_chunk: [u8; 128] = [0; 128];
+                let mut errors_chunk: [u8; 128] = [0; 128];
+
+                let reads: *mut u8 = reads_chunk.as_mut_ptr();
+                let writes: *mut u8 = writes_chunk.as_mut_ptr();
+                let errors: *mut u8 = errors_chunk.as_mut_ptr();
+
+                let byte_offset = fd / 8;
+                let read_byte_ptr = reads.wrapping_offset(byte_offset as isize);
+                let write_byte_ptr = writes.wrapping_offset(byte_offset as isize);
+                let error_byte_ptr = errors.wrapping_offset(byte_offset as isize);
+                let bit_offset = fd & 0b111;
 
                 //read
-                if events & POLLIN > 0 {reads.insert(fd);}
+                if events & POLLIN > 0 {unsafe{*read_byte_ptr |= 1 << bit_offset;}}
                 //write
-                if events & POLLOUT > 0 {writes.insert(fd);}
+                if events & POLLOUT > 0 {unsafe{*write_byte_ptr |= 1 << bit_offset;}}
                 //err
-                if events & POLLERR > 0 {errors.insert(fd);}
+                if events & POLLERR > 0 {unsafe{*error_byte_ptr |= 1 << bit_offset;}}
 
                 let mut mask: i16 = 0;
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
-                if Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO)) > 0 {
-                    mask += if !reads.is_empty() {POLLIN} else {0};
-                    mask += if !writes.is_empty() {POLLOUT} else {0};
-                    mask += if !errors.is_empty() {POLLERR} else {0};
+                // NOTE that the nfds argument is highest fd + 1
+                if Self::select_syscall(&self, fd + 1, reads, writes, errors, Some(interface::RustDuration::ZERO)) > 0 {
+                    mask += if !interface::is_fd_set_empty(reads, fd) {POLLIN} else {0};
+                    mask += if !interface::is_fd_set_empty(reads, fd) {POLLOUT} else {0};
+                    mask += if !interface::is_fd_set_empty(reads, fd) {POLLERR} else {0};
                     return_code += 1;
                 }
                 structpoll.revents = mask;

@@ -397,6 +397,18 @@ pub fn fd_set_to_hashset(union_argument: Arg, nfds: i32) -> Result<interface::Ru
     }
     return Ok(hashset);
 }
+// I don't want everything to assume the size of fd_set is 1024 bits, so this
+// helper function will check up to the byte of the highest fd given by nfds
+pub fn is_fd_set_empty(fdset: *const u8, highest_fd: i32) -> bool {
+    let nbytes = (highest_fd as usize + 7) / 8;
+    for i in 0..nbytes {
+        unsafe {
+            if *fdset.add(i) != 0 {return false;}
+        }
+    }
+    return true;
+}
+
 pub fn copy_out_to_fd_set(union_argument: Arg, nfds: i32, hashset: interface::RustHashSet<i32>) {
     let pointer = unsafe{union_argument.dispatch_mutcbuf};
     if pointer.is_null() {return;} //do nothing if it's null
