@@ -1843,6 +1843,44 @@ impl Cage {
         }
     }
 
+    //------------------------------------FSYNC SYSCALL------------------------------------
+
+    pub fn fsync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
+            match filedesc_enum {
+                //we must borrow the filedesc object as a mutable reference to update the position
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_wronly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fsync", "specified file not open for sync");
+                    }
+
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                    //delegate to character if it's a character file, checking based on the type of the inode object
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.syncat() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fsync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fsync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fsync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fsync", "invalid file descriptor")
+        }
+    }
+
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
