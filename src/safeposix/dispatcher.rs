@@ -102,7 +102,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 
 const FCHDIR_SYSCALL: i32 = 161;
 
-use crate::interface;
+use crate::interface::{self, get_mutcbuf};
 use super::cage::*;
 use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
@@ -351,18 +351,16 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let nfds = get_onearg!(interface::get_int(arg1));
             if nfds < 0 { //RLIMIT_NOFILE check as well?
                 return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
+            } else if nfds > 1024 {
+                return syscall_error(Errno::EINVAL, "select", "Number of fds can't exceed 1024");
             }
-            let mut readfds = get_onearg!(interface::fd_set_to_hashset(arg2, nfds));
-            let mut writefds = get_onearg!(interface::fd_set_to_hashset(arg3, nfds));
-            let mut exceptfds = get_onearg!(interface::fd_set_to_hashset(arg4, nfds));
 
-            let rv = check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut readfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut writefds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut exceptfds), interface::duration_fromtimeval(arg5));
+            // we don't use get_mutcbuf here because the pointers might be null
+            let mut readfds = unsafe{arg2.dispatch_mutcbuf};
+            let mut writefds = unsafe{arg3.dispatch_mutcbuf};
+            let mut exceptfds = unsafe{arg4.dispatch_mutcbuf};
 
-            interface::copy_out_to_fd_set(arg2, nfds, readfds);
-            interface::copy_out_to_fd_set(arg3, nfds, writefds);
-            interface::copy_out_to_fd_set(arg4, nfds, exceptfds);
-
-            rv
+            check_and_dispatch!(cage.select_syscall, nfds, readfds, writefds, exceptfds, interface::duration_fromtimeval(arg5))
         }
         POLL_SYSCALL => {
             let nfds = get_onearg!(interface::get_usize(arg2));

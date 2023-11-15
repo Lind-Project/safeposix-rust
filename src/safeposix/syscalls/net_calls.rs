@@ -1217,13 +1217,11 @@ impl Cage {
         }
     }
 
-    pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
-       //exceptfds and writefds are not really implemented at the current moment.
-       //They both always return success. However we have some intention of making
-       //writefds work at some point for pipes? We have no such intention for exceptfds
+    pub fn select_syscall(&self, nfds: i32, readfds: *mut u8, writefds: *mut u8, exceptfds: *mut u8, timeout: Option<interface::RustDuration>) -> i32 {
+       //exceptfds is not really implemented at the current moment.
+       //They both always return success.
        let mut new_readfds = interface::RustHashSet::<i32>::new();
        let mut new_writefds = interface::RustHashSet::<i32>::new();
-       //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
    
        if nfds < STARTINGFD || nfds >= MAXFD {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
@@ -1240,19 +1238,32 @@ impl Cage {
        loop { //we must block manually
            
             // 1. iterate thru readfds
-            let mut res = self.select_readfds(readfds, &mut new_readfds, &mut retval);
-            if res != 0 {return res}
+            if !readfds.is_null() {
+                let res = self.select_readfds(nfds, readfds,  &mut retval);
+                if res != 0 {return res}
+            }
             
             // 2. iterate thru writefds
-            res = self.select_writefds(writefds, &mut new_writefds, &mut retval);
-            if res != 0 {return res}
+            if !writefds.is_null() {
+                let res = self.select_writefds(nfds, writefds, &mut retval);
+                if res != 0 {return res}
+            }
             
             // 3. iterate thru exceptfds
-            for fd in exceptfds.iter() {
-                //we say none of them ever have exceptional conditions
-                let checkedfd = self.get_filedescriptor(*fd).unwrap();
-                let unlocked_fd = checkedfd.read();
-                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+            // currently we don't really do select on execptfds, we just check if those fds are valid
+            if !exceptfds.is_null() {
+                for i in 0..nfds {
+                    // check if current i is in execptfds
+                    let byte_offset = i / 8;
+                    let byte_ptr = exceptfds.wrapping_offset(byte_offset as isize);
+                    let bit_offset = i & 0b111;
+                    // find the bit and see if it's on
+                    if (unsafe{*byte_ptr}) & (1 << (i / 8)) == 0 {continue}
+                    let fd = i;
+                    let checkedfd = self.get_filedescriptor(fd).unwrap();
+                    let unlocked_fd = checkedfd.read();
+                    if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+                }
             }
 
            if retval != 0 || interface::readtimer(start_time) > end_time {
@@ -1261,14 +1272,22 @@ impl Cage {
                interface::sleep(BLOCK_TIME);
            }
        }
-       *readfds = new_readfds;
-       *writefds = new_writefds;
        return retval;
     }
 
-    fn select_readfds(&self, readfds: &mut interface::RustHashSet<i32>, new_readfds: &mut interface::RustHashSet<i32>, retval: &mut i32) -> i32 {
-        for fd in readfds.iter() {
-            let checkedfd = self.get_filedescriptor(*fd).unwrap();
+    fn select_readfds(&self, nfds: i32, readfds: *mut u8, retval: &mut i32) -> i32 {
+        for i in 0..nfds {
+            // check if current i is in readfd
+            let byte_offset = i / 8;
+            let byte_ptr = readfds.wrapping_offset(byte_offset as isize);
+            let bit_offset = i & 0b111;
+            //check if the bit is set, if not, skip 
+            if (unsafe{*byte_ptr}) & (1 << bit_offset) == 0 {continue}
+            let fd = i;
+            let mut readable = false;
+
+
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
                 match filedesc_enum {
@@ -1283,7 +1302,7 @@ impl Cage {
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
-                                        new_readfds.insert(*fd);
+                                        readable = true;
                                         *retval += 1;                
                                     }
                                 }
@@ -1297,8 +1316,8 @@ impl Cage {
                                 if sockhandle.state == ConnState::CONNECTED {
                                     drop(sockhandle);
                                     drop(unlocked_fd);
-                                    if self._nonblock_peek_read(*fd) {
-                                        new_readfds.insert(*fd);
+                                    if self._nonblock_peek_read(fd) {
+                                        readable = true;
                                         *retval += 1;
                                     }
                                 }
@@ -1324,22 +1343,22 @@ impl Cage {
                                     } //if it's already got a pending connection, add it!
 
                                     //if we reach here there is a pending connection
-                                    new_readfds.insert(*fd);
+                                    readable = true;
                                     *retval += 1;
                                     //sockhandle innersocket unwrap ok if INPROGRESS
                                 } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
                                         sockhandle.state = ConnState::CONNECTED;
-                                        new_readfds.insert(*fd);
+                                        readable = true;
                                         *retval += 1;
                                 } else {
                                     if sockhandle.protocol == IPPROTO_UDP {
-                                        new_readfds.insert(*fd);
+                                        readable = true;
                                         *retval += 1;
                                     } else {
                                         drop(sockhandle);
                                         drop(unlocked_fd);
-                                        if self._nonblock_peek_read(*fd) {
-                                            new_readfds.insert(*fd);
+                                        if self._nonblock_peek_read(fd) {
+                                            readable = true;
                                             *retval += 1;
                                         }
                                     }
@@ -1354,27 +1373,40 @@ impl Cage {
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_read() {
-                            new_readfds.insert(*fd);
+                            readable = true;
                             *retval += 1;
                         }
                     }
 
                     //these file reads never block
                     _ => {
-                        new_readfds.insert(*fd);
+                        readable = true;
                         *retval += 1;
                     }
                 }
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
             }
+            // if it is readable, leave the bit there, otherwise turn it off
+            if !readable {
+                unsafe{*byte_ptr &= !(1 << bit_offset);}
+            }
         }
         return 0;
     }
 
-    fn select_writefds(&self, writefds: &mut interface::RustHashSet<i32>, new_writefds: &mut interface::RustHashSet<i32>, retval: &mut i32) -> i32 {
-        for fd in writefds.iter() {
-            let checkedfd = self.get_filedescriptor(*fd).unwrap();
+    fn select_writefds(&self, nfds: i32, writefds: *mut u8, retval: &mut i32) -> i32 {
+        for i in 0..nfds {
+            // check if current i is in writefds
+            let byte_offset = i / 8;
+            let byte_ptr = writefds.wrapping_offset(byte_offset as isize);
+            let bit_offset = i & 0b111;
+            //check if the bit is set, if not, skip 
+            if (unsafe{*byte_ptr}) & (1 << bit_offset) == 0 {continue}
+            let fd = i;
+            let mut writable = false;
+
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
                 match filedesc_enum {
@@ -1399,31 +1431,35 @@ impl Cage {
                         }
                         
                         //we always say sockets are writable? Even though this is not true
-                        new_writefds.insert(*fd);
+                        writable = true;
                         *retval += 1;
                     }
 
                     //we always say streams are writable?
                     Stream(_) => {
-                        new_writefds.insert(*fd);
+                        writable = true;
                         *retval += 1;
                     }
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_write() {
-                            new_writefds.insert(*fd);
+                            writable = true;
                             *retval += 1;
                         }
                     }
 
                     //these file writes never block
                     _ => {
-                        new_writefds.insert(*fd);
+                        writable = true;
                         *retval += 1;
                     }
                 }
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+            }
+            // if fd is writable, leave the bit there, otherwise turn it off
+            if !writable {
+                unsafe{*byte_ptr &= !(1 << bit_offset);}
             }
         }
         return 0;
