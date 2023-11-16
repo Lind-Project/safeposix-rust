@@ -102,6 +102,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 
 const FCHDIR_SYSCALL: i32 = 161;
 const FSYNC_SYSCALL: i32 = 162;
+const FDATASYNC_SYSCALL: i32 = 163;
 
 use crate::interface;
 use super::cage::*;
@@ -171,6 +172,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         FSYNC_SYSCALL => {
             check_and_dispatch!(cage.fsync_syscall, interface::get_int(arg1))
+        }
+        FDATASYNC_SYSCALL => {
+            check_and_dispatch!(cage.fdatasync_syscall, interface::get_int(arg1))
         }
         FCHDIR_SYSCALL => {
             check_and_dispatch!(cage.fchdir_syscall, interface::get_int(arg1))
