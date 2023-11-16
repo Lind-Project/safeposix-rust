@@ -1333,8 +1333,10 @@ impl Cage {
                                             //save the pending connection for accept to do something with it
                                             vacant.insert(vec!(listeningsocket));
                                         } else {
-                                            //if it returned an error, then don't insert it into new_readfds
-                                        continue;
+                                            // if it returned an error, then don't insert it into new_readfds
+                                            // of course unset the bit explicitly before we continue
+                                            unsafe{*byte_ptr &= !(1 << bit_offset);}
+                                            continue;
                                         }
                                     } //if it's already got a pending connection, add it!
 
