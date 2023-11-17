@@ -703,7 +703,7 @@ pub mod net_tests {
         let fds_to_set = [serversockfd, filefd];
         for fd in &fds_to_set {
             let byte_offset = *fd as usize / 8;
-            let bit_offset = (*fd % 8) as u8;
+            let bit_offset = *fd & 0b111;
             let input_byte_ptr = unsafe {inputs.add(byte_offset)};
             unsafe {
                 let input_byte_ptr = inputs.add(byte_offset);
@@ -712,7 +712,7 @@ pub mod net_tests {
         }       
        
         let byte_offset = filefd as usize / 8;
-        let bit_offset = (filefd % 8) as u8;
+        let bit_offset = filefd & 0b111;
         unsafe {
             let output_byte_ptr = outputs.add(byte_offset);
             *output_byte_ptr |= 1 << bit_offset;
@@ -792,7 +792,7 @@ pub mod net_tests {
                         let sockfd = cage.accept_syscall(sock as i32, &mut sockgarbage); //really can only make sure that the fd is valid
                         assert!(sockfd > 0); 
                         let byte_offset = sockfd as usize / 8;
-                        let bit_offset = (sockfd % 8) as u8;
+                        let bit_offset = sockfd & 0b111;
                         let input_byte_ptr = unsafe {inputs.add(byte_offset)};
                         let output_byte_ptr = unsafe {outputs.add(byte_offset)};
                         unsafe {
@@ -804,7 +804,7 @@ pub mod net_tests {
                         assert_eq!(cage.write_syscall(sock as i32, str2cbuf("test"), 4), 4);
                         assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
                         let byte_offset = sock as usize / 8;
-                        let bit_offset = (sock % 8) as u8;
+                        let bit_offset = sock & 0b111;
                         unsafe {
                              let input_byte_ptr = inputs.add(byte_offset);
                             *input_byte_ptr &= !(1 << bit_offset);
@@ -821,7 +821,7 @@ pub mod net_tests {
                         if recvresult == 4 {
                             if cbuf2str(&buf) == "test" {
                                 let byte_offset = sock as usize / 8;
-                                let bit_offset = (sock % 8) as u8;
+                                let bit_offset = sock & 0b111;
                                 let output_byte_ptr = unsafe {outputs.add(byte_offset)};
                                 unsafe {
                                     *output_byte_ptr |= 1 << bit_offset;                   
@@ -833,7 +833,7 @@ pub mod net_tests {
                         }
                         assert_eq!(cage.close_syscall(sock as i32), 0);
                         let byte_offset = sock as usize / 8;
-                        let bit_offset = (sock % 8) as u8;
+                        let bit_offset = sock & 0b111;
                         let input_byte_ptr = unsafe {inputs.add(byte_offset)};
                         unsafe {
                             *input_byte_ptr &= !(1 << bit_offset);
@@ -855,7 +855,7 @@ pub mod net_tests {
                         assert_eq!(cage.read_syscall(sock as i32, buf.as_mut_ptr(), 4), 4);
                         assert_eq!(cbuf2str(&buf), "test");
                         let byte_offset = sock as usize / 8;
-                        let bit_offset = (sock % 8) as u8;
+                        let bit_offset = sock & 0b111;
                         let output_byte_ptr = unsafe {inputs.add(byte_offset)};
                         unsafe {
                             *output_byte_ptr &= !(1 << bit_offset);
@@ -863,7 +863,7 @@ pub mod net_tests {
                     } else { //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
                         assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
                         let byte_offset = sock as usize / 8;
-                        let bit_offset = (sock % 8) as u8;
+                        let bit_offset = sock & 0b111;
                         let output_byte_ptr = unsafe {inputs.add(byte_offset)};
                         unsafe {   
                             *output_byte_ptr &= !(1 << bit_offset);
