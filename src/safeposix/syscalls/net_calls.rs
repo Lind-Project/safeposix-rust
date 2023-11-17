@@ -1759,8 +1759,8 @@ impl Cage {
                 // NOTE that the nfds argument is highest fd + 1
                 if Self::select_syscall(&self, fd + 1, reads, writes, errors, Some(interface::RustDuration::ZERO)) > 0 {
                     mask += if !interface::is_fd_set_empty(reads, fd) {POLLIN} else {0};
-                    mask += if !interface::is_fd_set_empty(reads, fd) {POLLOUT} else {0};
-                    mask += if !interface::is_fd_set_empty(reads, fd) {POLLERR} else {0};
+                    mask += if !interface::is_fd_set_empty(writes, fd) {POLLOUT} else {0};
+                    mask += if !interface::is_fd_set_empty(errors, fd) {POLLERR} else {0};
                     return_code += 1;
                 }
                 structpoll.revents = mask;
