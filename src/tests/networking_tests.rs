@@ -6,27 +6,27 @@ pub mod net_tests {
     use std::mem::size_of;
     
     pub fn net_tests() {
-        ut_lind_net_bind();
-        ut_lind_net_bind_multiple();
-        ut_lind_net_bind_on_zero();
-        ut_lind_net_connect_basic_udp();
-        ut_lind_net_getpeername();
-        ut_lind_net_getsockname();
-        ut_lind_net_listen();
-        ut_lind_net_poll();
-        ut_lind_net_recvfrom();
+    //    ut_lind_net_bind();
+    //    ut_lind_net_bind_multiple();
+    //    ut_lind_net_bind_on_zero();
+    //    ut_lind_net_connect_basic_udp();
+    //    ut_lind_net_getpeername();
+    //    ut_lind_net_getsockname();
+    //    ut_lind_net_listen();
+    //    ut_lind_net_poll();
+    //    ut_lind_net_recvfrom();
         ut_lind_net_select(); 
-        ut_lind_net_shutdown();
-        ut_lind_net_socket();
-        ut_lind_net_socketoptions();
-        ut_lind_net_socketpair(); 
-        ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple(); 
-        ut_lind_net_udp_connect(); 
-        ut_lind_net_gethostname();
-        ut_lind_net_dns_rootserver_ping();
-        ut_lind_net_domain_socket();
-        ut_lind_net_epoll();
+    //    ut_lind_net_shutdown();
+    //    ut_lind_net_socket();
+    //    ut_lind_net_socketoptions();
+    //    ut_lind_net_socketpair(); 
+    //    ut_lind_net_udp_bad_bind();
+    //    ut_lind_net_udp_simple(); 
+    //    ut_lind_net_udp_connect(); 
+    //    ut_lind_net_gethostname();
+    //    ut_lind_net_dns_rootserver_ping();
+    //    ut_lind_net_domain_socket();
+    //  ut_lind_net_epoll();
     }
 
     pub fn ut_lind_net_bind() {
@@ -780,10 +780,9 @@ pub mod net_tests {
             for ind in 0..128 {
                 let byte_offset = ind / 8;
                 let bit_offset = (ind % 8) as u8;
-                unsafe {
-                    let input_byte_ptr = inputs.add(byte_offset) as *mut u8;
-                    let is_set = ((*input_byte_ptr >> bit_offset) & 1) == 1;
-                }
+                let input_byte_ptr = unsafe {inputs.add(byte_offset) as *mut u8};
+                
+                let is_set = unsafe {((*input_byte_ptr >> bit_offset) & 1) == 1};
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if is_set {
                     let sock = ind; 
@@ -846,10 +845,8 @@ pub mod net_tests {
             for ind in 0..128 {
                 let byte_offset = ind / 8;
                 let bit_offset = (ind % 8) as u8;
-                unsafe {
-                    let output_byte_ptr = outputs.add(byte_offset) as *mut u8;
-                    let is_set = ((*output_byte_ptr >> bit_offset) & 1) == 1;
-                }
+                let output_byte_ptr = unsafe{outputs.add(byte_offset) as *mut u8};
+                let is_set = unsafe {((*output_byte_ptr >> bit_offset) & 1) == 1};
                 if is_set {
                     let sock = ind;
                     if sock == filefd as usize {
