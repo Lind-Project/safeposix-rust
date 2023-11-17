@@ -704,16 +704,16 @@ pub mod net_tests {
         for fd in &fds_to_set {
             let byte_offset = *fd as usize / 8;
             let bit_offset = (*fd % 8) as u8;
-            let byte_ptr = inputs.add(byte_offset);
             unsafe {
-                *byte_ptr |= 1 << bit_offset;
+                let input_byte_ptr = inputs.add(byte_offset);
+                *input_byte_ptr |= 1 << bit_offset;
             }
         }       
        
         let byte_offset = filefd as usize / 8;
         let bit_offset = (filefd % 8) as u8;
-        let output_byte_ptr = outputs.add(byte_offset);
         unsafe {
+            let output_byte_ptr = outputs.add(byte_offset);
             *output_byte_ptr |= 1 << bit_offset;
         }
 
@@ -769,9 +769,9 @@ pub mod net_tests {
 
         //acting as the server and processing the request
         for _counter in 0..600 {
-            let mut binputs = inputs.clone();
-            let mut boutputs = outputs.clone();
-            let mut bexcepts = excepts.clone();
+            let binputs = inputs.clone();
+            let boutputs = outputs.clone();
+            let bexcepts = excepts.clone();
             let select_result = cage.select_syscall(11, binputs, boutputs, bexcepts, Some(interface::RustDuration::ZERO));
             assert!(select_result >= 0);
 
@@ -780,9 +780,11 @@ pub mod net_tests {
             for ind in 0..128 {
                 let byte_offset = ind / 8;
                 let bit_offset = (ind % 8) as u8;
-                let input_byte_ptr = inputs.add(byte_offset) as *mut u8;
-                let is_set = ((*input_byte_ptr >> bit_offset) & 1) == 1;
-            //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
+                unsafe {
+                    let input_byte_ptr = inputs.add(byte_offset) as *mut u8;
+                    let is_set = ((*input_byte_ptr >> bit_offset) & 1) == 1;
+                }
+                //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if is_set {
                     let sock = ind; 
                     if sock == serversockfd as usize {
@@ -791,9 +793,9 @@ pub mod net_tests {
                         assert!(sockfd > 0); 
                         let byte_offset = sockfd as usize / 8;
                         let bit_offset = (sockfd % 8) as u8;
-                        let input_byte_ptr = inputs.add(byte_offset);
-                        let output_byte_ptr = outputs.add(byte_offset);
                         unsafe {
+                            let input_byte_ptr = inputs.add(byte_offset);
+                            let output_byte_ptr = outputs.add(byte_offset);
                             *output_byte_ptr |= 1 << bit_offset;
                             *input_byte_ptr |= 1 << bit_offset;
                         }
@@ -803,8 +805,8 @@ pub mod net_tests {
                         assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
-                        let input_byte_ptr = inputs.add(byte_offset);
                         unsafe {
+                             let input_byte_ptr = inputs.add(byte_offset);
                             *input_byte_ptr &= !(1 << bit_offset);
                         }    
                     } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
@@ -820,8 +822,8 @@ pub mod net_tests {
                             if cbuf2str(&buf) == "test" {
                                 let byte_offset = sock as usize / 8;
                                 let bit_offset = (sock % 8) as u8;
-                                let output_byte_ptr = outputs.add(byte_offset);
                                 unsafe {
+                                    let output_byte_ptr = outputs.add(byte_offset);
                                     *output_byte_ptr |= 1 << bit_offset;
                                 }                   
                                 continue;
@@ -832,8 +834,8 @@ pub mod net_tests {
                         assert_eq!(cage.close_syscall(sock as i32), 0);
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
-                        let input_byte_ptr = inputs.add(byte_offset);
                         unsafe {
+                            let input_byte_ptr = inputs.add(byte_offset);
                             *input_byte_ptr &= !(1 << bit_offset);
                         }
                     }
@@ -844,8 +846,10 @@ pub mod net_tests {
             for ind in 0..128 {
                 let byte_offset = ind / 8;
                 let bit_offset = (ind % 8) as u8;
-                let output_byte_ptr = outputs.add(byte_offset) as *mut u8;
-                let is_set = ((*output_byte_ptr >> bit_offset) & 1) == 1;
+                unsafe {
+                    let output_byte_ptr = outputs.add(byte_offset) as *mut u8;
+                    let is_set = ((*output_byte_ptr >> bit_offset) & 1) == 1;
+                }
                 if is_set {
                     let sock = ind;
                     if sock == filefd as usize {
@@ -854,16 +858,16 @@ pub mod net_tests {
                         assert_eq!(cbuf2str(&buf), "test");
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
-                        let output_byte_ptr = inputs.add(byte_offset);
                         unsafe {
+                            let output_byte_ptr = inputs.add(byte_offset);
                             *output_byte_ptr &= !(1 << bit_offset);
                         }
                     } else { //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
                         assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
-                        let output_byte_ptr = inputs.add(byte_offset);
-                        unsafe {
+                        unsafe {   
+                            let output_byte_ptr = inputs.add(byte_offset);
                             *output_byte_ptr &= !(1 << bit_offset);
                         }
                     }
