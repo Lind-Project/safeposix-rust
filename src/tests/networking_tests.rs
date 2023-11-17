@@ -704,6 +704,7 @@ pub mod net_tests {
         for fd in &fds_to_set {
             let byte_offset = *fd as usize / 8;
             let bit_offset = (*fd % 8) as u8;
+            let input_byte_ptr = unsafe {inputs.add(byte_offset)};
             unsafe {
                 let input_byte_ptr = inputs.add(byte_offset);
                 *input_byte_ptr |= 1 << bit_offset;
@@ -779,7 +780,7 @@ pub mod net_tests {
             //for sock in binputs {
             for ind in 0..128 {
                 let byte_offset = ind / 8;
-                let bit_offset = (ind % 8) as u8;
+                let bit_offset = ind & 0b111;
                 let input_byte_ptr = unsafe {inputs.add(byte_offset) as *mut u8};
                 
                 let is_set = unsafe {((*input_byte_ptr >> bit_offset) & 1) == 1};
@@ -792,9 +793,9 @@ pub mod net_tests {
                         assert!(sockfd > 0); 
                         let byte_offset = sockfd as usize / 8;
                         let bit_offset = (sockfd % 8) as u8;
+                        let input_byte_ptr = unsafe {inputs.add(byte_offset)};
+                        let output_byte_ptr = unsafe {outputs.add(byte_offset)};
                         unsafe {
-                            let input_byte_ptr = inputs.add(byte_offset);
-                            let output_byte_ptr = outputs.add(byte_offset);
                             *output_byte_ptr |= 1 << bit_offset;
                             *input_byte_ptr |= 1 << bit_offset;
                         }
@@ -821,10 +822,10 @@ pub mod net_tests {
                             if cbuf2str(&buf) == "test" {
                                 let byte_offset = sock as usize / 8;
                                 let bit_offset = (sock % 8) as u8;
+                                let output_byte_ptr = unsafe {outputs.add(byte_offset)};
                                 unsafe {
-                                    let output_byte_ptr = outputs.add(byte_offset);
-                                    *output_byte_ptr |= 1 << bit_offset;
-                                }                   
+                                    *output_byte_ptr |= 1 << bit_offset;                   
+                                }
                                 continue;
                             }
                         } else {
@@ -833,8 +834,8 @@ pub mod net_tests {
                         assert_eq!(cage.close_syscall(sock as i32), 0);
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
+                        let input_byte_ptr = unsafe {inputs.add(byte_offset)};
                         unsafe {
-                            let input_byte_ptr = inputs.add(byte_offset);
                             *input_byte_ptr &= !(1 << bit_offset);
                         }
                     }
@@ -844,7 +845,7 @@ pub mod net_tests {
             //for sock in boutputs {
             for ind in 0..128 {
                 let byte_offset = ind / 8;
-                let bit_offset = (ind % 8) as u8;
+                let bit_offset = ind & 0b111;
                 let output_byte_ptr = unsafe{outputs.add(byte_offset) as *mut u8};
                 let is_set = unsafe {((*output_byte_ptr >> bit_offset) & 1) == 1};
                 if is_set {
@@ -855,16 +856,16 @@ pub mod net_tests {
                         assert_eq!(cbuf2str(&buf), "test");
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
+                        let output_byte_ptr = unsafe {inputs.add(byte_offset)};
                         unsafe {
-                            let output_byte_ptr = inputs.add(byte_offset);
                             *output_byte_ptr &= !(1 << bit_offset);
                         }
                     } else { //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
                         assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
                         let byte_offset = sock as usize / 8;
                         let bit_offset = (sock % 8) as u8;
+                        let output_byte_ptr = unsafe {inputs.add(byte_offset)};
                         unsafe {   
-                            let output_byte_ptr = inputs.add(byte_offset);
                             *output_byte_ptr &= !(1 << bit_offset);
                         }
                     }
