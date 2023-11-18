@@ -704,6 +704,10 @@ pub mod net_tests {
         interface::fd_set_insert(inputs, filefd);
         interface::fd_set_insert(outputs, filefd);
 
+        assert_eq!(interface::fd_set_check_fd(inputs, serversockfd), true);
+        assert_eq!(interface::fd_set_check_fd(inputs, filefd), true);
+        assert_eq!(interface::fd_set_check_fd(outputs, filefd), true);
+
         assert_eq!(cage.fork_syscall(2), 0);
         assert_eq!(cage.fork_syscall(3), 0);
 
@@ -753,7 +757,7 @@ pub mod net_tests {
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
             cage3.exit_syscall(EXIT_SUCCESS);
         });
-
+        interface::sleep(interface::RustDuration::from_millis(20));
         //acting as the server and processing the request
         for _counter in 0..600 {
             let select_result = cage.select_syscall(11, inputs, outputs, excepts, Some(interface::RustDuration::ZERO));
