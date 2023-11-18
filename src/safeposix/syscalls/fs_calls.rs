@@ -1145,7 +1145,6 @@ impl Cage {
             
             // re-grab clean fd
             fdguard = self.filedescriptortable[newfd as usize].write();
-
             (newfd, fdguard)
         } else {
             let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
@@ -1862,6 +1861,72 @@ impl Cage {
             Inode::Dir(_) => {
                 syscall_error(Errno::EISDIR, "truncate", "The named file is a directory")
             }
+        }
+    }
+
+    //------------------------------------FSYNC SYSCALL------------------------------------
+
+    pub fn fsync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fsync", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.fsync() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fsync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fsync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fsync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fsync", "invalid file descriptor")
+        }
+    }
+
+    //------------------------------------FDATASYNC SYSCALL------------------------------------
+
+    pub fn fdatasync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fdatasync", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.fdatasync() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fdatasync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fdatasync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fdatasync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fdatasync", "invalid file descriptor")
         }
     }
 
