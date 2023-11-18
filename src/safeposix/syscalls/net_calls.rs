@@ -1325,7 +1325,7 @@ impl Cage {
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
-                                            interface::fd_set_unset(readfds, fd);
+                                            interface::fd_set_remove(readfds, fd);
                                             continue;
                                         }
                                     } //if it's already got a pending connection, add it!
@@ -1377,7 +1377,7 @@ impl Cage {
             }
             // if it is readable, leave the bit there, otherwise turn it off
             if !readable {
-                interface::fd_set_unset(readfds, fd)
+                interface::fd_set_remove(readfds, fd)
             }
         }
         return 0;
@@ -1442,7 +1442,7 @@ impl Cage {
             }
             // if fd is writable, leave the bit there, otherwise turn it off
             if !writable {
-                interface::fd_set_unset(writefds, fd)
+                interface::fd_set_remove(writefds, fd)
             }
         }
         return 0;
@@ -1726,11 +1726,11 @@ impl Cage {
                 let errors: *mut u8 = errors_chunk.as_mut_ptr();
 
                 //read
-                if events & POLLIN > 0 {interface::fd_set_set(reads, fd)}
+                if events & POLLIN > 0 {interface::fd_set_insert(reads, fd)}
                 //write
-                if events & POLLOUT > 0 {interface::fd_set_set(writes, fd)}
+                if events & POLLOUT > 0 {interface::fd_set_insert(writes, fd)}
                 //err
-                if events & POLLERR > 0 {interface::fd_set_set(errors, fd)}
+                if events & POLLERR > 0 {interface::fd_set_insert(errors, fd)}
 
                 let mut mask: i16 = 0;
 

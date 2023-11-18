@@ -383,8 +383,9 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
+pub const FD_SET_SIZE :i32 = 1024;
 // turn on the fd bit in fd_set
-pub fn fd_set_set(fd_set: *mut u8, fd: i32) {
+pub fn fd_set_insert(fd_set: *mut u8, fd: i32) {
     let byte_offset = fd / 8;
     let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
     let bit_offset = fd & 0b111;
@@ -392,7 +393,7 @@ pub fn fd_set_set(fd_set: *mut u8, fd: i32) {
 }
 
 // turn off the fd bit in fd_set
-pub fn fd_set_unset(fd_set: *mut u8, fd: i32) {
+pub fn fd_set_remove(fd_set: *mut u8, fd: i32) {
     let byte_offset = fd / 8;
     let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
     let bit_offset = fd & 0b111;
@@ -418,24 +419,6 @@ pub fn is_fd_set_empty(fd_set: *const u8, highest_fd: i32) -> bool {
         }
     }
     return true;
-}
-
-pub fn copy_out_to_fd_set(union_argument: Arg, nfds: i32, hashset: interface::RustHashSet<i32>) {
-    let pointer = unsafe{union_argument.dispatch_mutcbuf};
-    if pointer.is_null() {return;} //do nothing if it's null
-    for i in 0..nfds {
-        let byte_offset = i / 8;
-        let bit_offset = i & 0b111;
-        let byte_ptr = pointer.wrapping_offset(byte_offset as isize);
-
-        if hashset.contains(&i) {
-            //if it's in the hash set, set the bit ot 1
-            unsafe{*byte_ptr |= 1 << bit_offset;}
-        } else {
-            //else, set the bit to 0
-            unsafe{*byte_ptr &= !(1 << bit_offset);}
-        }
-    }
 }
 
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {

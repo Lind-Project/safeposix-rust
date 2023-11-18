@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod net_tests {
-    use crate::interface;
+    use crate::interface::{self, fd_set_check_fd, fd_set_insert, fd_set_remove};
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::mem::size_of;
@@ -700,23 +700,9 @@ pub mod net_tests {
         let outputs: *mut u8 = output_chunk.as_mut_ptr();
         let excepts: *mut u8 = except_chunk.as_mut_ptr();
         
-        let fds_to_set = [serversockfd, filefd];
-        for fd in &fds_to_set {
-            let byte_offset = *fd as usize / 8;
-            let bit_offset = *fd & 0b111;
-            let input_byte_ptr = unsafe {inputs.add(byte_offset)};
-            unsafe {
-                let input_byte_ptr = inputs.add(byte_offset);
-                *input_byte_ptr |= 1 << bit_offset;
-            }
-        }       
-       
-        let byte_offset = filefd as usize / 8;
-        let bit_offset = filefd & 0b111;
-        unsafe {
-            let output_byte_ptr = outputs.add(byte_offset);
-            *output_byte_ptr |= 1 << bit_offset;
-        }
+        interface::fd_set_insert(inputs, serversockfd);
+        interface::fd_set_insert(inputs, filefd);
+        interface::fd_set_insert(outputs, filefd);
 
         assert_eq!(cage.fork_syscall(2), 0);
         assert_eq!(cage.fork_syscall(3), 0);
@@ -770,105 +756,59 @@ pub mod net_tests {
 
         //acting as the server and processing the request
         for _counter in 0..600 {
-            let binputs = inputs.clone();
-            let boutputs = outputs.clone();
-            let bexcepts = excepts.clone();
-            let select_result = cage.select_syscall(11, binputs, boutputs, bexcepts, Some(interface::RustDuration::ZERO));
+            let select_result = cage.select_syscall(11, inputs, outputs, excepts, Some(interface::RustDuration::ZERO));
             assert!(select_result >= 0);
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-            for ind in 0..128 {
-                let byte_offset = ind / 8;
-                let bit_offset = ind & 0b111;
-                let input_byte_ptr = unsafe {inputs.add(byte_offset) as *mut u8};
-                
-                let is_set = unsafe {((*input_byte_ptr >> bit_offset) & 1) == 1};
+            for sock in 0..interface::FD_SET_SIZE {
+                if !fd_set_check_fd(inputs, sock) {continue;}
+
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
-                if is_set {
-                    let sock = ind; 
-                    if sock == serversockfd as usize {
-                        let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
-                        let sockfd = cage.accept_syscall(sock as i32, &mut sockgarbage); //really can only make sure that the fd is valid
-                        assert!(sockfd > 0); 
-                        let byte_offset = sockfd as usize / 8;
-                        let bit_offset = sockfd & 0b111;
-                        let input_byte_ptr = unsafe {inputs.add(byte_offset)};
-                        let output_byte_ptr = unsafe {outputs.add(byte_offset)};
-                        unsafe {
-                            *output_byte_ptr |= 1 << bit_offset;
-                            *input_byte_ptr |= 1 << bit_offset;
-                        }
-                    } else if sock == filefd as usize {
-                        //Write to a file...
-                        assert_eq!(cage.write_syscall(sock as i32, str2cbuf("test"), 4), 4);
-                        assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
-                        let byte_offset = sock as usize / 8;
-                        let bit_offset = sock & 0b111;
-                        unsafe {
-                             let input_byte_ptr = inputs.add(byte_offset);
-                            *input_byte_ptr &= !(1 << bit_offset);
-                        }    
-                    } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
-                        let mut buf = sizecbuf(4);
-                        let mut recvresult :i32;
-                        loop {
-                            recvresult = cage.recv_syscall(sock as i32, buf.as_mut_ptr(), 4, 0);
-                            if recvresult != -libc::EINTR {
-                                break; // if the error was EINTR, retry the syscall
-                            }
-                        }
-                        if recvresult == 4 {
-                            if cbuf2str(&buf) == "test" {
-                                let byte_offset = sock as usize / 8;
-                                let bit_offset = sock & 0b111;
-                                let output_byte_ptr = unsafe {outputs.add(byte_offset)};
-                                unsafe {
-                                    *output_byte_ptr |= 1 << bit_offset;                   
-                                }
-                                continue;
-                            }
-                        } else {
-                            assert_eq!(recvresult, 0);
-                        }
-                        assert_eq!(cage.close_syscall(sock as i32), 0);
-                        let byte_offset = sock as usize / 8;
-                        let bit_offset = sock & 0b111;
-                        let input_byte_ptr = unsafe {inputs.add(byte_offset)};
-                        unsafe {
-                            *input_byte_ptr &= !(1 << bit_offset);
+                if sock == serversockfd {
+                    let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                    let sockfd = cage.accept_syscall(sock as i32, &mut sockgarbage); //really can only make sure that the fd is valid
+                    assert!(sockfd > 0); 
+                    interface::fd_set_insert(inputs, sockfd);
+                    interface::fd_set_insert(outputs, sockfd);
+                } else if sock == filefd {
+                    //Write to a file...
+                    assert_eq!(cage.write_syscall(sock as i32, str2cbuf("test"), 4), 4);
+                    assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
+                    interface::fd_set_remove(inputs, sock);
+                } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
+                    let mut buf = sizecbuf(4);
+                    let mut recvresult :i32;
+                    loop {
+                        recvresult = cage.recv_syscall(sock as i32, buf.as_mut_ptr(), 4, 0);
+                        if recvresult != -libc::EINTR {
+                            break; // if the error was EINTR, retry the syscall
                         }
                     }
+                    if recvresult == 4 {
+                        if cbuf2str(&buf) == "test" {
+                            interface::fd_set_insert(outputs, sock);
+                            continue;
+                        }
+                    } else {
+                        assert_eq!(recvresult, 0);
+                    }
+                    assert_eq!(cage.close_syscall(sock as i32), 0);
+                    interface::fd_set_remove(inputs, sock);
                 }
             }
 
             //for sock in boutputs {
-            for ind in 0..128 {
-                let byte_offset = ind / 8;
-                let bit_offset = ind & 0b111;
-                let output_byte_ptr = unsafe{outputs.add(byte_offset) as *mut u8};
-                let is_set = unsafe {((*output_byte_ptr >> bit_offset) & 1) == 1};
-                if is_set {
-                    let sock = ind;
-                    if sock == filefd as usize {
-                        let mut buf = sizecbuf(4);
-                        assert_eq!(cage.read_syscall(sock as i32, buf.as_mut_ptr(), 4), 4);
-                        assert_eq!(cbuf2str(&buf), "test");
-                        let byte_offset = sock as usize / 8;
-                        let bit_offset = sock & 0b111;
-                        let output_byte_ptr = unsafe {inputs.add(byte_offset)};
-                        unsafe {
-                            *output_byte_ptr &= !(1 << bit_offset);
-                        }
-                    } else { //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
-                        assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
-                        let byte_offset = sock as usize / 8;
-                        let bit_offset = sock & 0b111;
-                        let output_byte_ptr = unsafe {inputs.add(byte_offset)};
-                        unsafe {   
-                            *output_byte_ptr &= !(1 << bit_offset);
-                        }
-                    }
+            for sock in 0..interface::FD_SET_SIZE {
+                if !interface::fd_set_check_fd(outputs, sock) {continue;}
+                if sock == filefd {
+                    let mut buf = sizecbuf(4);
+                    assert_eq!(cage.read_syscall(sock as i32, buf.as_mut_ptr(), 4), 4);
+                    assert_eq!(cbuf2str(&buf), "test");
+                    interface::fd_set_remove(outputs, sock)
+                } else { //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
+                    assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
+                    interface::fd_set_remove(outputs, sock)
                 }
             }
         }
