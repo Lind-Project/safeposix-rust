@@ -1248,14 +1248,9 @@ impl Cage {
             // 3. iterate thru exceptfds
             // currently we don't really do select on execptfds, we just check if those fds are valid
             if !exceptfds.is_null() {
-                for i in 0..nfds {
-                    // check if current i is in execptfds
-                    let byte_offset = i / 8;
-                    let byte_ptr = exceptfds.wrapping_offset(byte_offset as isize);
-                    let bit_offset = i & 0b111;
+                for fd in 0..nfds {
                     // find the bit and see if it's on
-                    if (unsafe{*byte_ptr}) & (1 << bit_offset) == 0 {continue}
-                    let fd = i;
+                    if !interface::fd_set_check_fd(exceptfds, fd) {continue}
                     let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();
                     if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
@@ -1272,14 +1267,9 @@ impl Cage {
     }
 
     fn select_readfds(&self, nfds: i32, readfds: *mut u8, retval: &mut i32) -> i32 {
-        for i in 0..nfds {
+        for fd in 0..nfds {
             // check if current i is in readfd
-            let byte_offset = i / 8;
-            let byte_ptr = readfds.wrapping_offset(byte_offset as isize);
-            let bit_offset = i & 0b111;
-            //check if the bit is set, if not, skip 
-            if (unsafe{*byte_ptr}) & (1 << bit_offset) == 0 {continue}
-            let fd = i;
+            if !interface::fd_set_check_fd(readfds, fd) {continue}
             let mut readable = false;
 
 
@@ -1335,7 +1325,7 @@ impl Cage {
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
-                                            unsafe{*byte_ptr &= !(1 << bit_offset);}
+                                            interface::fd_set_unset(readfds, fd);
                                             continue;
                                         }
                                     } //if it's already got a pending connection, add it!
@@ -1387,21 +1377,16 @@ impl Cage {
             }
             // if it is readable, leave the bit there, otherwise turn it off
             if !readable {
-                unsafe{*byte_ptr &= !(1 << bit_offset);}
+                interface::fd_set_unset(readfds, fd)
             }
         }
         return 0;
     }
 
     fn select_writefds(&self, nfds: i32, writefds: *mut u8, retval: &mut i32) -> i32 {
-        for i in 0..nfds {
-            // check if current i is in writefds
-            let byte_offset = i / 8;
-            let byte_ptr = writefds.wrapping_offset(byte_offset as isize);
-            let bit_offset = i & 0b111;
-            //check if the bit is set, if not, skip 
-            if (unsafe{*byte_ptr}) & (1 << bit_offset) == 0 {continue}
-            let fd = i;
+        for fd in 0..nfds {
+            // check if current i is in writefds     
+            if !interface::fd_set_check_fd(writefds, fd) {continue}
             let mut writable = false;
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
@@ -1457,7 +1442,7 @@ impl Cage {
             }
             // if fd is writable, leave the bit there, otherwise turn it off
             if !writable {
-                unsafe{*byte_ptr &= !(1 << bit_offset);}
+                interface::fd_set_unset(writefds, fd)
             }
         }
         return 0;
@@ -1740,18 +1725,12 @@ impl Cage {
                 let writes: *mut u8 = writes_chunk.as_mut_ptr();
                 let errors: *mut u8 = errors_chunk.as_mut_ptr();
 
-                let byte_offset = fd / 8;
-                let read_byte_ptr = reads.wrapping_offset(byte_offset as isize);
-                let write_byte_ptr = writes.wrapping_offset(byte_offset as isize);
-                let error_byte_ptr = errors.wrapping_offset(byte_offset as isize);
-                let bit_offset = fd & 0b111;
-
                 //read
-                if events & POLLIN > 0 {unsafe{*read_byte_ptr |= 1 << bit_offset;}}
+                if events & POLLIN > 0 {interface::fd_set_set(reads, fd)}
                 //write
-                if events & POLLOUT > 0 {unsafe{*write_byte_ptr |= 1 << bit_offset;}}
+                if events & POLLOUT > 0 {interface::fd_set_set(writes, fd)}
                 //err
-                if events & POLLERR > 0 {unsafe{*error_byte_ptr |= 1 << bit_offset;}}
+                if events & POLLERR > 0 {interface::fd_set_set(errors, fd)}
 
                 let mut mask: i16 = 0;
 

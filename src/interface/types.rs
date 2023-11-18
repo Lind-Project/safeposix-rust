@@ -238,6 +238,10 @@ pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
+pub fn get_mutcbuf_null(union_argument: Arg) -> Result<*mut u8, i32> {
+    return Ok (unsafe{union_argument.dispatch_mutcbuf});
+}
+
 pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
    
     //first we check that the pointer is not null 
@@ -379,31 +383,38 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn fd_set_to_hashset(union_argument: Arg, nfds: i32) -> Result<interface::RustHashSet<i32>, i32> {
-    let pointer = unsafe{union_argument.dispatch_mutcbuf};
-    let hashset = interface::RustHashSet::new();
-    if !pointer.is_null() {    
-        for i in 0..nfds {
-            let byte_offset = i / 8;
-            let bit_offset = i & 0b111;
-            let byte_ptr = pointer.wrapping_offset(byte_offset as isize);
-
-            //check whether the bit_offsetth bit of the byte_offsetth byte in the fd_set is set
-            if (unsafe{*byte_ptr}) & (1 << bit_offset) != 0 {
-                //if so, add it to our hashset
-                hashset.insert(i);
-            }
-        }
-    }
-    return Ok(hashset);
+// turn off the fd bit in fd_set
+pub fn fd_set_set(fd_set: *mut u8, fd: i32) {
+    let byte_offset = fd / 8;
+    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
+    let bit_offset = fd & 0b111;
+    unsafe{*byte_ptr |= 1 << bit_offset;}
 }
+
+// turn on the fd bit in fd_set
+pub fn fd_set_unset(fd_set: *mut u8, fd: i32) {
+    let byte_offset = fd / 8;
+    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
+    let bit_offset = fd & 0b111;
+    unsafe{*byte_ptr &= !(1 << bit_offset);}
+}
+
+// return true if the bit for fd is set in fd_set, false otherwise
+pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
+    let byte_offset = fd / 8;
+    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
+    let bit_offset = fd & 0b111;
+    return (unsafe{*byte_ptr}) & (1 << bit_offset) == 0;
+}
+
 // I don't want everything to assume the size of fd_set is 1024 bits, so this
 // helper function will check up to the byte of the highest fd given by nfds
-pub fn is_fd_set_empty(fdset: *const u8, highest_fd: i32) -> bool {
+pub fn is_fd_set_empty(fd_set: *const u8, highest_fd: i32) -> bool {
     let nbytes = (highest_fd as usize + 7) / 8;
     for i in 0..nbytes {
         unsafe {
-            if *fdset.add(i) != 0 {return false;}
+            // return false if we find any non-zero byte
+            if *fd_set.add(i) != 0 {return false;}
         }
     }
     return true;

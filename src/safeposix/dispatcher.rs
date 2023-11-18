@@ -352,15 +352,10 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             if nfds < 0 { //RLIMIT_NOFILE check as well?
                 return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
             } else if nfds > 1024 {
-                return syscall_error(Errno::EINVAL, "select", "Number of fds can't exceed 1024");
+                return syscall_error(Errno::EOPNOTSUPP, "select", "Select only support fd number below 1024");
             }
 
-            // we don't use get_mutcbuf here because the pointers might be null
-            let readfds = unsafe{arg2.dispatch_mutcbuf};
-            let writefds = unsafe{arg3.dispatch_mutcbuf};
-            let exceptfds = unsafe{arg4.dispatch_mutcbuf};
-
-            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<*mut u8, i32>(readfds), Ok::<*mut u8, i32>(writefds), Ok::<*mut u8, i32>(exceptfds), interface::duration_fromtimeval(arg5))
+            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), interface::get_mutcbuf_null(arg2), interface::get_mutcbuf_null(arg3), interface::get_mutcbuf_null(arg4), interface::duration_fromtimeval(arg5))
         }
         POLL_SYSCALL => {
             let nfds = get_onearg!(interface::get_usize(arg2));
