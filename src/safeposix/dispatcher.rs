@@ -106,6 +106,8 @@ const SIGPROCMASK_SYSCALL: i32 = 149;
 const SETITIMER_SYSCALL: i32 = 150;
 
 const FCHDIR_SYSCALL: i32 = 161;
+const FSYNC_SYSCALL: i32 = 162;
+const FDATASYNC_SYSCALL: i32 = 163;
 
 use crate::interface;
 use super::cage::*;
@@ -113,8 +115,8 @@ use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, p
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
-use super::syscalls::sys_constants::*;
-use super::syscalls::fs_constants::IPC_STAT;
+use super::syscalls::{sys_constants::*, fs_constants::IPC_STAT};
+use crate::lib_fs_utils::{visit_children, lind_deltree};
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -192,6 +194,12 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         CHDIR_SYSCALL => {
             check_and_dispatch!(cage.chdir_syscall, interface::get_cstr(arg1))
+        }
+        FSYNC_SYSCALL => {
+            check_and_dispatch!(cage.fsync_syscall, interface::get_int(arg1))
+        }
+        FDATASYNC_SYSCALL => {
+            check_and_dispatch!(cage.fdatasync_syscall, interface::get_int(arg1))
         }
         FCHDIR_SYSCALL => {
             check_and_dispatch!(cage.fchdir_syscall, interface::get_int(arg1))
@@ -591,6 +599,25 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
     cage.thread_table.remove(&pthreadid);
 }
 
+fn cleartmp(init: bool) {
+    let path = "/tmp";
+    
+    let cage = interface::cagetable_getref(0);
+    let mut statdata = StatData::default();
+    
+    if cage.stat_syscall(path, &mut statdata) == 0 {
+        visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
+            if isdir { lind_deltree(childcage, childpath); }
+            else { childcage.unlink_syscall(childpath);}
+        });
+    }
+    else {
+        if init  == true {
+            cage.mkdir_syscall(path, S_IRWXA);
+        } 
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     let cage = interface::cagetable_getref(cageid);
@@ -616,13 +643,12 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
-
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
     load_fs();
     incref_root();
     incref_root();
-    
+
     let utilcage = Cage{
         cageid: 0, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
@@ -645,6 +671,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0)
     };
+
     interface::cagetable_insert(0, utilcage);
 
     //init cage is its own parent
@@ -671,18 +698,21 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         interval_timer: interface::IntervalTimer::new(1)
     };
     interface::cagetable_insert(1, initcage);
+    // make sure /tmp is clean
+    cleartmp(true);
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
-
-    interface::cagetable_clear();
-
+    
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
     }
-
+    
+    // clear /tmp folder
+    cleartmp(false);
+    interface::cagetable_clear();
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
