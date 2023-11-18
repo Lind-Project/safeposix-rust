@@ -383,7 +383,7 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-// turn off the fd bit in fd_set
+// turn on the fd bit in fd_set
 pub fn fd_set_set(fd_set: *mut u8, fd: i32) {
     let byte_offset = fd / 8;
     let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
@@ -391,7 +391,7 @@ pub fn fd_set_set(fd_set: *mut u8, fd: i32) {
     unsafe{*byte_ptr |= 1 << bit_offset;}
 }
 
-// turn on the fd bit in fd_set
+// turn off the fd bit in fd_set
 pub fn fd_set_unset(fd_set: *mut u8, fd: i32) {
     let byte_offset = fd / 8;
     let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
@@ -404,7 +404,7 @@ pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
     let byte_offset = fd / 8;
     let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
     let bit_offset = fd & 0b111;
-    return (unsafe{*byte_ptr}) & (1 << bit_offset) == 0;
+    return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
 }
 
 // I don't want everything to assume the size of fd_set is 1024 bits, so this
