@@ -1272,7 +1272,6 @@ impl Cage {
             if !interface::fd_set_check_fd(readfds, fd) {continue}
             let mut readable = false;
 
-
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -1717,6 +1716,7 @@ impl Cage {
                 let fd = structpoll.fd;
                 let events = structpoll.events;
 
+                // allocate spaces for fd_set bitmaps
                 let mut reads_chunk: [u8; 128] = [0; 128];
                 let mut writes_chunk: [u8; 128] = [0; 128];
                 let mut errors_chunk: [u8; 128] = [0; 128];

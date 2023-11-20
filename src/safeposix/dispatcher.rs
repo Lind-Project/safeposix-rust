@@ -102,7 +102,7 @@ const GETIFADDRS_SYSCALL: i32 = 146;
 
 const FCHDIR_SYSCALL: i32 = 161;
 
-use crate::interface::{self, get_mutcbuf};
+use crate::interface;
 use super::cage::*;
 use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
@@ -351,7 +351,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let nfds = get_onearg!(interface::get_int(arg1));
             if nfds < 0 { //RLIMIT_NOFILE check as well?
                 return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
-            } else if nfds > 1024 {
+            } else if nfds > interface::FD_SET_SIZE {
                 return syscall_error(Errno::EOPNOTSUPP, "select", "Select only support fd number below 1024");
             }
 

@@ -238,6 +238,7 @@ pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
+// for the case where the buffer pointer being Null is normal
 pub fn get_mutcbuf_null(union_argument: Arg) -> Result<*mut u8, i32> {
     return Ok (unsafe{union_argument.dispatch_mutcbuf});
 }
