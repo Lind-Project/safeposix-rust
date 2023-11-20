@@ -4,6 +4,7 @@ pub mod net_tests {
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::mem::size_of;
+    use std::sync::{Arc, Barrier};
     
     pub fn net_tests() {
     //    ut_lind_net_bind();
@@ -714,16 +715,21 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
 
+        let barrier = Arc::new(Barrier::new(3));
+        let barrier_clone1 = barrier.clone();
+        let barrier_clone2 = barrier.clone();
+
         //client 1 connects to the server to send and recv data...
         let threadclient1 = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
+            barrier_clone1.wait();
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
 
             interface::sleep(interface::RustDuration::from_millis(1));
-
+            
             let mut buf = sizecbuf(4);
             assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
             assert_eq!(cbuf2str(&buf), "test");
@@ -739,6 +745,7 @@ pub mod net_tests {
             assert_eq!(cage3.close_syscall(serversockfd), 0);
 
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
+            barrier_clone2.wait();
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf("test"), 4, 0), 4);
 
             interface::sleep(interface::RustDuration::from_millis(1));
@@ -757,7 +764,7 @@ pub mod net_tests {
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
             cage3.exit_syscall(EXIT_SUCCESS);
         });
-        interface::sleep(interface::RustDuration::from_millis(20));
+        barrier.wait();
         //acting as the server and processing the request
         for _counter in 0..600 {
             let select_result = cage.select_syscall(11, inputs, outputs, excepts, Some(interface::RustDuration::ZERO));
