@@ -172,7 +172,6 @@ pub union Arg {
 
 
 use std::mem::size_of;
-use std::ptr::null;
 
 // Represents a Dirent struct without the string, as rust has no flexible array member support
 #[repr(C, packed(1))]
@@ -413,7 +412,7 @@ pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
     return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
 }
 
-// I don't want everything to assume the size of fd_set is 1024 bits, so this
+// We don't want everything to assume the size of fd_set is 1024 bits, so this
 // helper function will check up to the byte of the highest fd given by nfds
 pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
     let nbytes = (highest_fd as usize + 7) / 8;

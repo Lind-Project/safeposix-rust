@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod net_tests {
-    use crate::interface::{self, fd_set_check_fd, fd_set_insert, fd_set_remove};
+    use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use super::super::*;
     use std::mem::size_of;
@@ -714,7 +714,7 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
 
-        // those barriers ensures that the clients finish the connect before we do the select
+        // these barriers ensures that the clients finish the connect before we do the select
         let barrier = Arc::new(Barrier::new(3));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
@@ -729,7 +729,7 @@ pub mod net_tests {
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
 
             interface::sleep(interface::RustDuration::from_millis(1));
-            
+
             let mut buf = sizecbuf(4);
             assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
             assert_eq!(cbuf2str(&buf), "test");
@@ -773,7 +773,7 @@ pub mod net_tests {
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
             for sock in 0..FD_SET_SIZE {
-                if !fd_set_check_fd(inputs, sock) {continue;}
+                if !interface::fd_set_check_fd(inputs, sock) {continue;}
 
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if sock == serversockfd {
@@ -880,8 +880,6 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-
-
 
     pub fn ut_lind_net_socket() {
         lindrustinit(0);
