@@ -1217,9 +1217,9 @@ impl Cage {
         }
     }
 
-    pub fn select_syscall(&self, nfds: i32, readfds: *mut u8, writefds: *mut u8, exceptfds: *mut u8, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
-       if nfds < STARTINGFD || nfds >= MAXFD {
+       if (nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE) {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
        }
    
@@ -1234,23 +1234,23 @@ impl Cage {
        loop { //we must block manually
            
             // 1. iterate thru readfds
-            if !readfds.is_null() {
-                let res = self.select_readfds(nfds, readfds,  &mut retval);
+            if readfds.is_some() {
+                let res = self.select_readfds(nfds, readfds.unwrap(),  &mut retval);
                 if res != 0 {return res}
             }
             
             // 2. iterate thru writefds
-            if !writefds.is_null() {
-                let res = self.select_writefds(nfds, writefds, &mut retval);
+            if !writefds.is_some() {
+                let res = self.select_writefds(nfds, writefds.unwrap(), &mut retval);
                 if res != 0 {return res}
             }
             
             // 3. iterate thru exceptfds
             // currently we don't really do select on execptfds, we just check if those fds are valid
-            if !exceptfds.is_null() {
+            if !exceptfds.is_some() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
-                    if !interface::fd_set_check_fd(exceptfds, fd) {continue}
+                    if !interface::fd_set_check_fd(exceptfds.unwrap(), fd) {continue}
                     let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();
                     if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
@@ -1736,10 +1736,10 @@ impl Cage {
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
                 // NOTE that the nfds argument is highest fd + 1
-                if Self::select_syscall(&self, fd + 1, reads, writes, errors, Some(interface::RustDuration::ZERO)) > 0 {
-                    mask += if !interface::is_fd_set_empty(reads, fd) {POLLIN} else {0};
-                    mask += if !interface::is_fd_set_empty(writes, fd) {POLLOUT} else {0};
-                    mask += if !interface::is_fd_set_empty(errors, fd) {POLLERR} else {0};
+                if Self::select_syscall(&self, fd + 1, Some(reads), Some(writes), Some(errors), Some(interface::RustDuration::ZERO)) > 0 {
+                    mask += if !interface::fd_set_is_empty(reads, fd) {POLLIN} else {0};
+                    mask += if !interface::fd_set_is_empty(writes, fd) {POLLOUT} else {0};
+                    mask += if !interface::fd_set_is_empty(errors, fd) {POLLERR} else {0};
                     return_code += 1;
                 }
                 structpoll.revents = mask;

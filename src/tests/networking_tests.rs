@@ -696,11 +696,9 @@ pub mod net_tests {
         // allocate spaces for fd_set bitmaps
         let mut input_chunk: [u8; 128] = [0; 128];
         let mut output_chunk: [u8; 128] = [0; 128];
-        let mut except_chunk: [u8; 128] = [0; 128];
 
         let inputs: *mut u8 = input_chunk.as_mut_ptr();
         let outputs: *mut u8 = output_chunk.as_mut_ptr();
-        let excepts: *mut u8 = except_chunk.as_mut_ptr();
         
         interface::fd_set_insert(inputs, serversockfd);
         interface::fd_set_insert(inputs, filefd);
@@ -716,6 +714,7 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
 
+        // those barriers ensures that the clients finish the connect before we do the select
         let barrier = Arc::new(Barrier::new(3));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
@@ -768,12 +767,12 @@ pub mod net_tests {
         barrier.wait();
         //acting as the server and processing the request
         for _counter in 0..600 {
-            let select_result = cage.select_syscall(11, inputs, outputs, excepts, Some(interface::RustDuration::ZERO));
+            let select_result = cage.select_syscall(11, Some(inputs), Some(outputs), None, Some(interface::RustDuration::ZERO));
             assert!(select_result >= 0);
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-            for sock in 0..interface::FD_SET_SIZE {
+            for sock in 0..FD_SET_SIZE {
                 if !fd_set_check_fd(inputs, sock) {continue;}
 
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
@@ -811,7 +810,7 @@ pub mod net_tests {
             }
 
             //for sock in boutputs {
-            for sock in 0..interface::FD_SET_SIZE {
+            for sock in 0..FD_SET_SIZE {
                 if !interface::fd_set_check_fd(outputs, sock) {continue;}
                 if sock == filefd {
                     let mut buf = sizecbuf(4);

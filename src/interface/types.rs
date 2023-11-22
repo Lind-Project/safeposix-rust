@@ -172,6 +172,7 @@ pub union Arg {
 
 
 use std::mem::size_of;
+use std::ptr::null;
 
 // Represents a Dirent struct without the string, as rust has no flexible array member support
 #[repr(C, packed(1))]
@@ -239,8 +240,12 @@ pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
 }
 
 // for the case where the buffer pointer being Null is normal
-pub fn get_mutcbuf_null(union_argument: Arg) -> Result<*mut u8, i32> {
-    return Ok (unsafe{union_argument.dispatch_mutcbuf});
+pub fn get_mutcbuf_null(union_argument: Arg) -> Result<Option<*mut u8>, i32> {
+    let data = unsafe{union_argument.dispatch_mutcbuf};
+    if !data.is_null() {
+        return Ok(Some(data));
+    }
+    return Ok(None);
 }
 
 pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
@@ -384,7 +389,6 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub const FD_SET_SIZE :i32 = 1024;
 // turn on the fd bit in fd_set
 pub fn fd_set_insert(fd_set: *mut u8, fd: i32) {
     let byte_offset = fd / 8;
@@ -411,7 +415,7 @@ pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
 
 // I don't want everything to assume the size of fd_set is 1024 bits, so this
 // helper function will check up to the byte of the highest fd given by nfds
-pub fn is_fd_set_empty(fd_set: *const u8, highest_fd: i32) -> bool {
+pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
     let nbytes = (highest_fd as usize + 7) / 8;
     for i in 0..nbytes {
         unsafe {
