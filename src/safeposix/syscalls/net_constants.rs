@@ -383,6 +383,8 @@ pub const EPOLL_CTL_ADD: i32 = 1;
 pub const EPOLL_CTL_DEL: i32 = 2;
 pub const EPOLL_CTL_MOD: i32 = 3;
 
+pub const FD_SET_SIZE :i32 = 1024;
+
 //for internal use
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ConnState {
