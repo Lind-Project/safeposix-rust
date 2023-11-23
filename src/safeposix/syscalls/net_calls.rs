@@ -1219,7 +1219,7 @@ impl Cage {
 
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
-       if (nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE) {
+       if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
        }
    
