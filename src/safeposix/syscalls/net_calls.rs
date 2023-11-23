@@ -1740,10 +1740,11 @@ impl Cage {
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
                 // NOTE that the nfds argument is highest fd + 1
-                if Self::select_syscall(&self, fd + 1, Some(reads), Some(writes), Some(errors), Some(interface::RustDuration::ZERO)) > 0 {
-                    mask += if !interface::fd_set_is_empty(reads, fd) {POLLIN} else {0};
-                    mask += if !interface::fd_set_is_empty(writes, fd) {POLLOUT} else {0};
-                    mask += if !interface::fd_set_is_empty(errors, fd) {POLLERR} else {0};
+                let selectret = Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO));
+                if selectret > 0 {
+                    mask += if !reads.is_empty() {POLLIN} else {0};
+                    mask += if !writes.is_empty() {POLLOUT} else {0};
+                    mask += if !errors.is_empty() {POLLERR} else {0};
                     return_code += 1;
                 } else if selectret < 0 { return selectret; }
                 structpoll.revents = mask;
