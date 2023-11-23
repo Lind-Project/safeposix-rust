@@ -1217,15 +1217,9 @@ impl Cage {
         }
     }
 
-    pub fn select_syscall(&self, nfds: i32, readfds: &mut interface::RustHashSet<i32>, writefds: &mut interface::RustHashSet<i32>, exceptfds: &mut interface::RustHashSet<i32>, timeout: Option<interface::RustDuration>) -> i32 {
-       //exceptfds and writefds are not really implemented at the current moment.
-       //They both always return success. However we have some intention of making
-       //writefds work at some point for pipes? We have no such intention for exceptfds
-       let mut new_readfds = interface::RustHashSet::<i32>::new();
-       let mut new_writefds = interface::RustHashSet::<i32>::new();
-       //let mut new_exceptfds = interface::RustHashSet::<i32>::new(); we don't ever support exceptional conditions
-   
-       if nfds < STARTINGFD || nfds >= MAXFD {
+    pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
+
+       if (nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE) {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
        }
    
@@ -1240,23 +1234,32 @@ impl Cage {
        loop { //we must block manually
            
             // 1. iterate thru readfds
-            let mut res = self.select_readfds(readfds, &mut new_readfds, &mut retval);
-            if res != 0 {return res}
+            if readfds.is_some() {
+                let res = self.select_readfds(nfds, readfds.unwrap(),  &mut retval);
+                if res != 0 {return res}
+            }
             
             // 2. iterate thru writefds
-            res = self.select_writefds(writefds, &mut new_writefds, &mut retval);
-            if res != 0 {return res}
+            if !writefds.is_some() {
+                let res = self.select_writefds(nfds, writefds.unwrap(), &mut retval);
+                if res != 0 {return res}
+            }
             
             // 3. iterate thru exceptfds
-            for fd in exceptfds.iter() {
-                //we say none of them ever have exceptional conditions
-                let checkedfd = self.get_filedescriptor(*fd).unwrap();
-                let unlocked_fd = checkedfd.read();
-                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+            // currently we don't really do select on execptfds, we just check if those fds are valid
+            if !exceptfds.is_some() {
+                for fd in 0..nfds {
+                    // find the bit and see if it's on
+                    if !interface::fd_set_check_fd(exceptfds.unwrap(), fd) {continue}
+                    let checkedfd = self.get_filedescriptor(fd).unwrap();
+                    let unlocked_fd = checkedfd.read();
+                    if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+                }
             }
 
             // at this point lets check if we got a signal before sleeping
             if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
+
 
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
@@ -1264,14 +1267,16 @@ impl Cage {
                 interface::sleep(BLOCK_TIME);
             }
         }
-        *readfds = new_readfds;
-        *writefds = new_writefds;
         return retval;
     }
 
-    fn select_readfds(&self, readfds: &mut interface::RustHashSet<i32>, new_readfds: &mut interface::RustHashSet<i32>, retval: &mut i32) -> i32 {
-        for fd in readfds.iter() {
-            let checkedfd = self.get_filedescriptor(*fd).unwrap();
+    fn select_readfds(&self, nfds: i32, readfds: *mut u8, retval: &mut i32) -> i32 {
+        for fd in 0..nfds {
+            // check if current i is in readfd
+            if !interface::fd_set_check_fd(readfds, fd) {continue}
+            let mut readable = false;
+
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
                 match filedesc_enum {
@@ -1286,7 +1291,7 @@ impl Cage {
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
-                                        new_readfds.insert(*fd);
+                                        readable = true;
                                         *retval += 1;                
                                     }
                                 }
@@ -1300,8 +1305,8 @@ impl Cage {
                                 if sockhandle.state == ConnState::CONNECTED {
                                     drop(sockhandle);
                                     drop(unlocked_fd);
-                                    if self._nonblock_peek_read(*fd) {
-                                        new_readfds.insert(*fd);
+                                    if self._nonblock_peek_read(fd) {
+                                        readable = true;
                                         *retval += 1;
                                     }
                                 }
@@ -1321,28 +1326,30 @@ impl Cage {
                                             //save the pending connection for accept to do something with it
                                             vacant.insert(vec!(listeningsocket));
                                         } else {
-                                            //if it returned an error, then don't insert it into new_readfds
-                                        continue;
+                                            // if it returned an error, then don't insert it into new_readfds
+                                            // of course unset the bit explicitly before we continue
+                                            interface::fd_set_remove(readfds, fd);
+                                            continue;
                                         }
                                     } //if it's already got a pending connection, add it!
 
                                     //if we reach here there is a pending connection
-                                    new_readfds.insert(*fd);
+                                    readable = true;
                                     *retval += 1;
                                     //sockhandle innersocket unwrap ok if INPROGRESS
                                 } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
                                         sockhandle.state = ConnState::CONNECTED;
-                                        new_readfds.insert(*fd);
+                                        readable = true;
                                         *retval += 1;
                                 } else {
                                     if sockhandle.protocol == IPPROTO_UDP {
-                                        new_readfds.insert(*fd);
+                                        readable = true;
                                         *retval += 1;
                                     } else {
                                         drop(sockhandle);
                                         drop(unlocked_fd);
-                                        if self._nonblock_peek_read(*fd) {
-                                            new_readfds.insert(*fd);
+                                        if self._nonblock_peek_read(fd) {
+                                            readable = true;
                                             *retval += 1;
                                         }
                                     }
@@ -1357,27 +1364,35 @@ impl Cage {
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_read() {
-                            new_readfds.insert(*fd);
+                            readable = true;
                             *retval += 1;
                         }
                     }
 
                     //these file reads never block
                     _ => {
-                        new_readfds.insert(*fd);
+                        readable = true;
                         *retval += 1;
                     }
                 }
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
             }
+            // if it is readable, leave the bit there, otherwise turn it off
+            if !readable {
+                interface::fd_set_remove(readfds, fd)
+            }
         }
         return 0;
     }
 
-    fn select_writefds(&self, writefds: &mut interface::RustHashSet<i32>, new_writefds: &mut interface::RustHashSet<i32>, retval: &mut i32) -> i32 {
-        for fd in writefds.iter() {
-            let checkedfd = self.get_filedescriptor(*fd).unwrap();
+    fn select_writefds(&self, nfds: i32, writefds: *mut u8, retval: &mut i32) -> i32 {
+        for fd in 0..nfds {
+            // check if current i is in writefds     
+            if !interface::fd_set_check_fd(writefds, fd) {continue}
+            let mut writable = false;
+
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
                 match filedesc_enum {
@@ -1402,31 +1417,35 @@ impl Cage {
                         }
                         
                         //we always say sockets are writable? Even though this is not true
-                        new_writefds.insert(*fd);
+                        writable = true;
                         *retval += 1;
                     }
 
                     //we always say streams are writable?
                     Stream(_) => {
-                        new_writefds.insert(*fd);
+                        writable = true;
                         *retval += 1;
                     }
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_write() {
-                            new_writefds.insert(*fd);
+                            writable = true;
                             *retval += 1;
                         }
                     }
 
                     //these file writes never block
                     _ => {
-                        new_writefds.insert(*fd);
+                        writable = true;
                         *retval += 1;
                     }
                 }
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+            }
+            // if fd is writable, leave the bit there, otherwise turn it off
+            if !writable {
+                interface::fd_set_remove(writefds, fd)
             }
         }
         return 0;
@@ -1701,25 +1720,30 @@ impl Cage {
                 let fd = structpoll.fd;
                 let events = structpoll.events;
 
-                let mut reads = interface::RustHashSet::<i32>::new();
-                let mut writes = interface::RustHashSet::<i32>::new();
-                let mut errors = interface::RustHashSet::<i32>::new();
+                // allocate spaces for fd_set bitmaps
+                let mut reads_chunk: [u8; 128] = [0; 128];
+                let mut writes_chunk: [u8; 128] = [0; 128];
+                let mut errors_chunk: [u8; 128] = [0; 128];
+
+                let reads: *mut u8 = reads_chunk.as_mut_ptr();
+                let writes: *mut u8 = writes_chunk.as_mut_ptr();
+                let errors: *mut u8 = errors_chunk.as_mut_ptr();
 
                 //read
-                if events & POLLIN > 0 {reads.insert(fd);}
+                if events & POLLIN > 0 {interface::fd_set_insert(reads, fd)}
                 //write
-                if events & POLLOUT > 0 {writes.insert(fd);}
+                if events & POLLOUT > 0 {interface::fd_set_insert(writes, fd)}
                 //err
-                if events & POLLERR > 0 {errors.insert(fd);}
+                if events & POLLERR > 0 {interface::fd_set_insert(errors, fd)}
 
                 let mut mask: i16 = 0;
 
                 //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
-                let selectret = Self::select_syscall(&self, fd, &mut reads, &mut writes, &mut errors, Some(interface::RustDuration::ZERO));
-                if selectret > 0 {
-                    mask += if !reads.is_empty() {POLLIN} else {0};
-                    mask += if !writes.is_empty() {POLLOUT} else {0};
-                    mask += if !errors.is_empty() {POLLERR} else {0};
+                // NOTE that the nfds argument is highest fd + 1
+                if Self::select_syscall(&self, fd + 1, Some(reads), Some(writes), Some(errors), Some(interface::RustDuration::ZERO)) > 0 {
+                    mask += if !interface::fd_set_is_empty(reads, fd) {POLLIN} else {0};
+                    mask += if !interface::fd_set_is_empty(writes, fd) {POLLOUT} else {0};
+                    mask += if !interface::fd_set_is_empty(errors, fd) {POLLERR} else {0};
                     return_code += 1;
                 } else if selectret < 0 { return selectret; }
                 structpoll.revents = mask;
