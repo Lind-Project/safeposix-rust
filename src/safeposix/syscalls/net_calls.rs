@@ -1219,7 +1219,7 @@ impl Cage {
 
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
-       if (nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE) {
+       if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE {
            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
        }
    
@@ -1240,14 +1240,14 @@ impl Cage {
             }
             
             // 2. iterate thru writefds
-            if !writefds.is_some() {
+            if writefds.is_some() {
                 let res = self.select_writefds(nfds, writefds.unwrap(), &mut retval);
                 if res != 0 {return res}
             }
             
             // 3. iterate thru exceptfds
             // currently we don't really do select on execptfds, we just check if those fds are valid
-            if !exceptfds.is_some() {
+            if exceptfds.is_some() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
                     if !interface::fd_set_check_fd(exceptfds.unwrap(), fd) {continue}
