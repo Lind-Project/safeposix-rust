@@ -351,18 +351,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let nfds = get_onearg!(interface::get_int(arg1));
             if nfds < 0 { //RLIMIT_NOFILE check as well?
                 return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
-            }
-            let mut readfds = get_onearg!(interface::fd_set_to_hashset(arg2, nfds));
-            let mut writefds = get_onearg!(interface::fd_set_to_hashset(arg3, nfds));
-            let mut exceptfds = get_onearg!(interface::fd_set_to_hashset(arg4, nfds));
-
-            let rv = check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut readfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut writefds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut exceptfds), interface::duration_fromtimeval(arg5));
-
-            interface::copy_out_to_fd_set(arg2, nfds, readfds);
-            interface::copy_out_to_fd_set(arg3, nfds, writefds);
-            interface::copy_out_to_fd_set(arg4, nfds, exceptfds);
-
-            rv
+            } 
+            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), interface::get_mutcbuf_null(arg2), interface::get_mutcbuf_null(arg3), interface::get_mutcbuf_null(arg4), interface::duration_fromtimeval(arg5))
         }
         POLL_SYSCALL => {
             let nfds = get_onearg!(interface::get_usize(arg2));
