@@ -1909,6 +1909,42 @@ impl Cage {
         }
     }
 
+    //------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
+
+     pub fn sync_file_range_syscall(&self, fd: i32, offset: i64, nbytes: i64, flags: u32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "sync_file_range", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
+                            if !(flags & !valid_flags == 0){
+                                return syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit");
+                            }
+                            let result = unsafe { libc::sync_file_range(fd, offset, nbytes, flags) };
+                            match result {
+                                0 => 0,
+                                _ => syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::ESPIPE, "sync_file_range", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "sync_file_range", "invalid file descriptor")
+        }
+    }
+
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
