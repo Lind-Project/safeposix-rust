@@ -40,6 +40,9 @@ pub const O_SYNC: i32 = 0o10000;
 pub const O_ASYNC: i32 = 0o20000;
 pub const O_CLOEXEC: i32 = 0o2000000;
 
+// For at syscall
+pub const AT_FDCWD: i32 = -100;
+
 pub const DEFAULTTIME: u64 = 1323630836;
 
 //Standard flag combinations
