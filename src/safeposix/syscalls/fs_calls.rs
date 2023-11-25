@@ -131,6 +131,30 @@ impl Cage {
         fd //open returns the opened file descriptor
     }
 
+    //------------------------------------OPENAT SYSCALL------------------------------------
+    
+    pub fn openat_syscall(&self, dirfd: i32, path: &str, flags: i32, mode: u32) -> i32 {
+        // Check that path is not empty
+        if path.len() == 0 {
+            return syscall_error(Errno::ENOENT, "openat", "given path was null");
+        }
+
+        let truepath = if dirfd == AT_FDCWD {
+            // If dirfd is AT_FDCWD, use the current working directory
+            normpath(convpath(path), self)
+        } else {
+            // Otherwise, resolve the path relative to the directory referred by dirfd
+            let dirpath = self.get_path_from_fd(dirfd);
+            if dirpath.is_none() {
+                return syscall_error(Errno::EBADF, "openat", "invalid dirfd");
+            }
+            resolve_relative_path(dirpath.unwrap(), path)
+        };
+
+        // Use open_syscall to perform the file opening
+        self.open_syscall(&truepath, flags, mode)
+    }
+
     //------------------MKDIR SYSCALL------------------
 
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
