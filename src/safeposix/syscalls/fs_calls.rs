@@ -149,12 +149,8 @@ impl Cage {
             return self.open_syscall(&path, flags, mode);
         } else if dirfd == AT_FDCWD {
             let current_path = self.cwd.read();
-            let new_path = current_path.push(path);
-            // Convert RustPathBuf into str, and replace None with ""
-            match new_path.to_str() {
-                Some(truepath) => return self.open_syscall(&truepath, flags, mode),
-                None => return syscall_error(Errno::EBADF, "openat", "Cannot get current path"),
-            }
+            let truepath = current_path.push(path).to_str();
+            return self.open_syscall(&truepath, flags, mode);
         } else {
             // TODO: Implement dirfd + path
             return syscall_error(Errno::EBADF, "openat", "Not implemented");
