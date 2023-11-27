@@ -146,12 +146,12 @@ impl Cage {
         // ELSE IF AT_FDCWD -> cwd + path (look at fchdir)
         // ELSE -> dirfd + path
         if interface::RustPath::new(path).is_absolute() {
-            return self.open_syscall(&path, flags, mode);
+            return Self::open_syscall(&path, flags, mode);
         } else if dirfd == AT_FDCWD {
             let mut current_path = self.cwd.read();
             current_path.push(path);
             let truepath = current_path.to_str().unwrap();
-            return self.open_syscall(&truepath, flags, mode);
+            return Self::open_syscall(&truepath, flags, mode);
         } else {
             // TODO: Implement dirfd + path
             return syscall_error(Errno::EBADF, "openat", "Not implemented");
