@@ -155,9 +155,10 @@ impl Cage {
             if cwd_ret == 0 {
                 if let Ok(path_str) = String::from_utf8(buffer) {
                     let current_path = path_str.trim_matches(char::from(0)); // Remove null char
-                    let new_path = RustPath::new(&current_path).join(path_to_append);
+                    let new_path = interface::RustPath::new(&current_path).join(path);
                     // Convert RustPathBuf into str, and replace None with ""
                     let truepath = new_path.to_str().unwrap_or("").to_string();
+                    self.open_syscall(&truepath, flags, mode);
                 } else {
                     return syscall_error(Errno::EBADF, "openat", "Cannot get current path");
                 }
@@ -166,9 +167,7 @@ impl Cage {
             // TODO: Implement dirfd + path
             return syscall_error(Errno::EBADF, "openat", "Not implemented");
         }
-
-        // Use open_syscall to perform the file opening
-        self.open_syscall(&truepath, flags, mode)
+        
     }
 
     //------------------MKDIR SYSCALL------------------
