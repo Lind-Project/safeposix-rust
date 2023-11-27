@@ -167,7 +167,7 @@ impl Cage {
             // TODO: Implement dirfd + path
             return syscall_error(Errno::EBADF, "openat", "Not implemented");
         }
-        
+        0
     }
 
     //------------------MKDIR SYSCALL------------------
