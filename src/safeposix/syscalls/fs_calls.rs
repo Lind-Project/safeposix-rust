@@ -151,7 +151,7 @@ impl Cage {
             let current_path = self.cwd.read();
             let new_path = current_path.push(path);
             // Convert RustPathBuf into str, and replace None with ""
-            match newpath.to_str() {
+            match new_path.to_str() {
                 Some(truepath) => return self.open_syscall(&truepath, flags, mode),
                 None => return syscall_error(Errno::EBADF, "openat", "Cannot get current path"),
             }
@@ -159,7 +159,7 @@ impl Cage {
             // TODO: Implement dirfd + path
             return syscall_error(Errno::EBADF, "openat", "Not implemented");
         }
-        0
+        
     }
 
     //------------------MKDIR SYSCALL------------------
