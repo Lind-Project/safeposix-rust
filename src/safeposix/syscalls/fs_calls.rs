@@ -138,18 +138,34 @@ impl Cage {
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "openat", "given path was null");
         }
-
-        let truepath = if dirfd == AT_FDCWD {
-            // If dirfd is AT_FDCWD, use the current working directory
-            normpath(convpath(path), self)
-        } else {
-            // Otherwise, resolve the path relative to the directory referred by dirfd
-            let dirpath = self.get_path_from_fd(dirfd);
-            if dirpath.is_none() {
-                return syscall_error(Errno::EBADF, "openat", "invalid dirfd");
+        // Check fd
+        let checkedfd = self.get_filedescriptor(dirfd).unwrap();
+        let unlocked_fd = checkedfd.read();
+        // Check whether path is absolute 
+        // IF yes -> call open
+        // ELSE IF AT_FDCWD -> cwd + path (look at fchdir)
+        // ELSE -> dirfd + path
+        if RustPath::new(path).is_absolute() {
+            self.open_syscall(&path, flags, mode);
+        } else if dirfd == AT_FDCWD {
+            let mut buffer = vec![0u8; 1024 as usize];
+            let bufptr: *mut u8 = &mut buf[0];
+            let cwd_ret = getcwd_syscall(bufptr, 1024 as u32);
+            // Error handles in getcwd syscall
+            if cwd_ret == 0 {
+                if let Ok(path_str) = String::from_utf8(buffer) {
+                    let current_path = path_str.trim_matches(char::from(0)); // Remove null char
+                    let new_path = RustPath::new(&current_path).join(path_to_append);
+                    // Convert RustPathBuf into str, and replace None with ""
+                    let truepath = new_path.to_str().unwrap_or("").to_string();
+                } else {
+                    return syscall_error(Errno::EBADF, "openat", "Cannot get current path");
+                }
             }
-            resolve_relative_path(dirpath.unwrap(), path)
-        };
+        } else {
+            // TODO: Implement dirfd + path
+            return syscall_error(Errno::EBADF, "openat", "Not implemented");
+        }
 
         // Use open_syscall to perform the file opening
         self.open_syscall(&truepath, flags, mode)
