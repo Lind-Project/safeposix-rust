@@ -1264,12 +1264,13 @@ impl Cage {
             if retval != 0 ||  curr_time > end_time {
                 break;
             } else {
+                interface::sleep(BLOCK_TIME);
+                
                 if curr_time - last_time > interface::RustDuration::MILLISECOND { 
                     // at this point lets check if we got a signal before sleeping
                     if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
                 }
                 last_time = curr_time;
-                interface::sleep(BLOCK_TIME);
             }
         }
         return retval;
