@@ -149,7 +149,8 @@ impl Cage {
             return Self::open_syscall(&self, &path, flags, mode);
         } else if dirfd == AT_FDCWD {
             let current_path = self.cwd.read().to_str().unwrap();
-            let truepath = current_path + path;
+            let formatted_cur_path = format!("{}{}", current_path, path);
+            let truepath = formatted_cur_path.as_str();
             return Self::open_syscall(&self, &truepath, flags, mode);
         } else {
             let path_string = match &*unlocked_fd {
