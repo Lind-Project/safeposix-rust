@@ -131,7 +131,7 @@ impl Cage {
         fd //open returns the opened file descriptor
     }
 
-    //------------------------------------OPENAT SYSCALL------------------------------------
+    // //------------------------------------OPENAT SYSCALL------------------------------------
     
     pub fn openat_syscall(&self, dirfd: i32, path: &str, flags: i32, mode: u32) -> i32 {
         // Check that path is not empty
@@ -153,8 +153,19 @@ impl Cage {
             let truepath = current_path.to_str().unwrap();
             return Self::open_syscall(&truepath, flags, mode);
         } else {
-            // TODO: Implement dirfd + path
-            return syscall_error(Errno::EBADF, "openat", "Not implemented");
+            let mut path_string = match &*unlocked_fd {
+                Some(File(normalfile_filedesc_obj)) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    match pathnamefrominodenum(inodenum) {
+                        Some(name) => name,
+                        None => return syscall_error(Errno::ENOTDIR, "openat", "the file descriptor does not refer to a directory"),
+                    }
+                },
+                Some(_) => return syscall_error(Errno::EACCES, "openat", "cannot ")
+                None => return syscall_error(Errno::EBADF, "openat", "the ")
+            }
+            let truepath = path_string.as_str() + path;
+            return Self::open_syscall(&truepath, flags, mode);
         }
         
     }

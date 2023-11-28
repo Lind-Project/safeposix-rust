@@ -186,11 +186,6 @@ impl Cage {
         0
     }
 
-    pub fn vfork_syscall(&self, child_cageid: u64) -> i32 {
-        // Check the table
-        
-    }
-
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         interface::cagetable_remove(self.cageid);
 
