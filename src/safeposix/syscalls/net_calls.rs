@@ -1224,13 +1224,14 @@ impl Cage {
        }
    
        let start_time = interface::starttimer();
-   
+       let mut last_time = interface::RustDuration::ZERO;
+       let mut retval = 0; 
+
        let end_time = match timeout {
            Some(time) => time,
            None => interface::RustDuration::MAX
        };
- 
-       let mut retval = 0; 
+
        loop { //we must block manually
            
             // 1. iterate thru readfds
@@ -1257,13 +1258,17 @@ impl Cage {
                 }
             }
 
-            // at this point lets check if we got a signal before sleeping
-            if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
 
 
-            if retval != 0 || interface::readtimer(start_time) > end_time {
+            let curr_time = interface::readtimer(start_time);
+            if retval != 0 ||  curr_time > end_time {
                 break;
             } else {
+                if curr_time - last_time > interface::RustDuration::SECOND { 
+                    // at this point lets check if we got a signal before sleeping
+                    if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
+                }
+                last_time = curr_time;
                 interface::sleep(BLOCK_TIME);
             }
         }
