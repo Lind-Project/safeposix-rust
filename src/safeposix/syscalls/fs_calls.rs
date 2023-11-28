@@ -146,12 +146,12 @@ impl Cage {
         // ELSE IF AT_FDCWD -> cwd + path (look at fchdir)
         // ELSE -> dirfd + path
         if interface::RustPath::new(path).is_absolute() {
-            return Self::open_syscall(&path, flags, mode);
+            return Self::open_syscall(&self, &path, flags, mode);
         } else if dirfd == AT_FDCWD {
             let mut current_path = self.cwd.read();
             current_path.push(path);
             let truepath = current_path.to_str().unwrap();
-            return Self::open_syscall(&truepath, flags, mode);
+            return Self::open_syscall(&self, &truepath, flags, mode);
         } else {
             let mut path_string = match &*unlocked_fd {
                 Some(File(normalfile_filedesc_obj)) => {
@@ -161,11 +161,11 @@ impl Cage {
                         None => return syscall_error(Errno::ENOTDIR, "openat", "the file descriptor does not refer to a directory"),
                     }
                 },
-                Some(_) => return syscall_error(Errno::EACCES, "openat", "cannot ")
-                None => return syscall_error(Errno::EBADF, "openat", "the ")
+                Some(_) => return syscall_error(Errno::EACCES, "openat", "cannot "),
+                None => return syscall_error(Errno::EBADF, "openat", "the "),
             }
             let truepath = path_string.as_str() + path;
-            return Self::open_syscall(&truepath, flags, mode);
+            return Self::open_syscall(&self, &truepath, flags, mode);
         }
         
     }
