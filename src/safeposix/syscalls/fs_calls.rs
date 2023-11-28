@@ -148,12 +148,12 @@ impl Cage {
         if interface::RustPath::new(path).is_absolute() {
             return Self::open_syscall(&self, &path, flags, mode);
         } else if dirfd == AT_FDCWD {
-            let mut current_path = self.cwd.read();
+            let current_path: interface::RustPathBuf = self.cwd.read();
             current_path.push(path);
             let truepath = current_path.to_str().unwrap();
             return Self::open_syscall(&self, &truepath, flags, mode);
         } else {
-            let mut path_string = match &*unlocked_fd {
+            let path_string = match &*unlocked_fd {
                 Some(File(normalfile_filedesc_obj)) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     match pathnamefrominodenum(inodenum) {
@@ -164,8 +164,9 @@ impl Cage {
                 Some(_) => return syscall_error(Errno::EACCES, "openat", "cannot "),
                 None => return syscall_error(Errno::EBADF, "openat", "the "),
             };
-            
-            let truepath = format!("{}{}", path_string, path).as_str();
+
+            let formatted_path = format!("{}{}", path_string, path);
+            let truepath = formatted_path.as_str();
             return Self::open_syscall(&self, &truepath, flags, mode);
         }
         
