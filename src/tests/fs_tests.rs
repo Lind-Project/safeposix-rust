@@ -136,7 +136,7 @@ pub mod fs_tests {
         let dirfd = cage.open_syscall("/dev", O_RDWR, S_IRWXA);
         assert!(dirfd >=0, "{}", dirfd);
         let fd2 = cage.openat_syscall(dirfd, "/zero", O_RDWR, S_IRWXA);
-        assert_eq!(fd2, "/dev/zero");
+        assert!(fd2 >= 0,"{}", fd2);
         // println!("fd2: {}", fd2);
         lindrustfinalize();
     }

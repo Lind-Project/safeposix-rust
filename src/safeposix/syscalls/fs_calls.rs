@@ -168,7 +168,7 @@ impl Cage {
 
             let formatted_path = format!("{}/{}", path_string, path);
             let truepath = formatted_path.as_str();
-            println!(truepath);
+            println!("{}", truepath);
             return Self::open_syscall(&self, &truepath, flags, mode);
         }
         
