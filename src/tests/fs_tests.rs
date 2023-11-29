@@ -42,6 +42,7 @@ pub mod fs_tests {
         rdwrtest();
         prdwrtest();
         chardevtest();
+        ut_lind_fs_openat();
         ut_lind_fs_exec_cloexec();
         ut_lind_fs_shm();
         ut_lind_fs_getpid_getppid();
@@ -124,7 +125,14 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    pub fn ut_lind_fs_openat() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
 
+        let fd = cage.openat_syscall(AT_FDCWD, "/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+        lindrustfinalize();
+    }
 
     pub fn chardevtest() {
         lindrustinit(0);
