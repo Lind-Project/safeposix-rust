@@ -148,9 +148,9 @@ impl Cage {
         if interface::RustPath::new(path).is_absolute() {
             return Self::open_syscall(&self, &path, flags, mode);
         } else if dirfd == AT_FDCWD {
-            let current_path = self.cwd.read().to_str().unwrap();
-            let cur_path_string = current_path.to_string();
-            let formatted_cur_path = format!("{}{}", current_path, path);
+            let current_path = self.cwd.read().to_str().unwrap().to_string();
+            let cur_path_string = current_path;
+            let formatted_cur_path = format!("{}{}", cur_path_string, path);
             let truepath = formatted_cur_path.as_str();
             return Self::open_syscall(&self, &truepath, flags, mode);
         } else {
