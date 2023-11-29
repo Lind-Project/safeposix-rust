@@ -133,7 +133,7 @@ impl Cage {
 
     // //------------------------------------OPENAT SYSCALL------------------------------------
     
-    pub fn openat_syscall(&self, dirfd: i32, path: &str, flags: i32, mode: u32) -> i32 {
+    pub fn openat_syscall(&self, dirfd: i32, path: &str, flags: i32, mode: u32) -> str {
         // Check that path is not empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "openat", "given path was null");
@@ -168,6 +168,7 @@ impl Cage {
 
             let formatted_path = format!("{}{}", path_string, path);
             let truepath = formatted_path.as_str();
+            return truepath;
             return Self::open_syscall(&self, &truepath, flags, mode);
         }
         
