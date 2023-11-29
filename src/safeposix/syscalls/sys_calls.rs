@@ -128,6 +128,17 @@ impl Cage {
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
 
+        // we grab the parent cages main threads sigset and store it at 0
+        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
+        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        let newsigset = interface::RustHashMap::new();
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+            let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
+            let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
+            newsigset.insert(0, mainsigset);
+        }
+
+
         /* 
         *  Construct a new semaphore table in child cage which equals to the one in the parent cage
         */
@@ -150,8 +161,14 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
-            thread_table: interface::RustHashMap::new(),
             sem_table: new_semtable,
+            thread_table: interface::RustHashMap::new(),
+            signalhandler: self.signalhandler.clone(),
+            sigset: newsigset,
+            pendingsigset: interface::RustHashMap::new(),
+            trusted_signal_flag: interface::RustHashMap::new(),
+            main_threadid: interface::RustAtomicU64::new(0),
+            interval_timer: interface::IntervalTimer::new(child_cageid)
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -188,8 +205,18 @@ impl Cage {
                 } != 0 { cloexecvec.push(fd); }
             }
         };
+        
         for fdnum in cloexecvec {
             self.close_syscall(fdnum);
+        }
+
+        // we grab the parent cages main threads sigset and store it at 0
+        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        let newsigset = interface::RustHashMap::new();
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+            let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
+            let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
+            newsigset.insert(0, mainsigset);
         }
 
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
@@ -203,8 +230,14 @@ impl Cage {
             rev_shm: interface::Mutex::new(vec!()),
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
-            thread_table: interface::RustHashMap::new(),
             sem_table: interface::RustHashMap::new(),
+            thread_table: interface::RustHashMap::new(),
+            signalhandler: interface::RustHashMap::new(),
+            sigset: newsigset,
+            pendingsigset: interface::RustHashMap::new(),
+            trusted_signal_flag: interface::RustHashMap::new(),
+            main_threadid: interface::RustAtomicU64::new(0),
+            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid)
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -230,6 +263,13 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+        
+        // Trigger SIGCHLD
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
+            if self.cageid != self.parent {
+                interface::lind_kill_from_id(self.parent, SIGCHLD);
+            }
+        }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
@@ -272,6 +312,108 @@ impl Cage {
             return -1
         } 
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+    }
+
+    pub fn sigaction_syscall(&self, sig: i32, act: Option<&interface::SigactionStruct>, oact: Option<&mut interface::SigactionStruct>) -> i32 {
+        if let Some(some_oact) = oact {
+            let old_sigactionstruct = self.signalhandler.get(&sig);
+
+            if let Some(entry) = old_sigactionstruct {
+                some_oact.clone_from(entry.value());
+            } else {
+                some_oact.clone_from(&interface::SigactionStruct::default()); // leave handler field as NULL
+            }
+        }
+
+        if let Some(some_act) = act {
+            if sig == 9 || sig == 19 { // Disallow changing the action for SIGKILL and SIGSTOP
+                return syscall_error(Errno::EINVAL, "sigaction", "Cannot modify the action of SIGKILL or SIGSTOP");
+            }
+
+            self.signalhandler.insert(
+                sig,
+                some_act.clone()
+            );
+        }
+
+        0
+    }
+
+    pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
+        if (cage_id < 0) || (cage_id >= interface::MAXCAGEID) {
+            return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
+        }
+
+        if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
+            interface::lind_threadkill(cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed), sig);
+            return 0;
+        } else {
+            return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
+        }
+    }
+
+    pub fn sigprocmask_syscall(&self, how: i32, set: Option<& interface::SigsetType>, oldset: Option<&mut interface::SigsetType>) -> i32 {
+        let mut res = 0;
+        let pthreadid = interface::get_pthreadid();
+
+        let sigset = self.sigset.get(&pthreadid).unwrap();
+
+        if let Some(some_oldset) = oldset {
+            *some_oldset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+        }
+
+        if let Some(some_set) = set {
+            let curr_sigset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+            res = match how {
+                SIG_BLOCK => { // Block signals in set
+                    sigset.store(curr_sigset | *some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                SIG_UNBLOCK => { // Unblock signals in set
+                    let newset = curr_sigset & !*some_set;
+                    let pendingsignals = curr_sigset & some_set;
+                    sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
+                    self.send_pending_signals(pendingsignals, pthreadid);
+                    0
+                },
+                SIG_SETMASK => { // Set sigset to set
+                    sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
+                    0
+                },
+                _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
+            }
+        }
+        res
+    }
+
+    pub fn setitimer_syscall(&self, which: i32, new_value: Option<& interface::ITimerVal>, old_value: Option<&mut interface::ITimerVal>) -> i32 {
+        match which {
+            ITIMER_REAL => { 
+                if let Some(some_old_value) = old_value {
+                    let (curr_duration, next_duration) = self.interval_timer.get_itimer();
+                    some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;
+                    some_old_value.it_value.tv_usec = curr_duration.subsec_millis() as i64;
+                    some_old_value.it_interval.tv_sec = next_duration.as_secs() as i64;
+                    some_old_value.it_interval.tv_usec = next_duration.subsec_millis() as i64;
+                }
+
+                if let Some(some_new_value) = new_value {
+                    let curr_duration = interface::RustDuration::new(
+                        some_new_value.it_value.tv_sec as u64,
+                        some_new_value.it_value.tv_usec as u32,
+                    );
+                    let next_duration = interface::RustDuration::new(
+                        some_new_value.it_interval.tv_sec as u64,
+                        some_new_value.it_interval.tv_usec as u32,
+                    );
+
+                    self.interval_timer.set_itimer(curr_duration, next_duration);
+                }
+            }
+
+            _ => { /* ITIMER_VIRTUAL and ITIMER_PROF is not implemented*/ }
+        }
+        0
     }
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut Rlimit) -> i32 {

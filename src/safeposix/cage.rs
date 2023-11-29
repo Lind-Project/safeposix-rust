@@ -76,8 +76,14 @@ pub struct Cage {
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
+    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>,
     pub thread_table: interface::RustHashMap<u64, bool>,
-    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>
+    pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
+    pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    pub main_threadid: interface::RustAtomicU64,
+    pub trusted_signal_flag: interface::RustHashMap<u64, u64>,
+    pub interval_timer: interface::IntervalTimer
 }
 
 impl Cage {
@@ -114,6 +120,14 @@ impl Cage {
             if cvtable[cv_handle  as usize].is_some() {
                 let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
                 clonedcv.broadcast();
+            }
+        }
+    }
+
+    pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {
+        for signo in 1..SIGNAL_MAX {
+            if interface::lind_sigismember(sigset, signo) {
+                interface::lind_threadkill(pthreadid, signo);
             }
         }
     }

@@ -9,14 +9,14 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::{mmap, pthread_self, pthread_exit, sched_yield};
+use libc::{mmap, pthread_self, pthread_exit, pthread_kill, sched_yield};
 
 use std::ffi::c_void;
 
@@ -25,31 +25,54 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
+use crate::interface::types::{SigsetType};
 use crate::interface;
 use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
+pub use std::sync::LazyLock;
 
-const MAXCAGEID: i32 = 1024;
+pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
+
+pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+    RustAtomicBool::new(false)
+});
 
 use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
+
+pub fn check_cageid(cageid: u64) {
+    if cageid >= MAXCAGEID as u64 {
+        panic!("Cage ID is outside of valid range");
+    }
+}
 
 pub fn cagetable_init() {
    unsafe { for _cage in 0..MAXCAGEID { CAGE_TABLE.push(None); }}
 }
 
 pub fn cagetable_insert(cageid: u64, cageobj: Cage) {
+    check_cageid(cageid);
     let _insertret = unsafe { CAGE_TABLE[cageid as usize].insert(RustRfc::new(cageobj)) };
 }
 
 pub fn cagetable_remove(cageid: u64) {
+    check_cageid(cageid);
     unsafe{ CAGE_TABLE[cageid as usize].take() };
 }
 
 pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
+    check_cageid(cageid);
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
+}
+
+pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
+    check_cageid(cageid);
+    unsafe { match CAGE_TABLE[cageid as usize].as_ref() {
+        Some(cage) => Some(cage.clone()),
+        None => None
+    }}
 }
 
 pub fn cagetable_clear() {
@@ -103,6 +126,10 @@ pub fn lind_threadexit() {
     unsafe { pthread_exit(0 as *mut c_void); }
 }
 
+pub fn lind_threadkill(thread_id: u64, sig: i32) -> i32 {
+    unsafe { pthread_kill(thread_id, sig) as i32 }
+}
+
 pub fn get_pthreadid() -> u64 {
     unsafe { pthread_self() as u64 } 
 }
@@ -121,12 +148,26 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return; }
+
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
         let cage = cagetable_getref(cageid);
         cage.thread_table.insert(pthread_id, false); 
         lind_threadexit(); 
     }
+}
+
+pub fn sigcheck(cageid: u64) -> bool {
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
+
+    let cage = cagetable_getref(cageid);
+    let pthread_id = get_pthreadid();
+    let boolu64 = cage.trusted_signal_flag.get(&pthread_id).unwrap();
+    let boolptr = *boolu64 as *const bool;
+    let sigbool = unsafe { *boolptr };
+
+    sigbool
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
@@ -172,6 +213,41 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Er
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
     return ((unsafe{mmap(addr as *mut c_void, len, prot, flags, fildes, off)} as i64) & 0xffffffff) as i32;
+}
+
+// Sigset Operations
+// 
+// sigsetops defined here are different from the ones in glibc. Since the sigset is just a u64
+// bitmask, we can just return the modified version of the sigset instead of changing it in-place.
+// It would also avoid any ownership issue and make the code cleaner.
+
+pub fn lind_sigemptyset() -> SigsetType {
+    0
+}
+
+pub fn lind_sigfillset() -> SigsetType {
+    u64::MAX
+}
+
+pub fn lind_sigaddset(set: SigsetType, signum: i32) -> SigsetType {
+    set | (1 << (signum - 1))
+}
+
+pub fn lind_sigdelset(set: SigsetType, signum: i32) -> SigsetType {
+    set & !(1 << (signum - 1))
+}
+
+pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
+    set & (1 << (signum - 1)) != 0
+}
+
+// Signals
+pub fn lind_kill_from_id(cage_id: u64, sig: i32) {
+    if let Some(cage) = cagetable_getref_opt(cage_id as u64) {
+        let cage_main_thread_id = cage.main_threadid.load(RustAtomicOrdering::Relaxed);
+        assert!(cage_main_thread_id != 0);
+        lind_threadkill(cage_main_thread_id, sig);
+    } 
 }
 
 #[derive(Debug)]

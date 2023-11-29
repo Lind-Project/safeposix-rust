@@ -97,6 +97,12 @@ pub struct TimeVal {
 }
 
 #[repr(C)]
+pub struct ITimerVal {
+    pub it_interval: TimeVal,
+    pub it_value: TimeVal,
+}
+
+#[repr(C)]
 pub struct TimeSpec {
     pub tv_sec: i64,
     pub tv_nsec: i64
@@ -139,6 +145,16 @@ pub struct ShmidsStruct {
   pub shm_nattch: u32
 }
 
+pub type SigsetType = u64;
+
+#[derive(Copy, Clone, Debug, Default)]
+#[repr(C)]
+pub struct SigactionStruct {
+  pub sa_handler: u32,
+  pub sa_mask: SigsetType,
+  pub sa_flags: i32,
+}
+
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -167,7 +183,13 @@ pub union Arg {
   pub dispatch_structtimespec: *mut TimeSpec,
   pub dispatch_pipearray: *mut PipeArray,
   pub dispatch_sockpair: *mut SockPair,
-  pub dispatch_ioctlptrunion: IoctlPtrUnion
+  pub dispatch_ioctlptrunion: IoctlPtrUnion,
+  pub dispatch_sigactionstruct: *mut SigactionStruct,
+  pub dispatch_constsigactionstruct: *const SigactionStruct,
+  pub dispatch_sigsett: *mut SigsetType,
+  pub dispatch_constsigsett: *const SigsetType,
+  pub dispatch_structitimerval: *mut ITimerVal,
+  pub dispatch_conststructitimerval: *const ITimerVal,
 }
 
 
@@ -541,6 +563,24 @@ pub fn duration_fromtimeval(union_argument: Arg) -> Result<Option<interface::Rus
     }
 }
 
+pub fn get_itimerval<'a>(union_argument: Arg) -> Result<Option<&'a mut ITimerVal>, i32> {
+    let pointer = unsafe{union_argument.dispatch_structitimerval};
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constitimerval<'a>(union_argument: Arg) -> Result<Option<&'a ITimerVal>, i32> {
+    let pointer = unsafe{union_argument.dispatch_conststructitimerval};
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
 pub fn duration_fromtimespec(union_argument: Arg) -> Result<interface::RustDuration, i32> {
     let pointer = unsafe{union_argument.dispatch_structtimespec};
     if !pointer.is_null() {    
@@ -570,4 +610,44 @@ pub fn get_duration_from_millis(union_argument: Arg) ->Result<Option<interface::
 
 pub fn arg_nullity(union_argument: &Arg) -> bool {
     unsafe{union_argument.dispatch_cbuf}.is_null()
+}
+
+pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a mut SigactionStruct>, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigactionstruct};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a SigactionStruct>, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigactionstruct};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_sigsett<'a>(union_argument: Arg) -> Result<Option<&'a mut SigsetType>, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigsett};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constsigsett<'a>(union_argument: Arg) -> Result<Option<&'a SigsetType>, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigsett};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
 }

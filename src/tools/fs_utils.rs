@@ -118,8 +118,14 @@ fn main() {
                         rev_shm: interface::Mutex::new(vec!()),
                         mutex_table: interface::RustLock::new(vec!()),
                         cv_table: interface::RustLock::new(vec!()),
-                        thread_table: interface::RustHashMap::new(),
                         sem_table: interface::RustHashMap::new(),
+                        thread_table: interface::RustHashMap::new(),
+                        signalhandler: interface::RustHashMap::new(),
+                        sigset: interface::RustHashMap::new(),
+                        pendingsigset: interface::RustHashMap::new(),
+                        trusted_signal_flag: interface::RustHashMap::new(),
+                        main_threadid: interface::RustAtomicU64::new(0),
+                        interval_timer: interface::IntervalTimer::new(0)
                     };
 
     args.next();//first arg is executable, we don't care
