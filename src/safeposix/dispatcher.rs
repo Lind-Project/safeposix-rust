@@ -178,7 +178,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.fdatasync_syscall, interface::get_int(arg1))
         }
         SYNC_FILE_RANGE =>{
-            check_and_dispatch!(cage.sync_file_range_syscall, interface::get_int(arg1), interface::get_long(arg2), interface::get_long(arg3), interface::get_uint(arg4))
+            check_and_dispatch!(cage.sync_file_range_syscall, interface::get_int(arg1), interface::get_isize(arg2), interface::get_isize(arg3), interface::get_uint(arg4))
         }
         FCHDIR_SYSCALL => {
             check_and_dispatch!(cage.fchdir_syscall, interface::get_int(arg1))

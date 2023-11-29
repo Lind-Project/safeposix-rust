@@ -7,6 +7,7 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
 use super::fs_constants::*;
+use std::convert::TryInto;
 
 impl Cage {
 
@@ -1911,7 +1912,7 @@ impl Cage {
 
     //------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
 
-     pub fn sync_file_range_syscall(&self, fd: i32, offset: i64, nbytes: i64, flags: u32) -> i32 {
+     pub fn sync_file_range_syscall(&self, fd: i32, offset: isize, nbytes: isize, flags: u32) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -1923,11 +1924,14 @@ impl Cage {
                     let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
                     match &*inodeobj {
                         Inode::File(_) => {
+                            let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
+
                             let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
                             if !(flags & !valid_flags == 0){
                                 return syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit");
                             }
-                            let result = unsafe { libc::sync_file_range(fd, offset, nbytes, flags) };
+                            let result = unsafe { libc::sync_file_range(fobjfdno, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
                             match result {
                                 0 => 0,
                                 _ => syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization")
