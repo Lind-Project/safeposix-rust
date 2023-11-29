@@ -166,8 +166,9 @@ impl Cage {
                 None => return syscall_error(Errno::EBADF, "openat", "the "),
             };
 
-            let formatted_path = format!("{}{}", path_string, path);
+            let formatted_path = format!("{}/{}", path_string, path);
             let truepath = formatted_path.as_str();
+            println!(truepath);
             return Self::open_syscall(&self, &truepath, flags, mode);
         }
         
