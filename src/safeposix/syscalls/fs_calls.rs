@@ -138,9 +138,6 @@ impl Cage {
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "openat", "given path was null");
         }
-        // Check fd
-        let checkedfd = self.get_filedescriptor(dirfd).unwrap();
-        let unlocked_fd = checkedfd.read();
         // Check whether path is absolute 
         // IF yes -> call open
         // ELSE IF AT_FDCWD -> cwd + path (look at fchdir)
@@ -154,6 +151,9 @@ impl Cage {
             let truepath = formatted_cur_path.as_str();
             return Self::open_syscall(&self, &truepath, flags, mode);
         } else {
+            // Check fd
+            let checkedfd = self.get_filedescriptor(dirfd).unwrap();
+            let unlocked_fd = checkedfd.read();
             let path_string = match &*unlocked_fd {
                 Some(File(normalfile_filedesc_obj)) => {
                     let inodenum = normalfile_filedesc_obj.inode;
