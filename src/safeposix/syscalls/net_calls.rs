@@ -1219,29 +1219,31 @@ impl Cage {
 
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
-       if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE {
-           return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
-       }
+        if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_MAX_FD {
+            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
+        }
    
-       let start_time = interface::starttimer();
+        let start_time = interface::starttimer();
    
-       let end_time = match timeout {
-           Some(time) => time,
-           None => interface::RustDuration::MAX
-       };
+        let end_time = match timeout {
+            Some(time) => time,
+            None => interface::RustDuration::MAX
+        };
  
-       let mut retval = 0; 
-       loop { //we must block manually
-           
+        let mut retval = 0; 
+            // work on copies of the fd_sets passed in
+        let new_readfds = interface::fd_set_new_copy(readfds, FD_SET_MAX_FD / 8);
+        let new_writefds = interface::fd_set_new_copy(writefds, FD_SET_MAX_FD / 8);
+        loop { //we must block manually
             // 1. iterate thru readfds
             if readfds.is_some() {
-                let res = self.select_readfds(nfds, readfds.unwrap(),  &mut retval);
+                let res = self.select_readfds(nfds, new_readfds.unwrap(), &mut retval);
                 if res != 0 {return res}
             }
             
             // 2. iterate thru writefds
             if writefds.is_some() {
-                let res = self.select_writefds(nfds, writefds.unwrap(), &mut retval);
+                let res = self.select_writefds(nfds, new_writefds.unwrap(), &mut retval);
                 if res != 0 {return res}
             }
             
@@ -1257,13 +1259,16 @@ impl Cage {
                 }
             }
 
-           if retval != 0 || interface::readtimer(start_time) > end_time {
-               break;
-           } else {
-               interface::sleep(BLOCK_TIME);
-           }
-       }
-       return retval;
+            if retval != 0 || interface::readtimer(start_time) > end_time {
+                break;
+            } else {
+                interface::sleep(BLOCK_TIME);
+            }
+        }
+        // update the original fd_set bitmaps
+        if readfds.is_some() {interface::fd_set_copy_to(new_readfds.unwrap(), readfds.unwrap(), FD_SET_MAX_FD / 8)}
+        if writefds.is_some() {interface::fd_set_copy_to(new_writefds.unwrap(), writefds.unwrap(), FD_SET_MAX_FD / 8)}
+        return retval;
     }
 
     fn select_readfds(&self, nfds: i32, readfds: *mut u8, retval: &mut i32) -> i32 {
@@ -1288,7 +1293,7 @@ impl Cage {
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
                                         readable = true;
-                                        *retval += 1;                
+                                        *retval += 1;
                                     }
                                 }
 

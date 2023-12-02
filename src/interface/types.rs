@@ -425,6 +425,23 @@ pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
     return true;
 }
 
+pub fn fd_set_new_copy(src_set: Option<*mut u8>, n_bytes: i32) -> Option<*mut u8> {
+    if src_set.is_some() {
+        let mut new_set = vec![0u8; n_bytes as usize];
+        unsafe {
+            std::ptr::copy(src_set.unwrap(), new_set.as_mut_ptr(), n_bytes as usize);
+        }
+        return Some(new_set.as_mut_ptr());
+    }
+    None
+}
+
+pub fn fd_set_copy_to(src_set: *mut u8, dst_set: *mut u8, n_bytes: i32) {
+    unsafe {
+        std::ptr::copy(src_set, dst_set, n_bytes as usize);
+    }
+}
+
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {
     let pointer = unsafe{union_argument.dispatch_constsockaddrstruct};
     if !pointer.is_null() {    
