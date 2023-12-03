@@ -427,7 +427,7 @@ pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
 
 pub fn fd_set_new_copy(src_set: Option<*mut u8>, n_bytes: i32) -> Option<*mut u8> {
     if src_set.is_some() {
-        let mut new_set = vec![0u8; n_bytes as usize];
+        let mut new_set: [u8; 128] = [0; 128];
         unsafe {
             std::ptr::copy(src_set.unwrap(), new_set.as_mut_ptr(), n_bytes as usize);
         }
