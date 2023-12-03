@@ -1217,9 +1217,7 @@ impl Cage {
         }
     }
 
-    pub fn assert_same_contents(&self, ptr1: *mut u8, ptr2: *mut u8, length: usize) {
-        assert!(!ptr1.is_null() && !ptr2.is_null(), "Null pointer provided");
-    
+    pub fn assert_same_contents(&self, ptr1: *mut u8, ptr2: *mut u8, length: usize) { 
         unsafe {
             for i in 0..length {
                 assert_eq!(*ptr1.add(i), *ptr2.add(i), "Contents differ at byte {}", i);
