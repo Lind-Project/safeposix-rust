@@ -1231,19 +1231,19 @@ impl Cage {
         };
  
         let mut retval = 0; 
-            // work on copies of the fd_sets passed in
+        // in the loop below, we always read from original fd_sets, but make updates to the new copies
         let new_readfds = interface::fd_set_new_copy(readfds, FD_SET_MAX_FD / 8);
         let new_writefds = interface::fd_set_new_copy(writefds, FD_SET_MAX_FD / 8);
         loop { //we must block manually
             // 1. iterate thru readfds
             if readfds.is_some() {
-                let res = self.select_readfds(nfds, new_readfds.unwrap(), &mut retval);
+                let res = self.select_readfds(nfds, readfds.unwrap(), new_readfds.unwrap(), &mut retval);
                 if res != 0 {return res}
             }
             
             // 2. iterate thru writefds
             if writefds.is_some() {
-                let res = self.select_writefds(nfds, new_writefds.unwrap(), &mut retval);
+                let res = self.select_writefds(nfds, writefds.unwrap(), new_writefds.unwrap(), &mut retval);
                 if res != 0 {return res}
             }
             
@@ -1271,7 +1271,7 @@ impl Cage {
         return retval;
     }
 
-    fn select_readfds(&self, nfds: i32, readfds: *mut u8, retval: &mut i32) -> i32 {
+    fn select_readfds(&self, nfds: i32, readfds: *mut u8, new_readfds: *mut u8, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in readfd
             if !interface::fd_set_check_fd(readfds, fd) {continue}
@@ -1329,7 +1329,7 @@ impl Cage {
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
-                                            interface::fd_set_remove(readfds, fd);
+                                            interface::fd_set_remove(new_readfds, fd);
                                             continue;
                                         }
                                     } //if it's already got a pending connection, add it!
@@ -1381,13 +1381,13 @@ impl Cage {
             }
             // if it is readable, leave the bit there, otherwise turn it off
             if !readable {
-                interface::fd_set_remove(readfds, fd)
+                interface::fd_set_remove(new_readfds, fd)
             }
         }
         return 0;
     }
 
-    fn select_writefds(&self, nfds: i32, writefds: *mut u8, retval: &mut i32) -> i32 {
+    fn select_writefds(&self, nfds: i32, writefds: *mut u8, new_writefds: *mut u8, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in writefds     
             if !interface::fd_set_check_fd(writefds, fd) {continue}
@@ -1446,7 +1446,7 @@ impl Cage {
             }
             // if fd is writable, leave the bit there, otherwise turn it off
             if !writable {
-                interface::fd_set_remove(writefds, fd)
+                interface::fd_set_remove(new_writefds, fd)
             }
         }
         return 0;
