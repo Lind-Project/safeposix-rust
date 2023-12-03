@@ -1277,7 +1277,7 @@ impl Cage {
         }
         // update the original fd_set bitmaps
         if readfds.is_some() {interface::fd_set_copy_to(new_readfds.unwrap(), readfds.unwrap(), FD_SET_MAX_FD / 8)}
-        self.assert_same_contents(new_readfds.unwrap(), readfds.unwrap(), 128);
+        if readfds.is_some() {self.assert_same_contents(new_readfds.unwrap(), readfds.unwrap(), 128);}
         if writefds.is_some() {interface::fd_set_copy_to(new_writefds.unwrap(), writefds.unwrap(), FD_SET_MAX_FD / 8)}
         return retval;
     }
