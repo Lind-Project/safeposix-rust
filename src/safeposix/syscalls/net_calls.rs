@@ -1217,6 +1217,16 @@ impl Cage {
         }
     }
 
+    pub fn assert_same_contents(&self, ptr1: *mut u8, ptr2: *mut u8, length: usize) {
+        assert!(!ptr1.is_null() && !ptr2.is_null(), "Null pointer provided");
+    
+        unsafe {
+            for i in 0..length {
+                assert_eq!(*ptr1.add(i), *ptr2.add(i), "Contents differ at byte {}", i);
+            }
+        }
+    }
+
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
         if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_MAX_FD {
@@ -1267,6 +1277,7 @@ impl Cage {
         }
         // update the original fd_set bitmaps
         if readfds.is_some() {interface::fd_set_copy_to(new_readfds.unwrap(), readfds.unwrap(), FD_SET_MAX_FD / 8)}
+        self.assert_same_contents(new_readfds.unwrap(), readfds.unwrap(), 128);
         if writefds.is_some() {interface::fd_set_copy_to(new_writefds.unwrap(), writefds.unwrap(), FD_SET_MAX_FD / 8)}
         return retval;
     }
