@@ -440,7 +440,7 @@ pub fn fd_set_copy_to(src_set: *mut u8, dst_set: *mut u8, n_bytes: i32) {
     unsafe {
         // std::ptr::copy::<u8>(src_set, dst_set, n_bytes as usize);
         for i in 0..n_bytes as usize {
-            *(dst_set.add(i)) = *(src_set.add(i));
+            *dst_set.add(i) = *src_set.add(i);
         }
     }
 }
