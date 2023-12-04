@@ -1219,29 +1219,33 @@ impl Cage {
 
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
-       if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_SIZE {
-           return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
-       }
+        if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
+            return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
+        }
    
-       let start_time = interface::starttimer();
+        let start_time = interface::starttimer();
    
-       let end_time = match timeout {
-           Some(time) => time,
-           None => interface::RustDuration::MAX
-       };
+        let end_time = match timeout {
+            Some(time) => time,
+            None => interface::RustDuration::MAX
+        };
  
-       let mut retval = 0; 
-       loop { //we must block manually
-           
+        let mut retval = 0; 
+        // in the loop below, we always read from original fd_sets, but make updates to the new copies
+        let mut new_reads_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
+        let mut new_writes_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
+        let new_readfds = new_reads_chunk.as_mut_ptr();
+        let new_writefds =  new_writes_chunk.as_mut_ptr();
+        loop { //we must block manually
             // 1. iterate thru readfds
             if readfds.is_some() {
-                let res = self.select_readfds(nfds, readfds.unwrap(),  &mut retval);
+                let res = self.select_readfds(nfds, readfds.unwrap(), new_readfds, &mut retval);
                 if res != 0 {return res}
             }
             
             // 2. iterate thru writefds
             if writefds.is_some() {
-                let res = self.select_writefds(nfds, writefds.unwrap(), &mut retval);
+                let res = self.select_writefds(nfds, writefds.unwrap(), new_writefds, &mut retval);
                 if res != 0 {return res}
             }
             
@@ -1257,20 +1261,27 @@ impl Cage {
                 }
             }
 
-           if retval != 0 || interface::readtimer(start_time) > end_time {
-               break;
-           } else {
-               interface::sleep(BLOCK_TIME);
-           }
-       }
-       return retval;
+            if retval != 0 || interface::readtimer(start_time) > end_time {
+                break;
+            } else {
+                interface::sleep(BLOCK_TIME);
+            }
+        }
+        // update the original fd_set bitmaps
+        if readfds.is_some() {
+            interface::fd_set_copy(new_readfds, readfds.unwrap(), nfds);
+        }
+
+        if writefds.is_some() {
+            interface::fd_set_copy(new_writefds, writefds.unwrap(), nfds);
+        }
+        return retval;
     }
 
-    fn select_readfds(&self, nfds: i32, readfds: *mut u8, retval: &mut i32) -> i32 {
+    fn select_readfds(&self, nfds: i32, readfds: *mut u8, new_readfds: *mut u8, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in readfd
             if !interface::fd_set_check_fd(readfds, fd) {continue}
-            let mut readable = false;
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
@@ -1287,8 +1298,8 @@ impl Cage {
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
-                                        readable = true;
-                                        *retval += 1;                
+                                        interface::fd_set_insert(new_readfds, fd);
+                                        *retval += 1;
                                     }
                                 }
 
@@ -1302,7 +1313,7 @@ impl Cage {
                                     drop(sockhandle);
                                     drop(unlocked_fd);
                                     if self._nonblock_peek_read(fd) {
-                                        readable = true;
+                                        interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                     }
                                 }
@@ -1324,28 +1335,28 @@ impl Cage {
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
-                                            interface::fd_set_remove(readfds, fd);
+                                            interface::fd_set_remove(new_readfds, fd);
                                             continue;
                                         }
                                     } //if it's already got a pending connection, add it!
 
                                     //if we reach here there is a pending connection
-                                    readable = true;
+                                    interface::fd_set_insert(new_readfds, fd);
                                     *retval += 1;
                                     //sockhandle innersocket unwrap ok if INPROGRESS
                                 } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
                                         sockhandle.state = ConnState::CONNECTED;
-                                        readable = true;
+                                        interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                 } else {
                                     if sockhandle.protocol == IPPROTO_UDP {
-                                        readable = true;
+                                        interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                     } else {
                                         drop(sockhandle);
                                         drop(unlocked_fd);
                                         if self._nonblock_peek_read(fd) {
-                                            readable = true;
+                                            interface::fd_set_insert(new_readfds, fd);
                                             *retval += 1;
                                         }
                                     }
@@ -1360,33 +1371,28 @@ impl Cage {
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_read() {
-                            readable = true;
+                            interface::fd_set_insert(new_readfds, fd);
                             *retval += 1;
                         }
                     }
 
                     //these file reads never block
                     _ => {
-                        readable = true;
+                        interface::fd_set_insert(new_readfds, fd);
                         *retval += 1;
                     }
                 }
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
             }
-            // if it is readable, leave the bit there, otherwise turn it off
-            if !readable {
-                interface::fd_set_remove(readfds, fd)
-            }
         }
         return 0;
     }
 
-    fn select_writefds(&self, nfds: i32, writefds: *mut u8, retval: &mut i32) -> i32 {
+    fn select_writefds(&self, nfds: i32, writefds: *mut u8, new_writefds: *mut u8, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in writefds     
             if !interface::fd_set_check_fd(writefds, fd) {continue}
-            let mut writable = false;
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
@@ -1413,35 +1419,31 @@ impl Cage {
                         }
                         
                         //we always say sockets are writable? Even though this is not true
-                        writable = true;
+                        interface::fd_set_insert(new_writefds, fd);
                         *retval += 1;
                     }
 
                     //we always say streams are writable?
                     Stream(_) => {
-                        writable = true;
+                        interface::fd_set_insert(new_writefds, fd);
                         *retval += 1;
                     }
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_write() {
-                            writable = true;
+                            interface::fd_set_insert(new_writefds, fd);
                             *retval += 1;
                         }
                     }
 
                     //these file writes never block
                     _ => {
-                        writable = true;
+                        interface::fd_set_insert(new_writefds, fd);
                         *retval += 1;
                     }
                 }
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
-            }
-            // if fd is writable, leave the bit there, otherwise turn it off
-            if !writable {
-                interface::fd_set_remove(writefds, fd)
             }
         }
         return 0;
@@ -1717,9 +1719,9 @@ impl Cage {
                 let events = structpoll.events;
 
                 // allocate spaces for fd_set bitmaps
-                let mut reads_chunk: [u8; 128] = [0; 128];
-                let mut writes_chunk: [u8; 128] = [0; 128];
-                let mut errors_chunk: [u8; 128] = [0; 128];
+                let mut reads_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
+                let mut writes_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
+                let mut errors_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
 
                 let reads: *mut u8 = reads_chunk.as_mut_ptr();
                 let writes: *mut u8 = writes_chunk.as_mut_ptr();

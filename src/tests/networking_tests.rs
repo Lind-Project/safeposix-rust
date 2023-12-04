@@ -772,7 +772,7 @@ pub mod net_tests {
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-            for sock in 0..FD_SET_SIZE {
+            for sock in 0..FD_SET_MAX_FD {
                 if !interface::fd_set_check_fd(inputs, sock) {continue;}
 
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
@@ -810,7 +810,7 @@ pub mod net_tests {
             }
 
             //for sock in boutputs {
-            for sock in 0..FD_SET_SIZE {
+            for sock in 0..FD_SET_MAX_FD {
                 if !interface::fd_set_check_fd(outputs, sock) {continue;}
                 if sock == filefd {
                     let mut buf = sizecbuf(4);
