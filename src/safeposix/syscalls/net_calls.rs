@@ -1217,21 +1217,11 @@ impl Cage {
         }
     }
 
-    pub fn assert_same_contents(&self, ptr1: *mut u8, ptr2: *mut u8, length: usize) { 
-        unsafe {
-            for i in 0..length {
-                assert_eq!(*ptr1.add(i), *ptr2.add(i), "Contents differ at byte {}", i);
-            }
-        }
-    }
-
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
-        if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_MAX_FD {
+        if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
         }
-
-        if nfds < 1 {return 0}
    
         let start_time = interface::starttimer();
    

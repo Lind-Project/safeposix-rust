@@ -422,6 +422,15 @@ pub fn fd_set_copy(src_set: *const u8, dst_set: *mut u8, nfds: i32) {
     }
 }
 
+pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
+    for fd in 0..highest_fd + 1 {
+        if fd_set_check_fd(fd_set, fd) {
+            return false;
+        }
+    }
+    return true;
+}
+
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {
     let pointer = unsafe{union_argument.dispatch_constsockaddrstruct};
     if !pointer.is_null() {    
