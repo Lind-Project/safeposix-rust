@@ -1230,6 +1230,8 @@ impl Cage {
         if nfds < STARTINGFD || nfds >= MAXFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
         }
+
+        if nfds < 1 {return 0}
    
         let start_time = interface::starttimer();
    
@@ -1277,23 +1279,11 @@ impl Cage {
         }
         // update the original fd_set bitmaps
         if readfds.is_some() {
-            for fd in 0..nfds {
-                if interface::fd_set_check_fd(new_readfds, fd) {
-                    interface::fd_set_insert(readfds.unwrap(), fd);
-                } else {
-                    interface::fd_set_remove(readfds.unwrap(), fd);
-                }
-            }
+            interface::fd_set_copy(new_readfds, readfds.unwrap(), nfds);
         }
 
         if writefds.is_some() {
-            for fd in 0..nfds {
-                if interface::fd_set_check_fd(new_writefds, fd) {
-                    interface::fd_set_insert(writefds.unwrap(), fd);
-                } else {
-                    interface::fd_set_remove(writefds.unwrap(), fd);
-                }
-            }
+            interface::fd_set_copy(new_writefds, writefds.unwrap(), nfds);
         }
         return retval;
     }

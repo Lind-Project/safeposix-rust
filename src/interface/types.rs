@@ -412,35 +412,12 @@ pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
     return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
 }
 
-// We don't want everything to assume the size of fd_set is 1024 bits, so this
-// helper function will check up to the byte of the highest fd given by nfds
-pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
-    let nbytes = (highest_fd as usize + 7) / 8;
-    for i in 0..nbytes {
-        unsafe {
-            // return false if we find any non-zero byte
-            if *fd_set.add(i) != 0 {return false;}
-        }
-    }
-    return true;
-}
-
-pub fn fd_set_new_copy(src_set: Option<*mut u8>, n_bytes: i32) -> Option<*mut u8> {
-    if src_set.is_some() {
-        let mut new_set: [u8; 128] = [0; 128];
-        unsafe {
-            std::ptr::copy::<u8>(src_set.unwrap(), new_set.as_mut_ptr(), n_bytes as usize);
-        }
-        return Some(new_set.as_mut_ptr());
-    }
-    None
-}
-
-pub fn fd_set_copy_to(src_set: *mut u8, dst_set: *mut u8, n_bytes: i32) {
-    unsafe {
-        // std::ptr::copy::<u8>(src_set, dst_set, n_bytes as usize);
-        for i in 0..n_bytes as usize {
-            *dst_set.add(i) = *src_set.add(i);
+pub fn fd_set_copy(src_set: *const u8, dst_set: *mut u8, nfds: i32) {
+    for fd in 0..nfds {
+        if interface::fd_set_check_fd(src_set, fd) {
+            interface::fd_set_insert(dst_set, fd);
+        } else {
+            interface::fd_set_remove(dst_set, fd);
         }
     }
 }
