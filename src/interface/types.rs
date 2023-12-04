@@ -434,14 +434,20 @@ pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
     return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
 }
 
-// We don't want everything to assume the size of fd_set is 1024 bits, so this
-// helper function will check up to the byte of the highest fd given by nfds
+pub fn fd_set_copy(src_set: *const u8, dst_set: *mut u8, nfds: i32) {
+    for fd in 0..nfds {
+        if interface::fd_set_check_fd(src_set, fd) {
+            interface::fd_set_insert(dst_set, fd);
+        } else {
+            interface::fd_set_remove(dst_set, fd);
+        }
+    }
+}
+
 pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
-    let nbytes = (highest_fd as usize + 7) / 8;
-    for i in 0..nbytes {
-        unsafe {
-            // return false if we find any non-zero byte
-            if *fd_set.add(i) != 0 {return false;}
+    for fd in 0..highest_fd + 1 {
+        if fd_set_check_fd(fd_set, fd) {
+            return false;
         }
     }
     return true;
