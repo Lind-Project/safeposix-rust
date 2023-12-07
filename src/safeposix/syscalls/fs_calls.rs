@@ -1925,15 +1925,9 @@ impl Cage {
                     match &*inodeobj {
                         Inode::File(_) => {
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            let fobjfdno = fobj.as_fd_handle_raw_int();
-
-                            let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
-                            if !(flags & !valid_flags == 0){
-                                return syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit");
-                            }
-                            let result = unsafe { libc::sync_file_range(fobjfdno, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
+                            let result = fobj.sync_file_range(offset, nbytes, flags);
                             match result {
-                                0 => 0,
+                                Ok(_) => 0,
                                 _ => syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization")
                             }
                         }

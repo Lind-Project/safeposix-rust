@@ -173,6 +173,19 @@ impl EmulatedFile {
         }
     }
 
+    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> std::io::Result<()> {
+        let fd = &self.as_fd_handle_raw_int();
+        let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
+        if !(flags & !valid_flags == 0){
+            panic!("flags specifies an invalid bit");
+        }
+        let result = unsafe { libc::sync_file_range(*fd, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
+        match result {
+            0 => Ok(()),
+            _ => panic!("an error occurred during synchronization")
+        }
+    }
+
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         let buf = unsafe {
