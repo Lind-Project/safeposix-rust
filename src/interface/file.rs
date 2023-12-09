@@ -18,8 +18,6 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
 use std::ffi::c_void;
 use std::convert::TryInto;
-use crate::interface::errnos::Errno;
-
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
