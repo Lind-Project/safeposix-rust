@@ -43,7 +43,6 @@ extern "C" {
     static mut pendingsignal: bool;
 }
 
-
 use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
