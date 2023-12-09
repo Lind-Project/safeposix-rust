@@ -166,7 +166,8 @@ pub fn cancelpoint(cageid: u64) {
 
 pub fn sigcheck() -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
-    pendingsignal
+    let pending = unsafe { pendingsignal };
+    pending
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
