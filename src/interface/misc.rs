@@ -38,9 +38,8 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
-extern "C" {
-    #[thread_local]
-    pub static mut pendingsignal: bool;
+thread_local! {
+    static PENDINGSIGNAL: RefCell<bool> = RefCell::new(false);
 }
 
 use crate::safeposix::cage::{Cage};
@@ -167,6 +166,16 @@ pub fn sigcheck() -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
     let pending = unsafe { pendingsignal };
     pending
+}
+
+#[no_mangle]
+pub extern "C" fn pendingsignal_set(value: bool) {
+    PENDINGSIGNAL.with(|v| *v.borrow_mut() = value);
+}
+
+#[no_mangle]
+pub extern "C" fn pendingsignal_get() -> bool {
+    PENDINGSIGNAL.with(|v| *v.borrow())
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
