@@ -7,7 +7,6 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
 use super::fs_constants::*;
-use std::convert::TryInto;
 
 impl Cage {
 
@@ -1925,10 +1924,16 @@ impl Cage {
                     match &*inodeobj {
                         Inode::File(_) => {
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            let result = fobj.sync_file_range(offset, nbytes, flags);
+                            let result = fobj.sync_file_range(offset, nbytes, flags).unwrap();
                             match result {
-                                Ok(_) => 0,
-                                _ => syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization")
+                                0 => 0,
+                                5 => syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization"),
+                                9 => syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization"),
+                                12 => syscall_error(Errno::ENOMEM, "sync_file_range", "Out of memory error"),
+                                22 => syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit"),
+                                28 => syscall_error(Errno::ENOSPC, "sync_file_range", "Out of disk space error"),
+                                29 =>  syscall_error(Errno::ESPIPE, "sync_file_range", "fd refers to something other than a regular file, a block device, a directory, or a symbolic link"),
+                                _ => syscall_error(Errno::EIO, "sync_file_range", "Unknown error occurred during synchronization")
                             }
                         }
                         _ => {
