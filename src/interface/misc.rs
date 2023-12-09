@@ -38,9 +38,9 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
-pub extern "C" {
+extern "C" {
     #[thread_local]
-    static mut pendingsignal: bool;
+    pub static mut pendingsignal: bool;
 }
 
 use crate::safeposix::cage::{Cage};
