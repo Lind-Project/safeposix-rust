@@ -19,6 +19,8 @@ use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMO
 use std::ffi::c_void;
 use std::convert::TryInto;
 
+
+
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
 pub fn listfiles() -> Vec<String> {
@@ -175,7 +177,7 @@ impl EmulatedFile {
         let fd = &self.as_fd_handle_raw_int();
         let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
         if !(flags & !valid_flags == 0){
-            return Ok(2);
+            return Ok(22);
         }
         let result = unsafe { libc::sync_file_range(*fd, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
         return Ok(result);
