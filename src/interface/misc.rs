@@ -38,6 +38,7 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
+#[link(name="pendingsignal", kind="static")]
 extern "C" {
     #[thread_local]
     static mut pendingsignal: bool;
