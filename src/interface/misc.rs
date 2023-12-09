@@ -12,6 +12,7 @@ pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
+use std::cell::RefCell;
 
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
@@ -164,8 +165,7 @@ pub fn cancelpoint(cageid: u64) {
 
 pub fn sigcheck() -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
-    let pending = unsafe { pendingsignal };
-    pending
+    pendingsignal_get()
 }
 
 #[no_mangle]
