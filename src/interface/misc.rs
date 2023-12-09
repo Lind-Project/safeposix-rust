@@ -38,7 +38,7 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
-extern {
+extern "C" {
     #[thread_local]
     static mut pendingsignal: bool;
 }
@@ -164,7 +164,7 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
-pub fn sigcheck(cageid: u64) -> bool {
+pub fn sigcheck() -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
     pendingsignal
 }
