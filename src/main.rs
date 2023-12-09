@@ -3,6 +3,7 @@
 #![feature(vec_into_raw_parts)]
 #![feature(result_into_ok_or_err)]
 #![feature(duration_constants)]
+#![feature(thread_local)]
 #![allow(unused_imports)]
 
 mod interface;
