@@ -38,6 +38,12 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
+extern {
+    #[thread_local]
+    static mut pendingsignal: bool;
+}
+
+
 use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
@@ -160,14 +166,7 @@ pub fn cancelpoint(cageid: u64) {
 
 pub fn sigcheck(cageid: u64) -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
-
-    let cage = cagetable_getref(cageid);
-    let pthread_id = get_pthreadid();
-    let boolu64 = cage.trusted_signal_flag.get(&pthread_id).unwrap();
-    let boolptr = *boolu64 as *const bool;
-    let sigbool = unsafe { *boolptr };
-
-    sigbool
+    pendingsignal
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
