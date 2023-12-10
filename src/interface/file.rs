@@ -18,8 +18,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
 use std::ffi::c_void;
 use std::convert::TryInto;
-
-
+use crate::interface::errnos::{Errno, syscall_error};
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -173,14 +172,23 @@ impl EmulatedFile {
         }
     }
 
-    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> std::io::Result<i32> {
+    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> Result<(), i32> {
         let fd = &self.as_fd_handle_raw_int();
         let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
         if !(flags & !valid_flags == 0){
-            return Ok(22);
+            return Err(syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit"));
         }
         let result = unsafe { libc::sync_file_range(*fd, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
-        return Ok(result);
+        match result {
+             0 =>  Ok(()),
+             5 =>  Err(syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization")),
+             9 =>  Err(syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization")),
+             12 => Err(syscall_error(Errno::ENOMEM, "sync_file_range", "Out of memory error")),
+             22 => Err(syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit")),
+             28 => Err(syscall_error(Errno::ENOSPC, "sync_file_range", "Out of disk space error")),
+             29 => Err(syscall_error(Errno::ESPIPE, "sync_file_range", "fd refers to something other than a regular file, a block device, a directory, or a symbolic link")),
+             _ =>  Err(syscall_error(Errno::EIO, "sync_file_range", "Unknown error occurred during synchronization"))
+        }
     }
 
     // Read from file into provided C-buffer
