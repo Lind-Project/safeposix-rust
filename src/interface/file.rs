@@ -193,6 +193,28 @@ impl EmulatedFile {
         Ok(())
     }
 
+     pub fn fdatasync(&self) -> std::io::Result<()> {
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => {
+                let fobj = f.lock();
+                fobj.sync_data()?;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn fsync(&self) -> std::io::Result<()> {
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => {
+                let fobj = f.lock();
+                fobj.sync_all()?;
+                Ok(())
+            }
+        }
+    }
+
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         
@@ -486,6 +508,8 @@ mod tests {
       let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
       println!("{:?}", f.writeat(q, 9, 0));
+      println!("fsync: {:?}", f.fsync().unwrap());
+      println!("fdatasync: {:?}", f.fdatasync().unwrap());
       let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
       println!("{:?}", f.readat(b, 9, 0));

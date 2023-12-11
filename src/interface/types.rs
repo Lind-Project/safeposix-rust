@@ -37,8 +37,8 @@ pub struct StatData {
   pub st_gid: u32,
   pub st_rdev: u64,
   pub st_size: usize,
-  pub st_blksize: isize,
-  pub st_blocks: usize,
+  pub st_blksize: i32,
+  pub st_blocks: u32,
   //currently we don't populate or care about the time bits here
   pub st_atim: (u64, u64),
   pub st_mtim: (u64, u64),
@@ -94,6 +94,12 @@ pub struct SockaddrDummy {
 pub struct TimeVal {
     pub tv_sec: i64,
     pub tv_usec: i64
+}
+
+#[repr(C)]
+pub struct TimeSpec {
+    pub tv_sec: i64,
+    pub tv_nsec: i64
 }
 
 #[derive(Copy, Clone)]
@@ -158,6 +164,7 @@ pub union Arg {
   pub dispatch_pollstructarray: *mut PollStruct,
   pub dispatch_epollevent: *mut EpollEvent,
   pub dispatch_structtimeval: *mut TimeVal,
+  pub dispatch_structtimespec: *mut TimeSpec,
   pub dispatch_pipearray: *mut PipeArray,
   pub dispatch_sockpair: *mut SockPair,
   pub dispatch_ioctlptrunion: IoctlPtrUnion
@@ -531,6 +538,19 @@ pub fn duration_fromtimeval(union_argument: Arg) -> Result<Option<interface::Rus
         return Ok(Some(interface::RustDuration::new(times.tv_sec as u64, times.tv_usec as u32 * 1000)));
     } else {
         return Ok(None);
+    }
+}
+
+pub fn duration_fromtimespec(union_argument: Arg) -> Result<interface::RustDuration, i32> {
+    let pointer = unsafe{union_argument.dispatch_structtimespec};
+    if !pointer.is_null() {    
+        let times = unsafe{&mut *pointer};
+        if times.tv_nsec < 0 || times.tv_nsec >= 1000000000 {
+            return Err(syscall_error(Errno::EINVAL, "timedwait", "nanosecond count was negative or more than 1 billion"));
+        }
+        return Ok(interface::RustDuration::new(times.tv_sec as u64, times.tv_nsec as u32 * 1000000000));
+    } else {
+        return Err(syscall_error(Errno::EFAULT, "timedwait", "input timespec is null"));
     }
 }
 

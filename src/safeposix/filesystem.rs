@@ -4,6 +4,7 @@
 use crate::interface;
 use super::syscalls::fs_constants::*;
 use super::syscalls::sys_constants::*;
+use super::net::NET_METADATA;
 
 use super::cage::Cage;
 
@@ -163,6 +164,10 @@ pub fn format_fs() {
     devchildren.insert("urandom".to_string(), 5);
     devchildren.insert("random".to_string(), 6);
 
+    let tmpchildren = interface::RustHashMap::new();
+    tmpchildren.insert("..".to_string(), 1); 
+    tmpchildren.insert(".".to_string(), 2); 
+
     let time = interface::timestamp(); //We do a real timestamp now
     let devdirinode = Inode::Dir(DirectoryInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
@@ -196,12 +201,21 @@ pub fn format_fs() {
         atime: time, ctime: time, mtime: time,
         dev: DevNo {major: 1, minor: 8},
     }); //inode 6
-    newmetadata.nextinode.store(7, interface::RustAtomicOrdering::Relaxed);
+    let tmpdirinode = Inode::Dir(DirectoryInode {
+        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+        mode: (S_IFDIR | 0755) as u32,
+        linkcount: 3 + 4, 
+        refcount: 0,
+        atime: time, ctime: time, mtime: time,
+        filename_to_inode_dict: tmpchildren,
+    }); //inode 7
+    newmetadata.nextinode.store(8, interface::RustAtomicOrdering::Relaxed);
     newmetadata.inodetable.insert(2, devdirinode);
     newmetadata.inodetable.insert(3, nullinode);
     newmetadata.inodetable.insert(4, zeroinode);
     newmetadata.inodetable.insert(5, urandominode);
     newmetadata.inodetable.insert(6, randominode);
+    newmetadata.inodetable.insert(7, tmpdirinode); 
 
     let _logremove = interface::removefile(LOGFILENAME.to_string());
 
@@ -264,7 +278,8 @@ pub fn fsck() {
                 normalfile_inode.linkcount != 0
             },
             Inode::Dir(ref mut dir_inode) => {
-                dir_inode.linkcount != 0
+                //2 because . and .. always contribute to the linkcount of a directory
+                dir_inode.linkcount > 2
             },
             Inode::CharDev(ref mut char_inodej) => {
                 char_inodej.linkcount != 0
@@ -303,7 +318,6 @@ pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
 
 // Serialize Metadata Struct to CBOR, write to file
 pub fn persist_metadata(metadata: &FilesystemMetadata) {
-  
     // Serialize metadata to string
     let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
     
@@ -318,6 +332,91 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
 
 pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
+}
+
+/// This function resolves the absolute path of a directory from its inode number in a filesystem. 
+/// Here's how it operates:
+///
+/// - Starts from the given inode and fetches its associated metadata from the filesystem's inode table.
+///
+/// - Verifies that the inode represents a directory.
+///
+/// - Attempts to find the parent directory by looking for the ".." entry in the current directory's entries.
+///
+/// - Retrieves the directory name associated with the current inode using the `filenamefrominode` function and prepends it to the `path_string`.
+///
+/// - Continues this process recursively, updating the current inode to the parent inode, and accumulating directory names in the `path_string`.
+///
+/// - Stops when it reaches the root directory, where it prepends a "/" to the `path_string` and returns the complete path.
+///
+/// This function effectively constructs the absolute path by backtracking the parent directories. However, if any issues arise during this process, such as missing metadata or inability to find the parent directory, it returns `None`.
+pub fn pathnamefrominodenum(inodenum: usize) -> Option<String>{
+    let mut path_string = String::new();
+    let mut first_iteration = true;
+    let mut current_inodenum = inodenum;
+
+    loop{
+        let mut thisinode = match FS_METADATA.inodetable.get_mut(&current_inodenum) {
+            Some(inode) => inode,
+            None => {
+                return None;
+            },
+        };
+
+        match *thisinode {
+            Inode::Dir(ref mut dir_inode) => {
+                // We try to get the parent directory inode.
+                if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
+
+                    // If the parent node is 1 (indicating the root directory) and this is not the first iteration, this indicates that we have arrived at the root directory. Here we add a '/' to the beginning of the path string and return it.
+                    if *parent_dir_inode == (1 as usize){
+                        if !first_iteration {
+                            path_string.insert(0, '/');
+                            return Some(path_string);
+                        }
+                        first_iteration = false;
+                    }
+
+                    match filenamefrominode(*parent_dir_inode, current_inodenum) {
+                        Some(filename) => {
+                            path_string = filename + "/" + &path_string;
+                            current_inodenum = *parent_dir_inode;
+                        },
+                        None => return None,
+                    };
+
+                } else {
+                    return None;
+                }
+
+            },
+            _ => {
+                return None;
+            }
+        }
+    }
+}
+
+
+// Find the file by the given inode number in the given directory
+pub fn filenamefrominode(dir_inode_no: usize, target_inode: usize) -> Option<String> {
+    let cur_node = Some(FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
+
+    match &*cur_node.unwrap() {
+        Inode::Dir(d) => {
+
+            let mut target_variable_name: Option<String> = None;
+
+            for entry in d.filename_to_inode_dict.iter() {
+                if entry.value() == &target_inode {
+                    target_variable_name = Some(entry.key().to_owned());
+                    break;
+                }
+            }
+            return target_variable_name;
+        }
+        _ => return None,
+    }
 }
 
 //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
@@ -398,15 +497,7 @@ pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
 
         //If both the file and the parent directory exists
         (Some(inodenum), Some(parentinodenum)) => {
-
-            let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&parentinodenum).unwrap();
-            let mut directory_parent_inode_obj = if let Inode::Dir(ref mut x) = *parentinodeobj {x} else {
-                panic!("File was a child of something other than a directory????");
-            };
-            directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
-            directory_parent_inode_obj.linkcount -= 1;
-            //remove reference to file in parent directory
-            drop(parentinodeobj);
+            Cage::remove_from_parent_dir(parentinodenum, &truepath);
 
             FS_METADATA.inodetable.remove(&inodenum);
         }

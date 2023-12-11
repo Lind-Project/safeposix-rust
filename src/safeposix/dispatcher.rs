@@ -14,7 +14,9 @@ const READ_SYSCALL: i32 = 12;
 const WRITE_SYSCALL: i32 = 13;
 const LSEEK_SYSCALL: i32 = 14;
 const IOCTL_SYSCALL: i32 = 15;
+const TRUNCATE_SYSCALL: i32 = 16;
 const FXSTAT_SYSCALL: i32 = 17;
+const FTRUNCATE_SYSCALL: i32 = 18;
 const FSTATFS_SYSCALL: i32 = 19;
 const MMAP_SYSCALL: i32 = 21;
 const MUNMAP_SYSCALL: i32 = 22;
@@ -63,6 +65,26 @@ const PIPE2_SYSCALL: i32 = 67;
 const FORK_SYSCALL: i32 = 68;
 const EXEC_SYSCALL: i32 = 69;
 
+const MUTEX_CREATE_SYSCALL: i32 = 70;
+const MUTEX_DESTROY_SYSCALL: i32 = 71;
+const MUTEX_LOCK_SYSCALL: i32 = 72;
+const MUTEX_TRYLOCK_SYSCALL: i32 = 73;
+const MUTEX_UNLOCK_SYSCALL: i32 = 74;
+const COND_CREATE_SYSCALL: i32 = 75;
+const COND_DESTROY_SYSCALL: i32 = 76;
+const COND_WAIT_SYSCALL: i32 = 77;
+const COND_BROADCAST_SYSCALL: i32 = 78;
+const COND_SIGNAL_SYSCALL: i32 = 79;
+const COND_TIMEDWAIT_SYSCALL: i32 = 80;
+
+const SEM_INIT_SYSCALL: i32 = 91;
+const SEM_WAIT_SYSCALL: i32 = 92;
+const SEM_TRYWAIT_SYSCALL: i32 = 93;
+const SEM_TIMEDWAIT_SYSCALL: i32 = 94;
+const SEM_POST_SYSCALL: i32 = 95;
+const SEM_DESTROY_SYSCALL: i32 = 96;
+const SEM_GETVALUE_SYSCALL: i32 = 97;
+
 const GETHOSTNAME_SYSCALL: i32 = 125;
 const PREAD_SYSCALL: i32 = 126;
 const PWRITE_SYSCALL: i32 = 127;
@@ -70,6 +92,7 @@ const CHDIR_SYSCALL: i32 = 130;
 const MKDIR_SYSCALL: i32 = 131;
 const RMDIR_SYSCALL: i32 = 132;
 const CHMOD_SYSCALL: i32 = 133;
+const FCHMOD_SYSCALL: i32 = 134;
 
 const SOCKET_SYSCALL: i32 = 136;
 
@@ -77,13 +100,18 @@ const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
 const GETIFADDRS_SYSCALL: i32 = 146;
 
+const FCHDIR_SYSCALL: i32 = 161;
+const FSYNC_SYSCALL: i32 = 162;
+const FDATASYNC_SYSCALL: i32 = 163;
 
 use crate::interface;
-use super::cage::{Arg, CAGE_TABLE, Cage, FSData, StatData, IoctlPtrUnion};
+use super::cage::*;
 use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
-use super::syscalls::sys_constants::*;
+use super::syscalls::{sys_constants::*, fs_constants::IPC_STAT};
+use crate::lib_fs_utils::{visit_children, lind_deltree};
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -110,11 +138,24 @@ macro_rules! check_and_dispatch_socketpair {
     };
 }
 
+
+// the following "quick" functions are implemented for research purposes
+// to increase I/O performance by bypassing the dispatcher and type checker
+#[no_mangle]
+pub extern "C" fn quick_write(fd: i32, buf: *const u8, count: usize, cageid: u64) -> i32 {
+  unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().write_syscall(fd, buf, count) }
+}
+
+#[no_mangle]
+pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) -> i32 {
+    unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().read_syscall(fd, buf, size) }
+}
+
 #[no_mangle]
 pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg) -> i32 {
 
     // need to match based on if cage exists
-    let cage = { CAGE_TABLE.get(&cageid).unwrap().clone() };
+    let cage = interface::cagetable_getref(cageid);
 
     match callnum {
         ACCESS_SYSCALL => {
@@ -128,6 +169,15 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         CHDIR_SYSCALL => {
             check_and_dispatch!(cage.chdir_syscall, interface::get_cstr(arg1))
+        }
+        FSYNC_SYSCALL => {
+            check_and_dispatch!(cage.fsync_syscall, interface::get_int(arg1))
+        }
+        FDATASYNC_SYSCALL => {
+            check_and_dispatch!(cage.fdatasync_syscall, interface::get_int(arg1))
+        }
+        FCHDIR_SYSCALL => {
+            check_and_dispatch!(cage.fchdir_syscall, interface::get_int(arg1))
         }
         XSTAT_SYSCALL => {
             check_and_dispatch!(cage.stat_syscall, interface::get_cstr(arg1), interface::get_statdatastruct(arg2))
@@ -358,6 +408,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         CHMOD_SYSCALL => { 
             check_and_dispatch!(cage.chmod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2))
         }
+        FCHMOD_SYSCALL => { 
+            check_and_dispatch!(cage.fchmod_syscall, interface::get_int(arg1), interface::get_uint(arg2))
+        }
         RMDIR_SYSCALL => {
             check_and_dispatch!(cage.rmdir_syscall, interface::get_cstr(arg1))
         }
@@ -407,73 +460,183 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             check_and_dispatch!(cage.shmdt_syscall, interface::get_mutcbuf(arg1))
         }
         SHMCTL_SYSCALL => {
-            check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::get_shmidstruct(arg3))
+            let cmd = get_onearg!(interface::get_int(arg2));
+            let buf = if cmd == IPC_STAT {Some(get_onearg!(interface::get_shmidstruct(arg3)))} else {None};
+            check_and_dispatch!(cage.shmctl_syscall, interface::get_int(arg1), Ok::<i32, i32>(cmd), Ok::<Option<&mut interface::ShmidsStruct>, i32>(buf))
         }
+
+        MUTEX_CREATE_SYSCALL => {
+            check_and_dispatch!(cage.mutex_create_syscall, )
+        }
+        MUTEX_DESTROY_SYSCALL => {
+            check_and_dispatch!(cage.mutex_destroy_syscall, interface::get_int(arg1))
+        }
+        MUTEX_LOCK_SYSCALL => {
+            check_and_dispatch!(cage.mutex_lock_syscall, interface::get_int(arg1))
+        }
+        MUTEX_TRYLOCK_SYSCALL => {
+            check_and_dispatch!(cage.mutex_trylock_syscall, interface::get_int(arg1))
+        }
+        MUTEX_UNLOCK_SYSCALL => {
+            check_and_dispatch!(cage.mutex_unlock_syscall, interface::get_int(arg1))
+        }
+        COND_CREATE_SYSCALL => {
+            check_and_dispatch!(cage.cond_create_syscall, )
+        }
+        COND_DESTROY_SYSCALL => {
+            check_and_dispatch!(cage.cond_destroy_syscall, interface::get_int(arg1))
+        }
+        COND_WAIT_SYSCALL => {
+            check_and_dispatch!(cage.cond_wait_syscall, interface::get_int(arg1), interface::get_int(arg2))
+        }
+        COND_BROADCAST_SYSCALL => {
+            check_and_dispatch!(cage.cond_broadcast_syscall, interface::get_int(arg1))
+        }
+        COND_SIGNAL_SYSCALL => {
+            check_and_dispatch!(cage.cond_signal_syscall, interface::get_int(arg1))
+        }
+        COND_TIMEDWAIT_SYSCALL => {
+            check_and_dispatch!(cage.cond_timedwait_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::duration_fromtimespec(arg3))
+        }
+        TRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_isize(arg2))
+        }
+        FTRUNCATE_SYSCALL => {
+            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
+        }
+        SEM_INIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_init_syscall, interface::get_uint(arg1), interface::get_int(arg2), interface::get_uint(arg3))
+        }
+        SEM_WAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_wait_syscall, interface::get_uint(arg1))
+        }
+        SEM_POST_SYSCALL => {
+            check_and_dispatch!(cage.sem_post_syscall, interface::get_uint(arg1))
+        }
+        SEM_DESTROY_SYSCALL => {
+            check_and_dispatch!(cage.sem_destroy_syscall, interface::get_uint(arg1))
+        }
+        SEM_GETVALUE_SYSCALL => {
+            check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1))
+        }
+        SEM_TRYWAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_trywait_syscall, interface::get_uint(arg1))
+        }
+        SEM_TIMEDWAIT_SYSCALL => {
+            check_and_dispatch!(cage.sem_timedwait_syscall, interface::get_uint(arg1), interface::duration_fromtimespec(arg2))
+        }
+
         _ => {//unknown syscall
             -1
         }
     }
 }
 
+
+
+#[no_mangle]
+pub extern "C" fn lindcancelinit(cageid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.cancelstatus.store(true, interface::RustAtomicOrdering::Relaxed);
+    cage.signalcvs();
+}
+
+#[no_mangle]
+pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.insert(pthreadid, kill);
+}
+
+#[no_mangle]
+pub extern "C" fn lindcheckthread(cageid: u64, pthreadid: u64) -> bool {
+    interface::check_thread(cageid, pthreadid)
+}
+
+#[no_mangle]
+pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.thread_table.remove(&pthreadid);
+}
+
+fn cleartmp(init: bool) {
+    let path = "/tmp";
+    
+    let cage = interface::cagetable_getref(0);
+    let mut statdata = StatData::default();
+    
+    if cage.stat_syscall(path, &mut statdata) == 0 {
+        visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
+            if isdir { lind_deltree(childcage, childpath); }
+            else { childcage.unlink_syscall(childpath);}
+        });
+    }
+    else {
+        if init  == true {
+            cage.mkdir_syscall(path, S_IRWXA);
+        } 
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
-
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
-    
+    interface::cagetable_init();
     load_fs();
     incref_root();
     incref_root();
-    let cagetable = &CAGE_TABLE;
 
     let utilcage = Cage{
-        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: interface::RustHashMap::new(),
+        cageid: 0, 
+        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, 
+        filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1)
+        geteuid: interface::RustAtomicI32::new(-1),
+        rev_shm: interface::Mutex::new(vec!()),
+        mutex_table: interface::RustLock::new(vec!()),
+        cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
+        sem_table: interface::RustHashMap::new(),
     };
-    cagetable.insert(0, interface::RustRfc::new(utilcage));
+
+    interface::cagetable_insert(0, utilcage);
 
     //init cage is its own parent
-    let mut initcage = Cage{
+    let initcage = Cage{
         cageid: 1, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
-        filedescriptortable: interface::RustHashMap::new(),
+        filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1)
+        geteuid: interface::RustAtomicI32::new(-1),
+        rev_shm: interface::Mutex::new(vec!()),
+        mutex_table: interface::RustLock::new(vec!()),
+        cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
+        sem_table: interface::RustHashMap::new(),
     };
-    initcage.load_lower_handle_stubs();
-    cagetable.insert(1, interface::RustRfc::new(initcage));
+    interface::cagetable_insert(1, initcage);
+    // make sure /tmp is clean
+    cleartmp(true);
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
-    //wipe all keys from hashmap, i.e. free all cages
-    let mut remainingcages: Vec<(u64, interface::RustRfc<Cage>)> = vec![];
-
-    //dashmap doesn't allow you to get key, value pairs directly, it only allows you to get a
-    //RefMulti struct which can be decomposed into the key and value
-    for refmulti in CAGE_TABLE.iter() {
-        let (key, value) = refmulti.pair();
-        remainingcages.push((*key, (*value).clone()));
-    }
-    //Wipe the keys from the CAGE_TABLE so we only have one remaing reference to them
-    CAGE_TABLE.clear();  
-
-    //actually exit the cages
-    for (_cageid, cage) in remainingcages {
-        cage.exit_syscall(EXIT_SUCCESS);
-    }
-
+    
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
     }
-
+    
+    // clear /tmp folder
+    cleartmp(false);
+    interface::cagetable_clear();
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
