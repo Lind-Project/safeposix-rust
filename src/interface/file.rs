@@ -193,26 +193,29 @@ impl EmulatedFile {
         Ok(())
     }
 
-     pub fn fdatasync(&self) -> std::io::Result<()> {
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => {
-                let fobj = f.lock();
-                fobj.sync_data()?;
-                Ok(())
-            }
-        }
+    // TODO: fix those!
+    pub fn fdatasync(&self) -> std::io::Result<()> {
+        // match &self.fobj {
+        //     None => panic!("{} is already closed.", self.filename),
+        //     Some(f) => {
+        //         let fobj = f.lock();
+        //         fobj.sync_data()?;
+        //         Ok(())
+        //     }
+        // }
+        return Ok(());
     }
 
     pub fn fsync(&self) -> std::io::Result<()> {
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => {
-                let fobj = f.lock();
-                fobj.sync_all()?;
-                Ok(())
-            }
-        }
+        // match &self.fobj {
+        //     None => panic!("{} is already closed.", self.filename),
+        //     Some(f) => {
+        //         let fobj = f.lock();
+        //         fobj.sync_all()?;
+        //         Ok(())
+        //     }
+        // }
+        return Ok(());
     }
 
     // Read from file into provided C-buffer
