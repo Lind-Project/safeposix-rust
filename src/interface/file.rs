@@ -15,7 +15,7 @@ use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::sync::{LazyLock as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE, madvise, MADV_SEQUENTIAL};
 use std::ffi::c_void;
 use std::convert::TryInto;
 
@@ -248,6 +248,13 @@ impl EmulatedFile {
             assert!(!ptr.is_null());
             slice::from_raw_parts(ptr, length)
         };
+
+        unsafe {
+            let result = madvise(buf.as_ptr() as *mut libc::c_void, length, MADV_SEQUENTIAL);
+            if result != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
 
         if offset + length > self.filesize {
             self.filesize = offset + length;
