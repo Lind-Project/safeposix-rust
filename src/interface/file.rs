@@ -252,7 +252,7 @@ impl EmulatedFile {
         unsafe {
             let result = madvise(buf.as_ptr() as *mut libc::c_void, length, MADV_SEQUENTIAL);
             if result != 0 {
-                return Err(std::io::Error::last_os_error());
+                panic!("madvise failed!");
             }
         }
 
