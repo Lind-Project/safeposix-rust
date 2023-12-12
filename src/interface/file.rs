@@ -172,23 +172,24 @@ impl EmulatedFile {
         }
     }
 
-    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> Result<(), i32> {
+    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> i32 {
         let fd = &self.as_fd_handle_raw_int();
         let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
         if !(flags & !valid_flags == 0){
-            return Err(syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit"));
+            return syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit");
         }
-        let result = unsafe { libc::sync_file_range(*fd, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
-        match result {
-             0 =>  Ok(()),
-             5 =>  Err(syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization")),
-             9 =>  Err(syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization")),
-             12 => Err(syscall_error(Errno::ENOMEM, "sync_file_range", "Out of memory error")),
-             22 => Err(syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit")),
-             28 => Err(syscall_error(Errno::ENOSPC, "sync_file_range", "Out of disk space error")),
-             29 => Err(syscall_error(Errno::ESPIPE, "sync_file_range", "fd refers to something other than a regular file, a block device, a directory, or a symbolic link")),
-             _ =>  Err(syscall_error(Errno::EIO, "sync_file_range", "Unknown error occurred during synchronization"))
-        }
+        let mut result = unsafe { libc::sync_file_range(*fd, offset.try_into().unwrap(), nbytes.try_into().unwrap(), flags) };
+        result = match result {
+            0 =>  0,
+            -5 =>  syscall_error(Errno::EIO, "sync_file_range", "an error occurred during synchronization"),
+            -9 =>  syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization"),
+            -12 => syscall_error(Errno::ENOMEM, "sync_file_range", "Out of memory error"),
+            -22 => syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit"),
+            -28 => syscall_error(Errno::ENOSPC, "sync_file_range", "Out of disk space error"),
+            -29 => syscall_error(Errno::ESPIPE, "sync_file_range", "fd refers to something other than a regular file, a block device, a directory, or a symbolic link"),
+            _ =>  syscall_error(Errno::EIO, "sync_file_range", "Unknown error occurred during synchronization")
+       };
+       return result;
     }
 
     // Read from file into provided C-buffer
