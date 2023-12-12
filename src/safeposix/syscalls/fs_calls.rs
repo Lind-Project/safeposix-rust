@@ -1924,8 +1924,7 @@ impl Cage {
                     match &*inodeobj {
                         Inode::File(_) => {
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            let result = fobj.sync_file_range(offset, nbytes, flags);
-                            return result;
+                            fobj.sync_file_range(offset, nbytes, flags)
                         }
                         _ => {
                             syscall_error(Errno::ESPIPE, "sync_file_range", "does not support special files for synchronization")
