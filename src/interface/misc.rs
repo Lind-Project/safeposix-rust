@@ -175,7 +175,8 @@ pub extern "C" fn pendingsignal_set(value: bool) {
 
 #[no_mangle]
 pub extern "C" fn pendingsignal_get() -> bool {
-    PENDINGSIGNAL.with(|v| *v.borrow())
+    let signalbool = PENDINGSIGNAL.with(|v| *v.borrow());
+    signalbool
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
