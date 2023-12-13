@@ -137,7 +137,7 @@ impl EmulatedFile {
 
         let emfile: Vec<u8>;
         unsafe {
-            let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
+            let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, rawfd, 0 as i64);
             madvise(filemap_addr as *mut c_void, mapsize, MADV_SEQUENTIAL);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
