@@ -38,6 +38,10 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
 
+thread_local! {
+    static TRUSTED_SIGNAL_FlAG: RefCell<u64> = RefCell::new(0);
+}
+
 use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
@@ -158,12 +162,18 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
+pub fn signalflag_set(value: u64) {
+    TRUSTED_SIGNAL_FlAG.with(|v| *v.borrow_mut() = value);
+}
+
+pub fn signalflag_get() -> u64 {
+    TRUSTED_SIGNAL_FlAG.with(|v| *v.borrow())
+}
+
 pub fn sigcheck(cageid: u64) -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
 
-    let cage = cagetable_getref(cageid);
-    let pthread_id = get_pthreadid();
-    let boolu64 = cage.trusted_signal_flag.get(&pthread_id).unwrap();
+    let boolu64 = signalflag_get();
     let boolptr = *boolu64 as *const bool;
     let sigbool = unsafe { *boolptr };
 
