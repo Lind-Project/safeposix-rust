@@ -6,6 +6,7 @@ use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
+use crate::safeposix::cage::Errno::EINVAL;
 use super::fs_constants::*;
 
 impl Cage {
@@ -1924,7 +1925,14 @@ impl Cage {
                     match &*inodeobj {
                         Inode::File(_) => {
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            fobj.sync_file_range(offset, nbytes, flags)
+                            let result = fobj.sync_file_range(offset, nbytes, flags);
+                            if result == 0 || result == -(EINVAL as i32) {
+                                  return result;
+                            }
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                  Ok(i) => {return syscall_error(i, "sync_file_range", "The libc call to sync_file_range failed!");},
+                                  Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            };
                         }
                         _ => {
                             syscall_error(Errno::ESPIPE, "sync_file_range", "does not support special files for synchronization")
