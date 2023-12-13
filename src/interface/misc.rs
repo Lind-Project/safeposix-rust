@@ -173,8 +173,7 @@ pub fn signalflag_get() -> u64 {
 pub fn sigcheck(cageid: u64) -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
 
-    let boolu64 = signalflag_get();
-    let boolptr = *boolu64 as *const bool;
+    let boolptr = signalflag_get() as *const bool;
     let sigbool = unsafe { *boolptr };
 
     sigbool
