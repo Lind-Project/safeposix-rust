@@ -173,7 +173,7 @@ pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
     } else { cage.sigset.insert(pthreadid, interface::RustAtomicU64::new(0)); }
 
     cage.pendingsigset.insert(pthreadid, interface::RustAtomicU64::new(0));
-    cage.trusted_signal_flag.insert(pthreadid, signalflag);
+    interface::signalflag_set(signalflag);
 }
 
 #[no_mangle]
@@ -657,7 +657,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(), 
         pendingsigset: interface::RustHashMap::new(),
-        trusted_signal_flag: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0)
     };
@@ -683,7 +682,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
         pendingsigset: interface::RustHashMap::new(),
-        trusted_signal_flag: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1)
     };

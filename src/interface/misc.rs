@@ -12,7 +12,7 @@ pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
-
+use std::cell::RefCell;
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockWriteGuard, RwLockReadGuard as RustLockReadGuard, Mutex, Condvar};
 
@@ -34,6 +34,11 @@ use std::sync::LazyLock;
 pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
     RustAtomicBool::new(false)
 });
+
+thread_local! {
+    static TRUSTED_SIGNAL_FlAG: RefCell<u64> = RefCell::new(0);
+}
+
 
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
@@ -158,13 +163,18 @@ pub fn cancelpoint(cageid: u64) {
     }
 }
 
+pub fn signalflag_set(value: u64) {
+    TRUSTED_SIGNAL_FlAG.with(|v| *v.borrow_mut() = value);
+}
+
+pub fn signalflag_get() -> u64 {
+    TRUSTED_SIGNAL_FlAG.with(|v| *v.borrow())
+}
+
 pub fn sigcheck(cageid: u64) -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
 
-    let cage = cagetable_getref(cageid);
-    let pthread_id = get_pthreadid();
-    let boolu64 = cage.trusted_signal_flag.get(&pthread_id).unwrap();
-    let boolptr = *boolu64 as *const bool;
+    let boolptr = signalflag_get() as *const bool;
     let sigbool = unsafe { *boolptr };
 
     sigbool

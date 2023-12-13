@@ -1,6 +1,8 @@
 #![feature(lazy_cell)]
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
+#![feature(result_into_ok_or_err)]
+#![feature(thread_local)]
 #![allow(unused_imports)]
 
 mod interface;
