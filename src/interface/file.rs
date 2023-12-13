@@ -138,6 +138,7 @@ impl EmulatedFile {
         let emfile: Vec<u8>;
         unsafe {
             let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
+            madvise(newmap_addr as *mut c_void, length, MADV_SEQUENTIAL);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
@@ -174,6 +175,7 @@ impl EmulatedFile {
 
             let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
             let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
+            madvise(newmap_addr as *mut c_void, length, MADV_SEQUENTIAL);
 
             emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
         }
@@ -248,13 +250,6 @@ impl EmulatedFile {
             assert!(!ptr.is_null());
             slice::from_raw_parts(ptr, length)
         };
-
-        unsafe {
-            let result = madvise(buf.as_ptr() as *mut libc::c_void, length, MADV_SEQUENTIAL);
-            if result != 0 {
-                panic!("madvise failed!");
-            }
-        }
 
         if offset + length > self.filesize {
             self.filesize = offset + length;
