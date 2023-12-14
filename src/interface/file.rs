@@ -15,7 +15,7 @@ use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::sync::{LazyLock as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE, madvise, MADV_WILLNEED, MADV_SEQUENTIAL};
+use libc::{mmap, mremap, munmap, memset, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE, madvise, MADV_WILLNEED, MADV_SEQUENTIAL};
 use std::ffi::c_void;
 use std::convert::TryInto;
 
@@ -142,6 +142,7 @@ impl EmulatedFile {
         unsafe {
             let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
             madvise(filemap_addr as *mut c_void, mapsize, MADV_SEQUENTIAL);
+            memset(filemap_addr, 0, mapsize);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
@@ -178,8 +179,7 @@ impl EmulatedFile {
 
             let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
             let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
-            madvise(newmap_addr.offset(oldlen as isize) as *mut c_void, self.mapsize, MADV_SEQUENTIAL);
-
+            memset(filemap_addr.offset(oldlen as isize), 0, mapsize - oldlen);
             emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
         }
 
