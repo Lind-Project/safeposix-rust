@@ -179,7 +179,7 @@ impl EmulatedFile {
 
             let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
             let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
-            memset(filemap_addr.offset(oldlen as isize), 0, mapsize - oldlen);
+            memset(newmap_addr.offset(oldlen as isize), 0, self.mapsize - oldlen);
             emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
         }
 
