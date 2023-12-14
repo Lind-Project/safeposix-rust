@@ -15,11 +15,15 @@ use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::sync::{LazyLock as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use libc::{mmap, mremap, munmap, memset, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE, madvise, MADV_WILLNEED, MADV_SEQUENTIAL};
 use std::ffi::c_void;
 use std::convert::TryInto;
 
+pub const COUNTMAPSIZE : usize = 8;
 
+pub const SIZE_512KB : usize = usize::pow(2, 19);
+pub const SIZE_1MB : usize = usize::pow(2, 20);
+pub const SIZE_4MB : usize = usize::pow(2, 22);
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -90,8 +94,11 @@ pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile>
 pub struct EmulatedFile {
     filename: String,
     abs_filename: RustPathBuf,
-    fobj: Option<Arc<Mutex<File>>>,
+    fobj: Arc<Mutex<Option<Vec<u8>>>>,
+    realfobj: Arc<Mutex<File>>,
     filesize: usize,
+    rawfd: i32,
+    mapsize: usize,
 }
 
 pub fn pathexists(filename: String) -> bool {
@@ -122,17 +129,61 @@ impl EmulatedFile {
         }?;
 
         let absolute_filename = fs::canonicalize(&path)?;
+        let rawfd = f.as_raw_fd() as i32;
 
         OPEN_FILES.insert(filename.clone());
-        let filesize = f.metadata()?.len();
+        let filesize = f.metadata()?.len() as usize; 
 
-        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
+        let mapsize = ((filesize / SIZE_4MB) + 1) * SIZE_4MB;
 
+        f.set_len(mapsize as u64)?;
+
+        let emfile: Vec<u8>;
+        unsafe {
+            let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
+            madvise(filemap_addr as *mut c_void, mapsize, MADV_SEQUENTIAL);
+            memset(filemap_addr, 0, mapsize);
+            emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
+        }
+
+        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(Some(emfile))), realfobj: Arc::new(Mutex::new(f)), filesize: filesize, rawfd: rawfd, mapsize: mapsize})
     }
 
     pub fn close(&self) -> std::io::Result<()> {
         OPEN_FILES.remove(&self.filename);
+        unsafe {
+            let mut fobj = self.fobj.lock();
+            let map = fobj.take().unwrap();
+
+            let (oldmap_addr, _oldlen, _cap) = map.into_raw_parts();
+            munmap(oldmap_addr as *mut c_void, self.mapsize);
+        }
+
+        let realfobj = self.realfobj.lock();
+        realfobj.set_len(self.filesize as u64)?;
+
         Ok(())
+    }
+
+    fn remap_file(&mut self) {
+        let emfile: Vec<u8>;
+
+        self.mapsize = ((self.filesize / SIZE_4MB) + 1) * SIZE_4MB;
+
+        let realfobj = self.realfobj.lock();
+        let _lenres = realfobj.set_len(self.mapsize as u64);
+
+        unsafe {
+            let mut fobj = self.fobj.lock();
+            let map = fobj.take().unwrap();
+
+            let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
+            let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
+            memset(newmap_addr.offset(oldlen as isize), 0, self.mapsize - oldlen);
+            emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
+        }
+
+        self.fobj = Arc::new(Mutex::new(Some(emfile)));
     }
 
     pub fn shrink(&mut self, length: usize) -> std::io::Result<()> {
@@ -140,163 +191,140 @@ impl EmulatedFile {
         if length > self.filesize { 
             panic!("Something is wrong. {} is already smaller than length.", self.filename);
         }
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => { 
-                let fobj = f.lock();
-                fobj.set_len(length as u64)?;
-                self.filesize = length;         
-                Ok(())
-            }
-        }
+        let realfobj = self.realfobj.lock();
+        self.filesize = length;   
+        drop(realfobj);
+        if self.filesize > self.mapsize { self.remap_file() }
+        Ok(())
     }
 
-     pub fn fdatasync(&self) -> std::io::Result<()> {
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => {
-                let fobj = f.lock();
-                fobj.sync_data()?;
-                Ok(())
-            }
-        }
+    // TODO: fix those!
+    pub fn fdatasync(&self) -> std::io::Result<()> {
+        // match &self.fobj {
+        //     None => panic!("{} is already closed.", self.filename),
+        //     Some(f) => {
+        //         let fobj = f.lock();
+        //         fobj.sync_data()?;
+        //         Ok(())
+        //     }
+        // }
+        return Ok(());
     }
 
     pub fn fsync(&self) -> std::io::Result<()> {
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => {
-                let fobj = f.lock();
-                fobj.sync_all()?;
-                Ok(())
-            }
-        }
+        // match &self.fobj {
+        //     None => panic!("{} is already closed.", self.filename),
+        //     Some(f) => {
+        //         let fobj = f.lock();
+        //         fobj.sync_all()?;
+        //         Ok(())
+        //     }
+        // }
+        return Ok(());
     }
 
     // Read from file into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
+        
+        let mut real_length = length;
+        if offset + length > self.filesize { real_length = self.filesize - offset }
+
         let buf = unsafe {
             assert!(!ptr.is_null());
-            slice::from_raw_parts_mut(ptr, length)
+            slice::from_raw_parts_mut(ptr, real_length)
         };
 
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => { 
-                let mut fobj = f.lock();
-                if offset > self.filesize {
-                  panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                let bytes_read = fobj.read(buf)?;
-                Ok(bytes_read)
-            }
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
+        if offset > self.filesize {
+            panic!("Seek offset extends past the EOF!");
         }
+
+        let fileslice = &fobj[offset..(offset + real_length)];
+        buf.copy_from_slice(fileslice);
+
+        Ok(real_length)
     }
 
     // Write to file from provided C-buffer
     pub fn writeat(&mut self, ptr: *const u8, length: usize, offset: usize) -> std::io::Result<usize> {
-
-        let bytes_written;
 
         let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts(ptr, length)
         };
 
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => { 
-                let mut fobj = f.lock();
-                if offset > self.filesize {
-                    panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                bytes_written = fobj.write(buf)?;
-            }
-        }
-
         if offset + length > self.filesize {
             self.filesize = offset + length;
+            if self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
         }
 
-        Ok(bytes_written)
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
+        if offset > self.filesize {
+            panic!("Seek offset extends past the EOF!");
+        }
+
+        let fileslice = &mut fobj[offset..(offset + length)];
+        fileslice.copy_from_slice(buf);
+
+        Ok(length)
     }
 
     // Reads entire file into bytes
     pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
+        let mut stringbuf = vec![0; self.filesize];
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
 
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => { 
-                let mut stringbuf = Vec::new();
-                let mut fobj = f.lock();
-                fobj.read_to_end(&mut stringbuf)?;
-                Ok(stringbuf) // return new buf string
-            }
-        }
+        let fileslice = &fobj[0..self.filesize];
+        stringbuf.copy_from_slice(fileslice);
+
+        Ok(stringbuf) // return new buf string
     }
 
     // Write to entire file from provided bytes
     pub fn writefile_from_bytes(&mut self, buf: &[u8]) -> std::io::Result<()> {
 
         let length = buf.len();
-        let offset = self.filesize;
-    
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => { 
-                let mut fobj = f.lock();
-                if offset > self.filesize {
-                    panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                fobj.write(buf)?;
-            }
-        }
 
-        if offset + length > self.filesize {
-            self.filesize = offset + length;
+        if length > self.filesize {
+            self.filesize = length;
+            while self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
         }
+    
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
+
+        let fileslice = &mut fobj[0..length];
+        fileslice.copy_from_slice(buf);
 
         Ok(())
     }
 
     pub fn zerofill_at(&mut self, offset: usize, count: usize) -> std::io::Result<usize> {
-        let bytes_written;
-        let buf = vec![0; count];
-
-        match &self.fobj {
-            None => panic!("{} is already closed.", self.filename),
-            Some(f) => { 
-                let mut fobj = f.lock();
-                if offset > self.filesize {
-                    panic!("Seek offset extends past the EOF!");
-                }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                bytes_written = fobj.write(buf.as_slice())?;
-            }
-        }
 
         if offset + count > self.filesize {
             self.filesize = offset + count;
+            if self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
         }
 
-        Ok(bytes_written)
+        let mut fobjopt = self.fobj.lock();
+        let fobj = fobjopt.as_mut().unwrap();
+        if offset > self.filesize {
+            panic!("Seek offset extends past the EOF!");
+        }
+        let fileslice = &mut fobj[offset..(offset + count)];
+        fileslice.fill(0);
+
+        Ok(count)
     }
     
     //gets the raw fd handle (integer) from a rust fileobject
     pub fn as_fd_handle_raw_int(&self) -> i32 {
-        if let Some(wrapped_barefile) = &self.fobj {
-            wrapped_barefile.lock().as_raw_fd() as i32
-        } else {
-            -1
-        }
+        self.rawfd
     }
 }
-
-pub const COUNTMAPSIZE : usize = 8;
-pub const MAP_1MB : usize = usize::pow(2, 20);
 
 #[derive(Debug)]
 pub struct EmulatedFileMap {
@@ -305,7 +333,7 @@ pub struct EmulatedFileMap {
     fobj: Arc<Mutex<File>>,
     map: Arc<Mutex<Option<Vec<u8>>>>,
     count: usize,
-    countmap:  Arc<Mutex<Option<Vec<u8>>>>,
+    countmap: Arc<Mutex<Option<Vec<u8>>>>,
     mapsize: usize
 }
 
@@ -330,7 +358,7 @@ impl EmulatedFileMap {
         let absolute_filename = canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
-        let mapsize = MAP_1MB - COUNTMAPSIZE;   
+        let mapsize = SIZE_1MB - COUNTMAPSIZE;   
         // set the file equal to where were mapping the count and the actual map
         let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
 
@@ -339,7 +367,7 @@ impl EmulatedFileMap {
 
         // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            let map_addr = mmap(0 as *mut c_void, SIZE_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
             countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
             let map_ptr = map_addr as *mut u8;
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
@@ -384,7 +412,7 @@ impl EmulatedFileMap {
         let f = self.fobj.lock();
 
         // add another 1MB to mapsize
-        let new_mapsize = self.mapsize + MAP_1MB;
+        let new_mapsize = self.mapsize + SIZE_1MB;
         let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
 
         let newmap : Vec::<u8>;
