@@ -21,6 +21,7 @@ use std::convert::TryInto;
 
 pub const COUNTMAPSIZE : usize = 8;
 pub const MAP_1MB : usize = usize::pow(2, 20);
+pub const MAP_4MB : usize = usize::pow(2, 20);
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -131,7 +132,7 @@ impl EmulatedFile {
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len() as usize; 
 
-        let mapsize = ((filesize / MAP_1MB) + 1) * MAP_1MB;
+        let mapsize = ((filesize / MAP_4MB) + 1) * MAP_4MB;
 
         f.set_len(mapsize as u64)?;
 
@@ -164,7 +165,7 @@ impl EmulatedFile {
     fn remap_file(&mut self) {
         let emfile: Vec<u8>;
 
-        self.mapsize = ((self.filesize / MAP_1MB) + 1) * MAP_1MB;
+        self.mapsize = ((self.filesize / MAP_4MB) + 1) * MAP_4MB;
 
         let realfobj = self.realfobj.lock();
         let _lenres = realfobj.set_len(self.mapsize as u64);
