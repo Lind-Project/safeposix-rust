@@ -20,8 +20,10 @@ use std::ffi::c_void;
 use std::convert::TryInto;
 
 pub const COUNTMAPSIZE : usize = 8;
-pub const MAP_1MB : usize = usize::pow(2, 20);
-pub const MAP_4MB : usize = usize::pow(2, 20);
+
+pub const SIZE_512KB : usize = usize::pow(2, 19);
+pub const SIZE_1MB : usize = usize::pow(2, 20);
+pub const SIZE_4MB : usize = usize::pow(2, 22);
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -132,7 +134,7 @@ impl EmulatedFile {
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len() as usize; 
 
-        let mapsize = ((filesize / MAP_4MB) + 1) * MAP_4MB;
+        let mapsize = ((filesize / SIZE_4MB) + 1) * SIZE_4MB;
 
         f.set_len(mapsize as u64)?;
 
@@ -165,7 +167,7 @@ impl EmulatedFile {
     fn remap_file(&mut self) {
         let emfile: Vec<u8>;
 
-        self.mapsize = ((self.filesize / MAP_4MB) + 1) * MAP_4MB;
+        self.mapsize = ((self.filesize / SIZE_4MB) + 1) * SIZE_4MB;
 
         let realfobj = self.realfobj.lock();
         let _lenres = realfobj.set_len(self.mapsize as u64);
@@ -254,7 +256,7 @@ impl EmulatedFile {
 
         if offset + length > self.filesize {
             self.filesize = offset + length;
-            if self.filesize > self.mapsize { self.remap_file() }
+            if self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
         }
 
         let mut fobjopt = self.fobj.lock();
@@ -288,7 +290,7 @@ impl EmulatedFile {
 
         if length > self.filesize {
             self.filesize = length;
-            while self.filesize > self.mapsize { self.remap_file() }
+            while self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
         }
     
         let mut fobjopt = self.fobj.lock();
@@ -304,7 +306,7 @@ impl EmulatedFile {
 
         if offset + count > self.filesize {
             self.filesize = offset + count;
-            if self.filesize > self.mapsize { self.remap_file() }
+            if self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
         }
 
         let mut fobjopt = self.fobj.lock();
@@ -356,7 +358,7 @@ impl EmulatedFileMap {
         let absolute_filename = canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
-        let mapsize = MAP_1MB - COUNTMAPSIZE;   
+        let mapsize = SIZE_1MB - COUNTMAPSIZE;   
         // set the file equal to where were mapping the count and the actual map
         let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
 
@@ -365,7 +367,7 @@ impl EmulatedFileMap {
 
         // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            let map_addr = mmap(0 as *mut c_void, SIZE_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
             countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
             let map_ptr = map_addr as *mut u8;
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
@@ -410,7 +412,7 @@ impl EmulatedFileMap {
         let f = self.fobj.lock();
 
         // add another 1MB to mapsize
-        let new_mapsize = self.mapsize + MAP_1MB;
+        let new_mapsize = self.mapsize + SIZE_1MB;
         let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
 
         let newmap : Vec::<u8>;
