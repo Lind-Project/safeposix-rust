@@ -142,7 +142,6 @@ impl EmulatedFile {
         unsafe {
             let filemap_addr = mmap(0 as *mut c_void, mapsize, PROT_READ | PROT_WRITE, MAP_SHARED, rawfd, 0 as i64);
             madvise(filemap_addr as *mut c_void, mapsize, MADV_SEQUENTIAL);
-            memset(filemap_addr, 0, mapsize);
             emfile =  Vec::<u8>::from_raw_parts(filemap_addr as *mut u8, mapsize, mapsize);
         }
 
@@ -179,7 +178,6 @@ impl EmulatedFile {
 
             let (oldmap_addr, oldlen, _cap) = map.into_raw_parts();
             let newmap_addr = mremap(oldmap_addr as *mut c_void, oldlen, self.mapsize, MREMAP_MAYMOVE);
-            memset(newmap_addr.offset(oldlen as isize), 0, self.mapsize - oldlen);
             emfile =  Vec::<u8>::from_raw_parts(newmap_addr as *mut u8, self.mapsize, self.mapsize);
         }
 
@@ -241,7 +239,7 @@ impl EmulatedFile {
         }
 
         let fileslice = &fobj[offset..(offset + real_length)];
-        buf.copy_from_slice(fileslice);
+        buf. (fileslice);
 
         Ok(real_length)
     }
