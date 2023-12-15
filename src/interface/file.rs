@@ -239,7 +239,7 @@ impl EmulatedFile {
         }
 
         let fileslice = &fobj[offset..(offset + real_length)];
-        buf. (fileslice);
+        buf.copy_from_slice(fileslice);
 
         Ok(real_length)
     }
