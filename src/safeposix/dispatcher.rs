@@ -108,6 +108,8 @@ const SETITIMER_SYSCALL: i32 = 150;
 const FCHDIR_SYSCALL: i32 = 161;
 const FSYNC_SYSCALL: i32 = 162;
 const FDATASYNC_SYSCALL: i32 = 163;
+const SYNC_FILE_RANGE: i32 = 164;
+
 
 use crate::interface;
 use super::cage::*;
@@ -200,6 +202,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         FDATASYNC_SYSCALL => {
             check_and_dispatch!(cage.fdatasync_syscall, interface::get_int(arg1))
+        }
+        SYNC_FILE_RANGE =>{
+            check_and_dispatch!(cage.sync_file_range_syscall, interface::get_int(arg1), interface::get_isize(arg2), interface::get_isize(arg3), interface::get_uint(arg4))
         }
         FCHDIR_SYSCALL => {
             check_and_dispatch!(cage.fchdir_syscall, interface::get_int(arg1))

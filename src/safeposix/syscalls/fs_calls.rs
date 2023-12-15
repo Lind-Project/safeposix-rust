@@ -6,6 +6,7 @@ use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
+use crate::safeposix::cage::Errno::EINVAL;
 use super::fs_constants::*;
 use super::sys_constants::*;
 
@@ -1931,6 +1932,46 @@ impl Cage {
             }
         } else {
             syscall_error(Errno::EBADF, "fdatasync", "invalid file descriptor")
+        }
+    }
+
+    //------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
+
+     pub fn sync_file_range_syscall(&self, fd: i32, offset: isize, nbytes: isize, flags: u32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "sync_file_range", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+			    // This code segment obtains the file object associated with the specified inode from FILEOBJECTTABLE.
+			    // It calls 'sync_file_range' on this file object, where initially the flags are validated, returning -EINVAL for incorrect flags.
+			    // If the flags are correct, libc::sync_file_range is invoked; if it fails (returns -1), 'from_discriminant' function handles the error code.
+
+			    let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let result = fobj.sync_file_range(offset, nbytes, flags);
+                            if result == 0 || result == -(EINVAL as i32) {
+                                  return result;
+                            }
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                  Ok(i) => {return syscall_error(i, "sync_file_range", "The libc call to sync_file_range failed!");},
+                                  Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            };
+                        }
+                        _ => {
+                            syscall_error(Errno::ESPIPE, "sync_file_range", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "sync_file_range", "invalid file descriptor")
         }
     }
 
