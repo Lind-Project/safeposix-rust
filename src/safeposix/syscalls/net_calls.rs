@@ -1261,13 +1261,11 @@ impl Cage {
                 }
             }
 
-            // at this point lets check if we got a signal before sleeping
-            if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
-
-
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
+                // at this point lets check if we got a signal before sleeping
+                if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
                 interface::sleep(BLOCK_TIME);
             }
         }
@@ -1448,27 +1446,8 @@ impl Cage {
                         *retval += 1;
                     }
                 }
-<<<<<<< HEAD
             } else {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
-=======
-
-            }
-            
-            for fd in exceptfds.iter() {
-                //we say none of them ever have exceptional conditions
-                let checkedfd = self.get_filedescriptor(*fd).unwrap();
-                let unlocked_fd = checkedfd.read();
-                if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
-            }
-
-            if retval != 0 || interface::readtimer(start_time) > end_time {
-                break;
-            } else {
-                // at this point lets check if we got a signal before sleeping
-                if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
-                interface::sleep(BLOCK_TIME);
->>>>>>> sigaction-merge
             }
         }
         return 0;
