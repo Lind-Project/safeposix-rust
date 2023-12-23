@@ -20,10 +20,7 @@ use std::ffi::c_void;
 use std::convert::TryInto;
 
 pub const COUNTMAPSIZE : usize = 8;
-
-pub const SIZE_512KB : usize = usize::pow(2, 19);
 pub const SIZE_1MB : usize = usize::pow(2, 20);
-pub const SIZE_4MB : usize = usize::pow(2, 22);
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -134,7 +131,7 @@ impl EmulatedFile {
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len() as usize; 
 
-        let mapsize = ((filesize / SIZE_4MB) + 1) * SIZE_4MB;
+        let mapsize = ((filesize / SIZE_1MB) + 1) * SIZE_1MB;
 
         f.set_len(mapsize as u64)?;
 
@@ -253,7 +250,7 @@ impl EmulatedFile {
 
         if offset + length > self.filesize {
             self.filesize = offset + length;
-            if self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
+            if self.filesize > self.mapsize { self.remap_file() }
         }
 
         let mut fobjopt = self.fobj.lock();
@@ -287,7 +284,7 @@ impl EmulatedFile {
 
         if length > self.filesize {
             self.filesize = length;
-            while self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
+            while self.filesize > self.mapsize { self.remap_file() }
         }
     
         let mut fobjopt = self.fobj.lock();
@@ -303,7 +300,7 @@ impl EmulatedFile {
 
         if offset + count > self.filesize {
             self.filesize = offset + count;
-            if self.filesize + SIZE_512KB > self.mapsize { self.remap_file() }
+            if self.filesize > self.mapsize { self.remap_file() }
         }
 
         let mut fobjopt = self.fobj.lock();
