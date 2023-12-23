@@ -163,7 +163,7 @@ impl EmulatedFile {
     fn remap_file(&mut self) {
         let emfile: Vec<u8>;
 
-        self.mapsize = ((self.filesize / SIZE_4MB) + 1) * SIZE_4MB;
+        self.mapsize = ((self.filesize / SIZE_1MB) + 1) * SIZE_1MB;
 
         let realfobj = self.realfobj.lock();
         let _lenres = realfobj.set_len(self.mapsize as u64);
