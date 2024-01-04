@@ -345,7 +345,7 @@ impl Cage {
             let localaddr = Self::assign_new_addr_unix(&sockhandle);
             self.bind_inner_socket(&mut *sockhandle, &localaddr, false); 
         }
-        let remotepathbuf = normpath(convpath(remoteaddr.path().clone()), self);
+        let remotepathbuf = normpath(convpath(remoteaddr.path()), self);
 
         // try to get and hold reference to the key-value pair, so other process can't alter it
         let path_ref = NET_METADATA.domsock_paths.get(&remotepathbuf);
@@ -1054,7 +1054,7 @@ impl Cage {
                 let receivepipenumber;
 
                 loop {
-                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
+                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path()), self);
                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
 
                     if let Some(ds) = dsconnobj {
@@ -1085,7 +1085,7 @@ impl Cage {
                 let newsock_tmp = newsockfd.handle.clone();
                 let mut newsockhandle = newsock_tmp.write();
 
-                let pathclone = normpath(convpath(remote_addr.path().clone()), self);
+                let pathclone = normpath(convpath(remote_addr.path()), self);
                 if let Some(inodenum) = metawalk(pathclone.as_path()) {                   
                     newsockhandle.unix_info = Some(UnixSocketInfo {
                         path: pathclone,
@@ -1293,7 +1293,6 @@ impl Cage {
                         let mut newconnection = false;
                         match sockhandle.domain {
                             AF_UNIX => {
-
                                 if sockhandle.state == ConnState::INPROGRESS {
                                     let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
@@ -1365,8 +1364,8 @@ impl Cage {
                         }
 
                         if newconnection {
-                            let mut sockhandlewr = sock_tmp.write();
-                            sockhandlewr.state = ConnState::CONNECTED; 
+                            let mut newconnhandle = sock_tmp.write();
+                            newconnhandle.state = ConnState::CONNECTED; 
                         }
                     }
 
@@ -1422,8 +1421,8 @@ impl Cage {
                         }
 
                         if newconnection {
-                            let mut sockhandlewr = sock_tmp.write();
-                            sockhandlewr.state = ConnState::CONNECTED; 
+                            let mut newconnhandle = sock_tmp.write();
+                            newconnhandle.state = ConnState::CONNECTED; 
                         }
                         
                         //we always say sockets are writable? Even though this is not true
