@@ -1191,7 +1191,7 @@ impl Cage {
         }
     }
 
-    fn _nonblock_peek_read(&self, fd: i32) -> bool{
+    fn _nonblock_peek_read(&self, fd: i32) -> bool {
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
@@ -1295,13 +1295,13 @@ impl Cage {
                             AF_UNIX => {
 
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path().clone()), self);
+                                    let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                     if dsconnobj.is_none() { newconnection = true; }
                                 }
 
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
+                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
@@ -1309,9 +1309,9 @@ impl Cage {
                                         *retval += 1;
                                     }
                                 } else if sockhandle.state == ConnState::CONNECTED || newconnection {
-                                    drop(sockhandle);
-                                    drop(unlocked_fd);
-                                    if self._nonblock_peek_read(fd) {
+                                    let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
+                                    if receivepipe.check_select_read() {
                                         interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                     }
@@ -1410,7 +1410,7 @@ impl Cage {
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path());
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
                                     if dsconnobj.is_none() { newconnection = true; }
                                 }
@@ -1758,7 +1758,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(BLOCK_TIME);
+                interface::lind_yield();
             }
         }
         return return_code;
