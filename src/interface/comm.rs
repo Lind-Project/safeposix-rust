@@ -71,7 +71,7 @@ impl GenSockaddr {
         match self {
             GenSockaddr::Unix(unixaddr) => {
                 let pathiter = &mut unixaddr.sun_path.split(|idx| *idx == 0);
-                let pathslice = pathiter.next().unwrap().clone();
+                let pathslice = pathiter.next().unwrap();
                 let path = from_utf8(pathslice).unwrap();
                 path
             }
