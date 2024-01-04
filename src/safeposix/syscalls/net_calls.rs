@@ -1191,7 +1191,7 @@ impl Cage {
         }
     }
 
-    fn _nonblock_peek_read(&self, fd: i32) -> bool{
+    fn _nonblock_peek_read(&self, fd: i32) -> bool {
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
@@ -1293,30 +1293,29 @@ impl Cage {
                 match filedesc_enum {
                     Socket(ref mut sockfdobj) => {
                         let sock_tmp = sockfdobj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
-
+                        let sockhandle = sock_tmp.read();
+                        let mut newconnection = false;
                         match sockhandle.domain {
                             AF_UNIX => {
+
+                                if sockhandle.state == ConnState::INPROGRESS {
+                                    let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path()), self);
+                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
+                                    if dsconnobj.is_none() { newconnection = true; }
+                                }
+
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path().clone()), self);
+                                    let localpathbuf = normpath(convpath(sockhandle.localaddr.unwrap().path()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
                                         interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                     }
-                                }
-
-                                if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path().clone()), self);
-                                    let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
-                                    if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
-                                }
-
-                                if sockhandle.state == ConnState::CONNECTED {
-                                    drop(sockhandle);
-                                    drop(unlocked_fd);
-                                    if self._nonblock_peek_read(fd) {
+                                } else if sockhandle.state == ConnState::CONNECTED || newconnection {
+                                    let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
+                                    if receivepipe.check_select_read() {
                                         interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                     }
@@ -1349,7 +1348,7 @@ impl Cage {
                                     *retval += 1;
                                     //sockhandle innersocket unwrap ok if INPROGRESS
                                 } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                        sockhandle.state = ConnState::CONNECTED;
+                                        newconnection = true;
                                         interface::fd_set_insert(new_readfds, fd);
                                         *retval += 1;
                                 } else {
@@ -1367,6 +1366,11 @@ impl Cage {
                                 }
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
+                        }
+
+                        if newconnection {
+                            let mut sockhandlewr = sock_tmp.write();
+                            sockhandlewr.state = ConnState::CONNECTED; 
                         }
                     }
 
@@ -1405,21 +1409,25 @@ impl Cage {
                     Socket(ref mut sockfdobj) => {
                         // check if we've made an in progress connection first
                         let sock_tmp = sockfdobj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
+                        let sockhandle = sock_tmp.read();
+                        let mut newconnection = false;
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path().clone());
+                                    let remotepathbuf = convpath(sockhandle.remoteaddr.unwrap().path());
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
-                                    if dsconnobj.is_none() { sockhandle.state = ConnState::CONNECTED; }
+                                    if dsconnobj.is_none() { newconnection = true; }
                                 }
                             },
                             AF_INET => {
-                                if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                    sockhandle.state = ConnState::CONNECTED;
-                                } 
+                                if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() { newconnection = true; }
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain")}
+                        }
+
+                        if newconnection {
+                            let mut sockhandlewr = sock_tmp.write();
+                            sockhandlewr.state = ConnState::CONNECTED; 
                         }
                         
                         //we always say sockets are writable? Even though this is not true
@@ -1755,7 +1763,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                interface::sleep(BLOCK_TIME);
+                interface::lind_yield();
             }
         }
         return return_code;
