@@ -39,7 +39,7 @@ pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
 });
 
 thread_local! {
-    static TRUSTED_SIGNAL_FlAG: RefCell<u64> = RefCell::new(0);
+    static TRUSTED_SIGNAL_FLAG: RefCell<u64> = RefCell::new(0);
 }
 
 use crate::safeposix::cage::{Cage};
@@ -163,14 +163,14 @@ pub fn cancelpoint(cageid: u64) {
 }
 
 pub fn signalflag_set(value: u64) {
-    TRUSTED_SIGNAL_FlAG.with(|v| *v.borrow_mut() = value);
+    TRUSTED_SIGNAL_FLAG.with(|v| *v.borrow_mut() = value);
 }
 
 pub fn signalflag_get() -> u64 {
-    TRUSTED_SIGNAL_FlAG.with(|v| *v.borrow())
+    TRUSTED_SIGNAL_FLAG.with(|v| *v.borrow())
 }
 
-pub fn sigcheck(cageid: u64) -> bool {
+pub fn sigcheck() -> bool {
     if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
 
     let boolptr = signalflag_get() as *const bool;
