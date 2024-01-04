@@ -1265,7 +1265,7 @@ impl Cage {
                 break;
             } else {
                 // at this point lets check if we got a signal before sleeping
-                if interface::sigcheck(self.cageid) { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
+                if interface::sigcheck() { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
                 interface::sleep(BLOCK_TIME);
             }
         }
