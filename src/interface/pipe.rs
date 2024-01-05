@@ -65,22 +65,30 @@ impl EmulatedPipe {
     }
 
     pub fn check_select_read(&self) -> bool {
-        let read_end = self.read_end.lock();
-        let pipe_space = read_end.len();
+        let readlock = self.read_end.try_lock();
+        match readlock {
+            Some(read_end) => {
+                let pipe_space = read_end.len();
 
-        if (pipe_space > 0) || self.eof.load(Ordering::SeqCst){
-            return true;
-        }
-        else {
-            return false;
+                if (pipe_space > 0) || self.eof.load(Ordering::SeqCst){
+                    return true;
+                }
+                else {
+                    return false;
+                }
+            }
+            None => return false
         }
     }
     pub fn check_select_write(&self) -> bool {
-
-        let write_end = self.write_end.lock();
-        let pipe_space = write_end.remaining();
-
-        return pipe_space != 0;
+        let writelock = self.write_end.try_lock();
+        match writelock {
+            Some(write_end) => {
+                let pipe_space = write_end.remaining();
+                return pipe_space != 0;
+            }
+            None => return false
+        }
     }
 
     // Write length bytes from pointer into pipe
