@@ -76,13 +76,11 @@ impl Cage {
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
 
-                if is_reg(mode) {
-                    if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum){
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
-                        vac.insert(interface::openfile(sysfilename, true).unwrap());
-                    }
+                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum){
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
+                    vac.insert(interface::openfile(sysfilename, true).unwrap());
                 }
-
+                
                 let _insertval = fdoption.insert(new_file_initializer(newinodenum, flags, 0));
             }
 
