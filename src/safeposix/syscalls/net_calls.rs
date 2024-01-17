@@ -871,6 +871,7 @@ impl Cage {
                             let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                             NET_METADATA.listening_port_set.insert(porttuple);
+                            NET_METADATA.pending_conn_table.insert(ladr.port(), vec![]);
                             sockhandle.state = ConnState::LISTEN;
 
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
@@ -947,41 +948,42 @@ impl Cage {
                 }
             }
 
-            if releaseflag {
-                if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
+            if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
+                NET_METADATA.pending_conn_table.remove(&localaddr.port());
+                if releaseflag {
                     //move to end
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {return e;}
-                    }
                 }
-            }     
+            }
+        }     
 
-            // now change the connections for all socket types
-            match how {
-                SHUT_RD => {
-                    sockhandle.state = ConnState::CONNWRONLY;
-                }
-                SHUT_WR => {
-                    sockhandle.state = ConnState::CONNRDONLY;
-                }
-                SHUT_RDWR => {
-                    sockhandle.state = ConnState::NOTCONNECTED;
-                }
-                _ => {
-                    //See http://linux.die.net/man/2/shutdown for nuance to this error
-                    return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
-                }
-            }      
+        // now change the connections for all socket types
+        match how {
+            SHUT_RD => {
+                sockhandle.state = ConnState::CONNWRONLY;
+            }
+            SHUT_WR => {
+                sockhandle.state = ConnState::CONNRDONLY;
+            }
+            SHUT_RDWR => {
+                sockhandle.state = ConnState::NOTCONNECTED;
+            }
+            _ => {
+                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+            }
+        }      
 
-            return 0;
+        return 0;
     }
 
     pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
         if let Socket(sockfdobj) = filedesc {
             let sock_tmp = sockfdobj.handle.clone();
             let mut sockhandle = sock_tmp.write();
-
+            
             Self::_cleanup_socket_inner_helper(&mut *sockhandle, how, shutdown)
         } else {
             syscall_error(Errno::ENOTSOCK, "cleanup socket", "file descriptor is not a socket")
@@ -1126,14 +1128,10 @@ impl Cage {
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
-                let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port()) {
-                    //if we got a pending connection in select/poll/whatever, return that here instead
-                    let tup = vec.pop().unwrap(); //pending connection tuple recieved
-                    if vec.is_empty() {
-                        drop(vec);
-                        NET_METADATA.pending_conn_table.remove(&sockhandle.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
-                    }
-                    tup
+                let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port());
+                let vec = &mut *entry;
+                let (acceptedresult, remote_addr) = if !vec.is_empty() {
+                    vec.pop().unwrap()
                 } else {
                     //unwrap ok because listening
                     if 0 == (sockfdobj.flags & O_NONBLOCK) {
@@ -1150,6 +1148,7 @@ impl Cage {
                         }
                     }
                 };
+                
 
                 if let Err(_) = acceptedresult {
                     match Errno::from_discriminant(interface::get_errno()) {
@@ -1322,25 +1321,30 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
-
-                                        //innersock unwrap ok because sockhandle is listening
-                                        let listeningsocket = match sockhandle.domain {
-                                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                            _ => panic!("Unknown domain in accepting socket"),
-                                        };
-                                        drop(sockhandle);
-                                        if let Ok(_) = listeningsocket.0 {
-                                            //save the pending connection for accept to do something with it
-                                            vacant.insert(vec!(listeningsocket));
-                                        } else {
-                                            // if it returned an error, then don't insert it into new_readfds
-                                            // of course unset the bit explicitly before we continue
-                                            interface::fd_set_remove(new_readfds, fd);
-                                            continue;
+                                    if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port().clone()) {
+                                        // if the pending connection already exists, i.e. the vec is non-empty, surely we add it to the fdset
+                                        // if the vec is still empty, we'll try to do an accept
+                                        let vec = &mut *entry;
+                                        if vec.is_empty() {
+                                            let listeningsocket = match sockhandle.domain {
+                                                PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                                _ => panic!("Unknown domain in accepting socket"),
+                                            };
+                                            drop(sockhandle);
+                                            if let Ok(_) = listeningsocket.0 {
+                                                //save the pending connection for accept to do something with it
+                                                vec.append(&mut vec!(listeningsocket));
+                                            } else {
+                                                // if it returned an error, then don't insert it into new_readfds
+                                                // of course unset the bit explicitly before we continue
+                                                interface::fd_set_remove(new_readfds, fd);
+                                                continue;
+                                            }
                                         }
-                                    } //if it's already got a pending connection, add it!
+                                    } else {
+                                        panic!("the entry of pending_conn_table should be registered in listen_syscall");
+                                    }
 
                                     //if we reach here there is a pending connection
                                     interface::fd_set_insert(new_readfds, fd);
