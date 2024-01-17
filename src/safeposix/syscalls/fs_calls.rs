@@ -81,7 +81,7 @@ impl Cage {
                     vac.insert(interface::openfile(sysfilename, true).unwrap());
                 }
                 
-                let _insertval = fdoption.insert(new_file_initializer(newinodenum, flags, 0));
+                let _insertval = fdoption.insert(File(_file_initializer(newinodenum, flags, 0)));
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -125,7 +125,7 @@ impl Cage {
                     Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
                 }
 
-                let _insertval = fdoption.insert(new_file_initializer(inodenum, flags, size));
+                let _insertval = fdoption.insert(File(_file_initializer(inodenum, flags, size)));
             }
         }
 
