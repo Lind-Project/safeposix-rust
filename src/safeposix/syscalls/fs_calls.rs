@@ -111,12 +111,13 @@ impl Cage {
     
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename.clone()).unwrap();
-    
-                            if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                vac.insert(interface::openfile(sysfilename, true).unwrap());
-                            }
                         }
+                        
+                        if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            vac.insert(interface::openfile(sysfilename, true).unwrap());
+                        }
+                        
                         size = f.size;
                         f.refcount += 1;
                     }
