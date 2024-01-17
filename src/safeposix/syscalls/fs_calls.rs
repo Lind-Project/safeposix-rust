@@ -17,7 +17,7 @@ impl Cage {
         //insert file descriptor into self.filedescriptortableable of the cage
         let position = if 0 != flags & O_APPEND {size} else {0};
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
-        File(FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})
+        FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}
     }
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
@@ -81,7 +81,7 @@ impl Cage {
                     vac.insert(interface::openfile(sysfilename, true).unwrap());
                 }
                 
-                let _insertval = fdoption.insert(File(_file_initializer(newinodenum, flags, 0)));
+                let _insertval = fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -125,7 +125,7 @@ impl Cage {
                     Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
                 }
 
-                let _insertval = fdoption.insert(File(_file_initializer(inodenum, flags, size)));
+                let _insertval = fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
             }
         }
 
