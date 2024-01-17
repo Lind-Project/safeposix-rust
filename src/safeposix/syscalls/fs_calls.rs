@@ -13,7 +13,7 @@ impl Cage {
 
     //------------------------------------OPEN SYSCALL------------------------------------
 
-    fn _file_initializer(&self, inodenum: usize, flags: i32, size: i32) -> FileDesc{
+    fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc{
         //insert file descriptor into self.filedescriptortableable of the cage
         let position = if 0 != flags & O_APPEND {size} else {0};
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
