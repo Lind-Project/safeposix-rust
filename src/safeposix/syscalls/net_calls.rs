@@ -872,6 +872,11 @@ impl Cage {
 
                             NET_METADATA.listening_port_set.insert(porttuple);
                             NET_METADATA.pending_conn_table.insert(ladr.port(), vec![]);
+                            if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&ladr.port()) {
+                                
+                            } else {
+                                panic!("failed to register pending connection in listen_syscall");
+                            }
                             sockhandle.state = ConnState::LISTEN;
 
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
