@@ -874,7 +874,7 @@ impl Cage {
 
                             NET_METADATA.listening_port_set.insert(porttuple);
                             NET_METADATA.pending_conn_table.insert(ladr.port(), vec![]);
-                            println!("register port {}", ladr.port());
+                            // println!("register port {}", ladr.port());
 
                             sockhandle.state = ConnState::LISTEN;
 
@@ -1325,7 +1325,7 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    println!("getting port {}", sockhandle.localaddr.unwrap().port());
+                                    // println!("getting port {}", sockhandle.localaddr.unwrap().port());
                                     if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port().clone()) {
                                         // if the pending connection already exists, i.e. the vec is non-empty, surely we add it to the fdset
                                         // if the vec is still empty, we'll try to do an accept
