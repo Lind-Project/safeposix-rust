@@ -1128,7 +1128,7 @@ impl Cage {
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
-                let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port());
+                let mut entry = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port()).unwrap();
                 let vec = &mut *entry;
                 let (acceptedresult, remote_addr) = if !vec.is_empty() {
                     vec.pop().unwrap()
