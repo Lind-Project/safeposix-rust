@@ -2,6 +2,8 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
+use libc::printf;
+
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
@@ -872,11 +874,8 @@ impl Cage {
 
                             NET_METADATA.listening_port_set.insert(porttuple);
                             NET_METADATA.pending_conn_table.insert(ladr.port(), vec![]);
-                            if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&ladr.port()) {
-                                
-                            } else {
-                                panic!("failed to register pending connection in listen_syscall");
-                            }
+                            println!("register port {}", ladr.port());
+
                             sockhandle.state = ConnState::LISTEN;
 
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
@@ -1326,6 +1325,7 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
+                                    println!("getting port {}", ladr.port());
                                     if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port().clone()) {
                                         // if the pending connection already exists, i.e. the vec is non-empty, surely we add it to the fdset
                                         // if the vec is still empty, we'll try to do an accept
