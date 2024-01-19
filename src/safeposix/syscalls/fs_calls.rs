@@ -65,8 +65,8 @@ impl Cage {
                     return syscall_error(Errno::ENOTDIR, "open", "tried to create a file as a child of something that isn't a directory");
                 }
                 self.FS_METADATA.inodetable.insert(newinodenum, newinode);
-                log_metadata(&self.FS_METADATA, pardirinode);
-                log_metadata(&self.FS_METADATA, newinodenum);
+                self.log_metadata(&self.FS_METADATA, pardirinode);
+                self.log_metadata(&self.FS_METADATA, newinodenum);
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -167,14 +167,14 @@ impl Cage {
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
                 });
 
-                if let Inode::Dir(ref mut parentdir) = *(self.metadata.inodetable.get_mut(&pardirinode).unwrap()) {
+                if let Inode::Dir(ref mut parentdir) = *(metadata.inodetable.get_mut(&pardirinode).unwrap()) {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
                 else {unreachable!();}
-                self.metadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(&metadata, pardirinode);
-                log_metadata(&metadata, newinodenum);
+                metadata.inodetable.insert(newinodenum, newinode);
+                self.log_metadata(&metadata, pardirinode);
+                self.log_metadata(&metadata, newinodenum);
                 0 //mkdir has succeeded
             }
 
@@ -223,9 +223,9 @@ impl Cage {
                     parentdir.filename_to_inode_dict.insert(filename, newinodenum);
                     parentdir.linkcount += 1;
                 } //insert a reference to the file in the parent directory
-                self.metadata.inodetable.insert(newinodenum, newinode);
-                log_metadata(metadata, pardirinode);
-                log_metadata(metadata, newinodenum);
+                metadata.inodetable.insert(newinodenum, newinode);
+                self.log_metadata(metadata, pardirinode);
+                self.log_metadata(metadata, newinodenum);
                 0 //mknod has succeeded
             }
 
@@ -281,8 +281,8 @@ impl Cage {
                             parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
                             parentdirinodeobj.linkcount += 1;
                             drop(parentinodeobj);
-                            log_metadata(&self.FS_METADATA, pardirinode);
-                            log_metadata(&self.FS_METADATA, inodenum);
+                            self.log_metadata(&self.FS_METADATA, pardirinode);
+                            self.log_metadata(&self.FS_METADATA, inodenum);
                         } else {
                             panic!("Parent directory was not a directory!");
                         }
@@ -348,7 +348,7 @@ impl Cage {
 
                 drop(inodeobj);
 
-                let removal_result = Self::remove_from_parent_dir(parentinodenum, &truepath);
+                let removal_result = Self::remove_from_parent_dir(&self, parentinodenum, &truepath);
                 if removal_result != 0 {return removal_result;}
 
                 if curlinkcount == 0 {
@@ -361,15 +361,15 @@ impl Cage {
                             interface::removefile(sysfilename).unwrap();
                         }
                         if has_domsock {
-                            self.NET_METADATA.domain_socket_table.remove(&truepath);
+                            NET_METADATA.domain_socket_table.remove(&truepath);
                         }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
                 // we don't log domain sockets
                 if !has_domsock {
-                    log_metadata(&self.FS_METADATA, parentinodenum);
-                    log_metadata(&self.FS_METADATA, inodenum);
+                    self.log_metadata(&self.FS_METADATA, parentinodenum);
+                    self.log_metadata(&self.FS_METADATA, inodenum);
                 }
                 0 //unlink has succeeded
             }
@@ -774,7 +774,7 @@ impl Cage {
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
                                     drop(inodeobj);
-                                    log_metadata(&self.FS_METADATA, normalfile_filedesc_obj.inode);
+                                    self.log_metadata(&self.FS_METADATA, normalfile_filedesc_obj.inode);
                                 } //update file size if necessary
                                 
                                 byteswritten as i32
@@ -877,7 +877,7 @@ impl Cage {
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
                                drop(inodeobj);
-                               log_metadata(&self.FS_METADATA, normalfile_filedesc_obj.inode);                            
+                               self.log_metadata(&self.FS_METADATA, normalfile_filedesc_obj.inode);                            
                             } //update file size if necessary
 
                             retval
@@ -1252,7 +1252,7 @@ impl Cage {
                                     drop(inodeobj);
                                     self.FS_METADATA.inodetable.remove(&inodenum);
                                     let truepath = pathopt.unwrap();
-                                    self.NET_METADATA.domain_socket_table.remove(&truepath);
+                                    NET_METADATA.domain_socket_table.remove(&truepath);
                                 }
                             }
                         }
@@ -1288,7 +1288,7 @@ impl Cage {
                                 } else {
                                     drop(inodeobj);
                                 }
-                                log_metadata(&self.FS_METADATA, inodenum);
+                                self.log_metadata(&self.FS_METADATA, inodenum);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
@@ -1303,7 +1303,7 @@ impl Cage {
                                 //removing the file from the metadata 
                                 self.FS_METADATA.inodetable.remove(&inodenum);
                                 drop(inodeobj);
-                                log_metadata(&self.FS_METADATA, inodenum);     
+                                self.log_metadata(&self.FS_METADATA, inodenum);     
                             } 
                         },
                         Inode::CharDev(ref mut char_inode_obj) => {
@@ -1321,7 +1321,7 @@ impl Cage {
                             }  else {
                                 drop(inodeobj);
                             }
-                            log_metadata(&self.FS_METADATA, inodenum);
+                            self.log_metadata(&self.FS_METADATA, inodenum);
                         },
                         Inode::Socket(_) => { panic!("close(): Socket inode found on a filedesc fd.") }
                     }
@@ -1483,7 +1483,7 @@ impl Cage {
    
      //------------------------------------CHMOD HELPER FUNCTION------------------------------------
     
-    pub fn _chmod_helper(inodenum: usize, mode: u32) {
+    pub fn _chmod_helper(&self, inodenum: usize, mode: u32) {
          let mut thisinode = self.FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
          let mut log = true;
          if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
@@ -1503,7 +1503,7 @@ impl Cage {
                 }
             }
             drop(thisinode);
-            if log { log_metadata(&self.FS_METADATA, inodenum) }; 
+            if log { self.log_metadata(&self.FS_METADATA, inodenum) }; 
          }
     }
 
@@ -1516,7 +1516,7 @@ impl Cage {
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path()) {
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-               Self:: _chmod_helper(inodenum, mode);
+               Self:: _chmod_helper(&self, inodenum, mode);
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1539,7 +1539,7 @@ impl Cage {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                       Self:: _chmod_helper(inodenum, mode);
+                       Self:: _chmod_helper(&self, inodenum, mode);
                     }
                     else {
                         return syscall_error(Errno::EACCES, "fchmod", "provided file mode is not valid");
@@ -1668,7 +1668,7 @@ impl Cage {
         }
     }
 
-    pub fn remove_from_parent_dir(parent_inodenum: usize, truepath: &interface::RustPathBuf) -> i32 {
+    pub fn remove_from_parent_dir(&self, parent_inodenum: usize, truepath: &interface::RustPathBuf) -> i32 {
       if let Inode::Dir(ref mut parent_dir) = *(self.FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap()) {
           // check if parent dir has write permission
           if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
@@ -1712,14 +1712,14 @@ impl Cage {
                         if remove_inode { dir_obj.linkcount = 2; } // linkcount for an empty directory after rmdir must be 2
                         drop(inodeobj);
 
-                        let removal_result = Self::remove_from_parent_dir(parent_inodenum, &truepath);
+                        let removal_result = Self::remove_from_parent_dir(&self, parent_inodenum, &truepath);
                         if removal_result != 0 {return removal_result;}
 
                         // remove entry of corresponding inodenum from inodetable
                         if remove_inode { self.FS_METADATA.inodetable.remove(&inodenum).unwrap(); } 
 
-                        log_metadata(&self.FS_METADATA, parent_inodenum);
-                        log_metadata(&self.FS_METADATA, inodenum);       
+                        self.log_metadata(&self.FS_METADATA, parent_inodenum);
+                        self.log_metadata(&self.FS_METADATA, inodenum);       
                         0 // success
                     }
                     _ => { syscall_error(Errno::ENOTDIR, "rmdir", "Path is not a directory") }
@@ -1762,7 +1762,7 @@ impl Cage {
                     // remove entry of old path from filename-inode dict
                     parent_dir.filename_to_inode_dict.remove(&true_oldpath.file_name().unwrap().to_str().unwrap().to_string());
                     drop(pardir_inodeobj);
-                    log_metadata(&self.FS_METADATA, parent_inodenum);       
+                    self.log_metadata(&self.FS_METADATA, parent_inodenum);       
                 }
                 0 // success
             }
@@ -1828,7 +1828,7 @@ impl Cage {
                 normalfile_inode_obj.size = ulength;
 
                 drop(inodeobj);
-                log_metadata(&self.FS_METADATA, inodenum);
+                self.log_metadata(&self.FS_METADATA, inodenum);
                 0 // truncating has succeeded!
             }
             Inode::CharDev(_) => {

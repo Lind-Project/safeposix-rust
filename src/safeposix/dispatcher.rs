@@ -104,7 +104,7 @@ const FCHDIR_SYSCALL: i32 = 161;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{FS_METADATA,incref_root, remove_domain_sock, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
@@ -564,11 +564,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     let init_fs_log_file = "lind.init.md.log";
 
     let utilcage = Cage::new(0);
-    load_fs(util_fs_metadata_file, util_fs_log_file);
+    Cage::load_fs(&utilcage, util_fs_metadata_file, util_fs_log_file);
     interface::cagetable_insert(0, utilcage);
     
     let initcage = Cage::new(1);
-    load_fs(init_fs_metadata_file, init_fs_log_file);
+    Cage::load_fs(&initcage, init_fs_metadata_file, init_fs_log_file);
     interface::cagetable_insert(1, initcage);
     //    let utilcage = Cage{
 //        cageid: 0, 
@@ -621,7 +621,7 @@ pub extern "C" fn lindrustfinalize() {
     }
 
     // if we get here, persist and delete log
-    persist_metadata(&FS_METADATA);
+    Cage::persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
         let mut logobj = LOGMAP.write();

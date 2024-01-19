@@ -174,7 +174,7 @@ fn main() {
             drop(logobj);
             let _logremove = interface::removefile(LOGFILENAME.to_string());
 
-            format_fs();
+            Cage::format_fs();
             return;
         }
 

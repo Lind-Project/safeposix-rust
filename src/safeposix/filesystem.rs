@@ -141,7 +141,7 @@ impl FilesystemMetadata {
 
 impl Cage {
     
-    pub fn format_fs(metadatapath: &str, logfilepath: &str) {
+    pub fn format_fs(&self, metadatapath: &str, logfilepath: &str) {
         let newmetadata = FilesystemMetadata::blank_fs_init();
         //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
         //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and 
@@ -208,7 +208,7 @@ impl Cage {
 
         let _logremove = interface::removefile(logfilepath.to_string());
 
-        persist_metadata(&newmetadata, metadatapath);
+        self.persist_metadata(&newmetadata, metadatapath);
     }
 
     pub fn load_fs(&self, metadatapath: &str, logfilepath: &str) {
@@ -238,8 +238,8 @@ impl Cage {
                 for serialpair in logvec.drain(..) {
                     let (inodenum, inode) = serialpair;
                     match inode {
-                        Some(inode) => {self.fs_metadata.inodetable.insert(inodenum, inode);}
-                        None => {self.fs_metadata.inodetable.remove(&inodenum);}
+                        Some(inode) => {self.FS_METADATA.inodetable.insert(inodenum, inode);}
+                        None => {self.FS_METADATA.inodetable.remove(&inodenum);}
                     }
                 }
 
@@ -247,21 +247,21 @@ impl Cage {
                 let _logremove = interface::removefile(logfilepath.to_string());
 
                 // clean up broken links
-                fsck();
+                self.fsck();
             }
         } else {
             if interface::pathexists(logfilepath.to_string()) {
                 println!("Filesystem in very corrupted state: log existed but metadata did not!");
             }
-            format_fs(metadatapath, logfilepath);
+            self.format_fs(metadatapath, logfilepath);
         }
 
         // then recreate the log
-        create_log();
+        self.create_log();
     }
     
     pub fn fsck(&self) {
-        self.fs_metadata.inodetable.retain(|_inodenum, inode_obj| {
+        self.FS_METADATA.inodetable.retain(|_inodenum, inode_obj| {
             match inode_obj {
                 Inode::File(ref mut normalfile_inode) => {
                     normalfile_inode.linkcount != 0
@@ -278,7 +278,7 @@ impl Cage {
         });
     }
 
-    pub fn create_log(logfilepath: &str) {
+    pub fn create_log(&self, logfilepath: &str) {
         // reinstantiate the log file and assign it to the metadata struct
         let log_mapobj = interface::mapfilenew(logfilepath.to_string()).unwrap();
         let mut logobj = LOGMAP.write();
@@ -286,7 +286,7 @@ impl Cage {
     }
 
     // Serialize New Metadata to CBOR, write to logfile
-    pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
+    pub fn log_metadata(&self, metadata: &FilesystemMetadata, inodenum: usize) {
         let serialpair: (usize, Option<&Inode>);
         let entrybytes;
 
@@ -306,7 +306,7 @@ impl Cage {
     }
 
     // Serialize Metadata Struct to CBOR, write to file
-    pub fn persist_metadata(metadata: &FilesystemMetadata, metadatapath: &str) {
+    pub fn persist_metadata(&self, metadata: &FilesystemMetadata, metadatapath: &str) {
         // Serialize metadata to string
         let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
         
