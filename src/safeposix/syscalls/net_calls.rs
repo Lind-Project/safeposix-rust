@@ -873,6 +873,7 @@ impl Cage {
                             let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                             NET_METADATA.listening_port_set.insert(porttuple);
+                            println!("inserting ({}, {})", ladr.addr_as_u128(), ladr.port());
                             NET_METADATA.pending_conn_table.insert((ladr.addr_as_u128(), ladr.port()), vec![]);
                             // println!("register port {}", ladr.port());
 
@@ -1131,7 +1132,9 @@ impl Cage {
                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+
                 let ladr = sockhandle.localaddr.unwrap();
+                println!("getting ({}, {})", ladr.addr_as_u128(), ladr.port());
                 let mut entry = NET_METADATA.pending_conn_table.get_mut(&(ladr.addr_as_u128(), ladr.port())).unwrap();
                 let vec = &mut *entry;
                 let (acceptedresult, remote_addr) = if !vec.is_empty() {
