@@ -954,6 +954,7 @@ impl Cage {
             }
 
             if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
+                println!("removing all entries with ip {}", localaddr.addr_as_u128());
                 NET_METADATA.pending_conn_table.retain(|key, _| key.0 != localaddr.addr_as_u128());
                 if releaseflag {
                     //move to end
