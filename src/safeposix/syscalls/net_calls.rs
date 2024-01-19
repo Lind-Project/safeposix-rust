@@ -1131,8 +1131,8 @@ impl Cage {
                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
-
-                let mut entry = NET_METADATA.pending_conn_table.get_mut(&(sockhandle.localaddr.unwrap().addr_as_u128(), sockhandle.localaddr.unwrap().port())).unwrap();
+                let ladr = sockhandle.localaddr.unwrap();
+                let mut entry = NET_METADATA.pending_conn_table.get_mut(&(ladr.addr_as_u128(), ladr.port())).unwrap();
                 let vec = &mut *entry;
                 let (acceptedresult, remote_addr) = if !vec.is_empty() {
                     vec.pop().unwrap()
