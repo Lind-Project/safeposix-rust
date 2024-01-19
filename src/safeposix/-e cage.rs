@@ -141,7 +141,7 @@ impl FilesystemMetadata {
 
 impl Cage {
     
-    pub fn format_fs(metadatapath: &str, logfilepath: &str) {
+    pub fn format_fs() {
         let newmetadata = FilesystemMetadata::blank_fs_init();
         //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
         //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and 
@@ -206,9 +206,9 @@ impl Cage {
         newmetadata.inodetable.insert(5, urandominode);
         newmetadata.inodetable.insert(6, randominode);
 
-        let _logremove = interface::removefile(logfilepath.to_string());
+        let _logremove = interface::removefile(LOGFILENAME.to_string());
 
-        persist_metadata(&newmetadata, metadatapath);
+        persist_metadata(&newmetadata);
     }
 
     pub fn load_fs(&self, metadatapath: &str, logfilepath: &str) {
@@ -253,7 +253,7 @@ impl Cage {
             if interface::pathexists(logfilepath.to_string()) {
                 println!("Filesystem in very corrupted state: log existed but metadata did not!");
             }
-            format_fs(metadatapath, logfilepath);
+            format_fs();
         }
 
         // then recreate the log
@@ -278,9 +278,9 @@ impl Cage {
         });
     }
 
-    pub fn create_log(logfilepath: &str) {
+    pub fn create_log() {
         // reinstantiate the log file and assign it to the metadata struct
-        let log_mapobj = interface::mapfilenew(logfilepath.to_string()).unwrap();
+        let log_mapobj = interface::mapfilenew(LOGFILENAME.to_string()).unwrap();
         let mut logobj = LOGMAP.write();
         logobj.replace(log_mapobj);
     }
@@ -306,15 +306,15 @@ impl Cage {
     }
 
     // Serialize Metadata Struct to CBOR, write to file
-    pub fn persist_metadata(metadata: &FilesystemMetadata, metadatapath: &str) {
+    pub fn persist_metadata(metadata: &FilesystemMetadata) {
         // Serialize metadata to string
         let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
         
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
-        let _ = interface::removefile(metadatapath.to_string());
+        let _ = interface::removefile(METADATAFILENAME.to_string());
 
         // write to file
-        let mut metadata_fileobj = interface::openfile(metadatapath.to_string(), true).unwrap();
+        let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
         metadata_fileobj.writefile_from_bytes(&metadatabytes).unwrap();
         metadata_fileobj.close().unwrap();
     }

@@ -555,46 +555,59 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
-    load_fs();
-    incref_root();
-    incref_root();
-    
-    let utilcage = Cage{
-        cageid: 0, 
-        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, 
-        filedescriptortable: init_fdtable(),
-        cancelstatus: interface::RustAtomicBool::new(false),
-        getgid: interface::RustAtomicI32::new(-1), 
-        getuid: interface::RustAtomicI32::new(-1), 
-        getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!()),
-        mutex_table: interface::RustLock::new(vec!()),
-        cv_table: interface::RustLock::new(vec!()),
-        thread_table: interface::RustHashMap::new(),
-        sem_table: interface::RustHashMap::new(),
-    };
-    interface::cagetable_insert(0, utilcage);
+    //load_fs();
+    //incref_root();
+    //incref_root();
+    let util_fs_metadata_file = "lind.util.metadata";
+    let init_fs_metadata_file = "lind.init.metadata";
+    let util_fs_log_file = "lind.util.md.log";
+    let init_fs_log_file = "lind.init.md.log";
 
-    //init cage is its own parent
-    let initcage = Cage{
-        cageid: 1, 
-        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 1, 
-        filedescriptortable: init_fdtable(),
-        cancelstatus: interface::RustAtomicBool::new(false),
-        getgid: interface::RustAtomicI32::new(-1), 
-        getuid: interface::RustAtomicI32::new(-1), 
-        getegid: interface::RustAtomicI32::new(-1), 
-        geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!()),
-        mutex_table: interface::RustLock::new(vec!()),
-        cv_table: interface::RustLock::new(vec!()),
-        thread_table: interface::RustHashMap::new(),
-        sem_table: interface::RustHashMap::new(),
-    };
+    let utilcage = Cage::new(0);
+    load_fs(util_fs_metadata_file, util_fs_log_file);
+    interface::cagetable_insert(0, utilcage);
+    
+    let initcage = Cage::new(1);
+    load_fs(init_fs_metadata_file, init_fs_log_file);
     interface::cagetable_insert(1, initcage);
+    //    let utilcage = Cage{
+//        cageid: 0, 
+//        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+//        parent: 0, 
+//        filedescriptortable: init_fdtable(),
+//        filesystem: init_per_cage_fs(),
+//        cancelstatus: interface::RustAtomicBool::new(false),
+//        getgid: interface::RustAtomicI32::new(-1), 
+//        getuid: interface::RustAtomicI32::new(-1), 
+//        getegid: interface::RustAtomicI32::new(-1), 
+//        geteuid: interface::RustAtomicI32::new(-1),
+//        rev_shm: interface::Mutex::new(vec!()),
+//        mutex_table: interface::RustLock::new(vec!()),
+//        cv_table: interface::RustLock::new(vec!()),
+//        thread_table: interface::RustHashMap::new(),
+//        sem_table: interface::RustHashMap::new(),
+//    };
+//    interface::cagetable_insert(0, utilcage);
+//
+    //init cage is its own parent
+//    let initcage = Cage{
+//        cageid: 1, 
+//        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+//        parent: 1, 
+//        filedescriptortable: init_fdtable(),
+//        filesystem: init_per_cage_fs(),
+//        cancelstatus: interface::RustAtomicBool::new(false),
+//        getgid: interface::RustAtomicI32::new(-1), 
+//        getuid: interface::RustAtomicI32::new(-1), 
+//        getegid: interface::RustAtomicI32::new(-1), 
+//        geteuid: interface::RustAtomicI32::new(-1),
+//        rev_shm: interface::Mutex::new(vec!()),
+//        mutex_table: interface::RustLock::new(vec!()),
+//        cv_table: interface::RustLock::new(vec!()),
+//        thread_table: interface::RustHashMap::new(),
+//        sem_table: interface::RustHashMap::new(),
+//    };
+//    interface::cagetable_insert(1, initcage);
 }
 
 #[no_mangle]

@@ -3,7 +3,7 @@
 // System related system calls
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
-use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
+use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir, FilesystemMetadata};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
 use super::sys_constants::*;
@@ -141,6 +141,7 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
+            fs_metadata: FilesystemMetadata::blank_fs_init(),
             cancelstatus: interface::RustAtomicBool::new(false),
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
@@ -195,6 +196,7 @@ impl Cage {
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
             parent: self.parent, 
             filedescriptortable: self.filedescriptortable.clone(),
+            fs_metadata: FilesystemMetadata::blank_fs_init(),
             cancelstatus: interface::RustAtomicBool::new(false),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 

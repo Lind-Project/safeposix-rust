@@ -7,7 +7,7 @@ pub use crate::interface::types::{Arg, EpollEvent, FSData, Rlimit, StatData, Pip
 pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::sys_constants::*;
 pub use super::syscalls::net_constants::*;
-use super::filesystem::normpath;
+use super::filesystem::{normpath, FilesystemMetadata};
 use super::net::SocketHandle;
 
 pub use crate::interface::{CAGE_TABLE};
@@ -62,12 +62,14 @@ pub struct EpollDesc {
 
 pub type FdTable = Vec<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>>;
 
+
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: FdTable,
+    pub fs_metadata: FilesystemMetadata,
     pub cancelstatus: interface::RustAtomicBool,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
@@ -81,6 +83,26 @@ pub struct Cage {
 }
 
 impl Cage {
+
+    pub fn new(cageid: u64) -> Self {
+        Self {
+            cageid, 
+            cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+            parent: 0, 
+            filedescriptortable: init_fdtable(),
+            fs_metadata: FilesystemMetadata::init_fs_metadata(), 
+            cancelstatus: interface::RustAtomicBool::new(false),
+            getgid: interface::RustAtomicI32::new(-1), 
+            getuid: interface::RustAtomicI32::new(-1), 
+            getegid: interface::RustAtomicI32::new(-1), 
+            geteuid: interface::RustAtomicI32::new(-1),
+            rev_shm: interface::Mutex::new(vec!()),
+            mutex_table: interface::RustLock::new(vec!()),
+            cv_table: interface::RustLock::new(vec!()),
+            thread_table: interface::RustHashMap::new(),
+            sem_table: interface::RustHashMap::new(), 
+        }
+    }
 
     pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockGuard<Option<FileDescriptor>>>) {
 
