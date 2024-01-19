@@ -1136,6 +1136,7 @@ impl Cage {
                 let ladr = sockhandle.localaddr.unwrap();
                 println!("getting ({}, {})", ladr.addr_as_u128(), ladr.port());
                 let mut entry = NET_METADATA.pending_conn_table.get_mut(&(ladr.addr_as_u128(), ladr.port())).unwrap();
+                println!("success in getting ({}, {})", ladr.addr_as_u128(), ladr.port());
                 let vec = &mut *entry;
                 let (acceptedresult, remote_addr) = if !vec.is_empty() {
                     vec.pop().unwrap()
