@@ -164,7 +164,7 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
+    pub pending_conn_table: interface::RustHashMap<(u128, u16), Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>, // keyed on (address, port) tuple
     pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, DomsockTableEntry>,
     pub domsock_paths: interface::RustHashSet<interface::RustPathBuf>
 }

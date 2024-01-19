@@ -43,12 +43,30 @@ impl GenSockaddr {
         }
     }
 
-    pub fn set_addr(&mut self, ip: GenIpaddr){
+    pub fn set_addr(&mut self, ip: GenIpaddr) {
         match self {
             GenSockaddr::Unix(_unixaddr) => panic!("Invalid function called for this type of Sockaddr."),
             GenSockaddr::V4(v4addr) => v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {v4ip} else {unreachable!()},
             GenSockaddr::V6(v6addr) => v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {v6ip} else {unreachable!()}
         };
+    }
+
+    pub fn addr_as_u128(&self) -> u128 {
+        match self {
+            GenSockaddr::Unix(_) => panic!("Invalid function call: addr_as_u128 called on a domain socket"),
+            GenSockaddr::V4(v4addr) => {
+                // simply extend the address to u128
+                u128::from(v4addr.sin_addr.s_addr)
+            },
+            GenSockaddr::V6(v6addr) => {
+                // convert the 16 bytes of an IPv6 address into a u128
+                let mut addr128: u128 = 0;
+                for &byte in &v6addr.sin6_addr.s6_addr {
+                    addr128 = (addr128 << 8) | u128::from(byte);
+                }
+                addr128
+            }
+        }
     }
     
     pub fn set_family(&mut self, family: u16){

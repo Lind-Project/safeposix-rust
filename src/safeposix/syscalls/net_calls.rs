@@ -873,7 +873,7 @@ impl Cage {
                             let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                             NET_METADATA.listening_port_set.insert(porttuple);
-                            NET_METADATA.pending_conn_table.insert(ladr.port(), vec![]);
+                            NET_METADATA.pending_conn_table.insert((ladr.addr_as_u128(), ladr.port()), vec![]);
                             // println!("register port {}", ladr.port());
 
                             sockhandle.state = ConnState::LISTEN;
@@ -953,7 +953,7 @@ impl Cage {
             }
 
             if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                NET_METADATA.pending_conn_table.remove(&localaddr.port());
+                NET_METADATA.pending_conn_table.retain(|key, _| key.0 != localaddr.addr_as_u128());
                 if releaseflag {
                     //move to end
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
@@ -1132,7 +1132,7 @@ impl Cage {
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
-                let mut entry = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port()).unwrap();
+                let mut entry = NET_METADATA.pending_conn_table.get_mut(&(sockhandle.localaddr.unwrap().addr_as_u128(), sockhandle.localaddr.unwrap().port())).unwrap();
                 let vec = &mut *entry;
                 let (acceptedresult, remote_addr) = if !vec.is_empty() {
                     vec.pop().unwrap()
@@ -1326,7 +1326,7 @@ impl Cage {
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
                                     // println!("getting port {}", sockhandle.localaddr.unwrap().port());
-                                    if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port().clone()) {
+                                    if let Some(mut entry) = NET_METADATA.pending_conn_table.get_mut(&(sockhandle.localaddr.unwrap().addr_as_u128(), sockhandle.localaddr.unwrap().port().clone())) {
                                         // if the pending connection already exists, i.e. the vec is non-empty, surely we add it to the fdset
                                         // if the vec is still empty, we'll try to do an accept
                                         let vec = &mut *entry;
