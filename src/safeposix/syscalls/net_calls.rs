@@ -1332,7 +1332,7 @@ impl Cage {
                                     let ladr = sockhandle.localaddr.unwrap().clone();
                                     let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                                    let pendingvec = NET_METADATA.pending_conn_table.get(&porttuple).unwrap()
+                                    let pendingvec = NET_METADATA.pending_conn_table.get(&porttuple).unwrap();
                                     if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
@@ -1343,7 +1343,7 @@ impl Cage {
                                         drop(sockhandle);
                                         if let Ok(_) = listeningsocket.0 {
                                             //save the new pending connection for accept to do something with it
-                                            pendingvec.append(listeningsocket);
+                                            pendingvec.push(listeningsocket);
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
