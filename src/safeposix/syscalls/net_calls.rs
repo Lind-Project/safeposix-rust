@@ -870,8 +870,8 @@ impl Cage {
                                 
                             let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                            NET_METADATA.listening_port_set.insert(porttuple);
-                            NET_METADATA.pending_conn_table.insert(porttuple, vec![]);
+                            NET_METADATA.listening_port_set.insert(porttuple.clone());
+                            NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]);
                             sockhandle.state = ConnState::LISTEN;
 
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
@@ -1138,7 +1138,7 @@ impl Cage {
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
                 let pendingoption = pendingvec.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
@@ -1332,7 +1332,7 @@ impl Cage {
                                     let ladr = sockhandle.localaddr.unwrap().clone();
                                     let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                                    let pendingvec = NET_METADATA.pending_conn_table.get(&porttuple).unwrap();
+                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
                                     if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
