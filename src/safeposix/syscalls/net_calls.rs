@@ -1341,7 +1341,7 @@ impl Cage {
                                                 continue;
                                             }
                                         } // if we get here we have an existing connection
-                                    } else { panic!("unregistered connection vector for listening socket!");
+                                    } else { panic!("unregistered connection vector for listening socket!"); }
                                     
                                     //if we reach here there is a pending connection, either from a new or existing connection
                                     interface::fd_set_insert(new_readfds, fd);
