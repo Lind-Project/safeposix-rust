@@ -1137,28 +1137,29 @@ impl Cage {
                 let ladr = sockhandle.localaddr.unwrap().clone();
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                let pendingtup = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&porttuple) {
-                    //if we got a pending connection in select/poll/whatever, return that here instead
-                    vec.pop();
-                }
+                // if we got a pending connection in select/poll/whatever, return that here instead
+                let pendingoption = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&porttuple) { vec.pop() };
 
-                let (acceptedresult, remote_addr) = if let Some(_) = { pendingtup 
-                } else {
-                    //unwrap ok because listening
-                    if 0 == (sockfdobj.flags & O_NONBLOCK) {
-                        match sockhandle.domain {
-                            PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
-                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
-                            _ => panic!("Unknown domain in accepting socket"),
-                        }
-                    } else {
-                        match sockhandle.domain {
-                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                            _ => panic!("Unknown domain in accepting socket"),
+                let (acceptedresult, remote_addr) = match pendingoption {
+                    Some(pendingtup) => pendingtup,
+                    None => {
+                        //unwrap ok because listening
+                        if 0 == (sockfdobj.flags & O_NONBLOCK) {
+                            match sockhandle.domain {
+                                PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
+                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
+                                _ => panic!("Unknown domain in accepting socket"),
+                            }
+                        } else {
+                            match sockhandle.domain {
+                                PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                _ => panic!("Unknown domain in accepting socket"),
+                            }
                         }
                     }
-                };
+                }
+
 
                 if let Err(_) = acceptedresult {
                     match Errno::from_discriminant(interface::get_errno()) {
