@@ -172,9 +172,9 @@ fn main() {
             let log = logobj.take().unwrap();
             let _close = log.close().unwrap();
             drop(logobj);
-            let _logremove = interface::removefile(LOGFILENAME.to_string());
+            let _logremove = interface::removefile(utilcage.fs.logfilename.to_string());
 
-            Cage::format_fs();
+            Cage::format_fs(&utilcage);
             return;
         }
 
@@ -208,5 +208,5 @@ fn main() {
             return;
         }
     }
-    lindrustfinalize();
+    lindrustfinalize(0);
 }

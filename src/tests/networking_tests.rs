@@ -49,7 +49,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(sockfd3, &socket), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
     
@@ -264,7 +264,7 @@ pub mod net_tests {
         thread.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -294,7 +294,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -313,7 +313,7 @@ pub mod net_tests {
         assert_eq!(cage.connect_syscall(sockfd, &socket), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -338,7 +338,7 @@ pub mod net_tests {
         assert_eq!(retsocket, socket);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -366,7 +366,7 @@ pub mod net_tests {
         assert_eq!(retsocket, socket);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
     
     
@@ -411,7 +411,7 @@ pub mod net_tests {
         thread.join().unwrap();
         
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -555,7 +555,7 @@ pub mod net_tests {
         thread2.join().unwrap();
         thread3.join().unwrap();
 
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -666,7 +666,7 @@ pub mod net_tests {
         thread.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -796,7 +796,7 @@ pub mod net_tests {
         threadclient2.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
     
     
@@ -847,7 +847,7 @@ pub mod net_tests {
         thread.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -877,7 +877,7 @@ pub mod net_tests {
 
         assert_eq!(cage.close_syscall(sockfd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -963,7 +963,7 @@ pub mod net_tests {
         assert_eq!(optstore, 1);
         
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -1024,7 +1024,7 @@ pub mod net_tests {
         //end of the UDP test
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -1049,7 +1049,7 @@ pub mod net_tests {
         assert_ne!(cage.bind_syscall(sockfd, &socket), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -1107,7 +1107,7 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(sendsockfd2), 0);
         assert_eq!(cage.close_syscall(clientfd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -1149,7 +1149,7 @@ pub mod net_tests {
         thread.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
     pub fn ut_lind_net_gethostname() { //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
@@ -1183,7 +1183,7 @@ pub mod net_tests {
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
         
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
     pub fn ut_lind_net_dns_rootserver_ping() {
@@ -1268,7 +1268,7 @@ pub mod net_tests {
         let record = unsafe{&*recordptr};
         assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
 
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
     pub fn ut_lind_net_domain_socket() {
@@ -1403,7 +1403,7 @@ pub mod net_tests {
         cage.unlink_syscall(clientsockfilename);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
     
     /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using 
@@ -1565,7 +1565,7 @@ pub mod net_tests {
         thread2.join().unwrap();
         thread3.join().unwrap();
 
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 }

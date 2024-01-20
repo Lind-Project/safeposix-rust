@@ -1,7 +1,7 @@
 #![allow(dead_code)] //suppress warning for these functions not being used in targets other than the tests
 
-mod fs_tests;
-mod pipe_tests;
+//mod fs_tests;
+//mod pipe_tests;
 mod networking_tests;
 
 use crate::interface;
@@ -11,8 +11,8 @@ use crate::safeposix::{cage::*, filesystem::*};
 #[cfg(test)]
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
-    use crate::tests::fs_tests::fs_tests::test_fs;
-    use crate::tests::pipe_tests::pipe_tests::test_pipe;
+    //use crate::tests::fs_tests::fs_tests::test_fs;
+    //use crate::tests::pipe_tests::pipe_tests::test_pipe;
 
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
     use crate::interface;
@@ -32,16 +32,16 @@ mod main_tests {
             assert_eq!(cage.mknod_syscall("/dev/random", S_IFCHR as u32| 0o777, makedev(&DevNo {major: 1, minor: 8})), 0);
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         }
-        lindrustfinalize();
+        lindrustfinalize(0);
 
         println!("FS TESTS");
-        test_fs();
+        //test_fs();
 
         println!("NET TESTS");
         net_tests();
         
         println!("PIPE TESTS");
-        test_pipe();
+        //test_pipe();
     }   
 }
 

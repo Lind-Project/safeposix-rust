@@ -60,6 +60,13 @@ pub struct EpollDesc {
     pub flags: i32
 }
 
+#[derive(Debug)]
+pub struct Fs {
+    pub FS_METADATA: FilesystemMetadata,
+    pub metadata: String,
+    pub logfilename: String,
+}
+
 pub type FdTable = Vec<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>>;
 
 
@@ -69,7 +76,7 @@ pub struct Cage {
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: FdTable,
-    pub FS_METADATA: FilesystemMetadata,
+    pub fs: Fs,
     pub cancelstatus: interface::RustAtomicBool,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
@@ -90,7 +97,11 @@ impl Cage {
             cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
             parent: 0, 
             filedescriptortable: init_fdtable(),
-            FS_METADATA: FilesystemMetadata::init_fs_metadata(), 
+            fs: Fs {
+                FS_METADATA: FilesystemMetadata::init_fs_metadata(),
+                metadata: format!("lind.metadata.{}", cageid),
+                logfilename: format!("lind.md.log.{}", cageid),
+            },
             cancelstatus: interface::RustAtomicBool::new(false),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 

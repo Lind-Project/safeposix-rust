@@ -141,7 +141,11 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
-            FS_METADATA: FilesystemMetadata::blank_fs_init(),
+            fs: Fs {
+                FS_METADATA: FilesystemMetadata::blank_fs_init(),
+                metadata: format!("lind.metadata.{}", self.cageid),
+                logfilename: format!("lind.md.log.{}", self.cageid),
+            }, 
             cancelstatus: interface::RustAtomicBool::new(false),
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
@@ -196,7 +200,11 @@ impl Cage {
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
             parent: self.parent, 
             filedescriptortable: self.filedescriptortable.clone(),
-            FS_METADATA: FilesystemMetadata::blank_fs_init(),
+            fs: Fs {
+                FS_METADATA: FilesystemMetadata::blank_fs_init(),
+                metadata: format!("lind.metadata.{}", self.cageid),
+                logfilename: format!("lind.md.log.{}", self.cageid),
+            },
             cancelstatus: interface::RustAtomicBool::new(false),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 

@@ -104,7 +104,7 @@ const FCHDIR_SYSCALL: i32 = 161;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{FS_METADATA,incref_root, remove_domain_sock, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{FS_METADATA,incref_root, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
@@ -557,18 +557,13 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     interface::cagetable_init();
     //load_fs();
     //incref_root();
-    //incref_root();
-    let util_fs_metadata_file = "lind.util.metadata";
-    let init_fs_metadata_file = "lind.init.metadata";
-    let util_fs_log_file = "lind.util.md.log";
-    let init_fs_log_file = "lind.init.md.log";
-
+    //incref_root(); 
     let utilcage = Cage::new(0);
-    Cage::load_fs(&utilcage, util_fs_metadata_file, util_fs_log_file);
+    Cage::load_fs(&utilcage);
     interface::cagetable_insert(0, utilcage);
     
     let initcage = Cage::new(1);
-    Cage::load_fs(&initcage, init_fs_metadata_file, init_fs_log_file);
+    Cage::load_fs(&initcage);
     interface::cagetable_insert(1, initcage);
     //    let utilcage = Cage{
 //        cageid: 0, 
@@ -611,22 +606,22 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 }
 
 #[no_mangle]
-pub extern "C" fn lindrustfinalize() {
-
+pub extern "C" fn lindrustfinalize(cageid: u64) {
+    let cage = interface::cagetable_getref(cageid);
     interface::cagetable_clear();
 
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
-        remove_domain_sock(truepath);
+        Cage::remove_domain_sock(&cage, truepath);
     }
 
     // if we get here, persist and delete log
-    Cage::persist_metadata(&FS_METADATA);
-    if interface::pathexists(LOGFILENAME.to_string()) {
+    Cage::persist_metadata(&cage, &cage.fs.FS_METADATA);
+    if interface::pathexists(cage.fs.logfilename.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
         let mut logobj = LOGMAP.write();
         let log = logobj.take().unwrap();
         let _close = log.close().unwrap();
-        let _logremove = interface::removefile(LOGFILENAME.to_string());
+        let _logremove = interface::removefile(cage.fs.logfilename.to_string());
     }
 }

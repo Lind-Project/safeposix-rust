@@ -141,7 +141,7 @@ impl FilesystemMetadata {
 
 impl Cage {
     
-    pub fn format_fs(&self, metadatapath: &str, logfilepath: &str) {
+    pub fn format_fs(&self) {
         let newmetadata = FilesystemMetadata::blank_fs_init();
         //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
         //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and 
@@ -206,22 +206,22 @@ impl Cage {
         newmetadata.inodetable.insert(5, urandominode);
         newmetadata.inodetable.insert(6, randominode);
 
-        let _logremove = interface::removefile(logfilepath.to_string());
+        let _logremove = interface::removefile(self.fs.logfilename.to_string());
 
-        self.persist_metadata(&newmetadata, metadatapath);
+        self.persist_metadata(&newmetadata);
     }
 
-    pub fn load_fs(&self, metadatapath: &str, logfilepath: &str) {
+    pub fn load_fs(&self) {
         // If the metadata file exists, just close the file for later restore
         // If it doesn't, lets create a new one, load special files, and persist it.
-        if interface::pathexists(metadatapath.to_string()) {
-            let metadata_fileobj = interface::openfile(metadatapath.to_string(), true).unwrap();
+        if interface::pathexists(self.fs.metadata.to_string()) {
+            let metadata_fileobj = interface::openfile(self.fs.metadata.to_string(), true).unwrap();
             metadata_fileobj.close().unwrap();
 
             // if we have a log file at this point, we need to sync it with the existing metadata
-            if interface::pathexists(logfilepath.to_string()) {
+            if interface::pathexists(self.fs.logfilename.to_string()) {
 
-                let log_fileobj = interface::openfile(logfilepath.to_string(), false).unwrap();
+                let log_fileobj = interface::openfile(self.fs.logfilename.to_string(), false).unwrap();
                 // read log file and parse count
                 let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
                 let logsize = interface::convert_bytes_to_size(&logread[0..interface::COUNTMAPSIZE]);
@@ -238,22 +238,22 @@ impl Cage {
                 for serialpair in logvec.drain(..) {
                     let (inodenum, inode) = serialpair;
                     match inode {
-                        Some(inode) => {self.FS_METADATA.inodetable.insert(inodenum, inode);}
-                        None => {self.FS_METADATA.inodetable.remove(&inodenum);}
+                        Some(inode) => {self.fs.FS_METADATA.inodetable.insert(inodenum, inode);}
+                        None => {self.fs.FS_METADATA.inodetable.remove(&inodenum);}
                     }
                 }
 
                 let _logclose = log_fileobj.close();
-                let _logremove = interface::removefile(logfilepath.to_string());
+                let _logremove = interface::removefile(self.fs.logfilename.to_string());
 
                 // clean up broken links
                 self.fsck();
             }
         } else {
-            if interface::pathexists(logfilepath.to_string()) {
+            if interface::pathexists(self.fs.logfilename.to_string()) {
                 println!("Filesystem in very corrupted state: log existed but metadata did not!");
             }
-            self.format_fs(metadatapath, logfilepath);
+            self.format_fs();
         }
 
         // then recreate the log
@@ -261,7 +261,7 @@ impl Cage {
     }
     
     pub fn fsck(&self) {
-        self.FS_METADATA.inodetable.retain(|_inodenum, inode_obj| {
+        self.fs.FS_METADATA.inodetable.retain(|_inodenum, inode_obj| {
             match inode_obj {
                 Inode::File(ref mut normalfile_inode) => {
                     normalfile_inode.linkcount != 0
@@ -278,9 +278,9 @@ impl Cage {
         });
     }
 
-    pub fn create_log(&self, logfilepath: &str) {
+    pub fn create_log(&self) {
         // reinstantiate the log file and assign it to the metadata struct
-        let log_mapobj = interface::mapfilenew(logfilepath.to_string()).unwrap();
+        let log_mapobj = interface::mapfilenew(self.fs.logfilename.to_string()).unwrap();
         let mut logobj = LOGMAP.write();
         logobj.replace(log_mapobj);
     }
@@ -306,20 +306,35 @@ impl Cage {
     }
 
     // Serialize Metadata Struct to CBOR, write to file
-    pub fn persist_metadata(&self, metadata: &FilesystemMetadata, metadatapath: &str) {
+    pub fn persist_metadata(&self, metadata: &FilesystemMetadata) {
         // Serialize metadata to string
-        let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
+        let metadatabytes = interface::serde_serialize_to_bytes(metadata).unwrap();
         
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
-        let _ = interface::removefile(metadatapath.to_string());
+        let _ = interface::removefile(self.fs.metadata.to_string());
 
         // write to file
-        let mut metadata_fileobj = interface::openfile(metadatapath.to_string(), true).unwrap();
+        let mut metadata_fileobj = interface::openfile(self.fs.metadata.to_string(), true).unwrap();
         metadata_fileobj.writefile_from_bytes(&metadatabytes).unwrap();
         metadata_fileobj.close().unwrap();
     }
+    pub fn remove_domain_sock(&self, truepath: interface::RustPathBuf) {
+        match metawalkandparent(truepath.as_path()) {
+            //If the file does not exist
+            (None, ..) => { panic!("path does not exist") }
+            //If the file exists but has no parent, it's the root directory
+            (Some(_), None) => { panic!("cannot unlink root directory") }
 
+            //If both the file and the parent directory exists
+            (Some(inodenum), Some(parentinodenum)) => {
+                Cage::remove_from_parent_dir(&self, parentinodenum, &truepath);
+
+                self.fs.FS_METADATA.inodetable.remove(&inodenum);
+            }
+        }
 }
+}
+//HERE IS SUPPOSED TO GO CLOSING BRACKET INITIALLY************
 //pub fn format_fs() {
 //    let newmetadata = FilesystemMetadata::blank_fs_init();
 //    //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
@@ -656,21 +671,21 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
     newp
 }
 
-pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
-    match metawalkandparent(truepath.as_path()) {
-        //If the file does not exist
-        (None, ..) => { panic!("path does not exist") }
-        //If the file exists but has no parent, it's the root directory
-        (Some(_), None) => { panic!("cannot unlink root directory") }
-
-        //If both the file and the parent directory exists
-        (Some(inodenum), Some(parentinodenum)) => {
-            Cage::remove_from_parent_dir(parentinodenum, &truepath);
-
-            FS_METADATA.inodetable.remove(&inodenum);
-        }
-    }
-}
+//pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
+//    match metawalkandparent(truepath.as_path()) {
+//        //If the file does not exist
+//        (None, ..) => { panic!("path does not exist") }
+//        //If the file exists but has no parent, it's the root directory
+//        (Some(_), None) => { panic!("cannot unlink root directory") }
+//
+//        //If both the file and the parent directory exists
+//        (Some(inodenum), Some(parentinodenum)) => {
+//            Cage::remove_from_parent_dir(parentinodenum, &truepath);
+//
+//            FS_METADATA.inodetable.remove(&inodenum);
+//        }
+//    }
+//}
 
 pub fn incref_root() {
     if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
@@ -690,3 +705,4 @@ pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
         } else {panic!("Cage had a cwd that was not a directory!");}
     } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
 }
+

@@ -34,7 +34,7 @@ pub mod pipe_tests {
 
         assert_eq!(cage.close_syscall(filefd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 
 
@@ -103,6 +103,6 @@ pub mod pipe_tests {
 
         assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
 
-        lindrustfinalize();
+        lindrustfinalize(0);
     }
 }
