@@ -1138,7 +1138,8 @@ impl Cage {
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let pendingoption = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&porttuple) { vec.pop() };
+                let pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                let pendingoption = pendingvec.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
                     Some(pendingtup) => pendingtup,
@@ -1158,7 +1159,7 @@ impl Cage {
                             }
                         }
                     }
-                }
+                };
 
 
                 if let Err(_) = acceptedresult {
