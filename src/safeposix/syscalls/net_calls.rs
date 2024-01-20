@@ -1332,26 +1332,25 @@ impl Cage {
                                     let ladr = sockhandle.localaddr.unwrap().clone();
                                     let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                                    if let Some(mut connvec) = NET_METADATA.pending_conn_table.get(&porttuple) {
-                                        if connvec.is_empty() {
-                                            //innersock unwrap ok because sockhandle is listening
-                                            let listeningsocket = match sockhandle.domain {
-                                                PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                                _ => panic!("Unknown domain in accepting socket"),
-                                            };
-                                            drop(sockhandle);
-                                            if let Ok(_) = listeningsocket.0 {
-                                                //save the new pending connection for accept to do something with it
-                                                connvec.append(listeningsocket);
-                                            } else {
-                                                // if it returned an error, then don't insert it into new_readfds
-                                                // of course unset the bit explicitly before we continue
-                                                interface::fd_set_remove(new_readfds, fd);
-                                                continue;
-                                            }
-                                        } // if we get here we have an existing connection
-                                    } else { panic!("unregistered connection vector for listening socket!"); }
+                                    let pendingvec = NET_METADATA.pending_conn_table.get(&porttuple).unwrap()
+                                    if pendingvec.is_empty() {
+                                        //innersock unwrap ok because sockhandle is listening
+                                        let listeningsocket = match sockhandle.domain {
+                                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                            _ => panic!("Unknown domain in accepting socket"),
+                                        };
+                                        drop(sockhandle);
+                                        if let Ok(_) = listeningsocket.0 {
+                                            //save the new pending connection for accept to do something with it
+                                            pendingvec.append(listeningsocket);
+                                        } else {
+                                            // if it returned an error, then don't insert it into new_readfds
+                                            // of course unset the bit explicitly before we continue
+                                            interface::fd_set_remove(new_readfds, fd);
+                                            continue;
+                                        }
+                                    } // if we get here we have an existing connection
                                     
                                     //if we reach here there is a pending connection, either from a new or existing connection
                                     interface::fd_set_insert(new_readfds, fd);
