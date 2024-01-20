@@ -1131,11 +1131,13 @@ impl Cage {
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
                 
+                let ladr = sockhandle.localaddr.unwrap().clone();
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                 let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&porttuple) {
                     //if we got a pending connection in select/poll/whatever, return that here instead
-                    if let Some(tup) = vec.pop() { tup }
+                    let tup = vec.pop();
+                    if tup.is_some() { tup.unwrap() }
                 } else {
                     //unwrap ok because listening
                     if 0 == (sockfdobj.flags & O_NONBLOCK) {
@@ -1320,9 +1322,10 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
+                                    let ladr = sockhandle.localaddr.unwrap().clone();
                                     let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                                    if let Some(mut connvec) = NET_METADATA.pending_conn_table.get(porttuple) {
+                                    if let Some(mut connvec) = NET_METADATA.pending_conn_table.get(&porttuple) {
                                         if connvec.is_empty() {
                                             //innersock unwrap ok because sockhandle is listening
                                             let listeningsocket = match sockhandle.domain {
