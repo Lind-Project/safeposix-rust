@@ -951,6 +951,9 @@ impl Cage {
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
                     //move to end
+                    let porttuple = mux_port(localaddr.addr().clone(),localaddr.port(), sockhandle.domain, TCPPORT);
+                    NET_METADATA.pending_conn_table.remove(&porttuple); // remove from pending connections
+
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {return e;}
@@ -1134,10 +1137,12 @@ impl Cage {
                 let ladr = sockhandle.localaddr.unwrap().clone();
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&porttuple) {
+                let pendingtup = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&porttuple) {
                     //if we got a pending connection in select/poll/whatever, return that here instead
-                    let tup = vec.pop();
-                    if tup.is_some() { tup.unwrap() }
+                    vec.pop();
+                }
+
+                let (acceptedresult, remote_addr) = if let Some(_) = { pendingtup 
                 } else {
                     //unwrap ok because listening
                     if 0 == (sockfdobj.flags & O_NONBLOCK) {
