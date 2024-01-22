@@ -15,11 +15,10 @@ use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::sync::{LazyLock as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE, off64_t};
 use std::ffi::c_void;
 use std::convert::TryInto;
-
-
+use crate::interface::errnos::{Errno, syscall_error};
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -171,6 +170,15 @@ impl EmulatedFile {
                 Ok(())
             }
         }
+    }
+
+    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> i32 {
+        let fd = &self.as_fd_handle_raw_int();
+        let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
+        if !(flags & !valid_flags == 0){
+            return syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit");
+        }
+        unsafe { libc::sync_file_range(*fd, offset as off64_t, nbytes as off64_t, flags) }
     }
 
     // Read from file into provided C-buffer
@@ -502,3 +510,4 @@ mod tests {
       println!("{:?}", removefile("foobar".to_string()));
     }
 }
+
