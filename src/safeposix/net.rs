@@ -95,7 +95,7 @@ pub struct SocketHandle {
     pub sndbuf: i32,
     pub rcvbuf: i32,
     pub errno: i32,
-    pub pendingid: u32
+    pub pendingid: usize,
 }
 
 //This cleanup-on-drop strategy is used in lieu of manual refcounting in order to allow the close
