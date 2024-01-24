@@ -447,6 +447,7 @@ impl Cage {
             sndbuf: 131070, //buffersize, which is only used by getsockopt
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             errno: 0,
+            pendingid: NET_METADATA.nextpendingid.fetch_add(1, interface::RustAtomicOrdering::Relaxed),
         }
     }
 
@@ -842,36 +843,22 @@ impl Cage {
                                 return 0;
                             }
 
-                            let mut ladr;
-                            match sockhandle.localaddr {
-                                Some(sla) => {
-                                    ladr = sla.clone();
-
-                                    if NET_METADATA.listening_port_set.contains(&mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT)) {
-                                        match NET_METADATA._get_available_tcp_port(ladr.addr().clone(), sockhandle.domain, sockhandle.options & (1 << SO_REUSEPORT) != 0) {
-                                            Ok(port) => ladr.set_port(port),
-                                            Err(i) => return i,
-                                        }
-                                    }
+                            if sockhandle.localaddr.is_none() {
+                                let shd = sockhandle.domain as i32;
+                                let ibindret = self._implicit_bind(&mut *sockhandle, shd);
+                                if ibindret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "listen", "The libc call to bind within listen failed");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
+                                    };
                                 }
-                                None => {
-                                    let shd = sockhandle.domain as i32;
-                                    let ibindret = self._implicit_bind(&mut *sockhandle, shd);
-                                    if ibindret < 0 {
-                                        match Errno::from_discriminant(interface::get_errno()) {
-                                            Ok(i) => {return syscall_error(i, "listen", "The libc call to bind within listen failed");},
-                                            Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
-                                        };
-                                    }
-                                    
-                                    ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
-                                }
-                            }
                                 
+                            }
+
+                            let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
                             let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                             NET_METADATA.listening_port_set.insert(porttuple.clone());
-                            NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]);
                             sockhandle.state = ConnState::LISTEN;
 
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
@@ -884,6 +871,9 @@ impl Cage {
                                 sockhandle.state = ConnState::NOTCONNECTED;
                                 return lr;
                             };
+
+                            NET_METADATA.pending_conn_table.insert(sockhandle.pendingid, vec![]);
+
                             return 0;
                         }
                     }
@@ -952,7 +942,7 @@ impl Cage {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
                     //move to end
                     let porttuple = mux_port(localaddr.addr().clone(),localaddr.port(), sockhandle.domain, TCPPORT);
-                    NET_METADATA.pending_conn_table.remove(&porttuple); // remove from pending connections
+                    NET_METADATA.pending_conn_table.remove(&sockhandle.pendingid); // remove from pending connections
 
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                     sockhandle.localaddr = None;
@@ -1138,7 +1128,7 @@ impl Cage {
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
                 let pendingoption = pendingvec.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
@@ -1332,7 +1322,7 @@ impl Cage {
                                     let ladr = sockhandle.localaddr.unwrap().clone();
                                     let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
                                     if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
