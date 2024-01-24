@@ -941,7 +941,6 @@ impl Cage {
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
                     //move to end
-                    let porttuple = mux_port(localaddr.addr().clone(),localaddr.port(), sockhandle.domain, TCPPORT);
                     NET_METADATA.pending_conn_table.remove(&sockhandle.pendingid); // remove from pending connections
 
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
@@ -1123,9 +1122,6 @@ impl Cage {
                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
-                
-                let ladr = sockhandle.localaddr.unwrap().clone();
-                let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
                 let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
@@ -1319,9 +1315,6 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let ladr = sockhandle.localaddr.unwrap().clone();
-                                    let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
-
                                     let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
                                     if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
