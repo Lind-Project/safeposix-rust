@@ -447,7 +447,7 @@ impl Cage {
             sndbuf: 131070, //buffersize, which is only used by getsockopt
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             errno: 0,
-            pendingid: NET_METADATA.nextpendingid.fetch_add(1, interface::RustAtomicOrdering::Relaxed),
+            pendingvec: vec![]
         }
     }
 
