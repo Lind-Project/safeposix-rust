@@ -447,7 +447,7 @@ impl Cage {
             sndbuf: 131070, //buffersize, which is only used by getsockopt
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             errno: 0,
-            pendingvec: vec![]
+            pendingvec: interface::RutLock::new(vec![])
         }
     }
 
@@ -1119,7 +1119,8 @@ impl Cage {
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let pendingoption = sockhandle.pendingvec.pop();
+                let pvectmp = sockhandle.pendingvec.write();
+                let pendingoption = pvectmp.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
                     Some(pendingtup) => pendingtup,
@@ -1309,7 +1310,8 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    if sockhandle.pendingvec.is_empty() {
+                                    let pvectmp = sockhandle.pendingvec.write();
+                                    if pvectmp.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
                                             PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
@@ -1319,8 +1321,7 @@ impl Cage {
                                         drop(sockhandle);
                                         if let Ok(_) = listeningsocket.0 {
                                             //save the new pending connection for accept to do something with it
-                                            let mut sockhandlepending = sock_tmp.write();
-                                            sockhandlepending.pendingvec.push(listeningsocket);
+                                            pvectmp.push(listeningsocket);
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue

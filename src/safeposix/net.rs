@@ -93,7 +93,7 @@ pub struct SocketHandle {
     pub sndbuf: i32,
     pub rcvbuf: i32,
     pub errno: i32,
-    pub pendingvec: Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>,
+    pub pendingvec: interface::RustLock<Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
 }
 
 //This cleanup-on-drop strategy is used in lieu of manual refcounting in order to allow the close
