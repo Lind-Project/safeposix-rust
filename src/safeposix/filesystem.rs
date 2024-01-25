@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use crate::interface;
+use std::cmp::max;
 use super::syscalls::fs_constants::*;
 use super::syscalls::sys_constants::*;
 use super::net::NET_METADATA;
@@ -246,13 +247,21 @@ pub fn load_fs() {
 
             // drain the vector and deserialize into pairs of inodenum + inodes,
             // if the inode exists, add it, if not, remove it
+            // keep track of the largest inodenum we see so we can update the nextinode counter
+            let mut max_inodenum = 0;
             for serialpair in logvec.drain(..) {
                 let (inodenum, inode) = serialpair;
                 match inode {
-                    Some(inode) => {FS_METADATA.inodetable.insert(inodenum, inode);}
+                    Some(inode) => {
+                        max_inodenum = max(max_inodenum, inodenum);
+                        FS_METADATA.inodetable.insert(inodenum, inode);
+                    }
                     None => {FS_METADATA.inodetable.remove(&inodenum);}
                 }
             }
+
+            // update the nextinode counter to avoid collisions
+            FS_METADATA.nextinode.store(max_inodenum + 1, interface::RustAtomicOrdering::Relaxed);
 
             let _logclose = log_fileobj.close();
             let _logremove = interface::removefile(LOGFILENAME.to_string());
