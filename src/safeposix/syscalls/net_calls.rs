@@ -447,7 +447,7 @@ impl Cage {
             sndbuf: 131070, //buffersize, which is only used by getsockopt
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             errno: 0,
-            pendingvec: interface::RutLock::new(vec![])
+            pendingvec: interface::RustLock::new(vec![])
         }
     }
 
