@@ -1119,7 +1119,7 @@ impl Cage {
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let pvectmp = sockhandle.pendingvec.write();
+                let mut pvectmp = sockhandle.pendingvec.write();
                 let pendingoption = pvectmp.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
@@ -1310,7 +1310,7 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let pvectmp = sockhandle.pendingvec.write();
+                                    let mut pvectmp = sockhandle.pendingvec.write();
                                     if pvectmp.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
@@ -1318,13 +1318,13 @@ impl Cage {
                                             PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
                                             _ => panic!("Unknown domain in accepting socket"),
                                         };
-                                        drop(sockhandle);
                                         if let Ok(_) = listeningsocket.0 {
                                             //save the new pending connection for accept to do something with it
                                             pvectmp.push(listeningsocket);
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
+                                            drop(sockhandle);
                                             interface::fd_set_remove(new_readfds, fd);
                                             continue;
                                         }
