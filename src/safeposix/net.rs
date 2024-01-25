@@ -27,8 +27,6 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_tcpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
-            pending_conn_table: interface::RustHashMap::new(),
-            nextpendingid: interface::RustAtomicUsize::new(0),
             domsock_accept_table: interface::RustHashMap::new(), // manages domain socket connection process
             domsock_paths: interface::RustHashSet::new() // set of all currently bound domain sockets
         })
@@ -95,7 +93,7 @@ pub struct SocketHandle {
     pub sndbuf: i32,
     pub rcvbuf: i32,
     pub errno: i32,
-    pub pendingid: usize,
+    pub pendingvec: Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>,
 }
 
 //This cleanup-on-drop strategy is used in lieu of manual refcounting in order to allow the close
@@ -167,8 +165,6 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub pending_conn_table: interface::RustHashMap<usize, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
-    pub nextpendingid: interface::RustAtomicUsize,
     pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, DomsockTableEntry>,
     pub domsock_paths: interface::RustHashSet<interface::RustPathBuf>
 }

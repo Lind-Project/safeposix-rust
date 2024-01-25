@@ -872,8 +872,6 @@ impl Cage {
                                 return lr;
                             };
 
-                            NET_METADATA.pending_conn_table.insert(sockhandle.pendingid, vec![]);
-
                             return 0;
                         }
                     }
@@ -940,9 +938,6 @@ impl Cage {
 
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                    //move to end
-                    NET_METADATA.pending_conn_table.remove(&sockhandle.pendingid); // remove from pending connections
-
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {return e;}
@@ -1124,8 +1119,7 @@ impl Cage {
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
-                let pendingoption = pendingvec.pop();
+                let pendingoption = sockhandle.pendingvec.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
                     Some(pendingtup) => pendingtup,
@@ -1315,8 +1309,7 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
-                                    if pendingvec.is_empty() {
+                                    if sockhandle.pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
                                             PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
@@ -1326,7 +1319,8 @@ impl Cage {
                                         drop(sockhandle);
                                         if let Ok(_) = listeningsocket.0 {
                                             //save the new pending connection for accept to do something with it
-                                            pendingvec.push(listeningsocket);
+                                            let mut sockhandlepending = sock_tmp.write();
+                                            sockhandlepending.pendingvec.push(listeningsocket);
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
