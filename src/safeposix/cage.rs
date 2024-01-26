@@ -92,13 +92,14 @@ pub struct Cage {
 impl Cage {
 
     pub fn new(cageid: u64) -> Self {
+        let cage = interface::cagetable_getref(cageid);
         Self {
             cageid, 
             cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
             parent: 0, 
             filedescriptortable: init_fdtable(),
             fs: Fs {
-                FS_METADATA: FilesystemMetadata::init_fs_metadata(),
+                FS_METADATA: FilesystemMetadata::init_fs_metadata(&cage),
                 metadata: format!("lind.metadata.{}", cageid),
                 logfilename: format!("lind.md.log.{}", cageid),
             },

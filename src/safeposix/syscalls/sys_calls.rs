@@ -3,7 +3,7 @@
 // System related system calls
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
-use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir, FilesystemMetadata};
+use crate::safeposix::filesystem::{Inode, FilesystemMetadata};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
 use super::sys_constants::*;
@@ -91,7 +91,7 @@ impl Cage {
 
                         if let Some(inodenum) = inodenum_option {
                             //increment the reference count on the inode
-                            let mut inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                            let mut inode = self.fs.FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                             match *inode {
                                 Inode::File(ref mut f) => {f.refcount += 1;}
                                 Inode::CharDev(ref mut f) => {f.refcount += 1;}
@@ -107,7 +107,7 @@ impl Cage {
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
                         if let Some(uinfo) = &mut sockhandle.unix_info {
-                            if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
+                            if let Inode::Socket(ref mut sock) = *(self.fs.FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
                                 sock.refcount += 1;
                             }
                         }
@@ -122,8 +122,8 @@ impl Cage {
 
         }
         let cwd_container = self.cwd.read();
-        if let Some(cwdinodenum) = metawalk(&cwd_container) {
-            if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
+        if let Some(cwdinodenum) = Cage::metawalk(&self, &cwd_container) {
+            if let Inode::Dir(ref mut cwddir) = *(self.fs.FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
                 cwddir.refcount += 1;
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
@@ -236,7 +236,7 @@ impl Cage {
 
         //get file descriptor table into a vector
         let cwd_container = self.cwd.read();
-        decref_dir(&*cwd_container);
+        Cage::decref_dir(&self, &*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);

@@ -8,17 +8,17 @@ use super::net::NET_METADATA;
 
 use super::cage::Cage;
 
-pub const METADATAFILENAME: &str = "lind.metadata";
+//pub const METADATAFILENAME: &str = "lind.metadata";
 
-pub const LOGFILENAME: &str = "lind.md.log";
+//pub const LOGFILENAME: &str = "lind.md.log";
 
 pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
     interface::RustLazyGlobal::new(|| 
         interface::RustRfc::new(interface::RustLock::new(None))
 );
 
-pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
-    interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::init_fs_metadata())); //we want to check if fs exists before doing a blank init, but not for now
+//pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
+//    interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::init_fs_metadata())); //we want to check if fs exists before doing a blank init, but not for now
 
 
 type FileObjectTable = interface::RustHashMap<usize, interface::EmulatedFile>;
@@ -124,10 +124,10 @@ impl FilesystemMetadata {
     }
 
     // Read file, and deserialize CBOR to FS METADATA
-    pub fn init_fs_metadata() -> FilesystemMetadata {
+    pub fn init_fs_metadata(cage: &Cage) -> FilesystemMetadata {
         // Read CBOR from file
-        if interface::pathexists(METADATAFILENAME.to_string()) {
-            let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), false).unwrap();
+        if interface::pathexists(cage.fs.metadata.to_string()) {
+            let metadata_fileobj = interface::openfile(cage.fs.metadata.to_string(), false).unwrap();
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
     
@@ -319,7 +319,7 @@ impl Cage {
         metadata_fileobj.close().unwrap();
     }
     pub fn remove_domain_sock(&self, truepath: interface::RustPathBuf) {
-        match metawalkandparent(truepath.as_path()) {
+        match Cage::metawalkandparent(&self, truepath.as_path()) {
             //If the file does not exist
             (None, ..) => { panic!("path does not exist") }
             //If the file exists but has no parent, it's the root directory
@@ -332,7 +332,145 @@ impl Cage {
                 self.fs.FS_METADATA.inodetable.remove(&inodenum);
             }
         }
-}
+    }
+    pub fn pathnamefrominodenum(&self, inodenum: usize) -> Option<String>{
+        let mut path_string = String::new();
+        let mut first_iteration = true;
+        let mut current_inodenum = inodenum;
+    
+        loop{
+            let mut thisinode = match self.fs.FS_METADATA.inodetable.get_mut(&current_inodenum) {
+                Some(inode) => inode,
+                None => {
+                    return None;
+                },
+            };
+    
+            match *thisinode {
+                Inode::Dir(ref mut dir_inode) => {
+                    // We try to get the parent directory inode.
+                    if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
+    
+                        // If the parent node is 1 (indicating the root directory) and this is not the first iteration, this indicates that we have arrived at the root directory. Here we add a '/' to the beginning of the path string and return it.
+                        if *parent_dir_inode == (1 as usize){
+                            if !first_iteration {
+                                path_string.insert(0, '/');
+                                return Some(path_string);
+                            }
+                            first_iteration = false;
+                        }
+    
+                        match Cage::filenamefrominode(&self, *parent_dir_inode, current_inodenum) {
+                            Some(filename) => {
+                                path_string = filename + "/" + &path_string;
+                                current_inodenum = *parent_dir_inode;
+                            },
+                            None => return None,
+                        };
+    
+                    } else {
+                        return None;
+                    }
+    
+                },
+                _ => {
+                    return None;
+                }
+            }
+        }
+    }
+    
+    
+    // Find the file by the given inode number in the given directory
+    pub fn filenamefrominode(&self, dir_inode_no: usize, target_inode: usize) -> Option<String> {
+        let cur_node = Some(self.fs.FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
+    
+        match &*cur_node.unwrap() {
+            Inode::Dir(d) => {
+    
+                let mut target_variable_name: Option<String> = None;
+    
+                for entry in d.filename_to_inode_dict.iter() {
+                    if entry.value() == &target_inode {
+                        target_variable_name = Some(entry.key().to_owned());
+                        break;
+                    }
+                }
+                return target_variable_name;
+            }
+            _ => return None,
+        }
+    }
+    
+    //returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
+    pub fn metawalkandparent(&self, path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
+    
+        let mut curnode = Some(self.fs.FS_METADATA.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
+        let mut inodeno = Some(ROOTDIRECTORYINODE);
+        let mut previnodeno = None;
+    
+        //Iterate over the components of the pathbuf in order to walk the file tree
+        for comp in path.components() {
+            match comp {
+                //We've already done what initialization needs to be done
+                interface::RustPathComponent::RootDir => {},
+    
+                interface::RustPathComponent::Normal(f) => {
+                    //If we're trying to get the child of a nonexistent directory, exit out
+                    if inodeno.is_none() {return (None, None);}
+                    match &*curnode.unwrap() { 
+                        Inode::Dir(d) => {
+                            previnodeno = inodeno;
+    
+                            //populate child inode number from parent directory's inode dict
+                            inodeno = match d.filename_to_inode_dict.get(&f.to_str().unwrap().to_string()) {
+                                Some(num) => {
+                                    curnode = self.fs.FS_METADATA.inodetable.get(&num);
+                                    Some(*num)
+                                }
+    
+                                //if no such child exists, update curnode, inodeno accordingly so that
+                                //we can check against none as we do at the beginning of the Normal match arm
+                                None => {
+                                    curnode = None;
+                                    None
+                                }
+                            }
+                        }
+                        //if we're trying to get a child of a non-directory inode, exit out
+                        _ => {return (None, None);}
+                    }
+                },
+    
+                //If it's a component of the pathbuf that we don't expect given a normed path, exit out
+                _ => {return (None, None);}
+            }
+        }
+        //return inode number and it's parent's number
+        (inodeno, previnodeno)
+    }
+    pub fn incref_root(&self) {
+        if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(self.fs.FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
+            rootdir_dirinode_obj.refcount += 1;
+        } else {panic!("Root directory inode was not a directory");}
+    }
+
+    pub fn decref_dir(&self, cwd_container: &interface::RustPathBuf) {
+        if let Some(cwdinodenum) = Cage::metawalk(&self, &cwd_container) {
+            if let Inode::Dir(ref mut cwddir) = *(self.fs.FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
+                cwddir.refcount -= 1;
+
+                //if the directory has been removed but this cwd was the last open handle to it
+                if cwddir.refcount == 0 && cwddir.linkcount == 0 {
+                    self.fs.FS_METADATA.inodetable.remove(&cwdinodenum);
+                }
+            } else {panic!("Cage had a cwd that was not a directory!");}
+        } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
+    }
+    
+    pub fn metawalk(&self, path: &interface::RustPath) -> Option<usize> {
+        self.metawalkandparent(path).0
+    }
 }
 //HERE IS SUPPOSED TO GO CLOSING BRACKET INITIALLY************
 //pub fn format_fs() {
@@ -533,125 +671,125 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
 /// - Stops when it reaches the root directory, where it prepends a "/" to the `path_string` and returns the complete path.
 ///
 /// This function effectively constructs the absolute path by backtracking the parent directories. However, if any issues arise during this process, such as missing metadata or inability to find the parent directory, it returns `None`.
-pub fn pathnamefrominodenum(inodenum: usize) -> Option<String>{
-    let mut path_string = String::new();
-    let mut first_iteration = true;
-    let mut current_inodenum = inodenum;
-
-    loop{
-        let mut thisinode = match FS_METADATA.inodetable.get_mut(&current_inodenum) {
-            Some(inode) => inode,
-            None => {
-                return None;
-            },
-        };
-
-        match *thisinode {
-            Inode::Dir(ref mut dir_inode) => {
-                // We try to get the parent directory inode.
-                if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
-
-                    // If the parent node is 1 (indicating the root directory) and this is not the first iteration, this indicates that we have arrived at the root directory. Here we add a '/' to the beginning of the path string and return it.
-                    if *parent_dir_inode == (1 as usize){
-                        if !first_iteration {
-                            path_string.insert(0, '/');
-                            return Some(path_string);
-                        }
-                        first_iteration = false;
-                    }
-
-                    match filenamefrominode(*parent_dir_inode, current_inodenum) {
-                        Some(filename) => {
-                            path_string = filename + "/" + &path_string;
-                            current_inodenum = *parent_dir_inode;
-                        },
-                        None => return None,
-                    };
-
-                } else {
-                    return None;
-                }
-
-            },
-            _ => {
-                return None;
-            }
-        }
-    }
-}
-
-
-// Find the file by the given inode number in the given directory
-pub fn filenamefrominode(dir_inode_no: usize, target_inode: usize) -> Option<String> {
-    let cur_node = Some(FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
-
-    match &*cur_node.unwrap() {
-        Inode::Dir(d) => {
-
-            let mut target_variable_name: Option<String> = None;
-
-            for entry in d.filename_to_inode_dict.iter() {
-                if entry.value() == &target_inode {
-                    target_variable_name = Some(entry.key().to_owned());
-                    break;
-                }
-            }
-            return target_variable_name;
-        }
-        _ => return None,
-    }
-}
-
-//returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
-pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
-
-    let mut curnode = Some(FS_METADATA.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
-    let mut inodeno = Some(ROOTDIRECTORYINODE);
-    let mut previnodeno = None;
-
-    //Iterate over the components of the pathbuf in order to walk the file tree
-    for comp in path.components() {
-        match comp {
-            //We've already done what initialization needs to be done
-            interface::RustPathComponent::RootDir => {},
-
-            interface::RustPathComponent::Normal(f) => {
-                //If we're trying to get the child of a nonexistent directory, exit out
-                if inodeno.is_none() {return (None, None);}
-                match &*curnode.unwrap() { 
-                    Inode::Dir(d) => {
-                        previnodeno = inodeno;
-
-                        //populate child inode number from parent directory's inode dict
-                        inodeno = match d.filename_to_inode_dict.get(&f.to_str().unwrap().to_string()) {
-                            Some(num) => {
-                                curnode = FS_METADATA.inodetable.get(&num);
-                                Some(*num)
-                            }
-
-                            //if no such child exists, update curnode, inodeno accordingly so that
-                            //we can check against none as we do at the beginning of the Normal match arm
-                            None => {
-                                curnode = None;
-                                None
-                            }
-                        }
-                    }
-                    //if we're trying to get a child of a non-directory inode, exit out
-                    _ => {return (None, None);}
-                }
-            },
-
-            //If it's a component of the pathbuf that we don't expect given a normed path, exit out
-            _ => {return (None, None);}
-        }
-    }
-    //return inode number and it's parent's number
-    (inodeno, previnodeno)
-}
-pub fn metawalk(path: &interface::RustPath) -> Option<usize> {
-    metawalkandparent(path).0
-}
+//pub fn pathnamefrominodenum(inodenum: usize) -> Option<String>{
+//    let mut path_string = String::new();
+//    let mut first_iteration = true;
+//    let mut current_inodenum = inodenum;
+//
+//    loop{
+//        let mut thisinode = match FS_METADATA.inodetable.get_mut(&current_inodenum) {
+//            Some(inode) => inode,
+//            None => {
+//                return None;
+//            },
+//        };
+//
+//        match *thisinode {
+//            Inode::Dir(ref mut dir_inode) => {
+//                // We try to get the parent directory inode.
+//                if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
+//
+//                    // If the parent node is 1 (indicating the root directory) and this is not the first iteration, this indicates that we have arrived at the root directory. Here we add a '/' to the beginning of the path string and return it.
+//                    if *parent_dir_inode == (1 as usize){
+//                        if !first_iteration {
+//                            path_string.insert(0, '/');
+//                            return Some(path_string);
+//                        }
+//                        first_iteration = false;
+//                    }
+//
+//                    match filenamefrominode(*parent_dir_inode, current_inodenum) {
+//                        Some(filename) => {
+//                            path_string = filename + "/" + &path_string;
+//                            current_inodenum = *parent_dir_inode;
+//                        },
+//                        None => return None,
+//                    };
+//
+//                } else {
+//                    return None;
+//                }
+//
+//            },
+//            _ => {
+//                return None;
+//            }
+//        }
+//    }
+//}
+//
+//
+//// Find the file by the given inode number in the given directory
+//pub fn filenamefrominode(dir_inode_no: usize, target_inode: usize) -> Option<String> {
+//    let cur_node = Some(FS_METADATA.inodetable.get(&dir_inode_no).unwrap());
+//
+//    match &*cur_node.unwrap() {
+//        Inode::Dir(d) => {
+//
+//            let mut target_variable_name: Option<String> = None;
+//
+//            for entry in d.filename_to_inode_dict.iter() {
+//                if entry.value() == &target_inode {
+//                    target_variable_name = Some(entry.key().to_owned());
+//                    break;
+//                }
+//            }
+//            return target_variable_name;
+//        }
+//        _ => return None,
+//    }
+//}
+//
+////returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
+//pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
+//
+//    let mut curnode = Some(FS_METADATA.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
+//    let mut inodeno = Some(ROOTDIRECTORYINODE);
+//    let mut previnodeno = None;
+//
+//    //Iterate over the components of the pathbuf in order to walk the file tree
+//    for comp in path.components() {
+//        match comp {
+//            //We've already done what initialization needs to be done
+//            interface::RustPathComponent::RootDir => {},
+//
+//            interface::RustPathComponent::Normal(f) => {
+//                //If we're trying to get the child of a nonexistent directory, exit out
+//                if inodeno.is_none() {return (None, None);}
+//                match &*curnode.unwrap() { 
+//                    Inode::Dir(d) => {
+//                        previnodeno = inodeno;
+//
+//                        //populate child inode number from parent directory's inode dict
+//                        inodeno = match d.filename_to_inode_dict.get(&f.to_str().unwrap().to_string()) {
+//                            Some(num) => {
+//                                curnode = FS_METADATA.inodetable.get(&num);
+//                                Some(*num)
+//                            }
+//
+//                            //if no such child exists, update curnode, inodeno accordingly so that
+//                            //we can check against none as we do at the beginning of the Normal match arm
+//                            None => {
+//                                curnode = None;
+//                                None
+//                            }
+//                        }
+//                    }
+//                    //if we're trying to get a child of a non-directory inode, exit out
+//                    _ => {return (None, None);}
+//                }
+//            },
+//
+//            //If it's a component of the pathbuf that we don't expect given a normed path, exit out
+//            _ => {return (None, None);}
+//        }
+//    }
+//    //return inode number and it's parent's number
+//    (inodeno, previnodeno)
+//}
+//pub fn metawalk(path: &interface::RustPath) -> Option<usize> {
+//    metawalkandparent(path).0
+//}
 pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPathBuf {
     //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
     let mut newp = if origp.is_relative() {(**cage.cwd.read()).clone()} else {interface::RustPathBuf::from("/")};
@@ -687,22 +825,22 @@ pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPa
 //    }
 //}
 
-pub fn incref_root() {
-    if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
-        rootdir_dirinode_obj.refcount += 1;
-    } else {panic!("Root directory inode was not a directory");}
-}
-
-pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
-    if let Some(cwdinodenum) = metawalk(&cwd_container) {
-        if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
-            cwddir.refcount -= 1;
-
-            //if the directory has been removed but this cwd was the last open handle to it
-            if cwddir.refcount == 0 && cwddir.linkcount == 0 {
-                FS_METADATA.inodetable.remove(&cwdinodenum);
-            }
-        } else {panic!("Cage had a cwd that was not a directory!");}
-    } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
-}
+//pub fn incref_root() {
+//    if let Inode::Dir(ref mut rootdir_dirinode_obj) = *(FS_METADATA.inodetable.get_mut(&ROOTDIRECTORYINODE).unwrap()) {
+//        rootdir_dirinode_obj.refcount += 1;
+//    } else {panic!("Root directory inode was not a directory");}
+//}
+//
+//pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
+//    if let Some(cwdinodenum) = metawalk(&cwd_container) {
+//        if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
+//            cwddir.refcount -= 1;
+//
+//            //if the directory has been removed but this cwd was the last open handle to it
+//            if cwddir.refcount == 0 && cwddir.linkcount == 0 {
+//                FS_METADATA.inodetable.remove(&cwdinodenum);
+//            }
+//        } else {panic!("Cage had a cwd that was not a directory!");}
+//    } else {panic!("Cage had a cwd which did not exist!");}//we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
+//}
 

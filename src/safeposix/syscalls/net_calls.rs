@@ -166,7 +166,7 @@ impl Cage {
             if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
             let truepath = normpath(convpath(path), self);
 
-            match metawalkandparent(truepath.as_path()) {
+            match Cage::metawalkandparent(&self, truepath.as_path()) {
                 //If neither the file nor parent exists
                 (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
                 //If the file doesn't exist but the parent does
@@ -174,10 +174,10 @@ impl Cage {
                     let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                     //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
-                    let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                    let newinodenum = self.fs.FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                     let newinode;
 
-                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                    if let Inode::Dir(ref mut dir) = *(self.fs.FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                         let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
                         let effective_mode = S_IFSOCK as u32 | mode;
 
@@ -202,7 +202,7 @@ impl Cage {
 
                     if bindret < 0 {
                         //undo the insertion if the bind failed
-                        if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                        if let Inode::Dir(ref mut dir) = *(self.fs.FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                             dir.filename_to_inode_dict.remove(&filename);
                             dir.linkcount -= 1;
                         } else {
@@ -216,7 +216,7 @@ impl Cage {
                     }
 
                     sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, inode: newinodenum, reallocalpath: truepath.clone()});
-                    FS_METADATA.inodetable.insert(newinodenum, newinode);
+                    self.fs.FS_METADATA.inodetable.insert(newinodenum, newinode);
                     NET_METADATA.domain_socket_table.insert(truepath, newsockaddr.clone());
                     NET_METADATA.revds_table.insert(newsockaddr, localaddr.clone());
                 }
@@ -976,14 +976,14 @@ impl Cage {
                             let possibleunixaddr = Self::swap_unixaddr(&remote_addr.clone());
                             if let interface::GenSockaddr::Unix(_) = possibleunixaddr {
                                 let pathclone = normpath(convpath(possibleunixaddr.path().clone()), self);
-                                if let Some(inodenum) = metawalk(pathclone.as_path()) {                
+                                if let Some(inodenum) = Cage::metawalk(&self, pathclone.as_path()) {                
                                     newsockhandle.realdomain = AF_UNIX;
                                     newsockhandle.unix_info = Some(UnixSocketInfo {
                                         reallocalpath: pathclone,
                                         inode: inodenum.clone(),
                                         mode: sockhandle.unix_info.as_ref().unwrap().mode,
                                     });
-                                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
+                                    if let Inode::Socket(ref mut sock) = *(self.fs.FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) { 
                                         sock.refcount += 1; 
                                     } 
                                 };

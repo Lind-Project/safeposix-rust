@@ -104,7 +104,7 @@ const FCHDIR_SYSCALL: i32 = 161;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{FS_METADATA,incref_root, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{LOGMAP, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
