@@ -131,35 +131,6 @@ impl Cage {
             }
         }
 
-        //We redo our metawalk in case of O_CREAT, but this is somewhat inefficient
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
-            let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            let mode;
-            let size;
-
-            //increment number of open handles to the file, retrieve other data from inode
-            match *inodeobj {
-                Inode::File(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Dir(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::CharDev(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
-            }
-
-            //If the file is a regular file, open the file object
-            if is_reg(mode) {
-                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    vac.insert(interface::openfile(sysfilename, true).unwrap());
-                }
-            }
-
-            //insert file descriptor into self.filedescriptortableable of the cage
-            let position = if 0 != flags & O_APPEND {size} else {0};
-            let allowmask = O_RDWRFLAGS | O_CLOEXEC;
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
-            let _insertval = fdoption.insert(newfd);
-        } else {panic!("Inode not created for some reason");}
-
         fd //open returns the opened file descriptor
     }
 
