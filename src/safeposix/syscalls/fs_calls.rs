@@ -13,6 +13,13 @@ impl Cage {
 
     //------------------------------------OPEN SYSCALL------------------------------------
 
+    fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc{
+        //insert file descriptor into self.filedescriptortableable of the cage
+        let position = if 0 != flags & O_APPEND {size} else {0};
+        let allowmask = O_RDWRFLAGS | O_CLOEXEC;
+        FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}
+    }
+
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
@@ -53,7 +60,7 @@ impl Cage {
                 let time = interface::timestamp(); //We do a real timestamp now
                 let newinode = Inode::File(GenericInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 1, refcount: 0,
+                    mode: effective_mode, linkcount: 1, refcount: 1,
                     atime: time, ctime: time, mtime: time,
                 });
 
@@ -68,6 +75,13 @@ impl Cage {
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
+
+                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum){
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
+                    vac.insert(interface::openfile(sysfilename, true).unwrap());
+                }
+                
+                let _insertval = fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -75,58 +89,46 @@ impl Cage {
                 if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
                     return syscall_error(Errno::EEXIST, "open", "file already exists and O_CREAT and O_EXCL were used");
                 }
+                let size;
 
-                if O_TRUNC == (flags & O_TRUNC) {
-                    // We only do this to regular files, otherwiese O_TRUNC is undefined
-                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
-                        //close the file object if another cage has it open
-                        let entry = FILEOBJECTTABLE.entry(inodenum);
-                        if let interface::RustHashEntry::Occupied(occ) = &entry {
-                            occ.get().close().unwrap();
+                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                match *inodeobj {
+                    Inode::File(ref mut f) => {
+                        if O_TRUNC == (flags & O_TRUNC) {
+                        // We only do this to regular files, otherwise O_TRUNC is undefined
+                            //close the file object if another cage has it open
+                            let entry = FILEOBJECTTABLE.entry(inodenum);
+                            if let interface::RustHashEntry::Occupied(occ) = &entry {
+                                occ.get().close().unwrap();
+                            }
+                            // resize it to 0
+                            f.size = 0;
+    
+                            //remove the previous file and add a new one of 0 length
+                            if let interface::RustHashEntry::Occupied(occ) = entry {
+                                occ.remove_entry();
+                            }
+    
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename.clone()).unwrap();
                         }
-                        // resize it to 0
-                        g.size = 0;
-
-                        //remove the previous file and add a new one of 0 length
-                        if let interface::RustHashEntry::Occupied(occ) = entry {
-                            occ.remove_entry();
+                        
+                        if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            vac.insert(interface::openfile(sysfilename, true).unwrap());
                         }
-
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                        interface::removefile(sysfilename.clone()).unwrap();
-                    }   
+                        
+                        size = f.size;
+                        f.refcount += 1;
+                    }
+                    Inode::Dir(ref mut f) => {size = f.size; f.refcount += 1;}
+                    Inode::CharDev(ref mut f) => {size = f.size; f.refcount += 1;}
+                    Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
                 }
+
+                let _insertval = fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
             }
         }
-
-        //We redo our metawalk in case of O_CREAT, but this is somewhat inefficient
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
-            let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            let mode;
-            let size;
-
-            //increment number of open handles to the file, retrieve other data from inode
-            match *inodeobj {
-                Inode::File(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Dir(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::CharDev(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
-            }
-
-            //If the file is a regular file, open the file object
-            if is_reg(mode) {
-                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    vac.insert(interface::openfile(sysfilename, true).unwrap());
-                }
-            }
-
-            //insert file descriptor into self.filedescriptortableable of the cage
-            let position = if 0 != flags & O_APPEND {size} else {0};
-            let allowmask = O_RDWRFLAGS | O_CLOEXEC;
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
-            let _insertval = fdoption.insert(newfd);
-        } else {panic!("Inode not created for some reason");}
 
         fd //open returns the opened file descriptor
     }
