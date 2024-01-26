@@ -1454,7 +1454,7 @@ pub mod net_tests {
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         // Create and set up the file descriptor and sockets
-        let port: u16 = 53019;
+        let port: u16 = 53009;
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: port.to_be(),
