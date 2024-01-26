@@ -1182,6 +1182,6 @@ pub mod fs_tests {
         lindrustinit(0);
         let cage1 = interface::cagetable_getref(1);
         let cage2 = interface::cagetable_getref(2);
-    
+         
     }
 }
