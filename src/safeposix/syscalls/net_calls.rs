@@ -447,7 +447,6 @@ impl Cage {
             sndbuf: 131070, //buffersize, which is only used by getsockopt
             rcvbuf: 262140, //buffersize, which is only used by getsockopt
             errno: 0,
-            pendingid: NET_METADATA.nextpendingid.fetch_add(1, interface::RustAtomicOrdering::Relaxed),
         }
     }
 
@@ -872,7 +871,7 @@ impl Cage {
                                 return lr;
                             };
 
-                            NET_METADATA.pending_conn_table.insert(sockhandle.pendingid, vec![]);
+                            if !NET_METADATA.pending_conn_table.contains(&porttuple) { NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]); }
 
                             return 0;
                         }
@@ -941,8 +940,6 @@ impl Cage {
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
                     //move to end
-                    NET_METADATA.pending_conn_table.remove(&sockhandle.pendingid); // remove from pending connections
-
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {return e;}
@@ -1124,7 +1121,10 @@ impl Cage {
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
-                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
+                let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
+                
+                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&portuple).unwrap();
                 let pendingoption = pendingvec.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
@@ -1315,7 +1315,10 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&sockhandle.pendingid).unwrap();
+                                    let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                                    let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
+                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&portuple).unwrap();
+
                                     if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {

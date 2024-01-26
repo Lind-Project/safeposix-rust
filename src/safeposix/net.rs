@@ -28,7 +28,6 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
             pending_conn_table: interface::RustHashMap::new(),
-            nextpendingid: interface::RustAtomicUsize::new(0),
             domsock_accept_table: interface::RustHashMap::new(), // manages domain socket connection process
             domsock_paths: interface::RustHashSet::new() // set of all currently bound domain sockets
         })
@@ -167,8 +166,7 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub pending_conn_table: interface::RustHashMap<usize, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
-    pub nextpendingid: interface::RustAtomicUsize,
+    pub pending_conn_table: interface::RustHashMap<(interface::GenIpaddr, u16, PortType), Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
     pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, DomsockTableEntry>,
     pub domsock_paths: interface::RustHashSet<interface::RustPathBuf>
 }
