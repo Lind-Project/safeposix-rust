@@ -871,7 +871,7 @@ impl Cage {
                                 return lr;
                             };
 
-                            if !NET_METADATA.pending_conn_table.contains(&porttuple) { NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]); }
+                            if !NET_METADATA.pending_conn_table.contains_key(&porttuple) { NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]); }
 
                             return 0;
                         }
@@ -1124,7 +1124,7 @@ impl Cage {
                 let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
                 let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
                 
-                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&portuple).unwrap();
+                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
                 let pendingoption = pendingvec.pop();
 
                 let (acceptedresult, remote_addr) = match pendingoption {
@@ -1317,7 +1317,7 @@ impl Cage {
                                 if sockhandle.state == ConnState::LISTEN {
                                     let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
                                     let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
-                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&portuple).unwrap();
+                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
 
                                     if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
