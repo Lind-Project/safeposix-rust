@@ -59,6 +59,7 @@ pub enum PortType {
     IPv4UDP, IPv4TCP, IPv6UDP, IPv6TCP
 
 }
+
 pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool) -> (interface::GenIpaddr, u16, PortType) {
     match  domain {
         PF_INET => (addr, port, if istcp {PortType::IPv4TCP} else {PortType::IPv4UDP}),
@@ -164,7 +165,7 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
+    pub pending_conn_table: interface::RustHashMap<(interface::GenIpaddr, u16, PortType), Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
     pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, DomsockTableEntry>,
     pub domsock_paths: interface::RustHashSet<interface::RustPathBuf>
 }

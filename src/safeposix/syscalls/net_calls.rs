@@ -842,35 +842,22 @@ impl Cage {
                                 return 0;
                             }
 
-                            let mut ladr;
-                            match sockhandle.localaddr {
-                                Some(sla) => {
-                                    ladr = sla.clone();
-
-                                    if NET_METADATA.listening_port_set.contains(&mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT)) {
-                                        match NET_METADATA._get_available_tcp_port(ladr.addr().clone(), sockhandle.domain, sockhandle.options & (1 << SO_REUSEPORT) != 0) {
-                                            Ok(port) => ladr.set_port(port),
-                                            Err(i) => return i,
-                                        }
-                                    }
+                            if sockhandle.localaddr.is_none() {
+                                let shd = sockhandle.domain as i32;
+                                let ibindret = self._implicit_bind(&mut *sockhandle, shd);
+                                if ibindret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "listen", "The libc call to bind within listen failed");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
+                                    };
                                 }
-                                None => {
-                                    let shd = sockhandle.domain as i32;
-                                    let ibindret = self._implicit_bind(&mut *sockhandle, shd);
-                                    if ibindret < 0 {
-                                        match Errno::from_discriminant(interface::get_errno()) {
-                                            Ok(i) => {return syscall_error(i, "listen", "The libc call to bind within listen failed");},
-                                            Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
-                                        };
-                                    }
-                                    
-                                    ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
-                                }
-                            }
                                 
+                            }
+
+                            let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
                             let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                            NET_METADATA.listening_port_set.insert(porttuple);
+                            NET_METADATA.listening_port_set.insert(porttuple.clone());
                             sockhandle.state = ConnState::LISTEN;
 
                             let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
@@ -883,6 +870,9 @@ impl Cage {
                                 sockhandle.state = ConnState::NOTCONNECTED;
                                 return lr;
                             };
+
+                            if !NET_METADATA.pending_conn_table.contains_key(&porttuple) { NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]); }
+
                             return 0;
                         }
                     }
@@ -953,28 +943,32 @@ impl Cage {
                     let release_ret_val = NET_METADATA._release_localport(localaddr.addr(), localaddr.port(), sockhandle.protocol, sockhandle.domain);
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {return e;}
-                    }
                 }
-            }     
+            }
+        }     
 
-            // now change the connections for all socket types
-            match how {
-                SHUT_RD => {
-                    sockhandle.state = ConnState::CONNWRONLY;
-                }
-                SHUT_WR => {
-                    sockhandle.state = ConnState::CONNRDONLY;
-                }
-                SHUT_RDWR => {
-                    sockhandle.state = ConnState::NOTCONNECTED;
-                }
-                _ => {
-                    //See http://linux.die.net/man/2/shutdown for nuance to this error
-                    return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
-                }
-            }      
+        // now change the connections for all socket types
+        match how {
+            SHUT_RD => {
+                if sockhandle.state == ConnState::CONNWRONLY { 
+                    sockhandle.state = ConnState::NOTCONNECTED; 
+                } else { sockhandle.state = ConnState::CONNWRONLY; }
+            }
+            SHUT_WR => {
+                if sockhandle.state == ConnState::CONNRDONLY { 
+                    sockhandle.state = ConnState::NOTCONNECTED; 
+                } else { sockhandle.state = ConnState::CONNRDONLY; }
+            }
+            SHUT_RDWR => {
+                sockhandle.state = ConnState::NOTCONNECTED;
+            }
+            _ => {
+                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                return syscall_error(Errno::EINVAL, "netshutdown", "the shutdown how argument passed is not supported");
+            }
+        }
 
-            return 0;
+        return 0;
     }
 
     pub fn _cleanup_socket_inner(&self, filedesc: &mut FileDescriptor, how: i32, shutdown: bool) -> i32 {
@@ -1126,30 +1120,33 @@ impl Cage {
                 }
                 let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
-                let (acceptedresult, remote_addr) = if let Some(mut vec) = NET_METADATA.pending_conn_table.get_mut(&sockhandle.localaddr.unwrap().port()) {
-                    //if we got a pending connection in select/poll/whatever, return that here instead
-                    let tup = vec.pop().unwrap(); //pending connection tuple recieved
-                    if vec.is_empty() {
-                        drop(vec);
-                        NET_METADATA.pending_conn_table.remove(&sockhandle.localaddr.unwrap().port()); //remove port from pending conn table if no more pending conns exist for it
-                    }
-                    tup
-                } else {
-                    //unwrap ok because listening
-                    if 0 == (sockfdobj.flags & O_NONBLOCK) {
-                        match sockhandle.domain {
-                            PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
-                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
-                            _ => panic!("Unknown domain in accepting socket"),
-                        }
-                    } else {
-                        match sockhandle.domain {
-                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                            _ => panic!("Unknown domain in accepting socket"),
+                // if we got a pending connection in select/poll/whatever, return that here instead
+                let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
+                
+                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                let pendingoption = pendingvec.pop();
+
+                let (acceptedresult, remote_addr) = match pendingoption {
+                    Some(pendingtup) => pendingtup,
+                    None => {
+                        //unwrap ok because listening
+                        if 0 == (sockfdobj.flags & O_NONBLOCK) {
+                            match sockhandle.domain {
+                                PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
+                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
+                                _ => panic!("Unknown domain in accepting socket"),
+                            }
+                        } else {
+                            match sockhandle.domain {
+                                PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                _ => panic!("Unknown domain in accepting socket"),
+                            }
                         }
                     }
                 };
+
 
                 if let Err(_) = acceptedresult {
                     match Errno::from_discriminant(interface::get_errno()) {
@@ -1322,8 +1319,11 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockhandle.localaddr.unwrap().port().clone()) {
+                                    let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                                    let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
+                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
 
+                                    if pendingvec.is_empty() {
                                         //innersock unwrap ok because sockhandle is listening
                                         let listeningsocket = match sockhandle.domain {
                                             PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
@@ -1332,17 +1332,17 @@ impl Cage {
                                         };
                                         drop(sockhandle);
                                         if let Ok(_) = listeningsocket.0 {
-                                            //save the pending connection for accept to do something with it
-                                            vacant.insert(vec!(listeningsocket));
+                                            //save the new pending connection for accept to do something with it
+                                            pendingvec.push(listeningsocket);
                                         } else {
                                             // if it returned an error, then don't insert it into new_readfds
                                             // of course unset the bit explicitly before we continue
                                             interface::fd_set_remove(new_readfds, fd);
                                             continue;
                                         }
-                                    } //if it's already got a pending connection, add it!
-
-                                    //if we reach here there is a pending connection
+                                    } // if we get here we have an existing connection
+                                    
+                                    //if we reach here there is a pending connection, either from a new or existing connection
                                     interface::fd_set_insert(new_readfds, fd);
                                     *retval += 1;
                                     //sockhandle innersocket unwrap ok if INPROGRESS
