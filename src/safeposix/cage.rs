@@ -65,6 +65,7 @@ pub struct Fs {
     pub FS_METADATA: FilesystemMetadata,
     pub metadata: String,
     pub logfilename: String,
+    pub logmap: interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>,
 }
 
 pub type FdTable = Vec<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>>;
@@ -103,6 +104,7 @@ impl Cage {
                 FS_METADATA: FilesystemMetadata::init_fs_metadata(mdfilename.clone()),
                 metadata: mdfilename,
                 logfilename: logfilename,
+                logmap: interface::RustRfc::new(interface::RustLock::new(None)),
             },
             cancelstatus: interface::RustAtomicBool::new(false),
             getgid: interface::RustAtomicI32::new(-1), 

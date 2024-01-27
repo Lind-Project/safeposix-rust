@@ -12,10 +12,10 @@ use super::cage::Cage;
 
 //pub const LOGFILENAME: &str = "lind.md.log";
 
-pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
-    interface::RustLazyGlobal::new(|| 
-        interface::RustRfc::new(interface::RustLock::new(None))
-);
+//pub static LOGMAP: interface::RustLazyGlobal<interface::RustRfc<interface::RustLock<Option<interface::EmulatedFileMap>>>> = 
+//    interface::RustLazyGlobal::new(|| 
+//        interface::RustRfc::new(interface::RustLock::new(None))
+//);
 
 //pub static FS_METADATA: interface::RustLazyGlobal<interface::RustRfc<FilesystemMetadata>> = 
 //    interface::RustLazyGlobal::new(|| interface::RustRfc::new(FilesystemMetadata::init_fs_metadata())); //we want to check if fs exists before doing a blank init, but not for now
@@ -281,7 +281,7 @@ impl Cage {
     pub fn create_log(&self) {
         // reinstantiate the log file and assign it to the metadata struct
         let log_mapobj = interface::mapfilenew(self.fs.logfilename.to_string()).unwrap();
-        let mut logobj = LOGMAP.write();
+        let mut logobj = self.fs.logmap.write();
         logobj.replace(log_mapobj);
     }
 
@@ -300,7 +300,7 @@ impl Cage {
         }
 
         // write to file
-        let mut mapopt = LOGMAP.write();
+        let mut mapopt = self.fs.logmap.write();
         let map = mapopt.as_mut().unwrap();
         map.write_to_map(&entrybytes).unwrap();
     }

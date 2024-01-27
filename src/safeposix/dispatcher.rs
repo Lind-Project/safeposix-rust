@@ -104,7 +104,7 @@ const FCHDIR_SYSCALL: i32 = 161;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{LOGMAP, FilesystemMetadata};
+use super::filesystem::{FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
@@ -555,16 +555,18 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
 
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
-    //load_fs();
-    //incref_root();
-    //incref_root(); 
+ 
     let utilcage = Cage::new(0);
     Cage::load_fs(&utilcage);
+    Cage::incref_root(&utilcage);
+    Cage::incref_root(&utilcage);
     interface::cagetable_insert(0, utilcage);
     
     let initcage = Cage::new(1);
     Cage::load_fs(&initcage);
-    interface::cagetable_insert(1, initcage);
+    Cage::incref_root(&initcage);
+    Cage::incref_root(&initcage);
+    interface::cagetable_insert(1, initcage); 
     //    let utilcage = Cage{
 //        cageid: 0, 
 //        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
@@ -619,7 +621,7 @@ pub extern "C" fn lindrustfinalize(cageid: u64) {
     Cage::persist_metadata(&cage, &cage.fs.FS_METADATA);
     if interface::pathexists(cage.fs.logfilename.to_string()) {
         // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
-        let mut logobj = LOGMAP.write();
+        let mut logobj = cage.fs.logmap.write();
         let log = logobj.take().unwrap();
         let _close = log.close().unwrap();
         let _logremove = interface::removefile(cage.fs.logfilename.to_string());
