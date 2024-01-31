@@ -879,8 +879,8 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
-                               drop(inodeobj);
-                               log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);                            
+                               let loginode = normalfile_filedesc_obj.inode;
+                               log_metadata(&FS_METADATA, loginode);                            
                             } //update file size if necessary
 
                             retval
