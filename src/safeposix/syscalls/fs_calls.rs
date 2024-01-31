@@ -778,6 +778,7 @@ impl Cage {
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
                                     drop(inodeobj);
+                                    drop(fileobject);
                                     log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
                                 } //update file size if necessary
                                 
@@ -883,6 +884,7 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               drop(fileobject);
                                drop(inodeobj);
                                log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);                            
                             } //update file size if necessary
