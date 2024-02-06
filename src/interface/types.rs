@@ -2,6 +2,8 @@
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 
+const SIZEOF_SOCKADDR: u32 = 16;
+
 //redefining the FSData struct in this file so that we maintain flow of program
 //derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
 #[derive(Eq, PartialEq, Default)]
@@ -459,7 +461,7 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
         let tmpsock = unsafe{&*pointer};
         match tmpsock.sa_family {
             /*AF_UNIX*/ 1 => {
-                if addrlen < size_of::<interface::SockaddrUnix>() as u32 {
+                if addrlen < SIZEOF_SOCKADDR || addrlen > size_of::<interface::SockaddrUnix>() as u32 {
                     return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
                 }
                 let unix_ptr = pointer as *const interface::SockaddrUnix;
