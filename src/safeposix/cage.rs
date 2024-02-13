@@ -41,7 +41,7 @@ pub struct StreamDesc {
 pub struct SocketDesc {
     pub flags: i32,
     pub handle: interface::RustRfc<interface::RustLock<SocketHandle>>,
-    pub advlock: interface::RustRfc<interface::AdvisoryLock>
+    pub advlock: interface::RustRfc<interface::AdvisoryLock>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,13 +76,18 @@ pub struct Cage {
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
+    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>,
     pub thread_table: interface::RustHashMap<u64, bool>,
-    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>
+    pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
+    pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    pub main_threadid: interface::RustAtomicU64,
+    pub interval_timer: interface::IntervalTimer
 }
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockGuard<Option<FileDescriptor>>>) {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockWriteGuard<Option<FileDescriptor>>>) {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -118,6 +123,14 @@ impl Cage {
         }
     }
 
+    pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {
+        for signo in 1..SIGNAL_MAX {
+            if interface::lind_sigismember(sigset, signo) {
+                interface::lind_threadkill(pthreadid, signo);
+            }
+        }
+    }
+
     pub fn get_filedescriptor(&self, fd: i32) -> Result<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>, ()> {
         if (fd < 0) || (fd >= MAXFD) {
             Err(())
@@ -141,4 +154,12 @@ pub fn init_fdtable() -> FdTable {
         fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
     }
     fdtable
+}
+
+pub fn create_unix_sockpipes() -> (interface::RustRfc<interface::EmulatedPipe>, interface::RustRfc<interface::EmulatedPipe>) {
+
+    let pipe1 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
+    let pipe2 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
+
+    (pipe1, pipe2)
 }

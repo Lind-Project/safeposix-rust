@@ -1,7 +1,6 @@
-#![feature(once_cell)]
+#![feature(lazy_cell)]
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
-#![feature(result_into_ok_or_err)]
 #![feature(duration_constants)]
 #![allow(unused)]
 
@@ -118,8 +117,13 @@ fn main() {
                         rev_shm: interface::Mutex::new(vec!()),
                         mutex_table: interface::RustLock::new(vec!()),
                         cv_table: interface::RustLock::new(vec!()),
-                        thread_table: interface::RustHashMap::new(),
                         sem_table: interface::RustHashMap::new(),
+                        thread_table: interface::RustHashMap::new(),
+                        signalhandler: interface::RustHashMap::new(),
+                        sigset: interface::RustHashMap::new(),
+                        pendingsigset: interface::RustHashMap::new(),
+                        main_threadid: interface::RustAtomicU64::new(0),
+                        interval_timer: interface::IntervalTimer::new(0)
                     };
 
     args.next();//first arg is executable, we don't care

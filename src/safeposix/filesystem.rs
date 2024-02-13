@@ -508,6 +508,7 @@ pub fn remove_domain_sock(truepath: interface::RustPathBuf) {
             Cage::remove_from_parent_dir(parentinodenum, &truepath);
 
             FS_METADATA.inodetable.remove(&inodenum);
+            NET_METADATA.domsock_paths.remove(&truepath);
         }
     }
 }

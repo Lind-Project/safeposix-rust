@@ -2,6 +2,8 @@
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 
+const SIZEOF_SOCKADDR: u32 = 16;
+
 //redefining the FSData struct in this file so that we maintain flow of program
 //derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
 #[derive(Eq, PartialEq, Default)]
@@ -97,6 +99,12 @@ pub struct TimeVal {
 }
 
 #[repr(C)]
+pub struct ITimerVal {
+    pub it_interval: TimeVal,
+    pub it_value: TimeVal,
+}
+
+#[repr(C)]
 pub struct TimeSpec {
     pub tv_sec: i64,
     pub tv_nsec: i64
@@ -139,6 +147,16 @@ pub struct ShmidsStruct {
   pub shm_nattch: u32
 }
 
+pub type SigsetType = u64;
+
+#[derive(Copy, Clone, Debug, Default)]
+#[repr(C)]
+pub struct SigactionStruct {
+  pub sa_handler: u32,
+  pub sa_mask: SigsetType,
+  pub sa_flags: i32,
+}
+
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -167,7 +185,13 @@ pub union Arg {
   pub dispatch_structtimespec: *mut TimeSpec,
   pub dispatch_pipearray: *mut PipeArray,
   pub dispatch_sockpair: *mut SockPair,
-  pub dispatch_ioctlptrunion: IoctlPtrUnion
+  pub dispatch_ioctlptrunion: IoctlPtrUnion,
+  pub dispatch_sigactionstruct: *mut SigactionStruct,
+  pub dispatch_constsigactionstruct: *const SigactionStruct,
+  pub dispatch_sigsett: *mut SigsetType,
+  pub dispatch_constsigsett: *const SigsetType,
+  pub dispatch_structitimerval: *mut ITimerVal,
+  pub dispatch_conststructitimerval: *const ITimerVal,
 }
 
 
@@ -236,6 +260,15 @@ pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
         return Ok(data);
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
+}
+
+// for the case where the buffer pointer being Null is normal
+pub fn get_mutcbuf_null(union_argument: Arg) -> Result<Option<*mut u8>, i32> {
+    let data = unsafe{union_argument.dispatch_mutcbuf};
+    if !data.is_null() {
+        return Ok(Some(data));
+    }
+    return Ok(None);
 }
 
 pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
@@ -379,40 +412,47 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-pub fn fd_set_to_hashset(union_argument: Arg, nfds: i32) -> Result<interface::RustHashSet<i32>, i32> {
-    let pointer = unsafe{union_argument.dispatch_mutcbuf};
-    let hashset = interface::RustHashSet::new();
-    if !pointer.is_null() {    
-        for i in 0..nfds {
-            let byte_offset = i / 8;
-            let bit_offset = i & 0b111;
-            let byte_ptr = pointer.wrapping_offset(byte_offset as isize);
-
-            //check whether the bit_offsetth bit of the byte_offsetth byte in the fd_set is set
-            if (unsafe{*byte_ptr}) & (1 << bit_offset) != 0 {
-                //if so, add it to our hashset
-                hashset.insert(i);
-            }
-        }
-    }
-    return Ok(hashset);
+// turn on the fd bit in fd_set
+pub fn fd_set_insert(fd_set: *mut u8, fd: i32) {
+    let byte_offset = fd / 8;
+    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
+    let bit_offset = fd & 0b111;
+    unsafe{*byte_ptr |= 1 << bit_offset;}
 }
-pub fn copy_out_to_fd_set(union_argument: Arg, nfds: i32, hashset: interface::RustHashSet<i32>) {
-    let pointer = unsafe{union_argument.dispatch_mutcbuf};
-    if pointer.is_null() {return;} //do nothing if it's null
-    for i in 0..nfds {
-        let byte_offset = i / 8;
-        let bit_offset = i & 0b111;
-        let byte_ptr = pointer.wrapping_offset(byte_offset as isize);
 
-        if hashset.contains(&i) {
-            //if it's in the hash set, set the bit ot 1
-            unsafe{*byte_ptr |= 1 << bit_offset;}
+// turn off the fd bit in fd_set
+pub fn fd_set_remove(fd_set: *mut u8, fd: i32) {
+    let byte_offset = fd / 8;
+    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
+    let bit_offset = fd & 0b111;
+    unsafe{*byte_ptr &= !(1 << bit_offset);}
+}
+
+// return true if the bit for fd is set in fd_set, false otherwise
+pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
+    let byte_offset = fd / 8;
+    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
+    let bit_offset = fd & 0b111;
+    return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
+}
+
+pub fn fd_set_copy(src_set: *const u8, dst_set: *mut u8, nfds: i32) {
+    for fd in 0..nfds {
+        if interface::fd_set_check_fd(src_set, fd) {
+            interface::fd_set_insert(dst_set, fd);
         } else {
-            //else, set the bit to 0
-            unsafe{*byte_ptr &= !(1 << bit_offset);}
+            interface::fd_set_remove(dst_set, fd);
         }
     }
+}
+
+pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
+    for fd in 0..highest_fd + 1 {
+        if fd_set_check_fd(fd_set, fd) {
+            return false;
+        }
+    }
+    return true;
 }
 
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {
@@ -421,8 +461,8 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
         let tmpsock = unsafe{&*pointer};
         match tmpsock.sa_family {
             /*AF_UNIX*/ 1 => {
-                if addrlen < size_of::<interface::SockaddrUnix>() as u32 {
-                    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length too small for family of sockaddr"));
+                if addrlen < SIZEOF_SOCKADDR || addrlen > size_of::<interface::SockaddrUnix>() as u32 {
+                    return Err(syscall_error(Errno::EINVAL, "dispatcher", "input length incorrect for family of sockaddr"));
                 }
                 let unix_ptr = pointer as *const interface::SockaddrUnix;
                 return Ok(interface::GenSockaddr::Unix(unsafe{*unix_ptr}));
@@ -541,6 +581,24 @@ pub fn duration_fromtimeval(union_argument: Arg) -> Result<Option<interface::Rus
     }
 }
 
+pub fn get_itimerval<'a>(union_argument: Arg) -> Result<Option<&'a mut ITimerVal>, i32> {
+    let pointer = unsafe{union_argument.dispatch_structitimerval};
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constitimerval<'a>(union_argument: Arg) -> Result<Option<&'a ITimerVal>, i32> {
+    let pointer = unsafe{union_argument.dispatch_conststructitimerval};
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
 pub fn duration_fromtimespec(union_argument: Arg) -> Result<interface::RustDuration, i32> {
     let pointer = unsafe{union_argument.dispatch_structtimespec};
     if !pointer.is_null() {    
@@ -570,4 +628,44 @@ pub fn get_duration_from_millis(union_argument: Arg) ->Result<Option<interface::
 
 pub fn arg_nullity(union_argument: &Arg) -> bool {
     unsafe{union_argument.dispatch_cbuf}.is_null()
+}
+
+pub fn get_sigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a mut SigactionStruct>, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigactionstruct};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constsigactionstruct<'a>(union_argument: Arg) -> Result<Option<&'a SigactionStruct>, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigactionstruct};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_sigsett<'a>(union_argument: Arg) -> Result<Option<&'a mut SigsetType>, i32> {
+    let pointer = unsafe{union_argument.dispatch_sigsett};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{&mut *pointer}))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_constsigsett<'a>(union_argument: Arg) -> Result<Option<&'a SigsetType>, i32> {
+    let pointer = unsafe{union_argument.dispatch_constsigsett};
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe{& *pointer}))
+    } else {
+        Ok(None)
+    }
 }

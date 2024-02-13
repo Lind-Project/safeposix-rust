@@ -1,4 +1,4 @@
-// // Authors: Nicholas Renner and Jonathan Singer
+// // Authors: Nicholas Renner and Jonathan Singer and Tristan Brigham
 // //
 // //
 
@@ -71,7 +71,7 @@ impl GenSockaddr {
         match self {
             GenSockaddr::Unix(unixaddr) => {
                 let pathiter = &mut unixaddr.sun_path.split(|idx| *idx == 0);
-                let pathslice = pathiter.next().unwrap().clone();
+                let pathslice = pathiter.next().unwrap();
                 let path = from_utf8(pathslice).unwrap();
                 path
             }
@@ -166,7 +166,7 @@ pub fn new_sockaddr_unix(family: u16, path: &[u8]) -> SockaddrUnix {
 }
 
 pub fn gen_ud_path() -> String {
-    let mut owned_path: String = "/tmp/sock".to_owned();
+    let mut owned_path: String = "/sock".to_owned();
     unsafe {
         let id = UD_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         owned_path.push_str(&id.to_string());

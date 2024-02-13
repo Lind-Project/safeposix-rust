@@ -100,6 +100,11 @@ const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
 const GETIFADDRS_SYSCALL: i32 = 146;
 
+const SIGACTION_SYSCALL: i32 = 147;
+const KILL_SYSCALL: i32 = 148;
+const SIGPROCMASK_SYSCALL: i32 = 149;
+const SETITIMER_SYSCALL: i32 = 150;
+
 const FCHDIR_SYSCALL: i32 = 161;
 const FSYNC_SYSCALL: i32 = 162;
 const FDATASYNC_SYSCALL: i32 = 163;
@@ -130,13 +135,17 @@ macro_rules! get_onearg {
 //the body of a closure within the variadic macro
 macro_rules! check_and_dispatch {
     ( $cage:ident . $func:ident, $($arg:expr),* ) => {
-        (|| Ok($cage.$func( $($arg?),* )))().into_ok_or_err()
+        match (|| Ok($cage.$func( $($arg?),* )))() {
+            Ok(i) => i, Err(i) => i
+        }
     };
 }
 
 macro_rules! check_and_dispatch_socketpair {
     ( $func:expr, $cage:ident, $($arg:expr),* ) => {
-        (|| Ok($func( $cage, $($arg?),* )))().into_ok_or_err()
+        match (|| Ok($func( $cage, $($arg?),* )))() {
+            Ok(i) => i, Err(i) => i
+        }
     };
 }
 
@@ -145,12 +154,28 @@ macro_rules! check_and_dispatch_socketpair {
 // to increase I/O performance by bypassing the dispatcher and type checker
 #[no_mangle]
 pub extern "C" fn quick_write(fd: i32, buf: *const u8, count: usize, cageid: u64) -> i32 {
-  unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().write_syscall(fd, buf, count) }
+    interface::check_cageid(cageid);
+    unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().write_syscall(fd, buf, count) }
 }
 
 #[no_mangle]
 pub extern "C" fn quick_read(fd: i32, buf: *mut u8, size: usize, cageid: u64) -> i32 {
+    interface::check_cageid(cageid);
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().read_syscall(fd, buf, size) }
+}
+
+#[no_mangle]
+pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    let pthreadid = interface::get_pthreadid();
+    cage.main_threadid.store(pthreadid, interface::RustAtomicOrdering::Relaxed);
+    let inheritedsigset = cage.sigset.remove(&0); // in cases of a forked cage, we've stored the inherited sigset at entry 0
+    if inheritedsigset.is_some() { 
+        cage.sigset.insert(pthreadid, inheritedsigset.unwrap().1);
+    } else { cage.sigset.insert(pthreadid, interface::RustAtomicU64::new(0)); }
+
+    cage.pendingsigset.insert(pthreadid, interface::RustAtomicU64::new(0));
+    interface::signalflag_set(signalflag);
 }
 
 #[no_mangle]
@@ -360,18 +385,8 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             let nfds = get_onearg!(interface::get_int(arg1));
             if nfds < 0 { //RLIMIT_NOFILE check as well?
                 return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
-            }
-            let mut readfds = get_onearg!(interface::fd_set_to_hashset(arg2, nfds));
-            let mut writefds = get_onearg!(interface::fd_set_to_hashset(arg3, nfds));
-            let mut exceptfds = get_onearg!(interface::fd_set_to_hashset(arg4, nfds));
-
-            let rv = check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut readfds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut writefds), Ok::<&mut interface::RustHashSet<i32>, i32>(&mut exceptfds), interface::duration_fromtimeval(arg5));
-
-            interface::copy_out_to_fd_set(arg2, nfds, readfds);
-            interface::copy_out_to_fd_set(arg3, nfds, writefds);
-            interface::copy_out_to_fd_set(arg4, nfds, exceptfds);
-
-            rv
+            } 
+            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), interface::get_mutcbuf_null(arg2), interface::get_mutcbuf_null(arg3), interface::get_mutcbuf_null(arg4), interface::duration_fromtimeval(arg5))
         }
         POLL_SYSCALL => {
             let nfds = get_onearg!(interface::get_usize(arg2));
@@ -509,6 +524,18 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         FTRUNCATE_SYSCALL => {
             check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
         }
+        SIGACTION_SYSCALL => {
+            check_and_dispatch!(cage.sigaction_syscall, interface::get_int(arg1), interface::get_constsigactionstruct(arg2), interface::get_sigactionstruct(arg3))
+        }
+        KILL_SYSCALL => {
+            check_and_dispatch!(cage.kill_syscall, interface::get_int(arg1), interface::get_int(arg2))
+        }
+        SIGPROCMASK_SYSCALL => {
+            check_and_dispatch!(cage.sigprocmask_syscall, interface::get_int(arg1), interface::get_constsigsett(arg2), interface::get_sigsett(arg3))
+        }
+        SETITIMER_SYSCALL => {
+            check_and_dispatch!(cage.setitimer_syscall, interface::get_int(arg1), interface::get_constitimerval(arg2), interface::get_itimerval(arg3)) 
+        }
         SEM_INIT_SYSCALL => {
             check_and_dispatch!(cage.sem_init_syscall, interface::get_uint(arg1), interface::get_int(arg2), interface::get_uint(arg3))
         }
@@ -550,6 +577,10 @@ pub extern "C" fn lindcancelinit(cageid: u64) {
 pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
     let cage = interface::cagetable_getref(cageid);
     cage.thread_table.insert(pthreadid, kill);
+    if cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed) == 0 {
+        cage.main_threadid.store(interface::get_pthreadid(), interface::RustAtomicOrdering::Relaxed);
+    }
+
 }
 
 #[no_mangle]
@@ -583,6 +614,29 @@ fn cleartmp(init: bool) {
 }
 
 #[no_mangle]
+pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
+    let cage = interface::cagetable_getref(cageid);
+    let pthreadid = interface::get_pthreadid();
+    let sigset = cage.sigset.get(&pthreadid).unwrap(); // these lock sigset dashmaps for concurrency
+    let pendingset = cage.sigset.get(&pthreadid).unwrap();
+
+    if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
+        return match cage.signalhandler.get(&signo) {
+            Some(action_struct) => {
+                    action_struct.sa_handler // if we have a handler and its not blocked return it
+
+            },
+            None => 0, // if we dont have a handler return 0
+        };
+    } else { 
+        let mutpendingset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+        sigset.store(interface::lind_sigaddset(mutpendingset, signo), interface::RustAtomicOrdering::Relaxed);
+        1 // if its blocked add the signal to the pending set and return 1 to indicated it was blocked
+        //  a signal handler cant be located at address 0x1 so this value is fine to return and check
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
@@ -603,8 +657,13 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
-        thread_table: interface::RustHashMap::new(),
         sem_table: interface::RustHashMap::new(),
+        thread_table: interface::RustHashMap::new(),
+        signalhandler: interface::RustHashMap::new(),
+        sigset: interface::RustHashMap::new(), 
+        pendingsigset: interface::RustHashMap::new(),
+        main_threadid: interface::RustAtomicU64::new(0),
+        interval_timer: interface::IntervalTimer::new(0)
     };
 
     interface::cagetable_insert(0, utilcage);
@@ -623,8 +682,13 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
-        thread_table: interface::RustHashMap::new(),
         sem_table: interface::RustHashMap::new(),
+        thread_table: interface::RustHashMap::new(),
+        signalhandler: interface::RustHashMap::new(),
+        sigset: interface::RustHashMap::new(),
+        pendingsigset: interface::RustHashMap::new(),
+        main_threadid: interface::RustAtomicU64::new(0),
+        interval_timer: interface::IntervalTimer::new(1)
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean
