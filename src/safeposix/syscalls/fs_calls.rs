@@ -1947,9 +1947,6 @@ impl Cage {
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
-                    if is_rdonly(normalfile_filedesc_obj.flags) {
-                        return syscall_error(Errno::EBADF, "sync_file_range", "specified file not open for sync");
-                    }
                     let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
                     match &*inodeobj {
                         Inode::File(_) => {
