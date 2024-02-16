@@ -61,7 +61,7 @@ impl Cage {
                 let newinode = Inode::File(GenericInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                     mode: effective_mode, linkcount: 1, refcount: 1,
-                    atime: time, ctime: time, mtime: time,
+                    atime: time, ctime: time, mtime: time, interface::bitmap_insert(personas_map, self.cageid);
                 });
 
                 let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
@@ -167,7 +167,7 @@ impl Cage {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
                     mode: effective_mode, linkcount: 3, refcount: 0, //2 because ., and .., as well as reference in parent directory
                     atime: time, ctime: time, mtime: time, 
-                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode)
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode), interface::bitmap_insert(personas_map, self.cageid);
                 });
 
                 if let Inode::Dir(ref mut parentdir) = *(metadata.inodetable.get_mut(&pardirinode).unwrap()) {

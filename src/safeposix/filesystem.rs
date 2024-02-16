@@ -44,7 +44,8 @@ pub struct GenericInode {
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
-    pub mtime: u64
+    pub mtime: u64,
+    pub personas_map: [u8; MAXCAGEID] = [0; MAXCAGEID];
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
@@ -89,7 +90,7 @@ pub struct DirectoryInode {
     pub ctime: u64,
     pub mtime: u64,
     pub filename_to_inode_dict: interface::RustHashMap<String, usize>,
-    pub personas_map: interface::RustHashSet<i32>
+    pub personas_map: [u8; MAXCAGEID] = [0; MAXCAGEID];
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
