@@ -113,7 +113,7 @@ const SYNC_FILE_RANGE: i32 = 164;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{FS_METADATA, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
@@ -640,7 +640,7 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 pub extern "C" fn lindrustinit(verbosity: isize) {
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
-    load_fs();
+    Cage::load_fs();
     incref_root();
     incref_root();
 
@@ -649,6 +649,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
         filedescriptortable: init_fdtable(),
+        personas: Personas {
+            personas_id: 0
+        },
         cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
@@ -674,6 +677,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
         filedescriptortable: init_fdtable(),
+        personas: Personas {
+            personas_id: 1
+        },
         cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 

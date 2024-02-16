@@ -412,6 +412,25 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
+pub fn init_bitmap() -> [u8; interface::MAXCAGEID as usize] {
+    [0; interface::MAXCAGEID]
+}
+
+
+pub fn bitmap_insert(bitmap: &mut [u8; interface::MAXCAGEID as usize], personas_id: usize) -> [u8; interface::MAXCAGEID as usize]{
+    let byte_index = personas_id / 8;
+    let bit_index = personas_id % 8;
+    bitmap[personas_id as usize] |= 1 << bit_index;
+    return *bitmap;
+}
+
+pub fn bitmap_remove(bitmap: &mut [u8; interface::MAXCAGEID as usize], personas_id: usize) -> [u8; interface::MAXCAGEID as usize]{
+    let byte_index = personas_id / 8;
+    let bit_index = personas_id % 8;
+    bitmap[personas_id as usize] &= !(1 << bit_index);
+    return *bitmap;
+}
+
 // turn on the fd bit in fd_set
 pub fn fd_set_insert(fd_set: *mut u8, fd: i32) {
     let byte_offset = fd / 8;

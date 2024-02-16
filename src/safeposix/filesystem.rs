@@ -44,7 +44,8 @@ pub struct GenericInode {
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
-    pub mtime: u64
+    pub mtime: u64,
+    pub personas_map: [u8; (interface::MAXCAGEID) as usize]
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
@@ -88,7 +89,8 @@ pub struct DirectoryInode {
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
-    pub filename_to_inode_dict: interface::RustHashMap<String, usize>
+    pub filename_to_inode_dict: interface::RustHashMap<String, usize>,
+    pub personas_map: [u8; (interface::MAXCAGEID) as usize]
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
@@ -117,7 +119,8 @@ impl FilesystemMetadata {
         //refcount is how many open file descriptors pointing to the directory exist, 0 as no cages exist yet
             mode: S_IFDIR as u32 | S_IRWXA, linkcount: 3, refcount: 0,
             atime: time, ctime: time, mtime: time,
-            filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE, ROOTDIRECTORYINODE)};
+            filename_to_inode_dict: init_filename_to_inode_dict(ROOTDIRECTORYINODE, ROOTDIRECTORYINODE), 
+            personas_map: interface::init_bitmap() };
         retval.inodetable.insert(ROOTDIRECTORYINODE, Inode::Dir(dirinode));
 
         retval
@@ -138,147 +141,152 @@ impl FilesystemMetadata {
         }
     }
 }
+impl Cage {
+    pub fn format_fs(&self) {
+        let newmetadata = FilesystemMetadata::blank_fs_init();
+        //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
+        //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and 
+        //then persist our new one. In order to create the new one, because the FS_METADATA does not
+        //point to the same metadata that we are trying to create, we need to manually insert these
+        //rather than using system calls.
+    
+        let mut rootinode = newmetadata.inodetable.get_mut(&1).unwrap(); //get root to populate its dict
+        if let Inode::Dir(ref mut rootdir) = *rootinode {
+            rootdir.filename_to_inode_dict.insert("dev".to_string(), 2);
+            rootdir.linkcount += 1;
+        } else {
+            unreachable!();
+        }
+        drop(rootinode);
+    
+        let devchildren = interface::RustHashMap::new();
+        devchildren.insert("..".to_string(), 1); 
+        devchildren.insert(".".to_string(), 2); 
+        devchildren.insert("null".to_string(), 3); 
+        devchildren.insert("zero".to_string(), 4);
+        devchildren.insert("urandom".to_string(), 5);
+        devchildren.insert("random".to_string(), 6);
+    
+        let tmpchildren = interface::RustHashMap::new();
+        tmpchildren.insert("..".to_string(), 1); 
+        tmpchildren.insert(".".to_string(), 2); 
+    
+        let personas_id = self.personas.personas_id;
 
-pub fn format_fs() {
-    let newmetadata = FilesystemMetadata::blank_fs_init();
-    //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
-    //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and 
-    //then persist our new one. In order to create the new one, because the FS_METADATA does not
-    //point to the same metadata that we are trying to create, we need to manually insert these
-    //rather than using system calls.
-
-    let mut rootinode = newmetadata.inodetable.get_mut(&1).unwrap(); //get root to populate its dict
-    if let Inode::Dir(ref mut rootdir) = *rootinode {
-        rootdir.filename_to_inode_dict.insert("dev".to_string(), 2);
-        rootdir.linkcount += 1;
-    } else {
-        unreachable!();
+        let time = interface::timestamp(); //We do a real timestamp now
+        let devdirinode = Inode::Dir(DirectoryInode {
+            size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+            mode: (S_IFDIR | 0755) as u32,
+            linkcount: 3 + 4, //3 for ., .., and the parent dir, 4 is one for each child we will create
+            refcount: 0,
+            atime: time, ctime: time, mtime: time,
+            filename_to_inode_dict: devchildren,
+            personas_map: interface::init_bitmap(),
+        }); //inode 2
+        let nullinode = Inode::CharDev(DeviceInode {
+            size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+            mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+            atime: time, ctime: time, mtime: time,
+            dev: DevNo {major: 1, minor: 3},
+        }); //inode 3
+        let zeroinode = Inode::CharDev(DeviceInode {
+            size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+            mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+            atime: time, ctime: time, mtime: time,
+            dev: DevNo {major: 1, minor: 5},
+        }); //inode 4
+        let urandominode = Inode::CharDev(DeviceInode {
+            size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+            mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+            atime: time, ctime: time, mtime: time,
+            dev: DevNo {major: 1, minor: 9},
+        }); //inode 5
+        let randominode = Inode::CharDev(DeviceInode {
+            size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
+            mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+            atime: time, ctime: time, mtime: time,
+            dev: DevNo {major: 1, minor: 8},
+        }); //inode 6
+        let tmpdirinode = Inode::Dir(DirectoryInode {
+            size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+            mode: (S_IFDIR | 0755) as u32,
+            linkcount: 3 + 4, 
+            refcount: 0,
+            atime: time, ctime: time, mtime: time,
+            filename_to_inode_dict: tmpchildren,
+            personas_map: interface::init_bitmap()
+        }); //inode 7
+        newmetadata.nextinode.store(8, interface::RustAtomicOrdering::Relaxed);
+        newmetadata.inodetable.insert(2, devdirinode);
+        newmetadata.inodetable.insert(3, nullinode);
+        newmetadata.inodetable.insert(4, zeroinode);
+        newmetadata.inodetable.insert(5, urandominode);
+        newmetadata.inodetable.insert(6, randominode);
+        newmetadata.inodetable.insert(7, tmpdirinode); 
+    
+        let _logremove = interface::removefile(LOGFILENAME.to_string());
+    
+        persist_metadata(&newmetadata);
     }
-    drop(rootinode);
 
-    let devchildren = interface::RustHashMap::new();
-    devchildren.insert("..".to_string(), 1); 
-    devchildren.insert(".".to_string(), 2); 
-    devchildren.insert("null".to_string(), 3); 
-    devchildren.insert("zero".to_string(), 4);
-    devchildren.insert("urandom".to_string(), 5);
-    devchildren.insert("random".to_string(), 6);
 
-    let tmpchildren = interface::RustHashMap::new();
-    tmpchildren.insert("..".to_string(), 1); 
-    tmpchildren.insert(".".to_string(), 2); 
-
-    let time = interface::timestamp(); //We do a real timestamp now
-    let devdirinode = Inode::Dir(DirectoryInode {
-        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        mode: (S_IFDIR | 0755) as u32,
-        linkcount: 3 + 4, //3 for ., .., and the parent dir, 4 is one for each child we will create
-        refcount: 0,
-        atime: time, ctime: time, mtime: time,
-        filename_to_inode_dict: devchildren,
-    }); //inode 2
-    let nullinode = Inode::CharDev(DeviceInode {
-        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
-        atime: time, ctime: time, mtime: time,
-        dev: DevNo {major: 1, minor: 3},
-    }); //inode 3
-    let zeroinode = Inode::CharDev(DeviceInode {
-        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
-        atime: time, ctime: time, mtime: time,
-        dev: DevNo {major: 1, minor: 5},
-    }); //inode 4
-    let urandominode = Inode::CharDev(DeviceInode {
-        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
-        atime: time, ctime: time, mtime: time,
-        dev: DevNo {major: 1, minor: 9},
-    }); //inode 5
-    let randominode = Inode::CharDev(DeviceInode {
-        size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
-        atime: time, ctime: time, mtime: time,
-        dev: DevNo {major: 1, minor: 8},
-    }); //inode 6
-    let tmpdirinode = Inode::Dir(DirectoryInode {
-        size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        mode: (S_IFDIR | 0755) as u32,
-        linkcount: 3 + 4, 
-        refcount: 0,
-        atime: time, ctime: time, mtime: time,
-        filename_to_inode_dict: tmpchildren,
-    }); //inode 7
-    newmetadata.nextinode.store(8, interface::RustAtomicOrdering::Relaxed);
-    newmetadata.inodetable.insert(2, devdirinode);
-    newmetadata.inodetable.insert(3, nullinode);
-    newmetadata.inodetable.insert(4, zeroinode);
-    newmetadata.inodetable.insert(5, urandominode);
-    newmetadata.inodetable.insert(6, randominode);
-    newmetadata.inodetable.insert(7, tmpdirinode); 
-
-    let _logremove = interface::removefile(LOGFILENAME.to_string());
-
-    persist_metadata(&newmetadata);
-}
-
-pub fn load_fs() {
-    // If the metadata file exists, just close the file for later restore
-    // If it doesn't, lets create a new one, load special files, and persist it.
-    if interface::pathexists(METADATAFILENAME.to_string()) {
-        let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
-        metadata_fileobj.close().unwrap();
-
-        // if we have a log file at this point, we need to sync it with the existing metadata
-        if interface::pathexists(LOGFILENAME.to_string()) {
-
-            let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
-            // read log file and parse count
-            let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
-            let logsize = interface::convert_bytes_to_size(&logread[0..interface::COUNTMAPSIZE]);
-
-            // create vec of log file bounded by indefinite encoding bytes (0x9F, 0xFF)
-            let mut logbytes: Vec<u8> = Vec::new();
-            logbytes.push(0x9F);
-            logbytes.extend_from_slice(&mut logread[interface::COUNTMAPSIZE..(interface::COUNTMAPSIZE + logsize)]);
-            logbytes.push(0xFF);
-            let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
-
-            // drain the vector and deserialize into pairs of inodenum + inodes,
-            // if the inode exists, add it, if not, remove it
-            // keep track of the largest inodenum we see so we can update the nextinode counter
-            let mut max_inodenum = FS_METADATA.nextinode.load(interface::RustAtomicOrdering::Relaxed);
-            for serialpair in logvec.drain(..) {
-                let (inodenum, inode) = serialpair;
-                match inode {
-                    Some(inode) => {
-                        max_inodenum = interface::rust_max(max_inodenum, inodenum);
-                        FS_METADATA.inodetable.insert(inodenum, inode);
+    pub fn load_fs(&self) {
+        // If the metadata file exists, just close the file for later restore
+        // If it doesn't, lets create a new one, load special files, and persist it.
+        if interface::pathexists(METADATAFILENAME.to_string()) {
+            let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+            metadata_fileobj.close().unwrap();
+    
+            // if we have a log file at this point, we need to sync it with the existing metadata
+            if interface::pathexists(LOGFILENAME.to_string()) {
+    
+                let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
+                // read log file and parse count
+                let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
+                let logsize = interface::convert_bytes_to_size(&logread[0..interface::COUNTMAPSIZE]);
+    
+                // create vec of log file bounded by indefinite encoding bytes (0x9F, 0xFF)
+                let mut logbytes: Vec<u8> = Vec::new();
+                logbytes.push(0x9F);
+                logbytes.extend_from_slice(&mut logread[interface::COUNTMAPSIZE..(interface::COUNTMAPSIZE + logsize)]);
+                logbytes.push(0xFF);
+                let mut logvec: Vec<(usize, Option<Inode>)> = interface::serde_deserialize_from_bytes(&logbytes).unwrap();
+    
+                // drain the vector and deserialize into pairs of inodenum + inodes,
+                // if the inode exists, add it, if not, remove it
+                // keep track of the largest inodenum we see so we can update the nextinode counter
+                let mut max_inodenum = FS_METADATA.nextinode.load(interface::RustAtomicOrdering::Relaxed);
+                for serialpair in logvec.drain(..) {
+                    let (inodenum, inode) = serialpair;
+                    match inode {
+                        Some(inode) => {
+                            max_inodenum = interface::rust_max(max_inodenum, inodenum);
+                            FS_METADATA.inodetable.insert(inodenum, inode);
+                        }
+                        None => {FS_METADATA.inodetable.remove(&inodenum);}
                     }
-                    None => {FS_METADATA.inodetable.remove(&inodenum);}
                 }
+    
+                // update the nextinode counter to avoid collisions
+                FS_METADATA.nextinode.store(max_inodenum + 1, interface::RustAtomicOrdering::Relaxed);
+    
+                let _logclose = log_fileobj.close();
+                let _logremove = interface::removefile(LOGFILENAME.to_string());
+    
+                // clean up broken links
+                fsck();
             }
-
-            // update the nextinode counter to avoid collisions
-            FS_METADATA.nextinode.store(max_inodenum + 1, interface::RustAtomicOrdering::Relaxed);
-
-            let _logclose = log_fileobj.close();
-            let _logremove = interface::removefile(LOGFILENAME.to_string());
-
-            // clean up broken links
-            fsck();
+        } else {
+            if interface::pathexists(LOGFILENAME.to_string()) {
+                println!("Filesystem in very corrupted state: log existed but metadata did not!");
+            }
+            self.format_fs();
         }
-    } else {
-        if interface::pathexists(LOGFILENAME.to_string()) {
-            println!("Filesystem in very corrupted state: log existed but metadata did not!");
-        }
-        format_fs();
+    
+        // then recreate the log
+        create_log();
     }
-
-    // then recreate the log
-    create_log();
 }
-
 pub fn fsck() {
     FS_METADATA.inodetable.retain(|_inodenum, inode_obj| {
         match inode_obj {

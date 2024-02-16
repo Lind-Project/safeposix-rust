@@ -60,6 +60,12 @@ pub struct EpollDesc {
     pub flags: i32
 }
 
+
+#[derive(Debug, Clone)]
+pub struct Personas {
+    pub personas_id: u64
+}
+
 pub type FdTable = Vec<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>>;
 
 #[derive(Debug)]
@@ -68,6 +74,7 @@ pub struct Cage {
     pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
     pub parent: u64,
     pub filedescriptortable: FdTable,
+    pub personas: Personas,
     pub cancelstatus: interface::RustAtomicBool,
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
