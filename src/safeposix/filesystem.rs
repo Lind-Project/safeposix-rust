@@ -88,7 +88,8 @@ pub struct DirectoryInode {
     pub atime: u64,
     pub ctime: u64,
     pub mtime: u64,
-    pub filename_to_inode_dict: interface::RustHashMap<String, usize>
+    pub filename_to_inode_dict: interface::RustHashMap<String, usize>,
+    pub personas_map: interface::RustHashSet<i32>
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
@@ -445,6 +446,9 @@ pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<u
                 if inodeno.is_none() {return (None, None);}
                 match &*curnode.unwrap() { 
                     Inode::Dir(d) => {
+                        // since directory, check the personas_map to see if the respective
+                        // personas Id is allowed to access this dir
+
                         previnodeno = inodeno;
 
                         //populate child inode number from parent directory's inode dict
