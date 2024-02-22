@@ -1263,7 +1263,7 @@ impl Cage {
             } else {
                 // at this point lets check if we got a signal before sleeping
                 if interface::sigcheck() { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
-                interface::sleep(BLOCK_TIME);
+                interface::lind_yield();
             }
         }
 
@@ -1285,10 +1285,10 @@ impl Cage {
             if !interface::fd_set_check_fd(readfds, fd) {continue}
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
-            let mut unlocked_fd = checkedfd.write();
-            if let Some(filedesc_enum) = &mut *unlocked_fd {
+            let unlocked_fd = checkedfd.read();
+            if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
-                    Socket(ref mut sockfdobj) => {
+                    Socket(ref sockfdobj) => {
                         let sock_tmp = sockfdobj.handle.clone();
                         let sockhandle = sock_tmp.read();
                         let mut newconnection = false;
@@ -1402,10 +1402,10 @@ impl Cage {
             if !interface::fd_set_check_fd(writefds, fd) {continue}
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
-            let mut unlocked_fd = checkedfd.write();
-            if let Some(filedesc_enum) = &mut *unlocked_fd {
+            let unlocked_fd = checkedfd.read();
+            if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
-                    Socket(ref mut sockfdobj) => {
+                    Socket(ref sockfdobj) => {
                         // check if we've made an in progress connection first
                         let sock_tmp = sockfdobj.handle.clone();
                         let sockhandle = sock_tmp.read();
