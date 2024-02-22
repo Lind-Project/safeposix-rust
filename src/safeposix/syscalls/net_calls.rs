@@ -1188,32 +1188,6 @@ impl Cage {
         }
     }
 
-    fn _nonblock_peek_read(&self, fd: i32) -> bool {
-        let flags = MSG_PEEK;
-        let mut buf = [0u8; 1];
-        let bufptr = buf.as_mut_ptr();
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
-        let mut unlocked_fd = checkedfd.write();
-        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
-            let oldflags;
-            if let Socket(ref mut sockfdobj) = filedesc_enum {
-                oldflags = sockfdobj.flags;
-                sockfdobj.flags |= O_NONBLOCK;
-            } else {
-                return false;
-            }
-            let retval = self.recv_common_inner(filedesc_enum, bufptr, 1, flags, &mut None);
-            if let Socket(ref mut sockfdobj) = filedesc_enum {
-                sockfdobj.flags = oldflags;
-            } else {
-                unreachable!();
-            }
-            return retval >= 0; //it it's less than 0, it failed, it it's 0 peer is dead, 1 it succeeded, in the latter 2 it's true
-        } else {
-            return false;
-        }
-    }
-
     pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
 
         if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
@@ -1280,6 +1254,11 @@ impl Cage {
     }
 
     fn select_readfds(&self, nfds: i32, readfds: *mut u8, new_readfds: *mut u8, retval: &mut i32) -> i32 {
+
+        // set up structures for kernel selecting on inet fds
+        let mut kernelfdset = interface::KernelFdSet::new();
+        let mut kernel2lindvec = vec!();
+
         for fd in 0..nfds {
             // check if current i is in readfd
             if !interface::fd_set_check_fd(readfds, fd) {continue}
@@ -1318,59 +1297,23 @@ impl Cage {
                                 }
                             }
                             AF_INET | AF_INET6 => {
-                                if sockhandle.state == ConnState::LISTEN {
-                                    let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
-                                    let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
-                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
 
-                                    if pendingvec.is_empty() {
-                                        //innersock unwrap ok because sockhandle is listening
-                                        let listeningsocket = match sockhandle.domain {
-                                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                            _ => panic!("Unknown domain in accepting socket"),
-                                        };
-                                        drop(sockhandle);
-                                        if let Ok(_) = listeningsocket.0 {
-                                            //save the new pending connection for accept to do something with it
-                                            pendingvec.push(listeningsocket);
-                                        } else {
-                                            // if it returned an error, then don't insert it into new_readfds
-                                            // of course unset the bit explicitly before we continue
-                                            interface::fd_set_remove(new_readfds, fd);
-                                            continue;
-                                        }
-                                    } // if we get here we have an existing connection
-                                    
-                                    //if we reach here there is a pending connection, either from a new or existing connection
-                                    interface::fd_set_insert(new_readfds, fd);
-                                    *retval += 1;
-                                    //sockhandle innersocket unwrap ok if INPROGRESS
-                                } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                        newconnection = true;
-                                        interface::fd_set_insert(new_readfds, fd);
-                                        *retval += 1;
-                                } else {
-                                    if sockhandle.protocol == IPPROTO_UDP {
-                                        interface::fd_set_insert(new_readfds, fd);
-                                        *retval += 1;
-                                    } else {
-                                        drop(sockhandle);
-                                        drop(unlocked_fd);
-                                        if self._nonblock_peek_read(fd) {
-                                            interface::fd_set_insert(new_readfds, fd);
-                                            *retval += 1;
-                                        }
-                                    }
-                                }
+                                // add raw fds for kernel select
+                                let innersocket = sockhandle.innersocket.unwrap();
+                                kernelfdset.set(innersocket.sys_raw_fd);
+                                kernel2lindvec.push(innersocket.sys_raw_fd);
+
+                                if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
+                                    drop(sockhandle);
+                                    let mut newconnhandle = sock_tmp.write();
+                                    newconnhandle.state = ConnState::CONNECTED;                                 }
+                            }
+                                
+
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
                         }
 
-                        if newconnection {
-                            let mut newconnhandle = sock_tmp.write();
-                            newconnhandle.state = ConnState::CONNECTED; 
-                        }
                     }
 
                     //we don't support selecting streams
@@ -1393,6 +1336,16 @@ impl Cage {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
             }
         }
+
+        // select from kernel and then add back to lind fdset
+        interface::kernel_select(kernelfdset);
+        for tup in kernel2lindvec {
+            if kernelfdset.is_set(tup.0) {
+                interface::fd_set_insert(new_readfds, tup.1);
+                *retval += 1;
+            }
+        }
+
         return 0;
     }
 
