@@ -206,7 +206,7 @@ pub struct SockaddrV6 {
 #[derive(Debug)]
 pub struct Socket {
     pub refcnt: i32,
-    raw_sys_fd: i32
+    pub raw_sys_fd: i32
 }
 
 impl Socket {

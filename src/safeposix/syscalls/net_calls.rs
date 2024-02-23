@@ -1188,33 +1188,7 @@ impl Cage {
         }
     }
 
-    fn _nonblock_peek_read(&self, fd: i32) -> bool {
-        let flags = MSG_PEEK;
-        let mut buf = [0u8; 1];
-        let bufptr = buf.as_mut_ptr();
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
-        let mut unlocked_fd = checkedfd.write();
-        if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
-            let oldflags;
-            if let Socket(ref mut sockfdobj) = filedesc_enum {
-                oldflags = sockfdobj.flags;
-                sockfdobj.flags |= O_NONBLOCK;
-            } else {
-                return false;
-            }
-            let retval = self.recv_common_inner(filedesc_enum, bufptr, 1, flags, &mut None);
-            if let Socket(ref mut sockfdobj) = filedesc_enum {
-                sockfdobj.flags = oldflags;
-            } else {
-                unreachable!();
-            }
-            return retval >= 0; //it it's less than 0, it failed, it it's 0 peer is dead, 1 it succeeded, in the latter 2 it's true
-        } else {
-            return false;
-        }
-    }
-
-    pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut u8>, writefds: Option<*mut u8>, exceptfds: Option<*mut u8>, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut libc::fd_set>, writefds: Option<*mut libc::fd_set>, exceptfds: Option<*mut libc::fd_set>, timeout: Option<interface::RustDuration>) -> i32 {
 
         if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
@@ -1229,33 +1203,64 @@ impl Cage {
  
         let mut retval = 0; 
         // in the loop below, we always read from original fd_sets, but make updates to the new copies
-        let mut new_reads_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-        let mut new_writes_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-        let new_readfds = new_reads_chunk.as_mut_ptr();
-        let new_writefds =  new_writes_chunk.as_mut_ptr();
+        let new_readfds = &mut interface::FdSet::new();
+        let new_writefds =  &mut interface::FdSet::new();
         loop { //we must block manually
             // 1. iterate thru readfds
             if readfds.is_some() {
-                let res = self.select_readfds(nfds, readfds.unwrap(), new_readfds, &mut retval);
+                // Build the FdSet struct from libc::fd_set
+                let internal_readfds = &mut interface::FdSet::new();
+                internal_readfds.copy_from_raw(readfds.unwrap());
+                // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
+                let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
+                let kernel_inet_fds = &mut interface::FdSet::new();
+                let res = self.select_readfds(nfds, internal_readfds, new_readfds, kernel_inet_fds, &mut rawfd_lindfd_tuples, &mut retval);
                 if res != 0 {return res}
+
+                // do the kernel_select for inet
+                if !kernel_inet_fds.is_empty() {
+                    let mut kernel_ret = 0;
+                    match timeout {
+                        Some(duration) => {
+                            let interval = interface::make_timeval(timeout.unwrap());
+                            kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None, Some(&interval));
+                        },
+                        None => {
+                            kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None, None);
+                        }
+                    }
+
+                    if kernel_ret < 0 {return kernel_ret} 
+                    if kernel_ret > 0 {
+                        // increment retval of our select
+                        retval += kernel_ret;
+                        // translate the kernel checked fds to lindfds, and add to our new_writefds
+                        new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, nfds, &rawfd_lindfd_tuples);
+                    }
+                }
             }
             
             // 2. iterate thru writefds
             if writefds.is_some() {
-                let res = self.select_writefds(nfds, writefds.unwrap(), new_writefds, &mut retval);
+                let internal_writefds = &mut interface::FdSet::new();
+                internal_writefds.copy_from_raw(writefds.unwrap());
+                let res = self.select_writefds(nfds, internal_writefds, new_writefds, &mut retval);
                 if res != 0 {return res}
             }
             
             // 3. iterate thru exceptfds
             // currently we don't really do select on execptfds, we just check if those fds are valid
             if exceptfds.is_some() {
+                let internal_exceptfds = &mut interface::FdSet::new();
+                internal_exceptfds.copy_from_raw(exceptfds.unwrap());
                 for fd in 0..nfds {
                     // find the bit and see if it's on
-                    if !interface::fd_set_check_fd(exceptfds.unwrap(), fd) {continue}
+                    if !internal_exceptfds.is_set(fd) {continue}
                     let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();
                     if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
                 }
+                
             }
 
             if retval != 0 || interface::readtimer(start_time) > end_time {
@@ -1267,22 +1272,22 @@ impl Cage {
             }
         }
 
-        // update the original fd_set bitmaps
+        // Now we copy our internal FdSet struct results back into the *mut libc::fd_set
         if readfds.is_some() {
-            interface::fd_set_copy(new_readfds, readfds.unwrap(), nfds);
+            new_readfds.copy_to_raw(readfds.unwrap())
         }
 
         if writefds.is_some() {
-            interface::fd_set_copy(new_writefds, writefds.unwrap(), nfds);
+            new_writefds.copy_to_raw(writefds.unwrap())
         }
         
         return retval;
     }
 
-    fn select_readfds(&self, nfds: i32, readfds: *mut u8, new_readfds: *mut u8, retval: &mut i32) -> i32 {
+    fn select_readfds(&self, nfds: i32, readfds: &mut interface::FdSet, new_readfds: &mut interface::FdSet, kernel_inet_fds: &mut interface::FdSet, rawfd_lindfd_tuples: &mut Vec<(i32, i32)>, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in readfd
-            if !interface::fd_set_check_fd(readfds, fd) {continue}
+            if !readfds.is_set(fd) {continue}
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
@@ -1305,64 +1310,23 @@ impl Cage {
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() { 
                                         // we have a connecting domain socket, return as readable to be accepted
-                                        interface::fd_set_insert(new_readfds, fd);
+                                        new_readfds.set(fd);
                                         *retval += 1;
                                     }
                                 } else if sockhandle.state == ConnState::CONNECTED || newconnection {
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                     let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                                     if receivepipe.check_select_read() {
-                                        interface::fd_set_insert(new_readfds, fd);
+                                        new_readfds.set(fd);
                                         *retval += 1;
                                     }
                                 }
                             }
                             AF_INET | AF_INET6 => {
-                                if sockhandle.state == ConnState::LISTEN {
-                                    let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
-                                    let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
-                                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
-
-                                    if pendingvec.is_empty() {
-                                        //innersock unwrap ok because sockhandle is listening
-                                        let listeningsocket = match sockhandle.domain {
-                                            PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                            PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                            _ => panic!("Unknown domain in accepting socket"),
-                                        };
-                                        drop(sockhandle);
-                                        if let Ok(_) = listeningsocket.0 {
-                                            //save the new pending connection for accept to do something with it
-                                            pendingvec.push(listeningsocket);
-                                        } else {
-                                            // if it returned an error, then don't insert it into new_readfds
-                                            // of course unset the bit explicitly before we continue
-                                            interface::fd_set_remove(new_readfds, fd);
-                                            continue;
-                                        }
-                                    } // if we get here we have an existing connection
-                                    
-                                    //if we reach here there is a pending connection, either from a new or existing connection
-                                    interface::fd_set_insert(new_readfds, fd);
-                                    *retval += 1;
-                                    //sockhandle innersocket unwrap ok if INPROGRESS
-                                } else if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
-                                        newconnection = true;
-                                        interface::fd_set_insert(new_readfds, fd);
-                                        *retval += 1;
-                                } else {
-                                    if sockhandle.protocol == IPPROTO_UDP {
-                                        interface::fd_set_insert(new_readfds, fd);
-                                        *retval += 1;
-                                    } else {
-                                        drop(sockhandle);
-                                        drop(unlocked_fd);
-                                        if self._nonblock_peek_read(fd) {
-                                            interface::fd_set_insert(new_readfds, fd);
-                                            *retval += 1;
-                                        }
-                                    }
-                                }
+                                // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
+                                let rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                                kernel_inet_fds.set(rawfd);
+                                rawfd_lindfd_tuples.push((rawfd, fd));
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
                         }
@@ -1378,14 +1342,14 @@ impl Cage {
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_read() {
-                            interface::fd_set_insert(new_readfds, fd);
+                            new_readfds.set(fd);
                             *retval += 1;
                         }
                     }
 
                     //these file reads never block
                     _ => {
-                        interface::fd_set_insert(new_readfds, fd);
+                        new_readfds.set(fd);
                         *retval += 1;
                     }
                 }
@@ -1396,10 +1360,10 @@ impl Cage {
         return 0;
     }
 
-    fn select_writefds(&self, nfds: i32, writefds: *mut u8, new_writefds: *mut u8, retval: &mut i32) -> i32 {
+    fn select_writefds(&self, nfds: i32, writefds: &mut interface::FdSet, new_writefds: &mut interface::FdSet, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in writefds     
-            if !interface::fd_set_check_fd(writefds, fd) {continue}
+            if !writefds.is_set(fd) {continue}
 
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
@@ -1430,26 +1394,26 @@ impl Cage {
                         }
                         
                         //we always say sockets are writable? Even though this is not true
-                        interface::fd_set_insert(new_writefds, fd);
+                        new_writefds.set(fd);
                         *retval += 1;
                     }
 
                     //we always say streams are writable?
                     Stream(_) => {
-                        interface::fd_set_insert(new_writefds, fd);
+                        new_writefds.set(fd);
                         *retval += 1;
                     }
 
                     Pipe(pipefdobj) => {
                         if pipefdobj.pipe.check_select_write() {
-                            interface::fd_set_insert(new_writefds, fd);
+                            new_writefds.set(fd);
                             *retval += 1;
                         }
                     }
 
                     //these file writes never block
                     _ => {
-                        interface::fd_set_insert(new_writefds, fd);
+                        new_writefds.set(fd);
                         *retval += 1;
                     }
                 }

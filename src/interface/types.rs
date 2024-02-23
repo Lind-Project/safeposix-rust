@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
+use std::os::unix::io::{AsRawFd, RawFd};
+use std::mem;
 
 const SIZEOF_SOCKADDR: u32 = 16;
 
@@ -192,6 +194,7 @@ pub union Arg {
   pub dispatch_constsigsett: *const SigsetType,
   pub dispatch_structitimerval: *mut ITimerVal,
   pub dispatch_conststructitimerval: *const ITimerVal,
+  pub dispatch_fdset: *mut libc::fd_set,
 }
 
 
@@ -265,6 +268,14 @@ pub fn get_mutcbuf(union_argument: Arg) -> Result<*mut u8, i32> {
 // for the case where the buffer pointer being Null is normal
 pub fn get_mutcbuf_null(union_argument: Arg) -> Result<Option<*mut u8>, i32> {
     let data = unsafe{union_argument.dispatch_mutcbuf};
+    if !data.is_null() {
+        return Ok(Some(data));
+    }
+    return Ok(None);
+}
+
+pub fn get_fdset(union_argument: Arg) -> Result<Option<*mut libc::fd_set>, i32> {
+    let data: *mut libc::fd_set = unsafe{union_argument.dispatch_fdset};
     if !data.is_null() {
         return Ok(Some(data));
     }
@@ -412,47 +423,107 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
 }
 
-// turn on the fd bit in fd_set
-pub fn fd_set_insert(fd_set: *mut u8, fd: i32) {
-    let byte_offset = fd / 8;
-    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
-    let bit_offset = fd & 0b111;
-    unsafe{*byte_ptr |= 1 << bit_offset;}
-}
+pub struct FdSet(libc::fd_set);
 
-// turn off the fd bit in fd_set
-pub fn fd_set_remove(fd_set: *mut u8, fd: i32) {
-    let byte_offset = fd / 8;
-    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
-    let bit_offset = fd & 0b111;
-    unsafe{*byte_ptr &= !(1 << bit_offset);}
-}
+impl FdSet {
+    pub fn new() -> FdSet {
+        unsafe {
+            let mut raw_fd_set = std::mem::MaybeUninit::<libc::fd_set>::uninit();
+            libc::FD_ZERO(raw_fd_set.as_mut_ptr());
+            FdSet(raw_fd_set.assume_init())
+        }
+    }
 
-// return true if the bit for fd is set in fd_set, false otherwise
-pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
-    let byte_offset = fd / 8;
-    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
-    let bit_offset = fd & 0b111;
-    return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
-}
+    // copy a raw libc::fd_set into a FdSet object
+    pub fn copy_from_raw(&mut self, raw_fdset_ptr: *const libc::fd_set) {
+        unsafe {
+            std::ptr::copy_nonoverlapping(raw_fdset_ptr, &mut self.0 as *mut libc::fd_set, 1);
+        }
+    }
 
-pub fn fd_set_copy(src_set: *const u8, dst_set: *mut u8, nfds: i32) {
-    for fd in 0..nfds {
-        if interface::fd_set_check_fd(src_set, fd) {
-            interface::fd_set_insert(dst_set, fd);
-        } else {
-            interface::fd_set_remove(dst_set, fd);
+    // copy a FdSet object into a raw libc::fd_set
+    pub fn copy_to_raw(&self, raw_fdset_ptr: *mut libc::fd_set) {
+        unsafe {
+            std::ptr::copy_nonoverlapping(&self.0 as *const libc::fd_set, raw_fdset_ptr, 1);
+        }
+    }
+
+    // turn off the fd bit in fd_set
+    pub fn clear(&mut self, fd: RawFd) {
+        unsafe { libc::FD_CLR(fd, &mut self.0) }
+    }
+
+    // turn on the fd bit in fd_set
+    pub fn set(&mut self, fd: RawFd) {
+        unsafe { libc::FD_SET(fd, &mut self.0) }
+    }
+
+    // return true if the bit for fd is set, false otherwise
+    pub fn is_set(&mut self, fd: RawFd) -> bool {
+        unsafe { libc::FD_ISSET(fd, &mut self.0) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let fd_array: &[u8] = unsafe {
+            std::slice::from_raw_parts(&self.0 as *const _ as *const u8, mem::size_of::<libc::fd_set>())
+        };
+        fd_array.iter().all(|&byte| byte == 0)
+    }
+
+    // for each fd, if otherSet turned it on, then turn it on in self
+    pub fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: RawFd, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
+        for fd in 0..nfds {
+            if kernel_fds.is_set(fd) {
+                for (rawfd, lindfd) in rawfd_lindfd_tuples {
+                    if *rawfd == fd {
+                        self.set(*lindfd);
+                    }
+                }
+            }
         }
     }
 }
 
-pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
-    for fd in 0..highest_fd + 1 {
-        if fd_set_check_fd(fd_set, fd) {
-            return false;
-        }
+// this is for the dispacher to cast raw libc::fd_set into FdSet struct
+pub fn from_raw_fd_set_ptr(fdset_ptr: *mut libc::fd_set) -> *mut FdSet {
+    unsafe{fdset_ptr as *mut FdSet}
+}
+
+// for unwrapping in kernel_select
+fn to_fdset_ptr(opt: Option<&mut FdSet>) -> *mut libc::fd_set {
+    match opt {
+        None => std::ptr::null_mut(),
+        Some(&mut FdSet(ref mut raw_fd_set)) => raw_fd_set,
     }
-    return true;
+}
+// for unwrapping in kernel_select
+fn to_ptr<T>(opt: Option<&T>) -> *const T {
+    match opt {
+        None => std::ptr::null::<T>(),
+        Some(p) => p,
+    }
+}
+
+pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: Option<&mut FdSet>, errorfds: Option<&mut FdSet>, timeout: Option<&libc::timeval>) -> i32 {
+    // Call libc::select and store the result
+    let result = unsafe {
+        libc::select(
+            nfds,
+            to_fdset_ptr(readfds),
+            to_fdset_ptr(writefds),
+            to_fdset_ptr(errorfds),
+            to_ptr::<libc::timeval>(timeout) as *mut libc::timeval,
+        )
+    };
+
+    return result;
+}
+
+pub fn make_timeval(duration: std::time::Duration) -> libc::timeval {
+    libc::timeval {
+        tv_sec: duration.as_secs() as i64,
+        tv_usec: duration.subsec_micros() as i32,
+    }
 }
 
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {
