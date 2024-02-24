@@ -1209,12 +1209,12 @@ impl Cage {
         let new_writefds =  &mut interface::FdSet::new();
         loop { //we must block manually
             // 1. iterate thru readfds
-            if readfds.is_some() {
+            if let Some(readfds_ref) = readfds.as_ref() {
                 // Build the FdSet struct from libc::fd_set
                 // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
                 let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
                 let kernel_inet_fds = &mut interface::FdSet::new();
-                let res = self.select_readfds(nfds, readfds.unwrap(), new_readfds, kernel_inet_fds, &mut rawfd_lindfd_tuples, &mut retval);
+                let res = self.select_readfds(nfds, readfds_ref, new_readfds, kernel_inet_fds, &mut rawfd_lindfd_tuples, &mut retval);
                 if res != 0 {return res}
 
                 // do the kernel_select for inet
@@ -1274,7 +1274,7 @@ impl Cage {
         return retval;
     }
 
-    fn select_readfds(&self, nfds: i32, readfds: &mut interface::FdSet, new_readfds: &mut interface::FdSet, kernel_inet_fds: &mut interface::FdSet, rawfd_lindfd_tuples: &mut Vec<(i32, i32)>, retval: &mut i32) -> i32 {
+    fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, kernel_inet_fds: &mut interface::FdSet, rawfd_lindfd_tuples: &mut Vec<(i32, i32)>, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in readfd
             if !readfds.is_set(fd) {continue}
