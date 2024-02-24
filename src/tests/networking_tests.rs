@@ -694,19 +694,16 @@ pub mod net_tests {
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
 
         // allocate spaces for fd_set bitmaps
-        let mut input_chunk: [u8; 128] = [0; 128];
-        let mut output_chunk: [u8; 128] = [0; 128];
-
-        let inputs: *mut u8 = input_chunk.as_mut_ptr();
-        let outputs: *mut u8 = output_chunk.as_mut_ptr();
+        let inputs = &mut interface::FdSet::new();
+        let outputs = &mut interface::FdSet::new();
         
-        interface::fd_set_insert(inputs, serversockfd);
-        interface::fd_set_insert(inputs, filefd);
-        interface::fd_set_insert(outputs, filefd);
+        inputs.set(serversockfd);
+        inputs.set(filefd);
+        outputs.set(filefd);
 
-        assert_eq!(interface::fd_set_check_fd(inputs, serversockfd), true);
-        assert_eq!(interface::fd_set_check_fd(inputs, filefd), true);
-        assert_eq!(interface::fd_set_check_fd(outputs, filefd), true);
+        assert_eq!(inputs.is_set(serversockfd), true);
+        assert_eq!(inputs.is_set(filefd), true);
+        assert_eq!(outputs.is_set(filefd), true);
 
         assert_eq!(cage.fork_syscall(2), 0);
         assert_eq!(cage.fork_syscall(3), 0);
@@ -773,20 +770,20 @@ pub mod net_tests {
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
             for sock in 0..FD_SET_MAX_FD {
-                if !interface::fd_set_check_fd(inputs, sock) {continue;}
+                if !inputs.is_set(sock) {continue;}
 
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if sock == serversockfd {
                     let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
                     let sockfd = cage.accept_syscall(sock as i32, &mut sockgarbage); //really can only make sure that the fd is valid
                     assert!(sockfd > 0); 
-                    interface::fd_set_insert(inputs, sockfd);
-                    interface::fd_set_insert(outputs, sockfd);
+                    inputs.set(sockfd);
+                    outputs.set(sockfd)
                 } else if sock == filefd {
                     //Write to a file...
                     assert_eq!(cage.write_syscall(sock as i32, str2cbuf("test"), 4), 4);
                     assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
-                    interface::fd_set_remove(inputs, sock);
+                    inputs.clear(sock)
                 } else { //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
                     let mut buf = sizecbuf(4);
                     let mut recvresult :i32;
@@ -798,28 +795,28 @@ pub mod net_tests {
                     }
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
-                            interface::fd_set_insert(outputs, sock);
+                            outputs.set(sock);
                             continue;
                         }
                     } else {
                         assert_eq!(recvresult, 0);
                     }
                     assert_eq!(cage.close_syscall(sock as i32), 0);
-                    interface::fd_set_remove(inputs, sock);
+                    inputs.clear(sock);
                 }
             }
 
             //for sock in boutputs {
             for sock in 0..FD_SET_MAX_FD {
-                if !interface::fd_set_check_fd(outputs, sock) {continue;}
+                if !outputs.is_set(sock) {continue;}
                 if sock == filefd {
                     let mut buf = sizecbuf(4);
                     assert_eq!(cage.read_syscall(sock as i32, buf.as_mut_ptr(), 4), 4);
                     assert_eq!(cbuf2str(&buf), "test");
-                    interface::fd_set_remove(outputs, sock)
+                    outputs.clear(sock);
                 } else { //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
                     assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
-                    interface::fd_set_remove(outputs, sock)
+                    outputs.clear(sock);
                 }
             }
         }

@@ -2,6 +2,8 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
+use libc::write;
+
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
@@ -1188,7 +1190,7 @@ impl Cage {
         }
     }
 
-    pub fn select_syscall(&self, nfds: i32, readfds: Option<*mut libc::fd_set>, writefds: Option<*mut libc::fd_set>, exceptfds: Option<*mut libc::fd_set>, timeout: Option<interface::RustDuration>) -> i32 {
+    pub fn select_syscall(&self, nfds: i32, readfds: Option<&mut interface::FdSet>, writefds: Option<&mut interface::FdSet>, exceptfds: Option<&mut interface::FdSet>, timeout: Option<interface::RustDuration>) -> i32 {
 
         if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
@@ -1209,12 +1211,10 @@ impl Cage {
             // 1. iterate thru readfds
             if readfds.is_some() {
                 // Build the FdSet struct from libc::fd_set
-                let internal_readfds = &mut interface::FdSet::new();
-                internal_readfds.copy_from_raw(readfds.unwrap());
                 // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
                 let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
                 let kernel_inet_fds = &mut interface::FdSet::new();
-                let res = self.select_readfds(nfds, internal_readfds, new_readfds, kernel_inet_fds, &mut rawfd_lindfd_tuples, &mut retval);
+                let res = self.select_readfds(nfds, readfds.unwrap(), new_readfds, kernel_inet_fds, &mut rawfd_lindfd_tuples, &mut retval);
                 if res != 0 {return res}
 
                 // do the kernel_select for inet
@@ -1242,20 +1242,17 @@ impl Cage {
             
             // 2. iterate thru writefds
             if writefds.is_some() {
-                let internal_writefds = &mut interface::FdSet::new();
-                internal_writefds.copy_from_raw(writefds.unwrap());
-                let res = self.select_writefds(nfds, internal_writefds, new_writefds, &mut retval);
+                let res = self.select_writefds(nfds, writefds.unwrap(), new_writefds, &mut retval);
                 if res != 0 {return res}
             }
             
             // 3. iterate thru exceptfds
             // currently we don't really do select on execptfds, we just check if those fds are valid
             if exceptfds.is_some() {
-                let internal_exceptfds = &mut interface::FdSet::new();
-                internal_exceptfds.copy_from_raw(exceptfds.unwrap());
+                let unwrapped_exceptfds = exceptfds.unwrap();
                 for fd in 0..nfds {
                     // find the bit and see if it's on
-                    if !internal_exceptfds.is_set(fd) {continue}
+                    if !unwrapped_exceptfds.is_set(fd) {continue}
                     let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();
                     if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
@@ -1274,11 +1271,11 @@ impl Cage {
 
         // Now we copy our internal FdSet struct results back into the *mut libc::fd_set
         if readfds.is_some() {
-            new_readfds.copy_to_raw(readfds.unwrap())
+            readfds.unwrap().copy_from(&new_readfds);
         }
 
         if writefds.is_some() {
-            new_writefds.copy_to_raw(writefds.unwrap())
+            writefds.unwrap().copy_from(&new_readfds);
         }
         
         return retval;
@@ -1693,21 +1690,17 @@ impl Cage {
                 let fd = structpoll.fd;
                 let events = structpoll.events;
 
-                // allocate spaces for fd_set bitmaps
-                let mut reads_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-                let mut writes_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-                let mut errors_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-
-                let reads: *mut u8 = reads_chunk.as_mut_ptr();
-                let writes: *mut u8 = writes_chunk.as_mut_ptr();
-                let errors: *mut u8 = errors_chunk.as_mut_ptr();
+                // init FdSet structures
+                let reads = &mut interface::FdSet::new();
+                let writes = &mut interface::FdSet::new();
+                let errors = &mut interface::FdSet::new();
 
                 //read
-                if events & POLLIN > 0 {interface::fd_set_insert(reads, fd)}
+                if events & POLLIN > 0 {reads.set(fd)}
                 //write
-                if events & POLLOUT > 0 {interface::fd_set_insert(writes, fd)}
+                if events & POLLOUT > 0 {writes.set(fd)}
                 //err
-                if events & POLLERR > 0 {interface::fd_set_insert(errors, fd)}
+                if events & POLLERR > 0 {errors.set(fd)}
 
                 let mut mask: i16 = 0;
 
@@ -1715,9 +1708,9 @@ impl Cage {
                 // NOTE that the nfds argument is highest fd + 1
                 let selectret = Self::select_syscall(&self, fd + 1, Some(reads), Some(writes), Some(errors), Some(interface::RustDuration::ZERO));
                 if selectret > 0 {
-                    mask += if !interface::fd_set_is_empty(reads, fd) {POLLIN} else {0};
-                    mask += if !interface::fd_set_is_empty(writes, fd) {POLLOUT} else {0};
-                    mask += if !interface::fd_set_is_empty(errors, fd) {POLLERR} else {0};
+                    mask += if !reads.is_empty() {POLLIN} else {0};
+                    mask += if !writes.is_empty() {POLLOUT} else {0};
+                    mask += if !errors.is_empty() {POLLERR} else {0};
                     return_code += 1;
                 } else if selectret < 0 { return selectret; }
                 structpoll.revents = mask;

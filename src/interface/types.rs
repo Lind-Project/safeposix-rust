@@ -274,10 +274,11 @@ pub fn get_mutcbuf_null(union_argument: Arg) -> Result<Option<*mut u8>, i32> {
     return Ok(None);
 }
 
-pub fn get_fdset(union_argument: Arg) -> Result<Option<*mut libc::fd_set>, i32> {
+pub fn get_fdset(union_argument: Arg) -> Result<Option<&'static mut FdSet>, i32> {
     let data: *mut libc::fd_set = unsafe{union_argument.dispatch_fdset};
     if !data.is_null() {
-        return Ok(Some(data));
+        let internal_fds: &mut FdSet = &mut FdSet::new_from_ptr(data);
+        return Ok(Some(internal_fds));
     }
     return Ok(None);
 }
@@ -434,17 +435,16 @@ impl FdSet {
         }
     }
 
-    // copy a raw libc::fd_set into a FdSet object
-    pub fn copy_from_raw(&mut self, raw_fdset_ptr: *const libc::fd_set) {
+    pub fn new_from_ptr(raw_fdset_ptr: *const libc::fd_set) -> FdSet {
         unsafe {
-            std::ptr::copy_nonoverlapping(raw_fdset_ptr, &mut self.0 as *mut libc::fd_set, 1);
+            FdSet(*raw_fdset_ptr)
         }
     }
 
-    // copy a FdSet object into a raw libc::fd_set
-    pub fn copy_to_raw(&self, raw_fdset_ptr: *mut libc::fd_set) {
+    // copy the src FdSet into self
+    pub fn copy_from(&mut self, src_fds: &FdSet) {
         unsafe {
-            std::ptr::copy_nonoverlapping(&self.0 as *const libc::fd_set, raw_fdset_ptr, 1);
+            std::ptr::copy_nonoverlapping(&src_fds.0 as *const libc::fd_set, &mut self.0 as *mut libc::fd_set, 1);
         }
     }
 
