@@ -1222,6 +1222,7 @@ impl Cage {
                     let kernel_ret;
                     // note that this select call always have timeout = 0, so it doesn't block
                     kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
+                    println!("kernel select returns: {}", kernel_ret);
 
                     if kernel_ret < 0 {return kernel_ret} 
                     if kernel_ret > 0 {
