@@ -460,7 +460,7 @@ impl FdSet {
 
     // return true if the bit for fd is set, false otherwise
     pub fn is_set(&self, fd: RawFd) -> bool {
-        unsafe { libc::FD_ISSET(fd, &mut self.0) }
+        unsafe { libc::FD_ISSET(fd, &self.0) }
     }
 
     pub fn is_empty(&self) -> bool {
