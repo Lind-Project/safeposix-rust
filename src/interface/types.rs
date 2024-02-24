@@ -470,8 +470,8 @@ impl FdSet {
         fd_array.iter().all(|&byte| byte == 0)
     }
 
-    // for each fd, if otherSet turned it on, then turn it on in self
-    pub fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: RawFd, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
+    // for each fd, if kernel_fds turned it on, then self will turn the corresponding tranlated fd on
+    pub fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: i32, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
         for fd in 0..nfds {
             if kernel_fds.is_set(fd) {
                 for (rawfd, lindfd) in rawfd_lindfd_tuples {
