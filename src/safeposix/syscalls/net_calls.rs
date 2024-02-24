@@ -1219,7 +1219,7 @@ impl Cage {
 
                 // do the kernel_select for inet
                 if !kernel_inet_fds.is_empty() {
-                    let mut kernel_ret;
+                    let kernel_ret;
                     // note that this select call always have timeout = 0, so it doesn't block
                     kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
 
