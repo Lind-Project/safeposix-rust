@@ -1268,7 +1268,7 @@ impl Cage {
         }
 
         if writefds.is_some() {
-            writefds.unwrap().copy_from(&new_readfds);
+            writefds.unwrap().copy_from(&new_writefds);
         }
         
         return retval;
