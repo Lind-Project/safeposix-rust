@@ -1219,7 +1219,7 @@ impl Cage {
 
                 // do the kernel_select for inet
                 if !kernel_inet_fds.is_empty() {
-                    let mut kernel_ret = 0;
+                    let mut kernel_ret;
                     // note that this select call always have timeout = 0, so it doesn't block
                     kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
 
@@ -1234,23 +1234,23 @@ impl Cage {
             }
             
             // 2. iterate thru writefds
-            if writefds.is_some() {
-                let res = self.select_writefds(nfds, writefds.unwrap(), new_writefds, &mut retval);
+            if let Some(writefds_ref) = writefds.as_ref() {
+                let res = self.select_writefds(nfds, writefds_ref, new_writefds, &mut retval);
                 if res != 0 {return res}
             }
             
             // 3. iterate thru exceptfds
             // currently we don't really do select on execptfds, we just check if those fds are valid
-            if exceptfds.is_some() {
-                let unwrapped_exceptfds = exceptfds.unwrap();
+            if let Some(exceptfds_ref) = exceptfds.as_ref() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
-                    if !unwrapped_exceptfds.is_set(fd) {continue}
+                    if !exceptfds_ref.is_set(fd) { continue; }
                     let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();
-                    if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
+                    if unlocked_fd.is_none() { 
+                        return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); 
+                    }
                 }
-                
             }
 
             if retval != 0 || interface::readtimer(start_time) > end_time {
@@ -1350,7 +1350,7 @@ impl Cage {
         return 0;
     }
 
-    fn select_writefds(&self, nfds: i32, writefds: &mut interface::FdSet, new_writefds: &mut interface::FdSet, retval: &mut i32) -> i32 {
+    fn select_writefds(&self, nfds: i32, writefds: & interface::FdSet, new_writefds: &mut interface::FdSet, retval: &mut i32) -> i32 {
         for fd in 0..nfds {
             // check if current i is in writefds     
             if !writefds.is_set(fd) {continue}
