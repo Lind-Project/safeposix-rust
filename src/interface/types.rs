@@ -437,7 +437,7 @@ impl FdSet {
 
     pub fn new_from_ptr(raw_fdset_ptr: *const libc::fd_set) -> &'static mut FdSet {
         unsafe {
-            &mut FdSet(*raw_fdset_ptr)
+            &mut *(raw_fdset_ptr as *mut FdSet)
         }
     }
 
