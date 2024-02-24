@@ -484,11 +484,6 @@ impl FdSet {
     }
 }
 
-// this is for the dispacher to cast raw libc::fd_set into FdSet struct
-pub fn from_raw_fd_set_ptr(fdset_ptr: *mut libc::fd_set) -> *mut FdSet {
-    unsafe{fdset_ptr as *mut FdSet}
-}
-
 // for unwrapping in kernel_select
 fn to_fdset_ptr(opt: Option<&mut FdSet>) -> *mut libc::fd_set {
     match opt {
