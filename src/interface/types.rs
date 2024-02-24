@@ -277,7 +277,7 @@ pub fn get_mutcbuf_null(union_argument: Arg) -> Result<Option<*mut u8>, i32> {
 pub fn get_fdset(union_argument: Arg) -> Result<Option<&'static mut FdSet>, i32> {
     let data: *mut libc::fd_set = unsafe{union_argument.dispatch_fdset};
     if !data.is_null() {
-        let internal_fds: &mut FdSet = &mut FdSet::new_from_ptr(data);
+        let internal_fds: &mut FdSet = FdSet::new_from_ptr(data);
         return Ok(Some(internal_fds));
     }
     return Ok(None);
@@ -435,9 +435,9 @@ impl FdSet {
         }
     }
 
-    pub fn new_from_ptr(raw_fdset_ptr: *const libc::fd_set) -> FdSet {
+    pub fn new_from_ptr(raw_fdset_ptr: *const libc::fd_set) -> &'static mut FdSet {
         unsafe {
-            FdSet(*raw_fdset_ptr)
+            &mut FdSet(*raw_fdset_ptr)
         }
     }
 
@@ -459,7 +459,7 @@ impl FdSet {
     }
 
     // return true if the bit for fd is set, false otherwise
-    pub fn is_set(&mut self, fd: RawFd) -> bool {
+    pub fn is_set(&self, fd: RawFd) -> bool {
         unsafe { libc::FD_ISSET(fd, &mut self.0) }
     }
 
@@ -504,26 +504,25 @@ fn to_ptr<T>(opt: Option<&T>) -> *const T {
     }
 }
 
-pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: Option<&mut FdSet>, errorfds: Option<&mut FdSet>, timeout: Option<&libc::timeval>) -> i32 {
+pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: Option<&mut FdSet>, errorfds: Option<&mut FdSet>) -> i32 {
     // Call libc::select and store the result
     let result = unsafe {
+        // Create a timeval struct with zero timeout
+        let mut timeout = libc::timeval {
+            tv_sec: 0,  // 0 seconds
+            tv_usec: 0, // 0 microseconds
+        };
+
         libc::select(
             nfds,
             to_fdset_ptr(readfds),
             to_fdset_ptr(writefds),
             to_fdset_ptr(errorfds),
-            to_ptr::<libc::timeval>(timeout) as *mut libc::timeval,
+            &mut timeout as *mut libc::timeval,
         )
     };
 
     return result;
-}
-
-pub fn make_timeval(duration: std::time::Duration) -> libc::timeval {
-    libc::timeval {
-        tv_sec: duration.as_secs() as i64,
-        tv_usec: duration.subsec_micros() as i32,
-    }
 }
 
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {

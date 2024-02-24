@@ -1220,15 +1220,8 @@ impl Cage {
                 // do the kernel_select for inet
                 if !kernel_inet_fds.is_empty() {
                     let mut kernel_ret = 0;
-                    match timeout {
-                        Some(duration) => {
-                            let interval = interface::make_timeval(timeout.unwrap());
-                            kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None, Some(&interval));
-                        },
-                        None => {
-                            kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None, None);
-                        }
-                    }
+                    // note that this select call always have timeout = 0, so it doesn't block
+                    kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
 
                     if kernel_ret < 0 {return kernel_ret} 
                     if kernel_ret > 0 {
