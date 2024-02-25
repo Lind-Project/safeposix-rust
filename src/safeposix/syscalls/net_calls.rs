@@ -1210,38 +1210,8 @@ impl Cage {
         loop { //we must block manually
             // 1. iterate thru readfds
             if let Some(readfds_ref) = readfds.as_ref() {
-                // Build the FdSet struct from libc::fd_set
-                // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
-                let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
-                let kernel_inet_fds = &mut interface::FdSet::new();
-                let res = self.select_readfds(nfds, readfds_ref, new_readfds, kernel_inet_fds, &mut rawfd_lindfd_tuples, &mut retval);
+                let res = self.select_readfds(nfds, readfds_ref, new_readfds, &mut retval);
                 if res != 0 {return res}
-
-                // do the kernel_select for inet
-                if !kernel_inet_fds.is_empty() {
-                    let kernel_ret;
-                    // note that this select call always have timeout = 0, so it doesn't block
-                    
-                    kernel_ret = interface::kernel_select(1024, Some(kernel_inet_fds), None, None);
-                    println!("kernel_ret: {}", kernel_ret);
-                    if kernel_ret < 0 {return kernel_ret} 
-                    if kernel_ret > 0 {
-                        // increment retval of our select
-                        retval += kernel_ret;
-                        // translate the kernel checked fds to lindfds, and add to our new_writefds
-                        new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, 20, &rawfd_lindfd_tuples);
-                        for i in 0..1024 {
-                            if kernel_inet_fds.is_set(i) {
-                                println!("kernel_fds {} is set", i);
-                            }
-                        }
-                        for i in 0..1024 {
-                            if new_readfds.is_set(i) {
-                                println!("new_readfds {} is set", i);
-                            }
-                        }
-                    }
-                }
             }
             
             // 2. iterate thru writefds
@@ -1285,7 +1255,11 @@ impl Cage {
         return retval;
     }
 
-    fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, kernel_inet_fds: &mut interface::FdSet, rawfd_lindfd_tuples: &mut Vec<(i32, i32)>, retval: &mut i32) -> i32 {
+    fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, retval: &mut i32) -> i32 {
+        // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
+        let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
+        let kernel_inet_fds = &mut interface::FdSet::new();
+
         for fd in 0..nfds {
             // check if current i is in readfd
             if !readfds.is_set(fd) {continue}
@@ -1358,6 +1332,22 @@ impl Cage {
                 return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
             }
         }
+
+        // do the kernel_select for inet sockets
+        if !kernel_inet_fds.is_empty() {
+            let kernel_ret;
+            // note that this select call always have timeout = 0, so it doesn't block
+            
+            kernel_ret = interface::kernel_select(1024, Some(kernel_inet_fds), None, None);
+            if kernel_ret < 0 {return kernel_ret} 
+            if kernel_ret > 0 {
+                // increment retval of our select
+                *retval += kernel_ret;
+                // translate the kernel checked fds to lindfds, and add to our new_writefds
+                new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, 20, &rawfd_lindfd_tuples);
+            }
+        }
+
         return 0;
     }
 
