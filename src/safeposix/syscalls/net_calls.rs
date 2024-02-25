@@ -1223,7 +1223,7 @@ impl Cage {
                     // note that this select call always have timeout = 0, so it doesn't block
                     
                     kernel_ret = interface::kernel_select(1024, Some(kernel_inet_fds), None, None);
-                    println!("kernel_ret: {]", kernel_ret);
+                    println!("kernel_ret: {}", kernel_ret);
                     if kernel_ret < 0 {return kernel_ret} 
                     if kernel_ret > 0 {
                         // increment retval of our select
