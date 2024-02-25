@@ -2,7 +2,7 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
-use libc::{printf, write};
+use libc::write;
 
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
@@ -1221,27 +1221,14 @@ impl Cage {
                 if !kernel_inet_fds.is_empty() {
                     let kernel_ret;
                     // note that this select call always have timeout = 0, so it doesn't block
-                    kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
-                    println!("kernel select returns: {}", kernel_ret);
+                    
+                    kernel_ret = interface::kernel_select(1024, Some(kernel_inet_fds), None, None);
                     if kernel_ret < 0 {return kernel_ret} 
                     if kernel_ret > 0 {
                         // increment retval of our select
                         retval += kernel_ret;
                         // translate the kernel checked fds to lindfds, and add to our new_writefds
                         new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, nfds, &rawfd_lindfd_tuples);
-                    }
-
-                    // DEBUGGING: see which sys fd is actually ready
-                    let all_fds = &mut interface::FdSet::new();
-                    for i in 0..1024 {
-                        all_fds.set(i);
-                    }
-                    let kernel_ret2 = interface::kernel_select(nfds, Some(all_fds), None, None);
-                    println!("kernel select on ALL_FDS returns: {}", kernel_ret2);
-                    for i in 0..1024 {
-                        if all_fds.is_set(i) {
-                            println!("kernel says {} is ready", i);
-                        }
                     }
                 }
             }
@@ -1266,7 +1253,6 @@ impl Cage {
                 }
             }
 
-            println!("select finished another iteration, cur time: {:?}, cur ret: {}", interface::readtimer(start_time), retval);
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
@@ -1329,8 +1315,6 @@ impl Cage {
                             AF_INET | AF_INET6 => {
                                 // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
                                 let rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                                println!("adding {} into inet_fds", rawfd);
-                                println!("adding pair {} {}", rawfd, fd);
                                 kernel_inet_fds.set(rawfd);
                                 rawfd_lindfd_tuples.push((rawfd, fd));
                             },
