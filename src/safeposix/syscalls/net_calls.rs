@@ -2,7 +2,7 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
-use libc::write;
+use libc::{printf, write};
 
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
@@ -1253,6 +1253,7 @@ impl Cage {
                 }
             }
 
+            print!("select finished another iteration, cur time: {}, cur ret: {}", start_time, retval);
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
@@ -1316,6 +1317,7 @@ impl Cage {
                                 // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
                                 let rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                                 println!("adding {} into inet_fds", rawfd);
+                                println!("adding {} ")
                                 kernel_inet_fds.set(rawfd);
                                 rawfd_lindfd_tuples.push((rawfd, fd));
                             },
