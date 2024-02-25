@@ -1236,7 +1236,7 @@ impl Cage {
                     for i in 0..1024 {
                         all_fds.set(i);
                     }
-                    let kernel_ret2 = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
+                    let kernel_ret2 = interface::kernel_select(nfds, Some(all_fds), None, None);
                     println!("kernel select on ALL_FDS returns: {}", kernel_ret2);
                     for i in 0..1024 {
                         if all_fds.is_set(i) {
