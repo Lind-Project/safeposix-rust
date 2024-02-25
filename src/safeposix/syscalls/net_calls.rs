@@ -1230,6 +1230,11 @@ impl Cage {
                         retval += kernel_ret;
                         // translate the kernel checked fds to lindfds, and add to our new_writefds
                         new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, nfds, &rawfd_lindfd_tuples);
+                        for i in 0..1024 {
+                            if new_readfds.is_set(i) {
+                                println!("new_readfds {} is set", i);
+                            }
+                        }
                     }
                 }
             }
