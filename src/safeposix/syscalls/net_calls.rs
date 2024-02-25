@@ -1230,6 +1230,19 @@ impl Cage {
                         // translate the kernel checked fds to lindfds, and add to our new_writefds
                         new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, nfds, &rawfd_lindfd_tuples);
                     }
+
+                    // DEBUGGING: see which sys fd is actually ready
+                    let all_fds = &mut interface::FdSet::new();
+                    for i in 0..1024 {
+                        all_fds.set(i);
+                    }
+                    let kernel_ret2 = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
+                    println!("kernel select on ALL_FDS returns: {}", kernel_ret2);
+                    for i in 0..1024 {
+                        if all_fds.is_set(i) {
+                            println!("kernel says {} is ready", i);
+                        }
+                    }
                 }
             }
             
