@@ -491,13 +491,6 @@ fn to_fdset_ptr(opt: Option<&mut FdSet>) -> *mut libc::fd_set {
         Some(&mut FdSet(ref mut raw_fd_set)) => raw_fd_set,
     }
 }
-// for unwrapping in kernel_select
-fn to_ptr<T>(opt: Option<&T>) -> *const T {
-    match opt {
-        None => std::ptr::null::<T>(),
-        Some(p) => p,
-    }
-}
 
 pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: Option<&mut FdSet>, errorfds: Option<&mut FdSet>) -> i32 {
     // Call libc::select and store the result

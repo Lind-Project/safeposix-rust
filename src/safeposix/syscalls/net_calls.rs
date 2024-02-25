@@ -1223,7 +1223,6 @@ impl Cage {
                     // note that this select call always have timeout = 0, so it doesn't block
                     kernel_ret = interface::kernel_select(nfds, Some(kernel_inet_fds), None, None);
                     println!("kernel select returns: {}", kernel_ret);
-
                     if kernel_ret < 0 {return kernel_ret} 
                     if kernel_ret > 0 {
                         // increment retval of our select
@@ -1316,6 +1315,7 @@ impl Cage {
                             AF_INET | AF_INET6 => {
                                 // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
                                 let rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                                println!("adding {} into inet_fds", rawfd);
                                 kernel_inet_fds.set(rawfd);
                                 rawfd_lindfd_tuples.push((rawfd, fd));
                             },
