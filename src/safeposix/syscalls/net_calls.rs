@@ -1259,6 +1259,7 @@ impl Cage {
         // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
         let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
         let kernel_inet_fds = &mut interface::FdSet::new();
+        let mut highest_raw_fd = 0;
 
         for fd in 0..nfds {
             // check if current i is in readfd
@@ -1302,6 +1303,9 @@ impl Cage {
                                 let rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                                 kernel_inet_fds.set(rawfd);
                                 rawfd_lindfd_tuples.push((rawfd, fd));
+                                if rawfd > highest_raw_fd {
+                                    highest_raw_fd = rawfd;
+                                }
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
                         }
@@ -1338,13 +1342,13 @@ impl Cage {
             let kernel_ret;
             // note that this select call always have timeout = 0, so it doesn't block
             
-            kernel_ret = interface::kernel_select(1024, Some(kernel_inet_fds), None, None);
+            kernel_ret = interface::kernel_select(highest_raw_fd + 1, Some(kernel_inet_fds), None, None);
             if kernel_ret < 0 {return kernel_ret} 
             if kernel_ret > 0 {
                 // increment retval of our select
                 *retval += kernel_ret;
                 // translate the kernel checked fds to lindfds, and add to our new_writefds
-                new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, 20, &rawfd_lindfd_tuples);
+                new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, highest_raw_fd + 1, &rawfd_lindfd_tuples);
             }
         }
 
