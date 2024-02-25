@@ -1229,7 +1229,7 @@ impl Cage {
                         // increment retval of our select
                         retval += kernel_ret;
                         // translate the kernel checked fds to lindfds, and add to our new_writefds
-                        new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, 1024, &rawfd_lindfd_tuples);
+                        new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, nfds, &rawfd_lindfd_tuples);
                     }
                 }
             }
