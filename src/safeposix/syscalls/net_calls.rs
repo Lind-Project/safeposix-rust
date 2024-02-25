@@ -1231,6 +1231,11 @@ impl Cage {
                         // translate the kernel checked fds to lindfds, and add to our new_writefds
                         new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, 10, &rawfd_lindfd_tuples);
                         for i in 0..1024 {
+                            if kernel_inet_fds.is_set(i) {
+                                println!("kernel_fds {} is set", i);
+                            }
+                        }
+                        for i in 0..1024 {
                             if new_readfds.is_set(i) {
                                 println!("new_readfds {} is set", i);
                             }
