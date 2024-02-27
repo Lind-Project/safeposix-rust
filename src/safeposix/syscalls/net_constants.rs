@@ -8,6 +8,8 @@ use crate::interface;
 pub const DEFAULT_HOSTNAME: &str = "Lind";
 pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
 
+pub const UDSOCK_CAPACITY: usize = 212992;
+
 // Define constants using static or const
 // Imported into net_calls file
 
@@ -381,8 +383,10 @@ pub const EPOLL_CTL_ADD: i32 = 1;
 pub const EPOLL_CTL_DEL: i32 = 2;
 pub const EPOLL_CTL_MOD: i32 = 3;
 
+pub const FD_SET_MAX_FD : i32 = 1024;
+
 //for internal use
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ConnState {
-    NOTCONNECTED, CONNECTED, LISTEN, INPROGRESS
+    NOTCONNECTED, CONNECTED, CONNRDONLY, CONNWRONLY, LISTEN, INPROGRESS
 }

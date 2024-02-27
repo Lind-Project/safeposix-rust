@@ -6,35 +6,30 @@ use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::*;
+use crate::safeposix::cage::Errno::EINVAL;
 use super::fs_constants::*;
+use super::sys_constants::*;
 
 impl Cage {
 
     //------------------------------------OPEN SYSCALL------------------------------------
+
+    fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc{
+        //insert file descriptor into self.filedescriptortableable of the cage
+        let position = if 0 != flags & O_APPEND {size} else {0};
+        let allowmask = O_RDWRFLAGS | O_CLOEXEC;
+        FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}
+    }
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         //Check that path is not empty
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
         let truepath = normpath(convpath(path), self);
 
-        let mut vacantentry = None;
-        for fd in 0..MAXFD{
-            match self.filedescriptortable.entry(fd) {
-                interface::RustHashEntry::Occupied(_) => {}
-                interface::RustHashEntry::Vacant(vacant) => {
-                    vacantentry = Some(vacant);
-                    break;
-                }
-            };
-        };
-
-        if let None = vacantentry {
-            return syscall_error(Errno::ENFILE, "open_syscall", "no available file descriptor number could be found");
-        }
-
-        let entry = vacantentry.unwrap();
-
-        let key = *entry.key();
+        
+        let (fd, guardopt) = self.get_next_fd(None);
+        if fd < 0 { return fd }
+        let fdoption = &mut *guardopt.unwrap();
 
         match metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
@@ -66,7 +61,7 @@ impl Cage {
                 let time = interface::timestamp(); //We do a real timestamp now
                 let newinode = Inode::File(GenericInode {
                     size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-                    mode: effective_mode, linkcount: 1, refcount: 0,
+                    mode: effective_mode, linkcount: 1, refcount: 1,
                     atime: time, ctime: time, mtime: time,
                 });
 
@@ -74,10 +69,20 @@ impl Cage {
                 if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
                     ind.filename_to_inode_dict.insert(filename, newinodenum);
                     ind.linkcount += 1;
-                } //insert a reference to the file in the parent directory
+                    //insert a reference to the file in the parent directory
+                } else {
+                    return syscall_error(Errno::ENOTDIR, "open", "tried to create a file as a child of something that isn't a directory");
+                }
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
+
+                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum){
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
+                    vac.insert(interface::openfile(sysfilename, true).unwrap());
+                }
+                
+                let _insertval = fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
             }
 
             //If the file exists (we don't need to look at parent here)
@@ -85,61 +90,48 @@ impl Cage {
                 if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
                     return syscall_error(Errno::EEXIST, "open", "file already exists and O_CREAT and O_EXCL were used");
                 }
+                let size;
 
-                if O_TRUNC == (flags & O_TRUNC) {
-                    // We only do this to regular files, otherwiese O_TRUNC is undefined
-                    if let Inode::File(ref mut g) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
-                        //close the file object if another cage has it open
-                        let entry = FILEOBJECTTABLE.entry(inodenum);
-                        if let interface::RustHashEntry::Occupied(occ) = &entry {
-                            occ.get().close().unwrap();
+                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                match *inodeobj {
+                    Inode::File(ref mut f) => {
+                        if O_TRUNC == (flags & O_TRUNC) {
+                        // We only do this to regular files, otherwise O_TRUNC is undefined
+                            //close the file object if another cage has it open
+                            let entry = FILEOBJECTTABLE.entry(inodenum);
+                            if let interface::RustHashEntry::Occupied(occ) = &entry {
+                                occ.get().close().unwrap();
+                            }
+                            // resize it to 0
+                            f.size = 0;
+    
+                            //remove the previous file and add a new one of 0 length
+                            if let interface::RustHashEntry::Occupied(occ) = entry {
+                                occ.remove_entry();
+                            }
+    
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename.clone()).unwrap();
                         }
-                        // resize it to 0
-                        g.size = 0;
-
-                        //remove the previous file and add a new one of 0 length
-                        if let interface::RustHashEntry::Occupied(occ) = entry {
-                            occ.remove_entry();
+                        
+                        if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            vac.insert(interface::openfile(sysfilename, true).unwrap());
                         }
-
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                        interface::removefile(sysfilename.clone()).unwrap();
-                    }   
+                        
+                        size = f.size;
+                        f.refcount += 1;
+                    }
+                    Inode::Dir(ref mut f) => {size = f.size; f.refcount += 1;}
+                    Inode::CharDev(ref mut f) => {size = f.size; f.refcount += 1;}
+                    Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
                 }
+
+                let _insertval = fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
             }
         }
 
-        //We redo our metawalk in case of O_CREAT, but this is somewhat inefficient
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
-            let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            let mode;
-            let size;
-
-            //increment number of open handles to the file, retrieve other data from inode
-            match *inodeobj {
-                Inode::File(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Dir(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::CharDev(ref mut f) => {size = f.size; mode = f.mode; f.refcount += 1;}
-                Inode::Socket(_) => { return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket"); }
-            }
-
-            //If the file is a regular file, open the file object
-            if is_reg(mode) {
-                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    vac.insert(interface::openfile(sysfilename, true).unwrap());
-                }
-            }
-
-            //insert file descriptor into self.filedescriptortableable of the cage
-            let position = if 0 != flags & O_APPEND {size} else {0};
-            let allowmask = O_RDWRFLAGS | O_CLOEXEC;
-            let newfd = File(FileDesc {position: position, inode: inodenum, flags: flags & allowmask, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
-            let wrappedfd = interface::RustRfc::new(interface::RustLock::new(newfd));
-            entry.insert(wrappedfd);
-        } else {panic!("Inode not created for some reason");}
-
-        key //open returns the opened file descriptor
+        fd //open returns the opened file descriptor
     }
 
     //------------------MKDIR SYSCALL------------------
@@ -267,76 +259,65 @@ impl Cage {
                 match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
-                        drop(inodeobj);
-
-                        match metawalkandparent(truenewpath.as_path()) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
-
-                            (None, Some(pardirinode)) => {
-                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
-                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
-                                    parentdirinodeobj.linkcount += 1;
-                                    drop(parentinodeobj);
-                                    log_metadata(&FS_METADATA, pardirinode);
-                                    log_metadata(&FS_METADATA, inodenum);
-                                } //insert a reference to the inode in the parent directory
-                                0 //link has succeeded
-                            }
-
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
-                        }
                     }
 
                     Inode::CharDev(ref mut chardev_inode_obj) => {
                         chardev_inode_obj.linkcount += 1; //add link to inode
-                        drop(inodeobj);
-
-                        match metawalkandparent(truenewpath.as_path()) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
-
-                            (None, Some(pardirinode)) => {
-                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
-                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
-                                    parentdirinodeobj.linkcount += 1;
-                                    drop(parentinodeobj);
-                                    log_metadata(&FS_METADATA, pardirinode);
-                                    log_metadata(&FS_METADATA, inodenum);
-                                } //insert a reference to the inode in the parent directory
-                                0 //link has succeeded
-                            }
-
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
-                        }
                     }
 
 
                     Inode::Socket(ref mut socket_inode_obj) => {
                         socket_inode_obj.linkcount += 1; //add link to inode
-                        drop(inodeobj);
-
-                        match metawalkandparent(truenewpath.as_path()) {
-                            (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
-
-                            (None, Some(pardirinode)) => {
-                                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
-                                if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
-                                    parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
-                                    parentdirinodeobj.linkcount += 1;
-                                    drop(parentinodeobj);
-                                    let newsockaddr = NET_METADATA.domain_socket_table.get(&trueoldpath).unwrap().clone();
-                                    NET_METADATA.domain_socket_table.insert(truenewpath, newsockaddr);
-                                } //insert a reference to the inode in the parent directory
-                                0 //link has succeeded
-                            }
-
-                            (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
-                        }
                     }
 
-                    Inode::Dir(_) => {syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
+                    Inode::Dir(_) => {return syscall_error(Errno::EPERM, "link", "oldpath is a directory")}
                 }
+
+                drop(inodeobj);
+
+                let retval = match metawalkandparent(truenewpath.as_path()) {
+                    (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
+
+                    (None, Some(pardirinode)) => {
+                        let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
+                        //insert a reference to the inode in the parent directory
+                        if let Inode::Dir(ref mut parentdirinodeobj) = *parentinodeobj {
+                            parentdirinodeobj.filename_to_inode_dict.insert(filename, inodenum);
+                            parentdirinodeobj.linkcount += 1;
+                            drop(parentinodeobj);
+                            log_metadata(&FS_METADATA, pardirinode);
+                            log_metadata(&FS_METADATA, inodenum);
+                        } else {
+                            panic!("Parent directory was not a directory!");
+                        }
+                        0 //link has succeeded
+                    }
+
+                    (Some(_), ..) => {syscall_error(Errno::EEXIST, "link", "newpath already exists")}
+                };
+
+                if retval != 0 {
+                    //reduce the linkcount to its previous value if linking failed
+                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::CharDev(ref mut chardev_inode_obj) => {
+                            chardev_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::Socket(ref mut socket_inode_obj) => {
+                            socket_inode_obj.linkcount -= 1;
+                        }
+
+                        Inode::Dir(_) => {panic!("Known non-directory file has been replaced with a directory!");}
+                    }
+                }
+
+                return retval;
             }
         }
     }
@@ -362,24 +343,17 @@ impl Cage {
             (Some(inodenum), Some(parentinodenum)) => {
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                let (currefcount, curlinkcount, has_fobj, has_domsock) = match *inodeobj {
-                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, false)},
-                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
-                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
+                let (currefcount, curlinkcount, has_fobj, log) = match *inodeobj {
+                    Inode::File(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, true, true)},
+                    Inode::CharDev(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, true)},
+                    Inode::Socket(ref mut f) => {f.linkcount -= 1; (f.refcount, f.linkcount, false, false)},
                     Inode::Dir(_) => {return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");},
                 }; //count current number of links and references
 
                 drop(inodeobj);
 
-                let mut parentinodeobj = FS_METADATA.inodetable.get_mut(&parentinodenum).unwrap();
-                let mut directory_parent_inode_obj = if let Inode::Dir(ref mut x) = *parentinodeobj {x} else {
-                    panic!("File was a child of something other than a directory????");
-                };
-                directory_parent_inode_obj.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()); //for now we assume this is sane, but maybe this should be checked later
-                directory_parent_inode_obj.linkcount -= 1;
-                //remove reference to file in parent directory
-
-                drop(parentinodeobj);
+                let removal_result = Self::remove_from_parent_dir(parentinodenum, &truepath);
+                if removal_result != 0 {return removal_result;}
 
                 if curlinkcount == 0 {
                     if currefcount == 0  {
@@ -390,20 +364,18 @@ impl Cage {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename).unwrap();
                         }
-                        if has_domsock {
-                            NET_METADATA.domain_socket_table.remove(&truepath);
-                        }
 
                     } //we don't need a separate unlinked flag, we can just check that refcount is 0
                 }
-                // we don't log domain sockets
-                if !has_domsock {
+                NET_METADATA.domsock_paths.remove(&truepath);
+
+                // the log boolean will be false if we are workign on a domain socket
+                if log {
                     log_metadata(&FS_METADATA, parentinodenum);
                     log_metadata(&FS_METADATA, inodenum);
                 }
                 0 //unlink has succeeded
             }
-
         }
     }
 
@@ -509,16 +481,15 @@ impl Cage {
     //------------------------------------FSTAT SYSCALL------------------------------------
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc_enum = wrappedclone.read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
 
             //Delegate populating statbuf to the relevant helper depending on the file type.
             //First we check in the file descriptor to handle sockets, streams, and pipes,
             //and if it is a normal file descriptor we handle regular files, dirs, and char 
             //files based on the information in the inode.
-            match &*filedesc_enum {
+            match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inode = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -576,15 +547,14 @@ impl Cage {
     //------------------------------------FSTATFS SYSCALL------------------------------------
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc_enum = wrappedclone.read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
             
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = FS_METADATA.dev_id;
 
-            match &*filedesc_enum {
+            match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let _inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -615,13 +585,12 @@ impl Cage {
     //------------------------------------READ SYSCALL------------------------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     if is_wronly(normalfile_filedesc_obj.flags) {
@@ -660,23 +629,28 @@ impl Cage {
                     }
                 }
                 Socket(_) => {
-                    drop(filedesc_enum);
+                    drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
                 Stream(_) => {syscall_error(Errno::EOPNOTSUPP, "read", "reading from stdin not implemented yet")}
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
-                    }
-
-                    // get the pipe, read from it, and return bytes read
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
+                    } 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe.read_from_pipe(buf, count, nonblocking) as i32;
-                    if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
-                    else { return ret };
-  
+                    loop { // loop over pipe reads so we can periodically check for cancellation
+                        let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                        if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == -(Errno::EAGAIN as i32) {
+                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                // if the cancel status is set in the cage, we trap around a cancel point
+                                // until the individual thread is signaled to cancel itself
+                                loop { interface::cancelpoint(self.cageid); }
+                            }
+                            continue; //received EAGAIN on blocking pipe, try again
+                        }
+                        return ret; // if we get here we can return
+                    }
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -687,12 +661,11 @@ impl Cage {
 
     //------------------------------------PREAD SYSCALL------------------------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     if is_wronly(normalfile_filedesc_obj.flags) {
@@ -757,13 +730,12 @@ impl Cage {
     //------------------------------------WRITE SYSCALL------------------------------------
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     if is_rdonly(normalfile_filedesc_obj.flags) {
@@ -802,6 +774,7 @@ impl Cage {
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
                                     drop(inodeobj);
+                                    drop(fileobject);
                                     log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
                                 } //update file size if necessary
                                 
@@ -825,7 +798,7 @@ impl Cage {
                     }
                 }
                 Socket(_) => {
-                    drop(filedesc_enum);
+                    drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }
                 Stream(stream_filedesc_obj) => {
@@ -841,14 +814,13 @@ impl Cage {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "write", "specified pipe not open for writing");
                     }
-                    // get the pipe, write to it, and return bytes written
-                    let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
+
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    let ret = pipe.write_to_pipe(buf, count, nonblocking) as i32;
-                    if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
-                    else { return ret };
-  
+                    
+                    let retval = pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32;
+                    if retval == -(Errno::EPIPE as i32) { interface::lind_kill_from_id(self.cageid, SIGPIPE); } // Trigger SIGPIPE
+                    retval
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
@@ -860,12 +832,11 @@ impl Cage {
     //------------------------------------PWRITE SYSCALL------------------------------------
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     if is_rdonly(normalfile_filedesc_obj.flags) {
@@ -909,6 +880,7 @@ impl Cage {
 
                             if newposition > filesize {
                                normalfile_inode_obj.size = newposition;
+                               drop(fileobject);
                                drop(inodeobj);
                                log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);                            
                             } //update file size if necessary
@@ -961,13 +933,12 @@ impl Cage {
 
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //confirm fd type is seekable
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
                     let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -1080,6 +1051,31 @@ impl Cage {
         }
     }
 
+    //------------------------------------FCHDIR SYSCALL------------------------------------
+   
+    pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+
+        let path_string = match &*unlocked_fd {
+            Some(File(normalfile_filedesc_obj)) => {
+                let inodenum = normalfile_filedesc_obj.inode;
+                match pathnamefrominodenum(inodenum) {
+                    Some(name) => name,
+                    None => return syscall_error(Errno::ENOTDIR, "fchdir", "the file descriptor does not refer to a directory"),
+                }
+            },
+            Some(_) => return syscall_error(Errno::EACCES, "fchdir", "cannot change working directory on this file descriptor"),
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+        };
+
+        let mut cwd_container = self.cwd.write();
+        
+	*cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+
+        0 // fchdir success
+    }
+
     //------------------------------------CHDIR SYSCALL------------------------------------
     
     pub fn chdir_syscall(&self, path: &str) -> i32 {
@@ -1116,59 +1112,58 @@ impl Cage {
             None => STARTINGFD,
         };
 
+        if start_fd == fd { return start_fd; } //if the file descriptors are equal, return the new one
+
+        // get the filedesc_enum
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let filedesc_enum = checkedfd.write();
+        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
+            return syscall_error(Errno::EBADF, "dup", "Invalid old file descriptor.");
+        };
+
         //checking whether the fd exists in the file table
-        return Self::_dup2_helper(&self, fd, start_fd, false)
+        return Self::_dup2_helper(&self, filedesc_enum, start_fd, false)
     }
 
-    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
-        //if the old fd exists, execute the helper, else return error
-        return Self::_dup2_helper(&self, oldfd, newfd, true);
-    }
-
-    pub fn _dup2_helper(&self, oldfd: i32, newfd: i32, fromdup2: bool) -> i32 {
+    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
-            return syscall_error(Errno::EBADF, "dup or dup2", "provided file descriptor is out of range");
-        }
+           return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
+       }
 
-        let locked_filedesc = if let Some(x) = self.filedescriptortable.get(&oldfd) {
-            x.clone()
+       if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
+
+       // get the filedesc_enum
+       let checkedfd = self.get_filedescriptor(oldfd).unwrap();
+       let filedesc_enum = checkedfd.write();
+       let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
+           return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor.");
+       };
+
+       //if the old fd exists, execute the helper, else return error
+       return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+   }
+
+    pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
+        let (dupfd, mut dupfdguard) = if fromdup2 {
+            let mut fdguard = self.filedescriptortable[newfd as usize].write();
+            let closebool = fdguard.is_some();
+            drop(fdguard);
+            // close the fd in the way of the new fd. mirror the implementation of linux, ignore the potential error of the close here
+            if closebool { let _close_result = Self::_close_helper_inner(&self, newfd); } 
+            
+            // re-grab clean fd
+            fdguard = self.filedescriptortable[newfd as usize].write();
+            (newfd, fdguard)
         } else {
-            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
+            let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
+            if newdupfd < 0 { return syscall_error(Errno::ENFILE, "dup2_helper", "no available file descriptor number could be found"); }
+            (newdupfd, guardopt.unwrap())
         };
 
-        let mut potential_entry = None;
-        if fromdup2 {
-            //if the file descriptors are equal, return the new one
-            if newfd == oldfd {
-                return newfd;
-            }
+        let dupfdoption = &mut *dupfdguard;
 
-            potential_entry = Some(self.filedescriptortable.entry(newfd));
-        } else { //if it's not from dup2 we need to find the first unused fd
-                 //we can't use get_next_fd because we need to reserve without populating
-            for fd in newfd..MAXFD {
-                let ourentry = self.filedescriptortable.entry(fd);
-                match ourentry {
-                    interface::RustHashEntry::Occupied(_) => {}
-                    interface::RustHashEntry::Vacant(_) => {
-                        potential_entry = Some(ourentry);
-                        break;
-                    }
-                }
-            }
-        }
-        let entry = if let Some(potent) = potential_entry {
-            potent
-        } else {
-            return syscall_error(Errno::ENFILE, "dup2_helper", "no available file descriptor number could be found");
-        };
-
-        let key = *entry.key();
-
-        let mut filedesc_enum = locked_filedesc.write();
-
-        match &*filedesc_enum {
+        match filedesc_enum {
             File(normalfile_filedesc_obj) => {
                 let inodenum = normalfile_filedesc_obj.inode;
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
@@ -1188,12 +1183,24 @@ impl Cage {
                 }
             }
             Pipe(pipe_filedesc_obj) => {
-                let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-                pipe.incr_ref(pipe_filedesc_obj.flags);
+                pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
-            Socket(socket_filedesc_obj) => {
-                if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                    NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
+            Socket(ref socket_filedesc_obj) => {
+                //we handle the closing of sockets on drop
+                // checking whether this is a domain socket
+
+                let sock_tmp = socket_filedesc_obj.handle.clone();
+                let sockhandle = sock_tmp.write();
+                let socket_type = sockhandle.domain;
+                if socket_type == AF_UNIX {
+                    if let Some(sockinfo) = &sockhandle.unix_info {
+                        if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
+                            sendpipe.incr_ref(O_WRONLY);
+                        }
+                        if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                            receivepipe.incr_ref(O_RDONLY);
+                        }
+                    }
                 }
             }
             Stream(_normalfile_filedesc_obj) => {
@@ -1202,21 +1209,10 @@ impl Cage {
             _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
         }
 
-        //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-        if fromdup2 {
-            match &entry {
-                interface::RustHashEntry::Occupied(occupied) => {
-                    let close_result = Self::_close_helper_inner(&self, (*occupied.get()).clone());
-                    if close_result < 0 {
-                        return close_result;
-                    }
-                }
-                interface::RustHashEntry::Vacant(_) => {}
-            }
-        }
+        let mut dupd_fd_enum = filedesc_enum.clone(); //clones the arc for sockethandle
 
         // get and clone fd, wrap and insert into table.
-        match &mut *filedesc_enum { // we don't want to pass on the CLOEXEC flag
+        match dupd_fd_enum { // we don't want to pass on the CLOEXEC flag
             File(ref mut normalfile_filedesc_obj) => {
                 normalfile_filedesc_obj.flags = normalfile_filedesc_obj.flags & !O_CLOEXEC; 
             }
@@ -1224,6 +1220,7 @@ impl Cage {
                 pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
             }
             Socket(ref mut socket_filedesc_obj) => {
+                // can do this for domainsockets and sockets
                 socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
             }
             Stream(ref mut stream_filedesc_obj) => {
@@ -1232,206 +1229,183 @@ impl Cage {
             _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
         }
 
+        let _insertval = dupfdoption.insert(dupd_fd_enum);
 
-        let wrappedfd = interface::RustRfc::new(interface::RustLock::new(filedesc_enum.clone()));
-        match entry {
-            interface::RustHashEntry::Occupied(occupied) => {
-                occupied.replace_entry(wrappedfd);
-            }
-            interface::RustHashEntry::Vacant(vacant) => {
-                vacant.insert(wrappedfd);
-            }
-        };
-        return key;
+        return dupfd;
     }
 
     //------------------------------------CLOSE SYSCALL------------------------------------
 
     pub fn close_syscall(&self, fd: i32) -> i32 {
         //check that the fd is valid
-            return Self::_close_helper(self, fd);
+        return Self::_close_helper(self, fd);
     }
 
-    pub fn _close_helper_inner(&self, locked_filedesc: interface::RustRfc<interface::RustLock<FileDescriptor>>) -> i32 {
-        let filedesc_enum = locked_filedesc.write();
+    pub fn _close_helper_inner(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            //Decide how to proceed depending on the fd type.
+            //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
+            //and if it is a normal file descriptor we decrement the refcount to reflect
+            //one less reference to the file.
+            match filedesc_enum {
+                //if we are a socket, we dont change disk metadata
+                Stream(_) => {}
+                Epoll(_) => {} //Epoll closing not implemented yet
+                Socket(ref mut socket_filedesc_obj) => {
+                    let sock_tmp = socket_filedesc_obj.handle.clone();
+                    let mut sockhandle = sock_tmp.write();
 
-        //Decide how to proceed depending on the fd type.
-        //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
-        //and if it is a normal file descriptor we decrement the refcount to reflect
-        //one less reference to the file.
-        match &*filedesc_enum {
-            //if we are a socket, we dont change disk metadata
-            Stream(_) => {}
-            Epoll(_) => {} //Epoll closing not implemented yet
-            Socket(socket_filedesc_obj) => {
-                let mut cleanflag = false;
-                if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                    let mut sockobjopt = NET_METADATA.socket_object_table.get_mut(&socknum);
-                    //in case shutdown?
-                    if let Some(ref mut sockobj) = sockobjopt {
-                        let mut so_tmp = sockobj.write();
-                        so_tmp.0.refcnt -= 1;
-                        cleanflag = so_tmp.0.refcnt == 0;
-                    }
-                }
-                if cleanflag {
-                    let mut fdclone = filedesc_enum.clone();
-                    let retval = self._cleanup_socket_inner(&mut fdclone, false, false);
-                    if retval < 0 {
-                        return retval;
-                    }
-                }
-                if let Some(inodenum) = socket_filedesc_obj.optinode {
-                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                    if let Inode::Socket(ref mut sock) = *inodeobj { 
-                        sock.refcount -= 1; 
-                        if sock.refcount == 0 {
-                            if sock.linkcount == 0 {
-                                drop(inodeobj);
-                                FS_METADATA.inodetable.remove(&inodenum);
-                                if let Some(truepath) = socket_filedesc_obj.reallocalpath.clone() {
-                                    NET_METADATA.domain_socket_table.remove(&truepath);
+                    // we need to do the following if UDS
+                    if let Some (ref mut ui) = sockhandle.unix_info {
+                        let inodenum = ui.inode;
+                        if let Some(sendpipe) = ui.sendpipe.as_ref() {
+                            sendpipe.decr_ref(O_WRONLY);
+                            // we're closing the last write end, lets set eof
+                            if sendpipe.get_write_ref() == 0 { sendpipe.set_eof(); }
+                            //last reference, lets remove it
+                            if (sendpipe.get_write_ref() as u64)  + (sendpipe.get_read_ref() as u64)  == 0 { ui.sendpipe = None; }
+                        }
+                        if let Some(receivepipe) = ui.receivepipe.as_ref() {
+                            receivepipe.decr_ref(O_RDONLY);
+                            //last reference, lets remove it
+                            if (receivepipe.get_write_ref() as u64) + (receivepipe.get_read_ref() as u64)  == 0 { ui.receivepipe = None; }
+
+                        }
+                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
+                        if let Inode::Socket(ref mut sock) = *inodeobj {
+                            sock.refcount -= 1;
+                            if sock.refcount == 0 {
+                                if sock.linkcount == 0 {
+                                    drop(inodeobj);
+                                    let path = normpath(convpath(sockhandle.localaddr.unwrap().path()), self);
+                                    FS_METADATA.inodetable.remove(&inodenum);
+                                    NET_METADATA.domsock_paths.remove(&path);
                                 }
                             }
                         }
-                    
-                    } 
+                    }
                 }
+                Pipe(ref pipe_filedesc_obj) => {   
+                    let pipe = &pipe_filedesc_obj.pipe;
+                    pipe.decr_ref(pipe_filedesc_obj.flags);
 
-
-            }
-            Pipe(pipe_filedesc_obj) => {
-                let pipe = PIPE_TABLE.get(&pipe_filedesc_obj.pipe).unwrap().clone();
-           
-                pipe.decr_ref(pipe_filedesc_obj.flags);
-
-                //Code below needs to reflect addition of pipes
-                if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
-                    // we're closing the last write end, lets set eof
-                    pipe.set_eof();
+                    if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
+                        // we're closing the last write end, lets set eof
+                        pipe.set_eof();
+                    }
                 }
+                File(ref normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                if pipe.get_write_ref() + pipe.get_read_ref() == 0 {
-                    // last reference, lets remove it
-                    PIPE_TABLE.remove(&pipe_filedesc_obj.pipe).unwrap();
-                }
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            normalfile_inode_obj.refcount -= 1;
 
-            }
-            File(normalfile_filedesc_obj) => {
-                let inodenum = normalfile_filedesc_obj.inode;
-                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                            //if it's not a reg file, then we have nothing to close
+                            //Inode::File is a regular file by default
+                            if normalfile_inode_obj.refcount == 0 {
+                                FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
+                                if normalfile_inode_obj.linkcount == 0 {
+                                    drop(inodeobj);
+                                    //removing the file from the entire filesystem (interface, metadata, and object table)
+                                    FS_METADATA.inodetable.remove(&inodenum);
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename).unwrap();
+                                } else {
+                                    drop(inodeobj);
+                                }
+                                log_metadata(&FS_METADATA, inodenum);
+                            }
+                        },
+                        Inode::Dir(ref mut dir_inode_obj) => {
+                            dir_inode_obj.refcount -= 1;
 
-                match *inodeobj {
-                    Inode::File(ref mut normalfile_inode_obj) => {
-                        normalfile_inode_obj.refcount -= 1;
-
-                        //if it's not a reg file, then we have nothing to close
-                        //Inode::File is a regular file by default
-                        if normalfile_inode_obj.refcount == 0 {
-                            FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
-                            if normalfile_inode_obj.linkcount == 0 {
-                                drop(inodeobj);
-                                //removing the file from the entire filesystem (interface, metadata, and object table)
+                            //if it's not a reg file, then we have nothing to close
+                            match FILEOBJECTTABLE.get(&inodenum) {
+                                Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                                None => {}
+                            }
+                            if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
+                                //removing the file from the metadata 
                                 FS_METADATA.inodetable.remove(&inodenum);
-                                let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                interface::removefile(sysfilename).unwrap();
-                            } else {
+                                drop(inodeobj);
+                                log_metadata(&FS_METADATA, inodenum);     
+                            } 
+                        },
+                        Inode::CharDev(ref mut char_inode_obj) => {
+                            char_inode_obj.refcount -= 1;
+
+                            //if it's not a reg file, then we have nothing to close
+                            match FILEOBJECTTABLE.get(&inodenum) {
+                                Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
+                                None => {}
+                            }
+                            if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
+                                //removing the file from the metadata 
+                                drop(inodeobj);
+                                FS_METADATA.inodetable.remove(&inodenum);
+                            }  else {
                                 drop(inodeobj);
                             }
                             log_metadata(&FS_METADATA, inodenum);
-                        }
-                    },
-                    Inode::Dir(ref mut dir_inode_obj) => {
-                        dir_inode_obj.refcount -= 1;
-
-                        //if it's not a reg file, then we have nothing to close
-                        match FILEOBJECTTABLE.get(&inodenum) {
-                            Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                            None => {}
-                        }
-                        if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
-                            //removing the file from the metadata 
-                            FS_METADATA.inodetable.remove(&inodenum);
-                            drop(inodeobj);
-                            log_metadata(&FS_METADATA, inodenum);     
-                        } 
-                    },
-                    Inode::CharDev(ref mut char_inode_obj) => {
-                        char_inode_obj.refcount -= 1;
-
-                        //if it's not a reg file, then we have nothing to close
-                        match FILEOBJECTTABLE.get(&inodenum) {
-                            Some(_) => {return syscall_error(Errno::ENOEXEC, "close or dup", "Non-regular file in file object table");},
-                            None => {}
-                        }
-                        if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
-                            //removing the file from the metadata 
-                            drop(inodeobj);
-                            FS_METADATA.inodetable.remove(&inodenum);
-                        }  else {
-                            drop(inodeobj);
-                        }
-                        log_metadata(&FS_METADATA, inodenum);
-                    },
-                    Inode::Socket(_) => { panic!("close(): Socket inode found on a filedesc fd.") }
+                        },
+                        Inode::Socket(_) => { panic!("close(): Socket inode found on a filedesc fd.") }
+                    }
                 }
             }
-        }
-        0
+            0
+        } else { return syscall_error(Errno::EBADF, "close", "invalid file descriptor"); }
     }
 
     pub fn _close_helper(&self, fd: i32) -> i32 {
-        //unpacking and getting the type to match for
-        {
-            let locked_filedesc = if let Some(desc) = self.filedescriptortable.get(&fd) {
-                desc
-            } else {
-                return syscall_error(Errno::EBADF, "close", "invalid file descriptor");
-            };
-            let inner_result = self._close_helper_inner((*locked_filedesc).clone());
-            if inner_result < 0 {
-                return inner_result;
-            }
-        }
 
+        let inner_result = self._close_helper_inner(fd);
+        if inner_result < 0 { return inner_result; }
+        
         //removing inode from fd table
-        self.filedescriptortable.remove(&fd);
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if unlocked_fd.is_some() {
+            let _discarded_fd = unlocked_fd.take();
+        }
         0 //_close_helper has succeeded!
     }
 
     //------------------------------------FCNTL SYSCALL------------------------------------
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
-            let flags = match &mut *filedesc_enum {
+            let flags = match filedesc_enum {
                 Epoll(obj) => {&mut obj.flags},
                 Pipe(obj) => {&mut obj.flags},
                 Stream(obj) => {&mut obj.flags},
                 File(obj) => {&mut obj.flags},
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
-                        let sid = Self::getsockobjid(&mut *sockfdobj);
-                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                        let sockobj = locksock.read();
-                        let fcntlret;
+                        let sock_tmp = sockfdobj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
 
-                        if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
-                            fcntlret = sockobj.0.set_nonblocking();
-                        }
-                        else { //clear non-blocking I/O
-                            fcntlret = sockobj.0.set_blocking();
+                        if let Some(ins) = &mut sockhandle.innersocket {
+                            let fcntlret;
+                            if arg & O_NONBLOCK == O_NONBLOCK { //set for non-blocking I/O
+                                fcntlret = ins.set_nonblocking();
+                            } else { //clear non-blocking I/O
+                                fcntlret = ins.set_blocking();
+                            }
+                            if fcntlret < 0 {
+                                match Errno::from_discriminant(interface::get_errno()) {
+                                    Ok(i) => {return syscall_error(i, "fcntl", "The libc call to fcntl failed!");},
+                                    Err(()) => panic!("Unknown errno value from fcntl returned!"),
+                                };
+                            }
                         }
 
-                        if fcntlret < 0 {
-                            match Errno::from_discriminant(interface::get_errno()) {
-                                Ok(i) => {return syscall_error(i, "fcntl", "The libc call to fcntl failed!");},
-                                Err(()) => panic!("Unknown errno value from fcntl returned!"),
-                            };
-                        }
                     }
 
                     &mut sockfdobj.flags
@@ -1462,7 +1436,7 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    Self::dup_syscall(self, fd, Some(arg))
+                    self._dup2_helper(&filedesc_enum, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
@@ -1482,36 +1456,37 @@ impl Cage {
     //------------------------------------IOCTL SYSCALL------------------------------------
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match request {
                 FIONBIO => {
                     let arg_result = interface::get_ioctl_int(ptrunion);
                     //matching the tuple and passing in filedesc_enum
-                    match (arg_result, &mut *filedesc_enum) {
+                    match (arg_result, filedesc_enum) {
                         (Err(arg_result), ..)=> {
                             return arg_result; //syscall_error
                         }
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
-                            let sid = Self::getsockobjid(&mut *sockfdobj);
-                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
-                            let sockobj = locksock.read();
+                            let sock_tmp = sockfdobj.handle.clone();
+                            let mut sockhandle = sock_tmp.write();
+
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
-                            let ioctlret;
+                            let mut ioctlret = 0;
 
                             if arg == 0 { //clear non-blocking I/O
                                 *flags &= !O_NONBLOCK;
-                                ioctlret = sockobj.0.set_blocking();
-                            }
-                            else { //set for non-blocking I/O
+                                if let Some(ins) = &mut sockhandle.innersocket {
+                                    ioctlret = ins.set_blocking();
+                                }
+                            } else { //set for non-blocking I/O
                                 *flags |= O_NONBLOCK;
-                                ioctlret = sockobj.0.set_nonblocking();
+                                if let Some(ins) = &mut sockhandle.innersocket {
+                                    ioctlret = ins.set_nonblocking();
+                                }
                             }
-                            
                             if ioctlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "ioctl", "The libc call to ioctl failed!");},
@@ -1534,6 +1509,33 @@ impl Cage {
             syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor")
         }
     }
+   
+     //------------------------------------CHMOD HELPER FUNCTION------------------------------------
+    
+    pub fn _chmod_helper(inodenum: usize, mode: u32) {
+         let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+         let mut log = true;
+         if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+            match *thisinode {
+                Inode::File(ref mut general_inode) => {
+                    general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
+                }
+                Inode::CharDev(ref mut dev_inode) => {
+                    dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
+                }   
+                Inode::Socket(ref mut sock_inode) => {
+                    sock_inode.mode = (sock_inode.mode &!S_IRWXA) | mode;
+                    log = false;
+                }
+                Inode::Dir(ref mut dir_inode) => {
+                    dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
+                }
+            }
+            drop(thisinode);
+            if log { log_metadata(&FS_METADATA, inodenum) }; 
+         }
+    }
+
 
     //------------------------------------CHMOD SYSCALL------------------------------------
 
@@ -1542,26 +1544,8 @@ impl Cage {
 
         //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            let mut log = true;
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
-                match *thisinode {
-                    Inode::File(ref mut general_inode) => {
-                        general_inode.mode = (general_inode.mode &!S_IRWXA) | mode
-                    }
-                    Inode::CharDev(ref mut dev_inode) => {
-                        dev_inode.mode = (dev_inode.mode &!S_IRWXA) | mode;
-                    }
-                    Inode::Socket(ref mut sock_inode) => {
-                        sock_inode.mode = (sock_inode.mode &!S_IRWXA) | mode;
-                        log = false;
-                    }
-                    Inode::Dir(ref mut dir_inode) => {
-                        dir_inode.mode = (dir_inode.mode &!S_IRWXA) | mode;
-                    }
-                }
-                drop(thisinode);
-                if log { log_metadata(&FS_METADATA, inodenum) };
+               Self:: _chmod_helper(inodenum, mode);
             }
             else {
                 //there doesn't seem to be a good syscall error errno for this
@@ -1572,6 +1556,35 @@ impl Cage {
         }
         0 //success!
     }
+
+    
+     //------------------------------------FCHMOD SYSCALL------------------------------------
+
+    pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
+            match filedesc_enum {
+                File(normalfile_filedesc_obj) => {
+                    let inodenum = normalfile_filedesc_obj.inode;
+                    if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
+                       Self:: _chmod_helper(inodenum, mode);
+                    }
+                    else {
+                        return syscall_error(Errno::EACCES, "fchmod", "provided file mode is not valid");
+                    }
+                }
+                Socket(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+                Stream(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");} 
+                Pipe(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+                Epoll(_) => {return syscall_error(Errno::EACCES, "fchmod", "cannot change mode on this file descriptor");}
+            }
+        } else {
+            return syscall_error(Errno::ENOENT, "fchmod", "the provided file descriptor  does not exist");
+        }
+        0 //success!
+    }
+    
 
     //------------------------------------MMAP SYSCALL------------------------------------
     
@@ -1586,13 +1599,12 @@ impl Cage {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
 
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fildes) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+        let checkedfd = self.get_filedescriptor(fildes).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //confirm fd type is mappable
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
                     let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
 
@@ -1643,12 +1655,11 @@ impl Cage {
     //------------------------------------FLOCK SYSCALL------------------------------------
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc_enum = wrappedclone.read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
 
-            let lock = match &*filedesc_enum {
+            let lock = match filedesc_enum {
                 File(normalfile_filedesc_obj) => {&normalfile_filedesc_obj.advlock}
                 Socket(socket_filedesc_obj) => {&socket_filedesc_obj.advlock}
                 Stream(stream_filedesc_obj) => {&stream_filedesc_obj.advlock}
@@ -1686,6 +1697,20 @@ impl Cage {
         }
     }
 
+    pub fn remove_from_parent_dir(parent_inodenum: usize, truepath: &interface::RustPathBuf) -> i32 {
+      if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap()) {
+          // check if parent dir has write permission
+          if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
+          
+          // remove entry of corresponding filename from filename-inode dict
+          parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
+          parent_dir.linkcount -= 1; // decrement linkcount of parent dir
+      } else {
+          panic!("Non directory file was parent!");
+      }
+      0
+    }
+
     //------------------RMDIR SYSCALL------------------
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
@@ -1695,35 +1720,33 @@ impl Cage {
         // try to get inodenum of input path and its parent
         match metawalkandparent(truepath.as_path()) {
             (None, ..) => {
-                syscall_error(Errno::EEXIST, "rmdir", "Path does not exist")
+                syscall_error(Errno::ENOENT, "rmdir", "Path does not exist")
             }
             (Some(_), None) => { // path exists but parent does not => path is root dir
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
-                let inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                match &*inodeobj {
+                match &mut *inodeobj {
                     // make sure inode matches a directory
-                    Inode::Dir(dir_obj) => {
+                    Inode::Dir(ref mut dir_obj) => {
                         if dir_obj.linkcount > 3 {return syscall_error(Errno::ENOTEMPTY, "rmdir", "Directory is not empty");}
                         if !is_dir(dir_obj.mode) {panic!("This directory does not have its mode set to S_IFDIR");}
 
                         // check if dir has write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Directory does not have write permission")}
                         
-                        // remove entry of corresponding inodenum from inodetable
+                        let remove_inode = dir_obj.refcount == 0;
+                        if remove_inode { dir_obj.linkcount = 2; } // linkcount for an empty directory after rmdir must be 2
                         drop(inodeobj);
-                        FS_METADATA.inodetable.remove(&inodenum).unwrap();
-                        
-                        if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap()) {
-                            // check if parent dir has write permission
-                            if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {return syscall_error(Errno::EPERM, "rmdir", "Parent directory does not have write permission")}
-                            
-                            // remove entry of corresponding filename from filename-inode dict
-                            parent_dir.filename_to_inode_dict.remove(&truepath.file_name().unwrap().to_str().unwrap().to_string()).unwrap();
-                            parent_dir.linkcount -= 1; // decrement linkcount of parent dir
-                        }
+
+                        let removal_result = Self::remove_from_parent_dir(parent_inodenum, &truepath);
+                        if removal_result != 0 {return removal_result;}
+
+                        // remove entry of corresponding inodenum from inodetable
+                        if remove_inode { FS_METADATA.inodetable.remove(&inodenum).unwrap(); } 
+
                         log_metadata(&FS_METADATA, parent_inodenum);
                         log_metadata(&FS_METADATA, inodenum);       
                         0 // success
@@ -1770,66 +1793,209 @@ impl Cage {
                     drop(pardir_inodeobj);
                     log_metadata(&FS_METADATA, parent_inodenum);       
                 }
+                NET_METADATA.domsock_paths.insert(true_newpath);
+                NET_METADATA.domsock_paths.remove(&true_oldpath);
                 0 // success
             }
+        }
+    }
+
+    fn _truncate_helper(&self, inodenum: usize, length: isize, file_must_exist: bool) -> i32 {
+        if length < 0 {
+            return syscall_error(Errno::EINVAL, "truncate", "length specified as less than 0");
+        }
+        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+
+        match *inodeobj {
+            // only proceed when inode matches with a file
+            Inode::File(ref mut normalfile_inode_obj) => {
+                let ulength = length as usize;
+                let filesize = normalfile_inode_obj.size as usize;
+
+                // get file object table with write lock
+                let mut maybe_fileobject = FILEOBJECTTABLE.entry(inodenum);
+                let mut tempbind;
+                let close_on_exit;
+
+                //We check if the fileobject exists. If file_must_exist is true (i.e. we called the helper from
+                //ftruncate) then we know that an fd must exist and thus we panic if the fileobject does not
+                //exist. If file_must_exist is false (i.e. we called the helper from truncate), if the file does
+                //not exist,  we create a new fileobject to use which we remove once we are done with it
+                let fileobject = if let interface::RustHashEntry::Occupied(ref mut occ) = maybe_fileobject {
+                    close_on_exit = false;
+                    occ.get_mut()
+                } else if file_must_exist {
+                    panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
+                } else {
+                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                    tempbind = interface::openfile(sysfilename, true).unwrap();
+                    close_on_exit = true;
+                    &mut tempbind
+                };
+
+                // if length is greater than original filesize,
+                // file is extented with null bytes
+                if filesize < ulength {
+                    let blankbytecount = ulength - filesize;
+                    if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount) {
+                        if byteswritten != blankbytecount {
+                            panic!("zerofill_at() has failed");
+                        }
+                    } else {
+                        panic!("zerofill_at() has failed");
+                    }
+                } else { // if length is smaller than original filesize,
+                        // extra data are cut off
+                    fileobject.shrink(ulength).unwrap();
+                } 
+
+                if close_on_exit {
+                    fileobject.close().unwrap();
+                }
+
+                drop(maybe_fileobject);
+
+                normalfile_inode_obj.size = ulength;
+
+                drop(inodeobj);
+                log_metadata(&FS_METADATA, inodenum);
+                0 // truncating has succeeded!
+            }
+            Inode::CharDev(_) => {
+                syscall_error(Errno::EINVAL, "truncate", "The named file is a character driver")
+            }
+            Inode::Socket(_) => {
+                syscall_error(Errno::EINVAL, "truncate", "The named file is a domain socket")
+            }
+            Inode::Dir(_) => {
+                syscall_error(Errno::EISDIR, "truncate", "The named file is a directory")
+            }
+        }
+    }
+
+    //------------------------------------FSYNC SYSCALL------------------------------------
+
+    pub fn fsync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fsync", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.fsync() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fsync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fsync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fsync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fsync", "invalid file descriptor")
+        }
+    }
+
+    //------------------------------------FDATASYNC SYSCALL------------------------------------
+
+    pub fn fdatasync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fdatasync", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.fdatasync() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fdatasync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fdatasync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fdatasync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fdatasync", "invalid file descriptor")
+        }
+    }
+
+    //------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
+
+     pub fn sync_file_range_syscall(&self, fd: i32, offset: isize, nbytes: isize, flags: u32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+			    // This code segment obtains the file object associated with the specified inode from FILEOBJECTTABLE.
+			    // It calls 'sync_file_range' on this file object, where initially the flags are validated, returning -EINVAL for incorrect flags.
+			    // If the flags are correct, libc::sync_file_range is invoked; if it fails (returns -1), 'from_discriminant' function handles the error code.
+
+			    let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+                            let result = fobj.sync_file_range(offset, nbytes, flags);
+                            if result == 0 || result == -(EINVAL as i32) {
+                                  return result;
+                            }
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                  Ok(i) => {return syscall_error(i, "sync_file_range", "The libc call to sync_file_range failed!");},
+                                  Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            };
+                        }
+                        _ => {
+                            syscall_error(Errno::ESPIPE, "sync_file_range", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EBADF, "sync_file_range", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "sync_file_range", "invalid file descriptor")
         }
     }
 
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let filedesc_enum = wrappedclone.read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
+        if let Some(filedesc_enum) = &*unlocked_fd {
 
-            match &*filedesc_enum {
+            match filedesc_enum {
                 // only proceed when fd references a regular file
                 File(normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "ftruncate", "specified file not open for writing");
+                    }
                     let inodenum = normalfile_filedesc_obj.inode;
-                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-
-                    match *inodeobj {
-                        // only proceed when inode matches with a file
-                        Inode::File(ref mut normalfile_inode_obj) => {
-                            // get file object table with write lock
-                            let mut fileobject = FILEOBJECTTABLE.get_mut(&inodenum).unwrap();
-                            let filesize = normalfile_inode_obj.size as isize;
-                            
-                            // if length is greater than original filesize,
-                            // file is extented with null bytes
-                            if filesize < length {
-                                let blankbytecount = length - filesize;
-                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize as usize, blankbytecount as usize) {
-                                    if byteswritten != blankbytecount as usize {
-                                        panic!("zerofill_at() has failed");
-                                    }
-                                } else {
-                                    panic!("zerofill_at() has failed");
-                                }
-                            } else { // if length is smaller than original filesize,
-                                     // extra data are cut off
-                                fileobject.shrink(length as usize).unwrap();
-                            } 
-                            drop(inodeobj);
-                            log_metadata(&FS_METADATA, inodenum);    
-                        }
-                        Inode::CharDev(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a character driver");
-                        }
-                        Inode::Socket(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a domain socket");
-                        }
-                        Inode::Dir(_) => {
-                            return syscall_error(Errno::EISDIR, "ftruncate", "The named file is a directory");
-                        }
-                    };
+                    self._truncate_helper(inodenum, length, true)
                 }
                 _ => {
-                    return syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file");
+                    syscall_error(Errno::EINVAL, "ftruncate", "fd does not reference a regular file")
                 }
-            };
-            0 // ftruncate() has succeeded!
+            }
         } else { 
             syscall_error(Errno::EBADF, "ftruncate", "fd is not a valid file descriptor")
         }
@@ -1837,7 +2003,14 @@ impl Cage {
 
     //------------------TRUNCATE SYSCALL------------------
     pub fn truncate_syscall(&self, path: &str, length: isize) -> i32 {
-        self.ftruncate_syscall(self.open_syscall(path, O_RDWR, S_IRWXA), length)
+        let truepath = normpath(convpath(path), self);
+
+        //Walk the file tree to get inode from path
+        if let Some(inodenum) = metawalk(truepath.as_path()) {
+            self._truncate_helper(inodenum, length, false)
+        } else {
+            syscall_error(Errno::ENOENT, "truncate", "path does not refer to an existing file")
+        }
     }
 
     //------------------PIPE SYSCALL------------------
@@ -1850,12 +2023,7 @@ impl Cage {
         let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
-        // get next available pipe number, and set up pipe
-        let pipenumber = if let Some(pipeno) = insert_next_pipe(interface::new_pipe(PIPE_CAPACITY)) {
-            pipeno
-        } else {
-            return syscall_error(Errno::ENFILE, "pipe", "no available pipe number could be found");
-        };
+        let pipe = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
         
         // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
         // append each to pipefds list
@@ -1863,16 +2031,15 @@ impl Cage {
         let accflags = [O_RDONLY, O_WRONLY];
         for accflag in accflags {
 
-            let thisfd = self.get_next_fd(None, Pipe(PipeDesc {pipe: pipenumber, flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
-
-            if thisfd < 0 {
-                PIPE_TABLE.remove(&pipenumber).unwrap();
-                return thisfd;
-            };
+            let (fd, guardopt) = self.get_next_fd(None);
+            if fd < 0 { return fd }
+            let fdoption = &mut *guardopt.unwrap();
+            
+            let _insertval = fdoption.insert(Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
 
             match accflag {
-                O_RDONLY => {pipefd.readfd = thisfd;},
-                O_WRONLY => {pipefd.writefd = thisfd;},
+                O_RDONLY => {pipefd.readfd = fd;},
+                O_WRONLY => {pipefd.writefd = fd;},
                 _ => panic!("How did you get here."),
             }
         }
@@ -1890,13 +2057,12 @@ impl Cage {
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
-        
-        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) { // check if fd is valid
-            let wrappedclone = wrappedfd.clone();
-            drop(wrappedfd);
-            let mut filedesc_enum = wrappedclone.write();
+
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
             
-            match &mut *filedesc_enum {
+            match filedesc_enum {
                 // only proceed when fd represents a file
                 File(ref mut normalfile_filedesc_obj) => {
                     let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
@@ -1976,11 +2142,47 @@ impl Cage {
         0 //getcwd has succeeded!;
     }
 
+
+    //------------------SHMHELPERS----------------------
+
+    pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+        for (index, val) in rev_shm.iter().enumerate() {
+            if val.0 == shmaddr as u32 {
+                return Some(index);
+            }
+        }
+        None
+    }
+
+    pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec<u32> {
+
+        let mut addrvec = Vec::new();
+        for val in rev_shm.iter() {
+            if val.1 == shmid as i32 {
+                addrvec.push(val.0);
+            }
+        }
+
+        return addrvec;
+    }
+
+    pub fn search_for_addr_in_region(rev_shm: &Vec<(u32, i32)>, search_addr: u32) -> Option<(u32, i32)> {
+        let metadata = &SHM_METADATA;
+        for val in rev_shm.iter() {
+            let addr = val.0;
+            let shmid = val.1;
+            if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                let range = addr..(addr + segment.size as u32);
+                if range.contains(&search_addr) { return Some((addr, shmid)); }
+            }
+        }
+        None
+    }
+
     //------------------SHMGET SYSCALL------------------
 
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32)-> i32 {
         if key == IPC_PRIVATE {return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");}
-        if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
         let shmid: i32;
         let metadata = &SHM_METADATA;
 
@@ -1995,6 +2197,9 @@ impl Cage {
                 if 0 == (shmflg & IPC_CREAT) {
                     return syscall_error(Errno::ENOENT, "shmget", "tried to use a key that did not exist, and IPC_CREAT was not specified");
                 }
+
+                if (size as u32) < SHMMIN || (size as u32) > SHMMAX { return syscall_error(Errno::EINVAL, "shmget", "Size is less than SHMMIN or more than SHMMAX"); }
+
                 shmid = metadata.new_keyid();
                 vacant.insert(shmid);
                 let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
@@ -2016,8 +2221,25 @@ impl Cage {
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             }  else { prot = PROT_READ | PROT_WRITE; }
-            metadata.rev_shm_add(self.cageid as u32, shmaddr, shmid);
-            segment.map_shm(shmaddr, prot)
+            let mut rev_shm = self.rev_shm.lock();
+            rev_shm.push((shmaddr as u32, shmid));
+            drop(rev_shm);
+
+            // update semaphores
+            if !segment.semaphor_offsets.is_empty() {
+                // lets just look at the first cage in the set, since we only need to grab the ref from one
+                if let Some(cageid) = segment.attached_cages.clone().into_read_only().keys().next() {
+                    let cage2 = interface::cagetable_getref(*cageid); 
+                    let cage2_rev_shm = cage2.rev_shm.lock();
+                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
+                    for offset in segment.semaphor_offsets.iter() {
+                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
+                        self.sem_table.insert(shmaddr as u32 + *offset, sementry);
+                    }
+                }
+            }
+
+            segment.map_shm(shmaddr, prot, self.cageid)
         } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
 
@@ -2026,38 +2248,48 @@ impl Cage {
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
-        if let Some(shmid) = metadata.rev_shm_lookup(self.cageid as u32, shmaddr) {
+        let mut rev_shm = self.rev_shm.lock();
+        let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
+
+        if let Some(index) = rev_shm_index {
+            let shmid = rev_shm[index].1;
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
-                    segment.unmap_shm(shmaddr);
+
+                    // update semaphores
+                    for offset in segment.semaphor_offsets.iter() {
+                        self.sem_table.remove(&(shmaddr as u32 + *offset));
+                    }
+
+                    segment.unmap_shm(shmaddr, self.cageid);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 { rm = true; }           
-                    metadata.rev_shm_rm(self.cageid as u32, shmaddr);
+                    rev_shm.swap_remove(index);
             
                     if rm {
                         let key = segment.key;
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
+
+                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
                 }
                 interface::RustHashEntry::Vacant(_) => {panic!("Inode not created for some reason");}
             };   
         } else { return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr"); }
-
-        0 //shmdt has succeeded!        
     }
 
     //------------------SHMCTL SYSCALL------------------
 
-    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: &mut ShmidsStruct)-> i32 {
+    pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: Option<&mut ShmidsStruct>)-> i32 {
 
         let metadata = &SHM_METADATA;
 
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
             match cmd {
                 IPC_STAT => {
-                    *buf = segment.shminfo;              
+                    *buf.unwrap() = segment.shminfo;              
                 }
                 IPC_RMID => {
                     segment.rmid = true;
@@ -2076,5 +2308,427 @@ impl Cage {
         }
         
         0 //shmctl has succeeded!
+    }
+
+    //------------------MUTEX SYSCALLS------------------
+    
+    pub fn mutex_create_syscall(&self) -> i32 {
+        let mut mutextable = self.mutex_table.write();
+        let mut index_option = None;
+        for i in 0..mutextable.len() {
+            if mutextable[i].is_none() {
+                index_option = Some(i);
+                break;
+            }
+        }
+
+        let index = if let Some(ind) = index_option {
+            ind
+        } else {
+            mutextable.push(None);
+            mutextable.len() - 1
+        };
+
+        let mutex_result = interface::RawMutex::create();
+        match mutex_result {
+            Ok(mutex) => {
+                mutextable[index] = Some(interface::RustRfc::new(mutex));
+                index as i32
+            }
+            Err(_) => {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {syscall_error(i, "mutex_create", "The libc call to pthread_mutex_init failed!")},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
+                }
+            }
+        }
+    }
+
+    pub fn mutex_destroy_syscall(&self, mutex_handle: i32) -> i32 {
+        let mut mutextable = self.mutex_table.write();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            mutextable[mutex_handle  as usize] = None;
+            0
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_destroy", "Mutex handle does not refer to a valid mutex!")
+        }
+        //the RawMutex is destroyed on Drop
+
+        //this is currently assumed to always succeed, as the man page does not list possible
+        //errors for pthread_mutex_destroy
+    }
+
+    pub fn mutex_lock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.lock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_lock", "The libc call to pthread_mutex_lock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_lock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_lock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    pub fn mutex_trylock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.trylock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_trylock", "The libc call to pthread_mutex_trylock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_trylock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_trylock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    pub fn mutex_unlock_syscall(&self, mutex_handle: i32) -> i32 {
+        let mutextable = self.mutex_table.read();
+        if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+            let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+            drop(mutextable);
+            let retval = clonedmutex.unlock();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "mutex_unlock", "The libc call to pthread_mutex_unlock failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_mutex_unlock returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "mutex_unlock", "Mutex handle does not refer to a valid mutex!")
+        }
+    }
+
+    //------------------CONDVAR SYSCALLS------------------
+
+    pub fn cond_create_syscall(&self) -> i32 {
+        let mut cvtable = self.cv_table.write();
+        let mut index_option = None;
+        for i in 0..cvtable.len() {
+            if cvtable[i].is_none() {
+                index_option = Some(i);
+                break;
+            }
+        }
+
+        let index = if let Some(ind) = index_option {
+            ind
+        } else {
+            cvtable.push(None);
+            cvtable.len() - 1
+        };
+
+        let cv_result = interface::RawCondvar::create();
+        match cv_result {
+            Ok(cv) => {
+                cvtable[index] = Some(interface::RustRfc::new(cv));
+                index as i32
+            }
+            Err(_) => {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {syscall_error(i, "cond_create", "The libc call to pthread_cond_init failed!")},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
+                }
+            }
+        }
+    }
+
+    pub fn cond_destroy_syscall(&self, cv_handle: i32) -> i32 {
+        let mut cvtable = self.cv_table.write();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            cvtable[cv_handle  as usize] = None;
+            0
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_destroy", "Condvar handle does not refer to a valid condvar!")
+        }
+        //the RawCondvar is destroyed on Drop
+
+        //this is currently assumed to always succeed, as the man page does not list possible
+        //errors for pthread_cv_destroy
+    }
+
+    pub fn cond_signal_syscall(&self, cv_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+            let retval = clonedcv.signal();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "cond_signal", "The libc call to pthread_cond_signal failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_signal returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_signal", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_broadcast_syscall(&self, cv_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+            let retval = clonedcv.broadcast();
+
+            if retval < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "cond_broadcast", "The libc call to pthread_cond_broadcast failed!");},
+                    Err(()) => panic!("Unknown errno value from pthread_cond_broadcast returned!"),
+                };
+            }
+
+            retval
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_broadcast", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_wait_syscall(&self, cv_handle: i32, mutex_handle: i32) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+
+            let mutextable = self.mutex_table.read();
+            if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+                let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+                drop(mutextable);
+                let retval = clonedcv.wait(&*clonedmutex);
+
+                // if the cancel status is set in the cage, we trap around a cancel point
+                // until the individual thread is signaled to cancel itself
+                if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                    loop { interface::cancelpoint(self.cageid); } // we check cancellation status here without letting the function return
+                }
+ 
+                if retval < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
+                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
+                    };
+                }
+
+                retval
+            } else {
+                //undefined behavior
+                syscall_error(Errno::EBADF, "cond_wait", "Mutex handle does not refer to a valid mutex!")
+            }
+
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    pub fn cond_timedwait_syscall(&self, cv_handle: i32, mutex_handle: i32, time: interface::RustDuration) -> i32 {
+        let cvtable = self.cv_table.read();
+        if cv_handle < cvtable.len() as i32 && cv_handle >= 0 && cvtable[cv_handle  as usize].is_some() {
+            let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
+            drop(cvtable);
+
+            let mutextable = self.mutex_table.read();
+            if mutex_handle < mutextable.len() as i32 && mutex_handle >= 0 && mutextable[mutex_handle  as usize].is_some() {
+                let clonedmutex = mutextable[mutex_handle  as usize].as_ref().unwrap().clone();
+                drop(mutextable);
+                let retval = clonedcv.timedwait(&*clonedmutex, time);
+                if retval < 0 {
+                    match Errno::from_discriminant(interface::get_errno()) {
+                        Ok(i) => {return syscall_error(i, "cond_wait", "The libc call to pthread_cond_wait failed!");},
+                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
+                    };
+                }
+
+                retval
+            } else {
+                //undefined behavior
+                syscall_error(Errno::EBADF, "cond_wait", "Mutex handle does not refer to a valid mutex!")
+            }
+
+        } else {
+            //undefined behavior
+            syscall_error(Errno::EBADF, "cond_wait", "Condvar handle does not refer to a valid condvar!")
+        }
+    }
+
+    //------------------SEMAPHORE SYSCALLS------------------
+    /* 
+    *  Initialize semaphore object SEM to value
+    *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
+    *  or shared between processes (when nonzero)
+    */
+    pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
+        // Boundary check
+        if value > SEM_VALUE_MAX { 
+            return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX"); 
+        }
+
+        let metadata = &SHM_METADATA;
+        let is_shared = pshared != 0;
+
+        // Iterate semaphore table, if semaphore is already initialzed return error
+        let semtable = &self.sem_table;
+
+        // Will initialize only it's new
+        if !semtable.contains_key(&sem_handle) {
+            let new_semaphore = interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
+            semtable.insert(sem_handle, new_semaphore.clone());
+
+            if is_shared {
+                let rev_shm = self.rev_shm.lock();
+                // if its shared and exists in an existing mapping we need to add it to other cages
+                if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) {
+                    let offset = mapaddr - sem_handle;
+                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        for cageid in segment.attached_cages.clone().into_read_only().keys() {
+                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
+                            let cage = interface::cagetable_getref(*cageid);
+                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            for addr in addrs.iter() {
+                                cage.sem_table.insert(addr + offset, new_semaphore.clone());
+                            }
+                        }
+                        segment.semaphor_offsets.insert(offset);
+                    }
+                }
+            }
+            return 0;
+        }
+
+        return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
+    }
+
+    pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            semaphore.lock();
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            if !semaphore.unlock() {
+                return syscall_error(Errno::EOVERFLOW, "sem_post", "The maximum allowable value for a semaphore would be exceeded");
+            }
+         } else {
+            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
+        let metadata = &SHM_METADATA;
+
+        let semtable = &self.sem_table;
+        // remove entry from semaphore table
+        if let Some(sementry) = semtable.remove(&sem_handle) {
+            if sementry.1.is_shared.load(interface::RustAtomicOrdering::Relaxed) {
+                // if its shared we'll need to remove it from other attachments
+                let rev_shm = self.rev_shm.lock();
+                if let Some((mapaddr, shmid)) = Self::search_for_addr_in_region(&rev_shm, sem_handle) { // find all segments that contain semaphore
+                    let offset = mapaddr - sem_handle;
+                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        for cageid in segment.attached_cages.clone().into_read_only().keys() { // iterate through all cages containing segment
+                            let cage = interface::cagetable_getref(*cageid);
+                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid); 
+                            for addr in addrs.iter() {
+                                cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
+                            }
+                        } 
+                    }
+                }
+            }
+            return 0;
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
+        }
+    }
+
+    /*
+    * Take only sem_t *sem as argument, and return int *sval
+    */
+    pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            return semaphore.get_value();
+        }
+        return syscall_error(Errno::EINVAL, "sem_getvalue", "sem is not a valid semaphore")
+    }
+
+    pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            if !semaphore.trylock() {
+                return syscall_error(Errno::EAGAIN, "sem_trywait", "The operation could not be performed without blocking");
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
+        }
+        return 0;
+    }
+
+    pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
+        let abstime = libc::timespec {
+            tv_sec: time.as_secs() as i64,
+            tv_nsec: (time.as_nanos() % 1000000000) as i64
+        };
+        if abstime.tv_nsec < 0 {
+            return syscall_error(Errno::EINVAL, "sem_timedwait", "Invalid timedout");
+        }
+        let semtable = &self.sem_table;
+        // Check whether semaphore exists
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            if !semaphore.timedlock(time) {
+                return syscall_error(Errno::ETIMEDOUT, "sem_timedwait", "The call timed out before the semaphore could be locked");
+            }
+        } else {
+            return syscall_error(Errno::EINVAL, "sem_timedwait", "sem is not a valid semaphore");
+        }
+        return 0;
     }
 }

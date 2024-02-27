@@ -1,7 +1,7 @@
 #![allow(dead_code)] //suppress warning for these functions not being used in targets other than the tests
 
 mod fs_tests;
-mod pipe_tests;
+mod ipc_tests;
 mod networking_tests;
 
 use crate::interface;
@@ -12,18 +12,21 @@ use crate::safeposix::{cage::*, filesystem::*};
 mod main_tests {
     use crate::tests::networking_tests::net_tests::net_tests;
     use crate::tests::fs_tests::fs_tests::test_fs;
-    use crate::tests::pipe_tests::pipe_tests::test_pipe;
+    use crate::tests::ipc_tests::ipc_tests::test_ipc;
 
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
+    use crate::interface;
 
     use std::process::Command;
 
     #[test]
     pub fn tests() {
+        interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
+        
         lindrustinit(0);
         {
-            let cage = &CAGE_TABLE.get(&1).unwrap().clone();
-            crate::lib_fs_utils::lind_deltree(cage, "/");
+            let cage = interface::cagetable_getref(1);
+            crate::lib_fs_utils::lind_deltree(&cage, "/");
             assert_eq!(cage.mkdir_syscall("/dev", S_IRWXA), 0);
             assert_eq!(cage.mknod_syscall("/dev/null", S_IFCHR as u32| 0o777, makedev(&DevNo {major: 1, minor: 3})), 0);
             assert_eq!(cage.mknod_syscall("/dev/zero", S_IFCHR as u32| 0o777, makedev(&DevNo {major: 1, minor: 5})), 0);
@@ -39,8 +42,8 @@ mod main_tests {
         println!("NET TESTS");
         net_tests();
         
-        println!("PIPE TESTS");
-        test_pipe();
+        println!("IPC TESTS");
+        test_ipc();
     }   
 }
 

@@ -27,10 +27,9 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             next_ephemeral_port_tcpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             next_ephemeral_port_udpv6: interface::RustRfc::new(interface::RustLock::new(EPHEMERAL_PORT_RANGE_END)),
             listening_port_set: interface::RustHashSet::new(),
-            socket_object_table: interface::RustHashMap::new(),
-            domain_socket_table: interface::RustHashMap::new(),
-            revds_table: interface::RustHashMap::new(),
             pending_conn_table: interface::RustHashMap::new(),
+            domsock_accept_table: interface::RustHashMap::new(), // manages domain socket connection process
+            domsock_paths: interface::RustHashSet::new() // set of all currently bound domain sockets
         })
     ); //we want to check if fs exists before doing a blank init, but not for now
 
@@ -60,11 +59,102 @@ pub enum PortType {
     IPv4UDP, IPv4TCP, IPv6UDP, IPv6TCP
 
 }
+
 pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool) -> (interface::GenIpaddr, u16, PortType) {
     match  domain {
         PF_INET => (addr, port, if istcp {PortType::IPv4TCP} else {PortType::IPv4UDP}),
         PF_INET6  => (addr, port, if istcp {PortType::IPv6TCP} else {PortType::IPv6UDP}),
         _ => panic!("How did you manage to set an unsupported domain on the socket?")
+    }
+}
+
+//A substructure for information only populated in a unix domain socket
+#[derive(Debug)]
+pub struct UnixSocketInfo {
+    pub mode: i32,
+    pub sendpipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
+    pub path: interface::RustPathBuf,
+    pub receivepipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
+    pub inode: usize,
+}
+
+//This structure contains all socket-associated data that is not held in the fd
+#[derive(Debug)]
+pub struct SocketHandle {
+    pub innersocket: Option<interface::Socket>,
+    pub options: i32,
+    pub state: ConnState,
+    pub protocol: i32,
+    pub domain: i32,
+    pub last_peek: interface::RustDeque<u8>,
+    pub localaddr: Option<interface::GenSockaddr>,
+    pub remoteaddr: Option<interface::GenSockaddr>,
+    pub unix_info: Option<UnixSocketInfo>,
+    pub socktype: i32,
+    pub sndbuf: i32,
+    pub rcvbuf: i32,
+    pub errno: i32,
+}
+
+//This cleanup-on-drop strategy is used in lieu of manual refcounting in order to allow the close
+//syscall not to have to wait to increase the refcnt manually in case for example it is in a
+//blocking recv. This clean-on-drop strategy is made possible by the fact that file descriptors
+//hold reference to a SocketHandle via an Arc, so only when the last reference to a SocketHandle is
+//gone--that is when the last cage has closed it--do we actually attempt to shut down the inner
+//socket, which is what we could have done manually in close instead. This should be both cleaner
+//and faster, because we don't have to wait for the recv timeout like we do in shutdown
+impl Drop for SocketHandle {
+    fn drop(&mut self) {
+        Cage::_cleanup_socket_inner_helper(self, -1, false);
+    }
+}
+
+
+#[derive(Debug)]
+pub struct ConnCondVar {
+    lock: interface::RustRfc<interface::Mutex<i32>>,
+    cv: interface::Condvar
+}
+
+impl ConnCondVar {
+    pub fn new() -> Self {
+        Self {lock: interface::RustRfc::new(interface::Mutex::new(0)), cv: interface::Condvar::new()}
+    }
+
+    pub fn wait(&self) {
+        let mut guard = self.lock.lock();
+        *guard +=1;
+        self.cv.wait(&mut guard);
+    }
+
+    pub fn broadcast(&self) -> bool {
+        let guard = self.lock.lock();
+        if *guard == 1 {
+            self.cv.notify_all();
+            return true;
+        } else { return false; }
+    }
+}
+
+pub struct DomsockTableEntry {
+    pub sockaddr: interface::GenSockaddr,
+    pub receive_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub send_pipe: interface::RustRfc<interface::EmulatedPipe>,
+    pub cond_var: Option<interface::RustRfc<ConnCondVar>>,
+}
+
+impl DomsockTableEntry {
+    pub fn get_cond_var(&self) -> Option<&interface::RustRfc<ConnCondVar>> {
+        self.cond_var.as_ref()
+    }
+    pub fn get_sockaddr(&self) -> &interface::GenSockaddr {
+        &self.sockaddr
+    }
+    pub fn get_send_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+        &self.send_pipe
+    }
+    pub fn get_receive_pipe(&self) -> &interface::RustRfc<interface::EmulatedPipe> {
+        &self.receive_pipe
     }
 }
 
@@ -75,10 +165,9 @@ pub struct NetMetadata {
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv6: interface::RustRfc<interface::RustLock<u16>>,
     pub listening_port_set: interface::RustHashSet<(interface::GenIpaddr, u16, PortType)>,
-    pub domain_socket_table: interface::RustHashMap<interface::RustPathBuf, interface::GenSockaddr>,
-    pub revds_table: interface::RustHashMap<interface::GenSockaddr, interface::GenSockaddr>,
-    pub socket_object_table: interface::RustHashMap<i32, interface::RustRfc<interface::RustLock<(interface::Socket, ConnState)>>>,
-    pub pending_conn_table: interface::RustHashMap<u16, Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>
+    pub pending_conn_table: interface::RustHashMap<(interface::GenIpaddr, u16, PortType), Vec<(Result<interface::Socket, i32>, interface::GenSockaddr)>>,
+    pub domsock_accept_table: interface::RustHashMap<interface::RustPathBuf, DomsockTableEntry>,
+    pub domsock_paths: interface::RustHashSet<interface::RustPathBuf>
 }
 
 impl NetMetadata {
@@ -118,6 +207,7 @@ impl NetMetadata {
             true
         }
     }
+
     pub fn _get_available_udp_port(&self, addr: interface::GenIpaddr, domain: i32, rebindability: bool) -> Result<u16, i32> {
         if !NET_DEVICE_IPLIST.contains(&addr) {
             return Err(syscall_error(Errno::EADDRNOTAVAIL, "bind", "Specified network device is not set up for lind or does not exist!"));
@@ -176,16 +266,6 @@ impl NetMetadata {
             }
         }
         return Err(syscall_error(Errno::EADDRINUSE, "bind", "No available ephemeral port could be found"));
-    }
-
-    fn insert_to_next_socketobjectid(&self, val: (interface::Socket, ConnState)) -> Option<i32> {
-        for i in MINSOCKOBJID..MAXSOCKOBJID {
-            if let interface::RustHashEntry::Vacant(v) = self.socket_object_table.entry(i) {
-                v.insert(interface::RustRfc::new(interface::RustLock::new(val)));
-                return Some(i);
-            }
-        }
-        return None;
     }
 
     pub fn _reserve_localport(&self, addr: interface::GenIpaddr, port: u16, protocol: i32, domain: i32, rebindability: bool) -> Result<u16, i32> {
@@ -266,14 +346,12 @@ impl NetMetadata {
                 if addr.is_unspecified() {
                     for portuser in userarr.clone() {
                         if portuser.1 <= 1 {
-                            drop(portuser);
                             userarr.swap_remove(index);
                         } else { //if it's rebindable and there are others bound to it
                             userarr[index].1 -= 1;
                         }
                     }
                     if userarr.len() == 0 {
-                        drop(userarr);
                         userentry.remove();
                     }
                     return Ok(());
@@ -282,9 +360,7 @@ impl NetMetadata {
                         if portuser.0 == muxed.0 {
                             //if it's rebindable and we're removing the last bound port or it's just not rebindable
                             if portuser.1 <= 1 {
-                                drop(portuser);
                                 if userarr.len() == 1 {
-                                    drop(userarr);
                                     userentry.remove();
                                 } else {
                                     userarr.swap_remove(index);
@@ -305,17 +381,9 @@ impl NetMetadata {
         }
     }
 
-    pub fn insert_into_socketobjecttable(&self, sock: interface::Socket, connstate: ConnState) -> Result<i32, i32> {
-        if let Some(id) = self.insert_to_next_socketobjectid((sock, connstate)) {
-            Ok(id)
-        } else {
-            Err(syscall_error(Errno::ENFILE, "bind", "The maximum number of sockets for the process have been created"))
-        }
-    }
-
     pub fn get_domainsock_paths(&self) -> Vec<interface::RustPathBuf> {
         let mut domainsock_paths: Vec<interface::RustPathBuf> = vec!();
-        for domainsocks in self.domain_socket_table.iter() { domainsock_paths.push(domainsocks.pair().0.clone()); } // get vector of domain sock table keys
+        for ds_path in self.domsock_paths.iter() { domainsock_paths.push(ds_path.clone()); } // get vector of domain sock table keys
         domainsock_paths
     }
 }

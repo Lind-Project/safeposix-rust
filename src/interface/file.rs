@@ -15,11 +15,10 @@ use std::io::{SeekFrom, Seek, Read, Write};
 pub use std::sync::{LazyLock as RustLazyGlobal};
 
 use std::os::unix::io::{AsRawFd, RawFd};
-use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE};
+use libc::{mmap, mremap, munmap, PROT_READ, PROT_WRITE, MAP_SHARED, MREMAP_MAYMOVE, off64_t};
 use std::ffi::c_void;
 use std::convert::TryInto;
-
-
+use crate::interface::errnos::{Errno, syscall_error};
 
 static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
 
@@ -149,6 +148,37 @@ impl EmulatedFile {
                 Ok(())
             }
         }
+    }
+
+     pub fn fdatasync(&self) -> std::io::Result<()> {
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => {
+                let fobj = f.lock();
+                fobj.sync_data()?;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn fsync(&self) -> std::io::Result<()> {
+        match &self.fobj {
+            None => panic!("{} is already closed.", self.filename),
+            Some(f) => {
+                let fobj = f.lock();
+                fobj.sync_all()?;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn sync_file_range(&self, offset: isize, nbytes: isize, flags: u32) -> i32 {
+        let fd = &self.as_fd_handle_raw_int();
+        let valid_flags = libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER;
+        if !(flags & !valid_flags == 0){
+            return syscall_error(Errno::EINVAL, "sync_file_range", "flags specifies an invalid bit");
+        }
+        unsafe { libc::sync_file_range(*fd, offset as off64_t, nbytes as off64_t, flags) }
     }
 
     // Read from file into provided C-buffer
@@ -466,6 +496,8 @@ mod tests {
       let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
       unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
       println!("{:?}", f.writeat(q, 9, 0));
+      println!("fsync: {:?}", f.fsync().unwrap());
+      println!("fdatasync: {:?}", f.fdatasync().unwrap());
       let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
       println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
       println!("{:?}", f.readat(b, 9, 0));
@@ -478,3 +510,4 @@ mod tests {
       println!("{:?}", removefile("foobar".to_string()));
     }
 }
+

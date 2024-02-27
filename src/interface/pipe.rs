@@ -12,29 +12,34 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use std::cmp::min;
+use std::fmt;
 
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
+const PAGE_SIZE: usize = 4096;
+
+const CANCEL_CHECK_INTERVAL: usize = 1048576; // check to cancel pipe reads every 2^20 iterations
 
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
 }
 
+#[derive(Clone)]
 pub struct EmulatedPipe {
     write_end: Arc<Mutex<Producer<u8>>>,
     read_end: Arc<Mutex<Consumer<u8>>>,
-    pub refcount_write: AtomicU32,
-    pub refcount_read: AtomicU32,
-    size: usize,
-    eof: AtomicBool,
+    pub refcount_write: Arc<AtomicU32>,
+    pub refcount_read: Arc<AtomicU32>,
+    eof: Arc<AtomicBool>,
+    size: usize
 }
 
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: AtomicU32::new(1), refcount_read: AtomicU32::new(1), size: size, eof: AtomicBool::new(false)}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false)), size: size}
     }
 
     pub fn set_eof(&self) {
@@ -59,9 +64,27 @@ impl EmulatedPipe {
         if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
 
+    pub fn check_select_read(&self) -> bool {
+        let read_end = self.read_end.lock();
+        let pipe_space = read_end.len();
+
+        if (pipe_space > 0) || self.eof.load(Ordering::SeqCst){
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    pub fn check_select_write(&self) -> bool {
+
+        let write_end = self.write_end.lock();
+        let pipe_space = write_end.remaining();
+
+        return pipe_space != 0;
+    }
+
     // Write length bytes from pointer into pipe
-    // BUG: This only currently works as SPSC
-    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, blocking: bool) -> i32 {
+    pub fn write_to_pipe(&self, ptr: *const u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_written = 0;
 
@@ -73,12 +96,24 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
 
         let pipe_space = write_end.remaining();
-        if blocking && (pipe_space == self.size) {
-            return -1;
+        if nonblocking && (pipe_space == 0) {
+            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
         }
 
         while bytes_written < length {
-            let bytes_to_write = min(length, bytes_written as usize + write_end.remaining());
+            if self.get_read_ref() == 0 {
+                return syscall_error(Errno::EPIPE, "write", "broken pipe");
+            } // EPIPE, all read ends are closed
+
+            let remaining = write_end.remaining();
+
+            if remaining == 0 {
+                interface::lind_yield(); //yield on a full pipe
+                continue 
+            }
+            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
+            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
+            let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
         }   
@@ -88,10 +123,7 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    // BUG: This only currently works as SPSC
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, blocking: bool) -> i32 {
-
-        let mut bytes_read = 0;
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -100,20 +132,40 @@ impl EmulatedPipe {
 
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
-        if blocking && (pipe_space == 0) {
-            return -1;
+        if nonblocking && (pipe_space == 0) {
+            if self.eof.load(Ordering::SeqCst) { return 0; }
+            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
         }
 
-        while bytes_read < length {
+        // wait for something to be in the pipe, but break on eof
+        // check cancel point after 2^20 cycles just in case
+        let mut count = 0;
+        while pipe_space == 0 {
+            if self.eof.load(Ordering::SeqCst) { return 0; }
+
+            if count == CANCEL_CHECK_INTERVAL { 
+                return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
+            }
+            
             pipe_space = read_end.len();
-            if (pipe_space == 0) & self.eof.load(Ordering::Relaxed) { break; }
-            let bytes_to_read = min(length, bytes_read + pipe_space);
-            read_end.pop_slice(&mut buf[bytes_read..bytes_to_read]);
-            bytes_read = bytes_to_read;
+            count = count + 1;
+            if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
         }
 
-        bytes_read as i32
+        let bytes_to_read = min(length, pipe_space);
+        read_end.pop_slice(&mut buf[0..bytes_to_read]);
+   
+        bytes_to_read as i32
     }
 
 }
 
+impl fmt::Debug for EmulatedPipe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EmulatedPipe")
+         .field("refcount read", &self.refcount_read)
+         .field("refcount write", &self.refcount_write)
+         .field("eof", &self.eof)
+         .finish()
+    }
+}

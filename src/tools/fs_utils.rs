@@ -1,7 +1,6 @@
-#![feature(once_cell)]
+#![feature(lazy_cell)]
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
-#![feature(result_into_ok_or_err)]
 #![feature(duration_constants)]
 #![allow(unused)]
 
@@ -109,11 +108,23 @@ fn main() {
     let utilcage = Cage{cageid: 0,
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
-                        filedescriptortable: interface::RustHashMap::new(),
+                        filedescriptortable: init_fdtable(),
+                        cancelstatus: interface::RustAtomicBool::new(false),
                         getgid: interface::RustAtomicI32::new(-1), 
                         getuid: interface::RustAtomicI32::new(-1), 
                         getegid: interface::RustAtomicI32::new(-1), 
-                        geteuid: interface::RustAtomicI32::new(-1)};
+                        geteuid: interface::RustAtomicI32::new(-1),
+                        rev_shm: interface::Mutex::new(vec!()),
+                        mutex_table: interface::RustLock::new(vec!()),
+                        cv_table: interface::RustLock::new(vec!()),
+                        sem_table: interface::RustHashMap::new(),
+                        thread_table: interface::RustHashMap::new(),
+                        signalhandler: interface::RustHashMap::new(),
+                        sigset: interface::RustHashMap::new(),
+                        pendingsigset: interface::RustHashMap::new(),
+                        main_threadid: interface::RustAtomicU64::new(0),
+                        interval_timer: interface::IntervalTimer::new(0)
+                    };
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {

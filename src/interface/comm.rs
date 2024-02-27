@@ -1,4 +1,4 @@
-// // Authors: Nicholas Renner and Jonathan Singer
+// // Authors: Nicholas Renner and Jonathan Singer and Tristan Brigham
 // //
 // //
 
@@ -71,7 +71,7 @@ impl GenSockaddr {
         match self {
             GenSockaddr::Unix(unixaddr) => {
                 let pathiter = &mut unixaddr.sun_path.split(|idx| *idx == 0);
-                let pathslice = pathiter.next().unwrap().clone();
+                let pathslice = pathiter.next().unwrap();
                 let path = from_utf8(pathslice).unwrap();
                 path
             }
@@ -166,7 +166,7 @@ pub fn new_sockaddr_unix(family: u16, path: &[u8]) -> SockaddrUnix {
 }
 
 pub fn gen_ud_path() -> String {
-    let mut owned_path: String = "/tmp/sock".to_owned();
+    let mut owned_path: String = "/sock".to_owned();
     unsafe {
         let id = UD_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         owned_path.push_str(&id.to_string());
@@ -212,6 +212,12 @@ pub struct Socket {
 impl Socket {
     pub fn new(domain: i32, socktype: i32, protocol: i32) -> Socket {
         let fd = unsafe {libc::socket(domain, socktype, protocol)};
+        
+        //we make every socket have a recieve timeout of one second
+        //This is in order to allow the socket to process and recieve
+        //shutdowns while blocked on blocking recv syscalls.
+        let timeoutval = libc::timeval { tv_sec: 1, tv_usec: 0 };
+        unsafe {libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVTIMEO, (&timeoutval as *const libc::timeval) as *const libc::c_void, size_of::<libc::timeval>() as u32)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
         Self {refcnt: 1, raw_sys_fd: fd}
     }
@@ -336,6 +342,11 @@ impl Socket {
         let valbuf = optval;
         let sor =  unsafe{libc::setsockopt(self.raw_sys_fd, level, optname, (&valbuf as *const i32).cast::<libc::c_void>(), size_of::<i32>() as u32)};
         sor
+    }
+
+    pub fn shutdown(&self, how: i32) -> i32 {
+        let ret = unsafe {libc::shutdown(self.raw_sys_fd, how)};
+        ret
     }
 
     pub fn check_rawconnection(&self) -> bool {
