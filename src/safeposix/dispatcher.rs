@@ -113,7 +113,7 @@ const SYNC_FILE_RANGE: i32 = 164;
 
 use crate::interface;
 use super::cage::*;
-use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
+use super::filesystem::{FS_METADATA, load_fs, incref_root, persist_metadata, LOGMAP, LOGFILENAME, FilesystemMetadata};
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
@@ -663,7 +663,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         sigset: interface::RustHashMap::new(), 
         pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
-        interval_timer: interface::IntervalTimer::new(0)
+        interval_timer: interface::IntervalTimer::new(0),
+        persona_id: 0,
+        inheritance_list: vec!()
     };
 
     interface::cagetable_insert(0, utilcage);
@@ -688,7 +690,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         sigset: interface::RustHashMap::new(),
         pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
-        interval_timer: interface::IntervalTimer::new(1)
+        interval_timer: interface::IntervalTimer::new(1),
+        persona_id: 1,
+        inheritance_list: vec!()
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean
@@ -702,7 +706,7 @@ pub extern "C" fn lindrustfinalize() {
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);
     }
-    
+     
     // clear /tmp folder
     cleartmp(false);
     interface::cagetable_clear();

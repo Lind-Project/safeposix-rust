@@ -79,6 +79,10 @@ fn assert_is_allowed_filename(filename: &String) {
     if filename.starts_with(".") {
         panic!("ArgumentError: Filename cannot start with a period.")
     }
+
+    if filename.contains("%") {
+        panic!("ArgumentError: Filename cannot contain %")
+    }
 }
 
 pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {

@@ -82,7 +82,9 @@ pub struct Cage {
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     pub main_threadid: interface::RustAtomicU64,
-    pub interval_timer: interface::IntervalTimer
+    pub interval_timer: interface::IntervalTimer,
+    pub persona_id: u64,
+    pub inheritance_list: Vec<u32>
 }
 
 impl Cage {

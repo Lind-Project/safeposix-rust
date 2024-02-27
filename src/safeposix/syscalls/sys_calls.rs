@@ -3,7 +3,7 @@
 // System related system calls
 use crate::interface;
 use crate::safeposix::cage::{*, FileDescriptor::*};
-use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
+use crate::safeposix::filesystem::{FS_METADATA, Inode};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
 use super::sys_constants::*;
@@ -142,7 +142,7 @@ impl Cage {
 
         }
         let cwd_container = self.cwd.read();
-        if let Some(cwdinodenum) = metawalk(&cwd_container) {
+        if let Some(cwdinodenum) = self.metawalk(&cwd_container) {
             if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
                 cwddir.refcount += 1;
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
@@ -187,7 +187,9 @@ impl Cage {
             sigset: newsigset,
             pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: interface::IntervalTimer::new(child_cageid)
+            interval_timer: interface::IntervalTimer::new(child_cageid),
+            persona_id: child_cageid,
+            inheritance_list: vec!()
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -255,7 +257,9 @@ impl Cage {
             sigset: newsigset,
             pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid)
+            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
+            persona_id: child_cageid,
+            inheritance_list: vec!()
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -277,7 +281,7 @@ impl Cage {
 
         //get file descriptor table into a vector
         let cwd_container = self.cwd.read();
-        decref_dir(&*cwd_container);
+        self.decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);

@@ -31,7 +31,7 @@ impl Cage {
         if fd < 0 { return fd }
         let fdoption = &mut *guardopt.unwrap();
 
-        match metawalkandparent(truepath.as_path()) {
+        match self.metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
             (None, None) => {
                 if 0 == (flags & O_CREAT) {
@@ -144,7 +144,7 @@ impl Cage {
         //pass the metadata to this helper. If passed table is none, then create new instance
         let metadata = &FS_METADATA;
 
-        match metawalkandparent(truepath.as_path()) {
+        match self.metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
             (None, None) => {
                 syscall_error(Errno::ENOENT, "mkdir", "a directory component in pathname does not exist or is a dangling symbolic link")
@@ -198,7 +198,7 @@ impl Cage {
         //pass the metadata to this helper. If passed table is none, then create new instance
         let metadata = &FS_METADATA;
 
-        match metawalkandparent(truepath.as_path()) {
+        match self.metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
             (None, None) => {
                 syscall_error(Errno::ENOENT, "mknod", "a directory component in pathname does not exist or is a dangling symbolic link")
@@ -248,7 +248,7 @@ impl Cage {
         let truenewpath = normpath(convpath(newpath), self);
         let filename = truenewpath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-        match metawalk(trueoldpath.as_path()) {
+        match self.metawalk(trueoldpath.as_path()) {
             //If neither the file nor parent exists
             None => {
                 syscall_error(Errno::ENOENT, "link", "a directory component in pathname does not exist or is a dangling symbolic link")
@@ -275,7 +275,7 @@ impl Cage {
 
                 drop(inodeobj);
 
-                let retval = match metawalkandparent(truenewpath.as_path()) {
+                let retval = match self.metawalkandparent(truenewpath.as_path()) {
                     (None, None) => {syscall_error(Errno::ENOENT, "link", "newpath cannot be created")}
 
                     (None, Some(pardirinode)) => {
@@ -328,7 +328,7 @@ impl Cage {
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");}
         let truepath = normpath(convpath(path), self);
 
-        match metawalkandparent(truepath.as_path()) {
+        match self.metawalkandparent(truepath.as_path()) {
             //If the file does not exist
             (None, ..) => {
                 syscall_error(Errno::ENOENT, "unlink", "path does not exist")
@@ -391,7 +391,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
+        if let Some(inodenum) = self.metawalk(truepath.as_path()) {
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
             
             //populate those fields in statbuf which depend on things other than the inode object
@@ -531,7 +531,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
+        if let Some(inodenum) = self.metawalk(truepath.as_path()) {
             let _inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
             
             //populate the dev id field -- can be done outside of the helper
@@ -1020,7 +1020,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
+        if let Some(inodenum) = self.metawalk(truepath.as_path()) {
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
             //Get the mode bits if the type of the inode is sane
@@ -1081,7 +1081,7 @@ impl Cage {
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
         //Walk the file tree to get inode from path
-        if let Some(inodenum) = metawalk(&truepath) {
+        if let Some(inodenum) = self.metawalk(&truepath) {
             if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
 
                 //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
@@ -1097,7 +1097,7 @@ impl Cage {
         let mut cwd_container = self.cwd.write();
 
         //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
-        decref_dir(&*cwd_container);
+        self.decref_dir(&*cwd_container);
 
         *cwd_container = interface::RustRfc::new(truepath);
         0 //chdir has succeeded!;
@@ -1543,7 +1543,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         //check if there is a valid path or not there to an inode
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
+        if let Some(inodenum) = self.metawalk(truepath.as_path()) {
             if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
                Self:: _chmod_helper(inodenum, mode);
             }
@@ -1718,7 +1718,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         // try to get inodenum of input path and its parent
-        match metawalkandparent(truepath.as_path()) {
+        match self.metawalkandparent(truepath.as_path()) {
             (None, ..) => {
                 syscall_error(Errno::ENOENT, "rmdir", "Path does not exist")
             }
@@ -1767,7 +1767,7 @@ impl Cage {
         let true_newpath = normpath(convpath(newpath), self);
 
         // try to get inodenum of old path and its parent
-        match metawalkandparent(true_oldpath.as_path()) {
+        match self.metawalkandparent(true_oldpath.as_path()) {
             (None, ..) => {
                 syscall_error(Errno::EEXIST, "rename", "Old path does not exist")
             }
@@ -1777,7 +1777,7 @@ impl Cage {
             (Some(inodenum), Some(parent_inodenum)) => {
                 // make sure file is not moved to another dir 
                 // get inodenum for parent of new path
-                let (_, new_par_inodenum) = metawalkandparent(true_newpath.as_path());
+                let (_, new_par_inodenum) = self.metawalkandparent(true_newpath.as_path());
                 // check if old and new paths share parent
                 if new_par_inodenum != Some(parent_inodenum) {
                     return syscall_error(Errno::EOPNOTSUPP, "rename", "Cannot move file to another directory");
@@ -2006,7 +2006,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
-        if let Some(inodenum) = metawalk(truepath.as_path()) {
+        if let Some(inodenum) = self.metawalk(truepath.as_path()) {
             self._truncate_helper(inodenum, length, false)
         } else {
             syscall_error(Errno::ENOENT, "truncate", "path does not refer to an existing file")

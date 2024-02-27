@@ -153,7 +153,7 @@ impl Cage {
         if path.len() == 0 {return syscall_error(Errno::ENOENT, "bind", "given path was null");}
         let truepath = normpath(convpath(path), self);
     
-        match metawalkandparent(truepath.as_path()) {
+        match self.metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
             (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
             //If the file doesn't exist but the parent does
@@ -1080,7 +1080,7 @@ impl Cage {
                 let mut newsockhandle = newsock_tmp.write();
 
                 let pathclone = normpath(convpath(remote_addr.path()), self);
-                if let Some(inodenum) = metawalk(pathclone.as_path()) {                   
+                if let Some(inodenum) = self.metawalk(pathclone.as_path()) {                   
                     newsockhandle.unix_info = Some(UnixSocketInfo {
                         path: pathclone,
                         inode: inodenum.clone(),
