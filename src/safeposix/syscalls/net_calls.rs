@@ -20,6 +20,8 @@ impl Cage {
 
         let sockfd = SocketDesc {
             flags: flags,
+            domain: domain,
+            rawfd: -1, // RawFD set in bind for inet, or stays at -1 for others
             handle: interface::RustRfc::new(interface::RustLock::new(Self::mksockhandle(domain, socktype, protocol, conn, flags))),
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
         }; //currently on failure to create handle we create successfully but it's corrupted, change?
@@ -217,7 +219,6 @@ impl Cage {
     
         0
     }
-    
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
@@ -227,7 +228,12 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
-                    self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved)
+                    let bindret = self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved);
+                    if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
+                        sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                    }
+
+                    bindret
                 }
                 _ => {
                     syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket")
@@ -1270,11 +1276,11 @@ impl Cage {
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
                     Socket(ref sockfdobj) => {
-                        let sock_tmp = sockfdobj.handle.clone();
-                        let sockhandle = sock_tmp.read();
                         let mut newconnection = false;
-                        match sockhandle.domain {
+                        match sockfdobj.domain {
                             AF_UNIX => {
+                                let sock_tmp = sockfdobj.handle.clone();
+                                let sockhandle = sock_tmp.read();
                                 if sockhandle.state == ConnState::INPROGRESS {
                                     let remotepathbuf = normpath(convpath(sockhandle.remoteaddr.unwrap().path()), self);
                                     let dsconnobj = NET_METADATA.domsock_accept_table.get(&remotepathbuf);
@@ -1300,19 +1306,19 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
-                                let rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                                kernel_inet_fds.set(rawfd);
-                                rawfd_lindfd_tuples.push((rawfd, fd));
-                                if rawfd > highest_raw_fd {
-                                    highest_raw_fd = rawfd;
+                                kernel_inet_fds.set(sockfdobj.rawfd);
+                                rawfd_lindfd_tuples.push((sockfdobj.rawfd, fd));
+                                if sockfdobj.rawfd > highest_raw_fd {
+                                    highest_raw_fd = sockfdobj.rawfd;
                                 }
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
                         }
 
                         if newconnection {
-                            let mut newconnhandle = sock_tmp.write();
-                            newconnhandle.state = ConnState::CONNECTED; 
+                            let sock_tmp = sockfdobj.handle.clone();
+                            let mut sockhandle = sock_tmp.write();
+                            sockhandle.state = ConnState::CONNECTED; 
                         }
                     }
 
