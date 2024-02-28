@@ -302,11 +302,18 @@ impl Cage {
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
-                    match sockhandle.protocol {
-                        IPPROTO_UDP => return self.connect_udp(&mut *sockhandle, remoteaddr),
-                        IPPROTO_TCP => return self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
+                    let ret = match sockhandle.protocol {
+                        IPPROTO_UDP => self.connect_udp(&mut *sockhandle, remoteaddr),
+                        IPPROTO_TCP => self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
                         _ => return syscall_error(Errno::EOPNOTSUPP, "connect", "Unknown protocol in connect"),
+                    };
+
+                    if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
+                        sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                     }
+
+                    ret
+                    
                 }
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "connect", "file descriptor refers to something other than a socket");
@@ -465,10 +472,10 @@ impl Cage {
         }
 
         let checkedfd = self.get_filedescriptor(fd).unwrap();
-        let unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &*unlocked_fd {
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
-                Socket(sockfdobj) => {
+                Socket(ref mut sockfdobj) => {
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
 
@@ -500,6 +507,10 @@ impl Cage {
                             if ibindret < 0 {
                                 return ibindret;
                             }
+                            if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
+                                sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                            }
+        
 
                             //unwrap ok because we implicit_bind_right before
                             let sockret = sockhandle.innersocket.as_ref().unwrap().sendto(buf, buflen, Some(dest_addr));
@@ -762,12 +773,17 @@ impl Cage {
     fn recv_common_inner_udp(&self, sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
         let binddomain = if let Some(baddr) = addr {
             baddr.get_family() as i32
-       } else { AF_INET };
+        } else { AF_INET };
        
-       let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
-       if ibindret < 0 {
-           return ibindret;
-       }
+        let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
+        if ibindret < 0 {
+            return ibindret;
+        }
+
+        if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
+            sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+        }
+
 
        loop { // loop for blocking sockets
            //if the remoteaddr is set and addr is not, use remoteaddr
@@ -859,7 +875,10 @@ impl Cage {
                                         Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
                                     };
                                 }
-                                
+
+                                if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
+                                    sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                                }
                             }
 
                             let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
@@ -1306,6 +1325,8 @@ impl Cage {
                             }
                             AF_INET | AF_INET6 => {
                                 // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
+                                if sockfdobj.rawfd < 0 { continue; }
+
                                 kernel_inet_fds.set(sockfdobj.rawfd);
                                 rawfd_lindfd_tuples.push((sockfdobj.rawfd, fd));
                                 if sockfdobj.rawfd > highest_raw_fd {
