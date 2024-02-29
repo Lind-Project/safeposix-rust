@@ -1203,7 +1203,7 @@ impl Cage {
 
                 //create socket object for new connected socket
                 newsockhandle.innersocket = Some(acceptedsock);
-                sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                newsockfd.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 
                 
                 let _insertval = newfdoption.insert(Socket(newsockfd));
