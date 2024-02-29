@@ -297,7 +297,7 @@ impl Cage {
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
-                    
+
                     match sockhandle.protocol {
                         IPPROTO_UDP => return self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr),
                         IPPROTO_TCP => return self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
@@ -325,10 +325,9 @@ impl Cage {
                     Err(e) => return e,
                 };
     
-                let ret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
+                let bindret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
                 sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // udp now connected so lets set rawfd for select
-                ret
-
+                return bindret;
             }
         };
     }
