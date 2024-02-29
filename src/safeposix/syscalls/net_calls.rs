@@ -1145,7 +1145,7 @@ impl Cage {
                 if sockhandle.state != ConnState::LISTEN {
                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                 }
-                let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+                let mut newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 // if we got a pending connection in select/poll/whatever, return that here instead
                 let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
