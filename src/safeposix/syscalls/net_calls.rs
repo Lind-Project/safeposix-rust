@@ -324,7 +324,7 @@ impl Cage {
                     Err(e) => return e,
                 };
     
-                ret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
+                let ret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
                 sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // udp now connected so lets set rawfd for select
                 ret
 
