@@ -1185,7 +1185,7 @@ impl Cage {
 
                 //create socket object for new connected socket
                 newsockhandle.innersocket = Some(acceptedsock);
-                newsockfd.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // set rawfd for select
+                newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // set rawfd for select
                 
                 
                 let _insertval = newfdoption.insert(Socket(newsockfd));
