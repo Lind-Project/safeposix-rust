@@ -297,9 +297,10 @@ impl Cage {
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
+                    
                     match sockhandle.protocol {
-                        IPPROTO_UDP => self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr),
-                        IPPROTO_TCP => self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
+                        IPPROTO_UDP => return self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr),
+                        IPPROTO_TCP => return self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
                         _ => return syscall_error(Errno::EOPNOTSUPP, "connect", "Unknown protocol in connect"),
                     };
                 }
