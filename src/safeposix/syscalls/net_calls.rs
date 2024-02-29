@@ -228,12 +228,7 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
-                    let bindret = self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved);
-                    if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
-                        sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                    }
-
-                    bindret
+                    self.bind_inner_socket(&mut *sockhandle, localaddr, prereserved)
                 }
                 _ => {
                     syscall_error(Errno::ENOTSOCK, "bind", "file descriptor refers to something other than a socket")
@@ -302,18 +297,11 @@ impl Cage {
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
-                    let ret = match sockhandle.protocol {
-                        IPPROTO_UDP => self.connect_udp(&mut *sockhandle, remoteaddr),
+                    match sockhandle.protocol {
+                        IPPROTO_UDP => self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr),
                         IPPROTO_TCP => self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
                         _ => return syscall_error(Errno::EOPNOTSUPP, "connect", "Unknown protocol in connect"),
                     };
-
-                    if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
-                        sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                    }
-
-                    ret
-                    
                 }
                 _ => {
                     return syscall_error(Errno::ENOTSOCK, "connect", "file descriptor refers to something other than a socket");
@@ -324,7 +312,7 @@ impl Cage {
         }
     }
     
-    fn connect_udp(&self, sockhandle: &mut SocketHandle, remoteaddr: &interface::GenSockaddr) -> i32 {
+    fn connect_udp(&self, sockhandle: &mut SocketHandle, sockfdobj: &mut SocketDesc, remoteaddr: &interface::GenSockaddr) -> i32 {
         //for UDP, just set the addresses and return
         //we don't need to check connection state for UDP, it's connectionless!
         sockhandle.remoteaddr = Some(remoteaddr.clone());
@@ -336,7 +324,10 @@ impl Cage {
                     Err(e) => return e,
                 };
     
-                return self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
+                ret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
+                sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // udp now connected so lets set rawfd for select
+                ret
+
             }
         };
     }
@@ -349,7 +340,7 @@ impl Cage {
     
         match sockhandle.domain {
             AF_UNIX => self.connect_tcp_unix(&mut *sockhandle, sockfdobj, remoteaddr),
-            AF_INET | AF_INET6 => self.connect_tcp_inet(&mut *sockhandle, remoteaddr),
+            AF_INET | AF_INET6 => self.connect_tcp_inet(&mut *sockhandle, sockfdobj, remoteaddr),
             _ => {return syscall_error(Errno::EINVAL, "connect", "Unsupported domain provided")},
         }
     }
@@ -395,7 +386,7 @@ impl Cage {
         return 0; 
     }
     
-    fn connect_tcp_inet(&self, sockhandle: &mut SocketHandle, remoteaddr: &interface::GenSockaddr) -> i32 {
+    fn connect_tcp_inet(&self, sockhandle: &mut SocketHandle, sockfdobj: &mut SocketDesc, remoteaddr: &interface::GenSockaddr) -> i32 {
         // TCP inet domain logic
         //for TCP, actually create the internal socket object and connect it
         let remoteclone = remoteaddr.clone();
@@ -437,6 +428,7 @@ impl Cage {
         sockhandle.state = ConnState::CONNECTED;
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         sockhandle.errno = 0;
+        sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
         if inprogress {
             sockhandle.state = ConnState::INPROGRESS;
             return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
@@ -507,10 +499,6 @@ impl Cage {
                             if ibindret < 0 {
                                 return ibindret;
                             }
-                            if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
-                                sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                            }
-        
 
                             //unwrap ok because we implicit_bind_right before
                             let sockret = sockhandle.innersocket.as_ref().unwrap().sendto(buf, buflen, Some(dest_addr));
@@ -780,10 +768,6 @@ impl Cage {
             return ibindret;
         }
 
-        if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
-            sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-        }
-
 
        loop { // loop for blocking sockets
            //if the remoteaddr is set and addr is not, use remoteaddr
@@ -875,10 +859,6 @@ impl Cage {
                                         Err(()) => panic!("Unknown errno value from socket bind within listen returned!"),
                                     };
                                 }
-
-                                if sockfdobj.domain == AF_INET || sockfdobj.domain == AF_INET6 { // set rawfd for select
-                                    sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                                }
                             }
 
                             let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
@@ -897,6 +877,8 @@ impl Cage {
                                 sockhandle.state = ConnState::NOTCONNECTED;
                                 return lr;
                             };
+ 
+                            sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; //set rawfd for select
 
                             if !NET_METADATA.pending_conn_table.contains_key(&porttuple) { NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]); }
 
@@ -1203,7 +1185,7 @@ impl Cage {
 
                 //create socket object for new connected socket
                 newsockhandle.innersocket = Some(acceptedsock);
-                newsockfd.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                newsockfd.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // set rawfd for select
                 
                 
                 let _insertval = newfdoption.insert(Socket(newsockfd));
