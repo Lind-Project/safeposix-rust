@@ -1219,7 +1219,7 @@ impl Cage {
         loop { //we must block manually
             // 1. iterate thru readfds
             if let Some(readfds_ref) = readfds.as_ref() {
-                let res = self.select_readfds(nfds, readfds_ref, new_readfds, &mut retval);
+                let res = self.select_readfds(nfds, readfds_ref, new_readfds, timeout, &mut retval);
                 if res != 0 {return res}
             }
             
@@ -1264,7 +1264,7 @@ impl Cage {
         return retval;
     }
 
-    fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, retval: &mut i32) -> i32 {
+    fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, timeout: Option<interface::RustDuration>, retval: &mut i32) -> i32 {
         // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
         let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
         let kernel_inet_fds = &mut interface::FdSet::new();
@@ -1353,7 +1353,7 @@ impl Cage {
             let kernel_ret;
             // note that this select call always have timeout = 0, so it doesn't block
             
-            kernel_ret = interface::kernel_select(highest_raw_fd + 1, Some(kernel_inet_fds), None, None);
+            kernel_ret = interface::kernel_select(highest_raw_fd + 1, Some(kernel_inet_fds), None, None, timeout);
             if kernel_ret < 0 {return kernel_ret} 
             if kernel_ret > 0 {
                 // increment retval of our select
