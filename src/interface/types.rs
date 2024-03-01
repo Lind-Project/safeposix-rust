@@ -497,16 +497,21 @@ pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: O
     let result = unsafe {
         // Create a timeval struct with zero timeout
 
-        let mut kselect_timeout = match timeout {
-            Some(duration) => libc::timeval {
-                    tv_sec: duration.as_secs() as i64,
-                    tv_usec: duration.subsec_micros() as i64,
-            },
-            None => libc::timeval {
-                tv_sec: interface::RustDuration::from_secs(1).as_secs() as i64,  // 0 seconds
+        // let mut kselect_timeout = match timeout {
+        //     Some(duration) => libc::timeval {
+        //             tv_sec: duration.as_secs() as i64,
+        //             tv_usec: duration.subsec_micros() as i64,
+        //     },
+        //     None => libc::timeval {
+        //         tv_sec: interface::RustDuration::from_secs(1).as_secs() as i64,  // 0 seconds
+        //         tv_usec: 0, // 0 microseconds
+        //     }
+        // };
+
+        let mut kselect_timeout = libc::timeval {
+                tv_sec: interface::RustDuration::from_secs(30).as_secs() as i64,  // 0 seconds
                 tv_usec: 0, // 0 microseconds
-            }
-        };
+            };
 
         libc::select(
             nfds,
