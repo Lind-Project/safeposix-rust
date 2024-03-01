@@ -503,7 +503,7 @@ pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: O
                     tv_usec: duration.subsec_micros() as i64,
             },
             None => libc::timeval {
-                tv_sec: 0,  // 0 seconds
+                tv_sec: interface::RustDuration::from_secs(1).as_secs() as i64,  // 0 seconds
                 tv_usec: 0, // 0 microseconds
             }
         };
