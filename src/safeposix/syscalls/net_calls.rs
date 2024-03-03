@@ -1515,8 +1515,35 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
                     }
                     SOL_TCP => {
+                        let optbit = 1 << optname;
+                        let sock_tmp = sockfdobj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
+                        
                         if optname == TCP_NODELAY {
-                            return 0;
+                            let mut newoptions = sockhandle.options;
+                            //now let's set this if we were told to
+                            if optval != 0 {
+                                //optval should always be 1 or 0.
+                                newoptions |= optbit;
+                            } else {
+                                newoptions &= !optbit;
+                            }
+
+                            if newoptions != sockhandle.options {
+                                if let Some(sock) = sockhandle.innersocket.as_ref() {
+                                    let sockret = sock.setsockopt(SOL_TCP, optname, optval);
+                                    if sockret < 0 {
+                                        match Errno::from_discriminant(interface::get_errno()) {
+                                            Ok(i) => {return syscall_error(i, "setsockopt", "The libc call to setsockopt failed!");},
+                                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                                        };
+                                    }
+                                }
+                            }
+
+                            sockhandle.options = newoptions;
+
+                            return 0;                  
                         }
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
