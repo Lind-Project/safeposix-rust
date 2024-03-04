@@ -1050,7 +1050,7 @@ impl Cage {
                 if sockhandle.state != ConnState::LISTEN {
                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                 }
-                let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+                let mut newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 let remote_addr : interface::GenSockaddr;
                 let sendpipenumber;
@@ -1108,7 +1108,9 @@ impl Cage {
                 let _insertval = newfdoption.insert(Socket(newsockfd));
                 *addr = remote_addr; //populate addr with what address it connected to
                 
-
+                // set lock-free domain and rawfd for select
+                newsockfd.domain = newsockhandle.domain;
+                newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 
                 return newfd;
             }
@@ -1185,7 +1187,9 @@ impl Cage {
 
                 //create socket object for new connected socket
                 newsockhandle.innersocket = Some(acceptedsock);
-                newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // set rawfd for select
+                // set lock-free domain and rawfd for select
+                newsockfd.domain = newsockhandle.domain;
+                newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 
                 
                 let _insertval = newfdoption.insert(Socket(newsockfd));
@@ -1441,6 +1445,23 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
                     }
                     SOL_TCP => {
+                        // Currently only support TCP_NODELAY option for SOL_TCP
+                        if optname == TCP_NODELAY {
+                            let optbit = 1 << optname;
+                            let sock_temp = sockfdobj.handle.clone();
+                            let sockhandle = sock_temp.read();
+
+                            if let Some(sock) = sockhandle.innersocket.as_ref() {
+                                let sockret = sock.getsockopt(level, optname, optval);
+                                if sockret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "getsockopt", "The libc call to getsockopt failed!");},
+                                        Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                                    };
+                                }
+                            }
+                            return 0;
+                        }
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
@@ -1512,14 +1533,14 @@ impl Cage {
                 //checking that we recieved SOL_SOCKET
                 match level {
                     SOL_UDP => {
-                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
+                        return syscall_error(Errno::EOPNOTSUPP, "setsockopt", "UDP is not supported for getsockopt");
                     }
                     SOL_TCP => {
-                        let optbit = 1 << optname;
-                        let sock_tmp = sockfdobj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
-                        
+                        // Currently only support TCP_NODELAY for SOL_TCP
                         if optname == TCP_NODELAY {
+                            let optbit = 1 << optname;
+                            let sock_tmp = sockfdobj.handle.clone();
+                            let mut sockhandle = sock_tmp.write();
                             let mut newoptions = sockhandle.options;
                             //now let's set this if we were told to
                             if optval != 0 {
@@ -1540,12 +1561,10 @@ impl Cage {
                                     }
                                 }
                             }
-
                             sockhandle.options = newoptions;
-
-                            return 0;                  
+                            return 0;           
                         }
-                        return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
+                        return syscall_error(Errno::EOPNOTSUPP, "setsockopt", "This TCP option is not remembered by setsockopt");
                     }
                     SOL_SOCKET => {
                         let optbit = 1 << optname;
