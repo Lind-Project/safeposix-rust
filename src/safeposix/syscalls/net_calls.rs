@@ -326,7 +326,8 @@ impl Cage {
                 };
     
                 let bindret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
-                sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; // udp now connected so lets set rawfd for select
+                // udp now connected so lets set rawfd for select
+                sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 return bindret;
             }
         };
@@ -1109,7 +1110,6 @@ impl Cage {
                 *addr = remote_addr; //populate addr with what address it connected to
                 
                 // set lock-free domain and rawfd for select
-                newsockfd.domain = newsockhandle.domain;
                 newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 
                 return newfd;
@@ -1187,8 +1187,7 @@ impl Cage {
 
                 //create socket object for new connected socket
                 newsockhandle.innersocket = Some(acceptedsock);
-                // set lock-free domain and rawfd for select
-                newsockfd.domain = newsockhandle.domain;
+                // set lock-free rawfd for select
                 newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 
                 
