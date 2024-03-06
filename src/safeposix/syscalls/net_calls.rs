@@ -1056,7 +1056,7 @@ impl Cage {
                 if sockhandle.state != ConnState::LISTEN {
                     return syscall_error(Errno::EINVAL, "accept", "Socket must be listening before accept is called");
                 }
-                let mut newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
+                let newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
                 let remote_addr : interface::GenSockaddr;
                 let sendpipenumber;
@@ -1359,7 +1359,7 @@ impl Cage {
             let kernel_ret;
             // note that this select call always have timeout = 0, so it doesn't block
             
-            kernel_ret = interface::kernel_select(highest_raw_fd + 1, Some(kernel_inet_fds), None, None, timeout);
+            kernel_ret = interface::kernel_select(highest_raw_fd + 1, Some(kernel_inet_fds), None, None);
             if kernel_ret < 0 {return kernel_ret} 
             if kernel_ret > 0 {
                 // increment retval of our select
