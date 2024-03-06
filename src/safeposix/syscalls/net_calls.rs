@@ -1112,9 +1112,6 @@ impl Cage {
                 newsockhandle.remoteaddr = Some(remote_addr.clone());
                 newsockhandle.state = ConnState::CONNECTED;
 
-                // set lock-free domain and rawfd for select
-                newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-
                 let _insertval = newfdoption.insert(Socket(newsockfd));
                 *addr = remote_addr; //populate addr with what address it connected to
                 
