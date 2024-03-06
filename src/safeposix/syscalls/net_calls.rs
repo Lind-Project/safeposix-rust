@@ -1111,11 +1111,12 @@ impl Cage {
                 newsockhandle.localaddr = Some(sockhandle.localaddr.unwrap().clone());
                 newsockhandle.remoteaddr = Some(remote_addr.clone());
                 newsockhandle.state = ConnState::CONNECTED;
-                let _insertval = newfdoption.insert(Socket(newsockfd));
-                *addr = remote_addr; //populate addr with what address it connected to
-                
+
                 // set lock-free domain and rawfd for select
                 newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+
+                let _insertval = newfdoption.insert(Socket(newsockfd));
+                *addr = remote_addr; //populate addr with what address it connected to
                 
                 return newfd;
             }
@@ -1451,12 +1452,11 @@ impl Cage {
                     SOL_TCP => {
                         // Currently only support TCP_NODELAY option for SOL_TCP
                         if optname == TCP_NODELAY {
-                            let optbit = 1 << optname;
                             let sock_temp = sockfdobj.handle.clone();
                             let sockhandle = sock_temp.read();
 
                             if let Some(sock) = sockhandle.innersocket.as_ref() {
-                                let sockret = sock.getsockopt(level, optname, optval);
+                                let sockret = sock.getsockopt(level, TCP_NODELAY, optval);
                                 if sockret < 0 {
                                     match Errno::from_discriminant(interface::get_errno()) {
                                         Ok(i) => {return syscall_error(i, "getsockopt", "The libc call to getsockopt failed!");},
