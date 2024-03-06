@@ -645,6 +645,11 @@ impl Cage {
 
     fn recv_common_inner_tcp(&self, sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>, sockfdobj: &mut SocketDesc, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
 
+        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the state here
+        if sockhandle.state == ConnState::INPROGRESS && sockhandle.innersocket.as_ref().unwrap().check_rawconnection() {
+            sockhandle.state = ConnState::CONNECTED;
+        }
+
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY) {
             return syscall_error(Errno::ENOTCONN, "recvfrom", "The descriptor is not connected");
         }
