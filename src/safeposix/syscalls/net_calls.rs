@@ -2,8 +2,6 @@
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind
 
-use libc::write;
-
 use crate::interface;
 use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
@@ -429,6 +427,7 @@ impl Cage {
         sockhandle.state = ConnState::CONNECTED;
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         sockhandle.errno = 0;
+        // set the rawfd for select
         sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
         if inprogress {
             sockhandle.state = ConnState::INPROGRESS;
@@ -883,8 +882,9 @@ impl Cage {
                                 sockhandle.state = ConnState::NOTCONNECTED;
                                 return lr;
                             };
- 
-                            sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd; //set rawfd for select
+                            
+                            //set rawfd for select
+                            sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
                             if !NET_METADATA.pending_conn_table.contains_key(&porttuple) { NET_METADATA.pending_conn_table.insert(porttuple.clone(), vec![]); }
 
