@@ -1442,36 +1442,29 @@ impl Cage {
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
-                //checking that we recieved SOL_SOCKET
+                let optbit = 1 << optname;
+                let sock_tmp = sockfdobj.handle.clone();
+                let mut sockhandle = sock_tmp.write();
                 match level {
                     SOL_UDP => {
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "UDP is not supported for getsockopt");
                     }
                     SOL_TCP => {
+                        // Checking the tcp_options here
                         // Currently only support TCP_NODELAY option for SOL_TCP
                         if optname == TCP_NODELAY {
-                            let sock_temp = sockfdobj.handle.clone();
-                            let sockhandle = sock_temp.read();
-
-                            if let Some(sock) = sockhandle.innersocket.as_ref() {
-                                let sockret = sock.getsockopt(level, TCP_NODELAY, optval);
-                                if sockret < 0 {
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {return syscall_error(i, "getsockopt", "The libc call to getsockopt failed!");},
-                                        Err(()) => panic!("Unknown errno value from setsockopt returned!"),
-                                    };
-                                }
+                            let optbit = 1 << optname;
+                            if optbit & sockhandle.tcp_options == optbit {
+                                *optval = 1;
+                            } else {
+                                *optval = 0;
                             }
                             return 0;
                         }
                         return syscall_error(Errno::EOPNOTSUPP, "getsockopt", "TCP options not remembered by getsockopt");
                     }
                     SOL_SOCKET => {
-                        let optbit = 1 << optname;
-
-                        let sock_tmp = sockfdobj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
-
+                        // checking the socket_options here
                         match optname {
                             //indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
