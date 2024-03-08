@@ -374,8 +374,6 @@ pub fn getifaddrs_from_file() -> String {
 pub struct FdSet(libc::fd_set);
 
 impl FdSet {
-    #[allow(dead_code)]
-    
     pub fn new() -> FdSet {
         unsafe {
             let mut raw_fd_set = std::mem::MaybeUninit::<libc::fd_set>::uninit();
@@ -397,7 +395,8 @@ impl FdSet {
         }
     }
 
-    // turn off the fd bit in fd_set
+    // turn off the fd bit in fd_set (currently only used by the tests)
+    #[allow(dead_code)]
     pub fn clear(&mut self, fd: RawFd) {
         unsafe { libc::FD_CLR(fd, &mut self.0) }
     }
