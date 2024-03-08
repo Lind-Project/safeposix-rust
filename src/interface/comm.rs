@@ -341,12 +341,6 @@ impl Socket {
         };
     }
 
-    pub fn getsockopt(&self, level: i32, optname: i32, optval: &mut i32) -> i32 {
-        let mut len: libc::socklen_t = size_of::<i32>() as libc::socklen_t;
-        let ret = unsafe {libc::getsockopt(self.raw_sys_fd, level, optname, optval as *mut i32 as *mut libc::c_void, &mut len)};
-        ret
-    }
-
     pub fn setsockopt(&self, level: i32, optname: i32, optval: i32) -> i32 {
         let valbuf = optval;
         let ret =  unsafe{libc::setsockopt(self.raw_sys_fd, level, optname, (&valbuf as *const i32).cast::<libc::c_void>(), size_of::<i32>() as u32)};
@@ -380,6 +374,8 @@ pub fn getifaddrs_from_file() -> String {
 pub struct FdSet(libc::fd_set);
 
 impl FdSet {
+    #[allow(dead_code)]
+    
     pub fn new() -> FdSet {
         unsafe {
             let mut raw_fd_set = std::mem::MaybeUninit::<libc::fd_set>::uninit();
