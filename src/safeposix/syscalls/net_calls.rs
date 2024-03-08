@@ -110,7 +110,7 @@ impl Cage {
             let thissock = interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
 
             for reuse in [SO_REUSEPORT, SO_REUSEADDR] {
-                if sockhandle.options & (1 << reuse) == 0 {continue;}
+                if sockhandle.socket_options & (1 << reuse) == 0 {continue;}
                 let sockret = thissock.setsockopt(SOL_SOCKET, reuse, 1);
                 if sockret < 0 {
                     panic!("Cannot handle failure in setsockopt on socket creation");
@@ -194,7 +194,7 @@ impl Cage {
     
     fn bind_inner_socket_inet(&self, sockhandle: &mut SocketHandle, newsockaddr: &mut interface::GenSockaddr, prereserved: bool) -> i32 {
         // INET Sockets
-        let intent_to_rebind = sockhandle.options & (1 << SO_REUSEPORT) != 0;
+        let intent_to_rebind = sockhandle.socket_options & (1 << SO_REUSEPORT) != 0;
         Self::force_innersocket(sockhandle);
     
         let newlocalport = if prereserved {
@@ -438,11 +438,12 @@ impl Cage {
         }
     }    
 
-    fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, options: i32) -> SocketHandle {
+    fn mksockhandle(domain: i32, socktype: i32, protocol: i32, conn: ConnState, socket_options: i32) -> SocketHandle {
 
         SocketHandle {
             innersocket: None,
-            options: options,
+            socket_options: socket_options,
+            tcp_options: 0,
             state: conn,
             protocol: protocol,
             domain: domain,
@@ -1482,7 +1483,7 @@ impl Cage {
                             }
                             //if the option is a stored binary option, just return it...
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT | SO_REUSEADDR => {
-                                if sockhandle.options & optbit == optbit {
+                                if sockhandle.socket_options & optbit == optbit {
                                     *optval = 1;
                                 } else {
                                     *optval = 0;
@@ -1537,12 +1538,13 @@ impl Cage {
                         return syscall_error(Errno::EOPNOTSUPP, "setsockopt", "UDP is not supported for getsockopt");
                     }
                     SOL_TCP => {
+                        // Here we check and set tcp_options
                         // Currently only support TCP_NODELAY for SOL_TCP
                         if optname == TCP_NODELAY {
                             let optbit = 1 << optname;
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
-                            let mut newoptions = sockhandle.options;
+                            let mut newoptions = sockhandle.tcp_options;
                             //now let's set this if we were told to
                             if optval != 0 {
                                 //optval should always be 1 or 0.
@@ -1551,7 +1553,7 @@ impl Cage {
                                 newoptions &= !optbit;
                             }
 
-                            if newoptions != sockhandle.options {
+                            if newoptions != sockhandle.tcp_options {
                                 if let Some(sock) = sockhandle.innersocket.as_ref() {
                                     let sockret = sock.setsockopt(SOL_TCP, optname, optval);
                                     if sockret < 0 {
@@ -1562,12 +1564,13 @@ impl Cage {
                                     }
                                 }
                             }
-                            sockhandle.options = newoptions;
+                            sockhandle.tcp_options = newoptions;
                             return 0;           
                         }
                         return syscall_error(Errno::EOPNOTSUPP, "setsockopt", "This TCP option is not remembered by setsockopt");
                     }
                     SOL_SOCKET => {
+                        // Here we check and set socket_options
                         let optbit = 1 << optname;
                         let sock_tmp = sockfdobj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
@@ -1579,10 +1582,10 @@ impl Cage {
                             }
                             SO_LINGER | SO_KEEPALIVE => {
                                 if optval == 0 {
-                                    sockhandle.options &= !optbit;
+                                    sockhandle.socket_options &= !optbit;
                                 } else {
                                     //optval should always be 1 or 0.
-                                    sockhandle.options |= optbit;
+                                    sockhandle.socket_options |= optbit;
                                 }
 
 
@@ -1590,7 +1593,7 @@ impl Cage {
                             }
 
                             SO_REUSEPORT | SO_REUSEADDR => {
-                                let mut newoptions = sockhandle.options;
+                                let mut newoptions = sockhandle.socket_options;
                                 //now let's set this if we were told to
                                 if optval != 0 {
                                     //optval should always be 1 or 0.
@@ -1599,7 +1602,7 @@ impl Cage {
                                     newoptions &= !optbit;
                                 }
 
-                                if newoptions != sockhandle.options {
+                                if newoptions != sockhandle.socket_options {
                                     if let Some(sock) = sockhandle.innersocket.as_ref() {
                                         let sockret = sock.setsockopt(SOL_SOCKET, optname, optval);
                                         if sockret < 0 {
@@ -1611,7 +1614,7 @@ impl Cage {
                                     }
                                 }
 
-                                sockhandle.options = newoptions;
+                                sockhandle.socket_options = newoptions;
 
                                 return 0;
                             }

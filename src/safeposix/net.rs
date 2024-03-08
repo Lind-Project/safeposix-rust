@@ -82,7 +82,8 @@ pub struct UnixSocketInfo {
 #[derive(Debug)]
 pub struct SocketHandle {
     pub innersocket: Option<interface::Socket>,
-    pub options: i32,
+    pub socket_options: i32,
+    pub tcp_options: i32,
     pub state: ConnState,
     pub protocol: i32,
     pub domain: i32,
