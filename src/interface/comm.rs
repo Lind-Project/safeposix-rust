@@ -401,6 +401,11 @@ impl FdSet {
         }
     }
 
+    // turn off the fd bit in fd_set
+    pub fn clear(&mut self, fd: RawFd) {
+        unsafe { libc::FD_CLR(fd, &mut self.0) }
+    }
+
     // turn on the fd bit in fd_set
     pub fn set(&mut self, fd: RawFd) {
         unsafe { libc::FD_SET(fd, &mut self.0) }
