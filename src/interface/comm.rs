@@ -421,12 +421,12 @@ impl FdSet {
     // for each fd, if kernel_fds turned it on, then self will turn the corresponding tranlated fd on
     pub fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: i32, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
         for fd in 0..nfds {
-            if kernel_fds.is_set(fd) {
-                for (rawfd, lindfd) in rawfd_lindfd_tuples {
-                    if *rawfd == fd {
-                        self.set(*lindfd);
-                    }
-                }
+            if !kernel_fds.is_set(fd) {
+                continue;
+            }
+            // translate and set
+            if let Some((_, lindfd)) = rawfd_lindfd_tuples.iter().find(|(rawfd, _)| *rawfd == fd) {
+                self.set(*lindfd);
             }
         }
     }
@@ -460,4 +460,20 @@ pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: O
     };
 
     return result;
+}
+
+pub struct SelectInetInfo {
+    pub rawfd_lindfd_tuples: Vec<(i32, i32)>,
+    pub kernel_fds: interface::FdSet,
+    pub highest_raw_fd: i32,
+}
+
+impl SelectInetInfo {
+    pub fn new() -> Self {
+        SelectInetInfo {
+            rawfd_lindfd_tuples: Vec::new(),
+            kernel_fds: interface::FdSet::new(),
+            highest_raw_fd: 0,
+        }
+    }
 }

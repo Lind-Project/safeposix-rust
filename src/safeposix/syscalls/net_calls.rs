@@ -1272,10 +1272,8 @@ impl Cage {
     }
 
     fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, retval: &mut i32) -> i32 {
-        // For INET: prepare the tuple vec and a empty FdSet for the kernel_select's use
-        let mut rawfd_lindfd_tuples: Vec<(i32, i32)> = Vec::new();
-        let kernel_inet_fds = &mut interface::FdSet::new();
-        let mut highest_raw_fd = 0;
+        // For INET: prepare the data structures for the kernel_select's use
+        let mut inet_info = interface::SelectInetInfo::new();
 
         for fd in 0..nfds {
             // check if current i is in readfd
@@ -1318,10 +1316,10 @@ impl Cage {
                                 // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
                                 if sockfdobj.rawfd < 0 { continue; }
 
-                                kernel_inet_fds.set(sockfdobj.rawfd);
-                                rawfd_lindfd_tuples.push((sockfdobj.rawfd, fd));
-                                if sockfdobj.rawfd > highest_raw_fd {
-                                    highest_raw_fd = sockfdobj.rawfd;
+                                inet_info.kernel_fds.set(sockfdobj.rawfd);
+                                inet_info.rawfd_lindfd_tuples.push((sockfdobj.rawfd, fd));
+                                if sockfdobj.rawfd > inet_info.highest_raw_fd {
+                                    inet_info.highest_raw_fd = sockfdobj.rawfd;
                                 }
                             },
                             _ => {return syscall_error(Errno::EINVAL, "select", "Unsupported domain provided")}
@@ -1356,17 +1354,18 @@ impl Cage {
         }
 
         // do the kernel_select for inet sockets
-        if !kernel_inet_fds.is_empty() {
+        if !inet_info.kernel_fds.is_empty() {
             let kernel_ret;
             // note that this select call always have timeout = 0, so it doesn't block
             
-            kernel_ret = interface::kernel_select(highest_raw_fd + 1, Some(kernel_inet_fds), None, None);
-            if kernel_ret < 0 {return kernel_ret} 
+            kernel_ret = interface::kernel_select(inet_info.highest_raw_fd + 1, Some(&mut inet_info.kernel_fds), None, None);
             if kernel_ret > 0 {
                 // increment retval of our select
                 *retval += kernel_ret;
                 // translate the kernel checked fds to lindfds, and add to our new_writefds
-                new_readfds.set_from_kernelfds_and_translate(kernel_inet_fds, highest_raw_fd + 1, &rawfd_lindfd_tuples);
+                new_readfds.set_from_kernelfds_and_translate(&mut inet_info.kernel_fds, inet_info.highest_raw_fd + 1, &inet_info.rawfd_lindfd_tuples);
+            } else {
+                return kernel_ret; // might be 0 or have errors
             }
         }
 
