@@ -419,7 +419,7 @@ impl FdSet {
     }
 
     // for each fd, if kernel_fds turned it on, then self will turn the corresponding tranlated fd on
-    pub fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: i32, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
+    fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: i32, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
         for fd in 0..nfds {
             if !kernel_fds.is_set(fd) {
                 continue;
@@ -429,6 +429,20 @@ impl FdSet {
                 self.set(*lindfd);
             }
         }
+    }
+
+    pub fn update_from_kernel_select(&mut self, inet_info: &mut SelectInetInfo, retval: &mut i32) -> i32 {
+        let kernel_ret;
+        // note that this select call always have timeout = 0, so it doesn't block
+        
+        kernel_ret = interface::kernel_select(inet_info.highest_raw_fd + 1, Some(&mut inet_info.kernel_fds), None, None);
+        if kernel_ret > 0 {
+            // increment retval of our select
+            *retval += kernel_ret;
+            // translate the kernel checked fds to lindfds, and add to our new_writefds
+            self.set_from_kernelfds_and_translate(&mut inet_info.kernel_fds, inet_info.highest_raw_fd + 1, &inet_info.rawfd_lindfd_tuples);
+        }
+        return kernel_ret;
     }
 }
 

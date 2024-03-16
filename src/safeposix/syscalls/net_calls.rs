@@ -1355,17 +1355,10 @@ impl Cage {
 
         // do the kernel_select for inet sockets
         if !inet_info.kernel_fds.is_empty() {
-            let kernel_ret;
-            // note that this select call always have timeout = 0, so it doesn't block
-            
-            kernel_ret = interface::kernel_select(inet_info.highest_raw_fd + 1, Some(&mut inet_info.kernel_fds), None, None);
-            if kernel_ret > 0 {
-                // increment retval of our select
-                *retval += kernel_ret;
-                // translate the kernel checked fds to lindfds, and add to our new_writefds
-                new_readfds.set_from_kernelfds_and_translate(&mut inet_info.kernel_fds, inet_info.highest_raw_fd + 1, &inet_info.rawfd_lindfd_tuples);
-            } else {
-                return kernel_ret; // might be 0 or have errors
+            let kernel_ret = new_readfds.update_from_kernel_select(&mut inet_info, retval);
+            // NOTE: we ignore the kernel_select error if some domsocks are ready
+            if kernel_ret < 0 && *retval <= 0 {
+                 return kernel_ret;
             }
         }
 
