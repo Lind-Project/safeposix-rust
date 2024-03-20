@@ -192,6 +192,7 @@ pub union Arg {
   pub dispatch_constsigsett: *const SigsetType,
   pub dispatch_structitimerval: *mut ITimerVal,
   pub dispatch_conststructitimerval: *const ITimerVal,
+  pub dispatch_fdset: *mut libc::fd_set,
 }
 
 
@@ -267,6 +268,15 @@ pub fn get_mutcbuf_null(union_argument: Arg) -> Result<Option<*mut u8>, i32> {
     let data = unsafe{union_argument.dispatch_mutcbuf};
     if !data.is_null() {
         return Ok(Some(data));
+    }
+    return Ok(None);
+}
+
+pub fn get_fdset(union_argument: Arg) -> Result<Option<&'static mut interface::FdSet>, i32> {
+    let data: *mut libc::fd_set = unsafe{union_argument.dispatch_fdset};
+    if !data.is_null() {
+        let internal_fds: &mut interface::FdSet = interface::FdSet::new_from_ptr(data);
+        return Ok(Some(internal_fds));
     }
     return Ok(None);
 }
@@ -410,49 +420,6 @@ pub fn get_sockpair<'a>(union_argument: Arg) -> Result<&'a mut SockPair, i32> {
         return Ok(unsafe{&mut *pointer});
     }
     return Err(syscall_error(Errno::EFAULT, "dispatcher", "input data not valid"));
-}
-
-// turn on the fd bit in fd_set
-pub fn fd_set_insert(fd_set: *mut u8, fd: i32) {
-    let byte_offset = fd / 8;
-    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
-    let bit_offset = fd & 0b111;
-    unsafe{*byte_ptr |= 1 << bit_offset;}
-}
-
-// turn off the fd bit in fd_set
-pub fn fd_set_remove(fd_set: *mut u8, fd: i32) {
-    let byte_offset = fd / 8;
-    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
-    let bit_offset = fd & 0b111;
-    unsafe{*byte_ptr &= !(1 << bit_offset);}
-}
-
-// return true if the bit for fd is set in fd_set, false otherwise
-pub fn fd_set_check_fd(fd_set: *const u8, fd: i32) -> bool {
-    let byte_offset = fd / 8;
-    let byte_ptr = fd_set.wrapping_offset(byte_offset as isize);
-    let bit_offset = fd & 0b111;
-    return (unsafe{*byte_ptr}) & (1 << bit_offset) != 0;
-}
-
-pub fn fd_set_copy(src_set: *const u8, dst_set: *mut u8, nfds: i32) {
-    for fd in 0..nfds {
-        if interface::fd_set_check_fd(src_set, fd) {
-            interface::fd_set_insert(dst_set, fd);
-        } else {
-            interface::fd_set_remove(dst_set, fd);
-        }
-    }
-}
-
-pub fn fd_set_is_empty(fd_set: *const u8, highest_fd: i32) -> bool {
-    for fd in 0..highest_fd + 1 {
-        if fd_set_check_fd(fd_set, fd) {
-            return false;
-        }
-    }
-    return true;
 }
 
 pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenSockaddr, i32> {

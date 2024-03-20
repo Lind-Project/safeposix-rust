@@ -82,7 +82,8 @@ pub struct UnixSocketInfo {
 #[derive(Debug)]
 pub struct SocketHandle {
     pub innersocket: Option<interface::Socket>,
-    pub options: i32,
+    pub socket_options: i32,
+    pub tcp_options: i32,
     pub state: ConnState,
     pub protocol: i32,
     pub domain: i32,
@@ -386,4 +387,34 @@ impl NetMetadata {
         for ds_path in self.domsock_paths.iter() { domainsock_paths.push(ds_path.clone()); } // get vector of domain sock table keys
         domainsock_paths
     }
+}
+
+pub struct SelectInetInfo {
+    pub rawfd_lindfd_tuples: Vec<(i32, i32)>,
+    pub kernel_fds: interface::FdSet,
+    pub highest_raw_fd: i32,
+}
+
+impl SelectInetInfo {
+    pub fn new() -> Self {
+        SelectInetInfo {
+            rawfd_lindfd_tuples: Vec::new(),
+            kernel_fds: interface::FdSet::new(),
+            highest_raw_fd: 0,
+        }
+    }
+}
+
+pub fn update_readfds_from_kernel_select(readfds: &mut interface::FdSet, inet_info: &mut SelectInetInfo, retval: &mut i32) -> i32 {
+    let kernel_ret;
+    // note that this select call always have timeout = 0, so it doesn't block
+    
+    kernel_ret = interface::kernel_select(inet_info.highest_raw_fd + 1, Some(&mut inet_info.kernel_fds), None, None);
+    if kernel_ret > 0 {
+        // increment retval of our select
+        *retval += kernel_ret;
+        // translate the kernel checked fds to lindfds, and add to our new_writefds
+        readfds.set_from_kernelfds_and_translate(&mut inet_info.kernel_fds, inet_info.highest_raw_fd + 1, &inet_info.rawfd_lindfd_tuples);
+    }
+    return kernel_ret;
 }
