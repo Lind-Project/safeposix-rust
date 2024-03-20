@@ -3,12 +3,10 @@
 // //
 
 use crate::interface;
-use std::mem::size_of;
+use std::mem::{size_of};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::fs::read_to_string;
 use std::str::from_utf8;
-use std::os::unix::io::{AsRawFd, RawFd};
-use std::mem;
 
 extern crate libc;
 
@@ -397,23 +395,23 @@ impl FdSet {
 
     // turn off the fd bit in fd_set (currently only used by the tests)
     #[allow(dead_code)]
-    pub fn clear(&mut self, fd: RawFd) {
+    pub fn clear(&mut self, fd: i32) {
         unsafe { libc::FD_CLR(fd, &mut self.0) }
     }
 
     // turn on the fd bit in fd_set
-    pub fn set(&mut self, fd: RawFd) {
+    pub fn set(&mut self, fd: i32) {
         unsafe { libc::FD_SET(fd, &mut self.0) }
     }
 
     // return true if the bit for fd is set, false otherwise
-    pub fn is_set(&self, fd: RawFd) -> bool {
+    pub fn is_set(&self, fd: i32) -> bool {
         unsafe { libc::FD_ISSET(fd, &self.0) }
     }
 
     pub fn is_empty(&self) -> bool {
         let fd_array: &[u8] = unsafe {
-            std::slice::from_raw_parts(&self.0 as *const _ as *const u8, mem::size_of::<libc::fd_set>())
+            std::slice::from_raw_parts(&self.0 as *const _ as *const u8, size_of::<libc::fd_set>())
         };
         fd_array.iter().all(|&byte| byte == 0)
     }
