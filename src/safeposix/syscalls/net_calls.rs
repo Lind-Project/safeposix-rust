@@ -1273,7 +1273,7 @@ impl Cage {
 
     fn select_readfds(&self, nfds: i32, readfds: &interface::FdSet, new_readfds: &mut interface::FdSet, retval: &mut i32) -> i32 {
         // For INET: prepare the data structures for the kernel_select's use
-        let mut inet_info = interface::SelectInetInfo::new();
+        let mut inet_info = SelectInetInfo::new();
 
         for fd in 0..nfds {
             // check if current i is in readfd
@@ -1355,7 +1355,7 @@ impl Cage {
 
         // do the kernel_select for inet sockets
         if !inet_info.kernel_fds.is_empty() {
-            let kernel_ret = new_readfds.update_from_kernel_select(&mut inet_info, retval);
+            let kernel_ret = update_readfds_from_kernel_select(new_readfds, &mut inet_info, retval);
             // NOTE: we ignore the kernel_select error if some domsocks are ready
             if kernel_ret < 0 && *retval <= 0 {
                  return kernel_ret;
