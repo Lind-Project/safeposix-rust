@@ -386,7 +386,7 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
             if nfds < 0 { //RLIMIT_NOFILE check as well?
                 return syscall_error(Errno::EINVAL, "select", "The number of fds passed was invalid");
             } 
-            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), interface::get_mutcbuf_null(arg2), interface::get_mutcbuf_null(arg3), interface::get_mutcbuf_null(arg4), interface::duration_fromtimeval(arg5))
+            check_and_dispatch!(cage.select_syscall, Ok::<i32, i32>(nfds), interface::get_fdset(arg2), interface::get_fdset(arg3), interface::get_fdset(arg4), interface::duration_fromtimeval(arg5))
         }
         POLL_SYSCALL => {
             let nfds = get_onearg!(interface::get_usize(arg2));
