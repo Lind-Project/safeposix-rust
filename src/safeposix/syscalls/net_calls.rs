@@ -1228,16 +1228,122 @@ impl Cage {
         };
  
         let mut retval = 0; 
-        // in the loop below, we always read from original fd_sets, but make updates to the new copies
-        let mut new_reads_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-        let mut new_writes_chunk: [u8; (FD_SET_MAX_FD / 8) as usize] = [0; (FD_SET_MAX_FD / 8) as usize];
-        let new_readfds = new_reads_chunk.as_mut_ptr();
-        let new_writefds =  new_writes_chunk.as_mut_ptr();
         loop { //we must block manually
-            // 1. iterate thru readfds
-            if readfds.is_some() {
-                let res = self.select_readfds(nfds, readfds.unwrap(), new_readfds, &mut retval);
-                if res != 0 {return res}
+            for fd in readfds.iter() {
+                if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+                    let wrappedclone = wrappedfd.clone();
+                    drop(wrappedfd);
+                    let mut filedesc_enum = wrappedclone.write();
+
+                    match &mut *filedesc_enum {
+                        Socket(ref mut sockfdobj) => {
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                            let mut sockobj = locksock.write();
+
+                            if sockobj.1 == ConnState::LISTEN {
+                                if let interface::RustHashEntry::Vacant(vacant) = NET_METADATA.pending_conn_table.entry(sockfdobj.localaddr.unwrap().port().clone()) {
+
+                                    let listeningsocket = match sockfdobj.domain {
+                                        PF_INET => sockobj.0.nonblock_accept(true),
+                                        PF_INET6 => sockobj.0.nonblock_accept(false),
+                                        _ => panic!("Unknown domain in accepting socket"),
+                                    };
+                                    drop(sockobj);
+                                    if let Ok(_) = listeningsocket.0 {
+                                        //save the pending connection for accept to do something with it
+                                        vacant.insert(vec!(listeningsocket));
+                                    } else {
+                                        //if it returned an error, then don't insert it into new_readfds
+                                      continue;
+                                    }
+                                } //if it's already got a pending connection, add it!
+
+                                //if we reach here there is a pending connection
+                                new_readfds.insert(*fd);
+                                retval += 1;
+                            } else if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
+                                    sockobj.1 = ConnState::CONNECTED;
+                                    new_readfds.insert(*fd);
+                                    retval += 1;
+                            } else {
+                                if sockfdobj.protocol == IPPROTO_UDP {
+                                    new_readfds.insert(*fd);
+                                    retval += 1;
+                                } else {
+                                    drop(sockfdobj);
+                                    drop(filedesc_enum);
+                                    drop(sockobj);
+                                    if self._nonblock_peek_read(*fd) {
+                                        new_readfds.insert(*fd);
+                                        retval += 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        //we don't support selecting streams
+                        Stream(_) => {continue;}
+
+                        //not supported yet
+                        Pipe(_) => {
+                            new_readfds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        //these file reads never block
+                        _ => {
+                            new_readfds.insert(*fd);
+                            retval += 1;
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+            }
+
+            for fd in writefds.iter() {
+                if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+                    let wrappedclone = wrappedfd.clone();
+                    drop(wrappedfd);
+                    let mut filedesc_enum = wrappedclone.write();
+                    match &mut *filedesc_enum {
+                        Socket(ref mut sockfdobj) => {
+                            // check if we've made an in progress connection first
+                            let sid = Self::getsockobjid(&mut *sockfdobj);
+                            let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                            let mut sockobj = locksock.write();
+                            if sockobj.1 == ConnState::INPROGRESS && sockobj.0.check_rawconnection() {
+                                sockobj.1 = ConnState::CONNECTED;
+                            } 
+                            
+                            //we always say sockets are writable? Even though this is not true
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        //we always say streams are writable?
+                        Stream(_) => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        //not supported yet
+                        Pipe(_) => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+
+                        //these file writes never block
+                        _ => {
+                            new_writefds.insert(*fd);
+                            retval += 1;
+                        }
+                    }
+                } else {
+                    return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
+                }
+
             }
             
             // 2. iterate thru writefds
@@ -1848,15 +1954,16 @@ impl Cage {
     }
 
     pub fn epoll_wait_syscall(&self, epfd: i32, events: &mut [EpollEvent], maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
-        let checkedfd = self.get_filedescriptor(epfd).unwrap();
-        let mut unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {
-            if let Epoll(epollfdobj) = filedesc_enum {
+
+        if let Some(wrappedfd) = self.filedescriptortable.get(&epfd) {
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.write();
+            if let Epoll(epollfdobj) = &*filedesc_enum {
                 if  maxevents <  0 {
                     return syscall_error(Errno::EINVAL, "epoll wait", "max events argument is not a positive number");
                 }
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
-                let mut rm_fds_vec: Vec<i32> = vec![];
                 let mut num_events: usize = 0;
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
@@ -1886,13 +1993,9 @@ impl Cage {
                     }
                     poll_fds_vec.push(structpoll);
                   num_events += 1;
-                }
-
-                for fd in rm_fds_vec.iter() { epollfdobj.registered_fds.remove(fd); } // remove closed fds
-
+                } 
                 let poll_fds_slice = &mut poll_fds_vec[..];
-                let pollret = Self::poll_syscall(&self, poll_fds_slice, timeout);
-                if pollret < 0 { return pollret; }
+                Self::poll_syscall(&self, poll_fds_slice, timeout);
                 let mut count = 0;
                 let end_idx: usize = interface::rust_min(num_events, maxevents as usize);
                 for result in poll_fds_slice[..end_idx].iter() {
