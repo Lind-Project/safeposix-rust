@@ -2,7 +2,8 @@
 // //
 // //
 
-use std::mem::size_of;
+use crate::interface;
+use std::mem::{size_of};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::fs::read_to_string;
 use std::str::from_utf8;
@@ -206,7 +207,7 @@ pub struct SockaddrV6 {
 #[derive(Debug)]
 pub struct Socket {
     pub refcnt: i32,
-    raw_sys_fd: i32
+    pub raw_sys_fd: i32
 }
 
 impl Socket {
@@ -340,8 +341,8 @@ impl Socket {
 
     pub fn setsockopt(&self, level: i32, optname: i32, optval: i32) -> i32 {
         let valbuf = optval;
-        let sor =  unsafe{libc::setsockopt(self.raw_sys_fd, level, optname, (&valbuf as *const i32).cast::<libc::c_void>(), size_of::<i32>() as u32)};
-        sor
+        let ret =  unsafe{libc::setsockopt(self.raw_sys_fd, level, optname, (&valbuf as *const i32).cast::<libc::c_void>(), size_of::<i32>() as u32)};
+        ret
     }
 
     pub fn shutdown(&self, how: i32) -> i32 {
@@ -365,4 +366,96 @@ impl Drop for Socket {
 
 pub fn getifaddrs_from_file() -> String {
     read_to_string(NET_DEV_FILENAME).expect("No net_devices file present!").to_owned()
+}
+
+// Implementations of select related FD_SET structure
+pub struct FdSet(libc::fd_set);
+
+impl FdSet {
+    pub fn new() -> FdSet {
+        unsafe {
+            let mut raw_fd_set = std::mem::MaybeUninit::<libc::fd_set>::uninit();
+            libc::FD_ZERO(raw_fd_set.as_mut_ptr());
+            FdSet(raw_fd_set.assume_init())
+        }
+    }
+
+    pub fn new_from_ptr(raw_fdset_ptr: *const libc::fd_set) -> &'static mut FdSet {
+        unsafe {
+            &mut *(raw_fdset_ptr as *mut FdSet)
+        }
+    }
+
+    // copy the src FdSet into self
+    pub fn copy_from(&mut self, src_fds: &FdSet) {
+        unsafe {
+            std::ptr::copy_nonoverlapping(&src_fds.0 as *const libc::fd_set, &mut self.0 as *mut libc::fd_set, 1);
+        }
+    }
+
+    // turn off the fd bit in fd_set (currently only used by the tests)
+    #[allow(dead_code)]
+    pub fn clear(&mut self, fd: i32) {
+        unsafe { libc::FD_CLR(fd, &mut self.0) }
+    }
+
+    // turn on the fd bit in fd_set
+    pub fn set(&mut self, fd: i32) {
+        unsafe { libc::FD_SET(fd, &mut self.0) }
+    }
+
+    // return true if the bit for fd is set, false otherwise
+    pub fn is_set(&self, fd: i32) -> bool {
+        unsafe { libc::FD_ISSET(fd, &self.0) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let fd_array: &[u8] = unsafe {
+            std::slice::from_raw_parts(&self.0 as *const _ as *const u8, size_of::<libc::fd_set>())
+        };
+        fd_array.iter().all(|&byte| byte == 0)
+    }
+
+    // for each fd, if kernel_fds turned it on, then self will turn the corresponding tranlated fd on
+    pub fn set_from_kernelfds_and_translate(&mut self, kernel_fds: &FdSet, nfds: i32, rawfd_lindfd_tuples: &Vec<(i32, i32)>) {
+        for fd in 0..nfds {
+            if !kernel_fds.is_set(fd) {
+                continue;
+            }
+            // translate and set
+            if let Some((_, lindfd)) = rawfd_lindfd_tuples.iter().find(|(rawfd, _)| *rawfd == fd) {
+                self.set(*lindfd);
+            }
+        }
+    }
+}
+
+// for unwrapping in kernel_select
+fn to_fdset_ptr(opt: Option<&mut FdSet>) -> *mut libc::fd_set {
+    match opt {
+        None => std::ptr::null_mut(),
+        Some(&mut FdSet(ref mut raw_fd_set)) => raw_fd_set,
+    }
+}
+
+pub fn kernel_select(nfds: libc::c_int, readfds: Option<&mut FdSet>, writefds: Option<&mut FdSet>, errorfds: Option<&mut FdSet>) -> i32 {
+    // Call libc::select and store the result
+    let result = unsafe {
+        // Create a timeval struct with zero timeout
+
+        let mut kselect_timeout = libc::timeval {
+                tv_sec: 0,  // 0 seconds
+                tv_usec: 0, // 0 microseconds
+            };
+
+        libc::select(
+            nfds,
+            to_fdset_ptr(readfds),
+            to_fdset_ptr(writefds),
+            to_fdset_ptr(errorfds),
+            &mut kselect_timeout as *mut libc::timeval,
+        )
+    };
+
+    return result;
 }
