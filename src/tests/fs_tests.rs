@@ -220,7 +220,7 @@ pub mod fs_tests {
 
    pub fn ut_lind_fs_fchmod() {
         lindrustinit(0);
-        let cage = {CAGE_TABLE.get(&1).unwrap().clone()};
+        let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/fchmodTestFile";

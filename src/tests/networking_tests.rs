@@ -441,7 +441,7 @@ pub mod net_tests {
         cage.fork_syscall(2);
         //client 1 connects to the server to send and recv data...
         let thread1 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(30));
+            interface::sleep(interface::RustDuration::from_millis(100));
             let cage2 = interface::cagetable_getref(2);
 
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
@@ -457,7 +457,7 @@ pub mod net_tests {
         //client 2 connects to the server to send and recv data...
         let thread2 = interface::helper_thread(move || {
             //give it a longer time so that it can sufficiently process all of the data
-            interface::sleep(interface::RustDuration::from_millis(45));
+            interface::sleep(interface::RustDuration::from_millis(200));
             let cage3 = interface::cagetable_getref(3);
 
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);

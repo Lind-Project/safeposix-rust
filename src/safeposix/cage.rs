@@ -10,7 +10,7 @@ pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 use super::net::SocketHandle;
 
-pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
+pub use crate::interface::{CAGE_TABLE};
 
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {

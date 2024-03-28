@@ -602,13 +602,12 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     load_fs();
     incref_root();
     incref_root();
-
+    
     let utilcage = Cage{
         cageid: 0, 
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 0, 
-        filedescriptortable: init_fdtable(),
-        cancelstatus: interface::RustAtomicBool::new(false),
+        filedescriptortable: interface::RustHashMap::new(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -617,7 +616,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
-
     interface::cagetable_insert(0, utilcage);
 
     //init cage is its own parent
@@ -635,14 +633,15 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
+    initcage.load_lower_handle_stubs();
     interface::cagetable_insert(1, initcage);
-    // make sure /tmp is clean
-    cleartmp(true);
 }
 
 #[no_mangle]
 pub extern "C" fn lindrustfinalize() {
-    
+
+    interface::cagetable_clear();
+
     // remove any open domain socket inodes
     for truepath in NET_METADATA.get_domainsock_paths() {
         remove_domain_sock(truepath);

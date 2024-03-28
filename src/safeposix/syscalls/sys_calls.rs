@@ -78,48 +78,6 @@ impl Cage {
         }
         drop(cvtable);
 
-        //construct a new mutex in the child cage where each initialized mutex is in the parent cage
-        let mutextable = self.mutex_table.read();
-        let mut new_mutex_table = vec!();
-        for elem in mutextable.iter() {
-            if elem.is_some() {
-                let new_mutex_result = interface::RawMutex::create();
-                match new_mutex_result {
-                    Ok(new_mutex) => {new_mutex_table.push(Some(interface::RustRfc::new(new_mutex)))}
-                        Err(_) => {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_mutex_init failed!");},
-                            Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
-                        };
-                    }
-                }
-            } else {
-                new_mutex_table.push(None);
-            }
-        }
-        drop(mutextable);
-
-        //construct a new condvar in the child cage where each initialized condvar is in the parent cage
-        let cvtable = self.cv_table.read();
-        let mut new_cv_table = vec!();
-        for elem in cvtable.iter() {
-            if elem.is_some() {
-                let new_cv_result = interface::RawCondvar::create();
-                match new_cv_result {
-                    Ok(new_cv) => {new_cv_table.push(Some(interface::RustRfc::new(new_cv)))}
-                    Err(_) => {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_cond_init failed!");},
-                            Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
-                        };
-                    }
-                }
-            } else {
-                new_cv_table.push(None);
-            }
-        }
-        drop(cvtable);
-
         //construct new cage struct with a cloned fdtable
         let newfdtable = init_fdtable();
         for fd in 0..MAXFD {
@@ -203,15 +161,13 @@ impl Cage {
             shment.shminfo.shm_nattch += 1;
         }
         drop(shmtable);
+        interface::cagetable_insert(child_cageid, cageobj);
 
-        mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
     }
 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         interface::cagetable_remove(self.cageid);
-
-        self.unmap_shm_mappings();
 
         let mut cloexecvec = vec!();
         let iterator = self.filedescriptortable.iter();
@@ -283,13 +239,6 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
-        
-        // Trigger SIGCHLD
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
-            if self.cageid != self.parent {
-                interface::lind_kill_from_id(self.parent, SIGCHLD);
-            }
-        }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
