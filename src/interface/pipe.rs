@@ -19,8 +19,6 @@ const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
 
-const CANCEL_CHECK_INTERVAL: usize = 1048576; // check to cancel pipe reads every 2^20 iterations
-
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
 }
@@ -32,13 +30,14 @@ pub struct EmulatedPipe {
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
     eof: Arc<AtomicBool>,
+    size: usize
 }
 
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false))}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false)), size: size}
     }
 
     pub fn set_eof(&self) {
@@ -101,7 +100,6 @@ impl EmulatedPipe {
     }
 
     // Write length bytes from pointer into pipe
-    // BUG: This only currently works as SPSC
     pub fn write_to_pipe(&self, ptr: *const u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_written = 0;
@@ -119,16 +117,7 @@ impl EmulatedPipe {
         }
 
         while bytes_written < length {
-            if self.get_read_ref() == 0 {
-                return syscall_error(Errno::EPIPE, "write", "broken pipe");
-            } // EPIPE, all read ends are closed
-
             let remaining = write_end.remaining();
-
-            if remaining == 0 {
-                interface::lind_yield(); //yield on a full pipe
-                continue 
-            }
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
             if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
@@ -141,7 +130,6 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    // BUG: This only currently works as SPSC
     pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
         let mut bytes_read = 0;
