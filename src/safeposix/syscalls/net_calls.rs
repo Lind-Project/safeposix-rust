@@ -7,7 +7,7 @@ use crate::interface::errnos::{Errno, syscall_error};
 use super::net_constants::*;
 use super::fs_constants::*;
 use super::sys_constants::*;
-use crate::safeposix::cage::{*, FileDescriptor::*};
+use crate::safeposix::cage::{CAGE_TABLE, PIPE_TABLE, Cage, FileDescriptor::*, SocketDesc, EpollDesc, EpollEvent, FdTable, PollStruct, FileDescriptor};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
@@ -1286,9 +1286,12 @@ impl Cage {
                         Stream(_) => {continue;}
 
                         //not supported yet
-                        Pipe(_) => {
-                            new_readfds.insert(*fd);
-                            retval += 1;
+                        Pipe(pipefdobj) => {
+                            let pipe = PIPE_TABLE.get(&pipefdobj.pipe).unwrap().clone();
+                            if pipe.check_select_read() {
+                                new_readfds.insert(*fd);
+                                retval += 1;
+                            }
                         }
 
                         //these file reads never block
@@ -1329,9 +1332,12 @@ impl Cage {
                         }
 
                         //not supported yet
-                        Pipe(_) => {
-                            new_writefds.insert(*fd);
-                            retval += 1;
+                        Pipe(pipefdobj) => {
+                            let pipe = PIPE_TABLE.get(&pipefdobj.pipe).unwrap().clone();
+                            if pipe.check_select_write() {
+                                new_writefds.insert(*fd);
+                                retval += 1;
+                            }
                         }
 
                         //these file writes never block
