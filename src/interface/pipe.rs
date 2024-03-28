@@ -19,6 +19,8 @@ const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
 
+const CANCEL_CHECK_INTERVAL: usize = 1048576; // check to cancel pipe reads every 2^20 iterations
+
 pub fn new_pipe(size: usize) -> EmulatedPipe {
     EmulatedPipe::new_with_capacity(size)
 }
@@ -61,6 +63,7 @@ impl EmulatedPipe {
         if (flags & O_RDWRFLAGS) == O_RDONLY {self.refcount_read.fetch_sub(1, Ordering::Relaxed);}
         if (flags & O_RDWRFLAGS) == O_WRONLY {self.refcount_write.fetch_sub(1, Ordering::Relaxed);}
     }
+
     pub fn check_select_read(&self) -> bool {
         let read_end = self.read_end.lock();
         let pipe_space = read_end.len();
@@ -132,7 +135,7 @@ impl EmulatedPipe {
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
-    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
+    pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool, cageid: u64) -> i32 {
 
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -146,9 +149,18 @@ impl EmulatedPipe {
         }
 
         // wait for something to be in the pipe, but break on eof
+        // check cancel point after 2^20 cycles just in case
+        let mut count = 0;
         while pipe_space == 0 {
             if self.eof.load(Ordering::SeqCst) { return 0; }
+
+            if count == CANCEL_CHECK_INTERVAL { 
+                interface::cancelpoint(cageid); 
+                count = 0;
+            }
+            
             pipe_space = read_end.len();
+            count = count + 1;
         }
 
         let bytes_to_read = min(length, pipe_space);

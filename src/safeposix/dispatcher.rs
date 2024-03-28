@@ -536,10 +536,6 @@ pub extern "C" fn lindcancelinit(cageid: u64) {
 pub extern "C" fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
     let cage = interface::cagetable_getref(cageid);
     cage.thread_table.insert(pthreadid, kill);
-    if cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed) == 0 {
-        cage.main_threadid.store(interface::get_pthreadid(), interface::RustAtomicOrdering::Relaxed);
-    }
-
 }
 
 #[no_mangle]
@@ -553,48 +549,6 @@ pub extern "C" fn lindthreadremove(cageid: u64, pthreadid: u64) {
     cage.thread_table.remove(&pthreadid);
 }
 
-fn cleartmp(init: bool) {
-    let path = "/tmp";
-    
-    let cage = interface::cagetable_getref(0);
-    let mut statdata = StatData::default();
-    
-    if cage.stat_syscall(path, &mut statdata) == 0 {
-        visit_children(&cage, path, None, |childcage, childpath, isdir, _| {
-            if isdir { lind_deltree(childcage, childpath); }
-            else { childcage.unlink_syscall(childpath);}
-        });
-    }
-    else {
-        if init  == true {
-            cage.mkdir_syscall(path, S_IRWXA);
-        } 
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
-    let cage = interface::cagetable_getref(cageid);
-    let pthreadid = interface::get_pthreadid();
-    let sigset = cage.sigset.get(&pthreadid).unwrap(); // these lock sigset dashmaps for concurrency
-    let pendingset = cage.sigset.get(&pthreadid).unwrap();
-
-    if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
-        return match cage.signalhandler.get(&signo) {
-            Some(action_struct) => {
-                    action_struct.sa_handler // if we have a handler and its not blocked return it
-
-            },
-            None => 0, // if we dont have a handler return 0
-        };
-    } else { 
-        let mutpendingset = sigset.load(interface::RustAtomicOrdering::Relaxed);
-        sigset.store(interface::lind_sigaddset(mutpendingset, signo), interface::RustAtomicOrdering::Relaxed);
-        1 // if its blocked add the signal to the pending set and return 1 to indicated it was blocked
-        //  a signal handler cant be located at address 0x1 so this value is fine to return and check
-    }
-}
-
 #[no_mangle]
 pub extern "C" fn lindrustinit(verbosity: isize) {
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
@@ -604,8 +558,11 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     incref_root();
     
     let utilcage = Cage{
-        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, filedescriptortable: init_fdtable(),
+        cageid: 0, 
+        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, 
+        filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -613,6 +570,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(0, utilcage);
 
@@ -622,6 +580,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
         filedescriptortable: init_fdtable(),
+        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -629,6 +588,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         rev_shm: interface::Mutex::new(vec!()),
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
+        thread_table: interface::RustHashMap::new(),
     };
     interface::cagetable_insert(1, initcage);
 }

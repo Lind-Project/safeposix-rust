@@ -16,7 +16,7 @@ use std::cell::RefCell;
 pub use std::sync::{Arc as RustRfc};
 pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
 
-use libc::{mmap, pthread_self, pthread_exit, pthread_kill, sched_yield};
+use libc::{mmap, pthread_self, pthread_exit};
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
@@ -99,16 +99,8 @@ pub fn lind_threadexit() {
     unsafe { pthread_exit(0 as *mut c_void); }
 }
 
-pub fn lind_threadkill(thread_id: u64, sig: i32) -> i32 {
-    unsafe { pthread_kill(thread_id, sig) as i32 }
-}
-
 pub fn get_pthreadid() -> u64 {
     unsafe { pthread_self() as u64 } 
-}
-
-pub fn lind_yield() {
-    unsafe { sched_yield(); }
 }
 
 // this function checks if a thread is killable and returns that state
@@ -121,31 +113,12 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
-    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return; } // we don't use this when testing rustposix standalone
-    
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
         let cage = cagetable_getref(cageid);
         cage.thread_table.insert(pthread_id, false); 
         lind_threadexit(); 
     }
-}
-
-pub fn signalflag_set(value: u64) {
-    TRUSTED_SIGNAL_FLAG.with(|v| *v.borrow_mut() = value);
-}
-
-pub fn signalflag_get() -> u64 {
-    TRUSTED_SIGNAL_FLAG.with(|v| *v.borrow())
-}
-
-pub fn sigcheck() -> bool {
-    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
-
-    let boolptr = signalflag_get() as *const bool;
-    let sigbool = unsafe { *boolptr };
-
-    sigbool
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
