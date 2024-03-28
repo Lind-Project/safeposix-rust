@@ -1146,35 +1146,40 @@ impl Cage {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let filedesc_enum = checkedfd.write();
         let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
-            return syscall_error(Errno::EBADF, "dup", "Invalid old file descriptor.");
+            return syscall_error(Errno::EBADF, "dup","Invalid old file descriptor.");
         };
 
         //checking whether the fd exists in the file table
         return Self::_dup2_helper(&self, filedesc_enum, start_fd, false)
     }
 
-    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
+    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32{
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
            return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
        }
 
-        let checkedfd = self.get_filedescriptor(oldfd).unwrap();
-        let filedesc_enum = checkedfd.write();
-        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
-            return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
-        };
+       if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
 
+       // get the filedesc_enum
+       let checkedfd = self.get_filedescriptor(oldfd).unwrap();
+       let filedesc_enum = checkedfd.write();
+       let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
+           return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
+       };
+
+       //if the old fd exists, execute the helper, else return error
+       return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+   }
+
+    pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
         let (dupfd, mut dupfdguard) = if fromdup2 {
-            if newfd == oldfd { return newfd; } //if the file descriptors are equal, return the new one
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
             if fdguard.is_some() {
                 drop(fdguard);
                 //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
                 let close_result = Self::_close_helper_inner(&self, newfd);
-                if close_result < 0 {
-                    return close_result;
-                }
+                // mirror the implementation of linux, ignore the potential error of the close here
             } else { drop(fdguard); }
             fdguard = self.filedescriptortable[newfd as usize].write();
 
@@ -1435,8 +1440,7 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    drop(filedesc_enum);
-                    self._dup2_helper(fd, arg, false)
+                    self._dup2_helper(&filedesc_enum, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
