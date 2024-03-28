@@ -92,16 +92,8 @@ const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
 const GETIFADDRS_SYSCALL: i32 = 146;
 
-const SIGACTION_SYSCALL: i32 = 147;
-const KILL_SYSCALL: i32 = 148;
-const SIGPROCMASK_SYSCALL: i32 = 149;
-const SETITIMER_SYSCALL: i32 = 150;
-
+const MKNOD_SYSCALL: i32 = 160;
 const FCHDIR_SYSCALL: i32 = 161;
-const FSYNC_SYSCALL: i32 = 162;
-const FDATASYNC_SYSCALL: i32 = 163;
-const SYNC_FILE_RANGE: i32 = 164;
-
 
 use crate::interface;
 use super::cage::*;
@@ -172,15 +164,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         CHDIR_SYSCALL => {
             check_and_dispatch!(cage.chdir_syscall, interface::get_cstr(arg1))
-        }
-        FSYNC_SYSCALL => {
-            check_and_dispatch!(cage.fsync_syscall, interface::get_int(arg1))
-        }
-        FDATASYNC_SYSCALL => {
-            check_and_dispatch!(cage.fdatasync_syscall, interface::get_int(arg1))
-        }
-        SYNC_FILE_RANGE =>{
-            check_and_dispatch!(cage.sync_file_range_syscall, interface::get_int(arg1), interface::get_isize(arg2), interface::get_isize(arg3), interface::get_uint(arg4))
         }
         FCHDIR_SYSCALL => {
             check_and_dispatch!(cage.fchdir_syscall, interface::get_int(arg1))
@@ -499,6 +482,9 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         }
         FTRUNCATE_SYSCALL => {
             check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
+        }
+        MKNOD_SYSCALL => {
+            check_and_dispatch!(cage.mknod_syscall, interface::get_cstr(arg1), interface::get_uint(arg2), interface::get_ulong(arg3))
         }
 
         _ => {//unknown syscall

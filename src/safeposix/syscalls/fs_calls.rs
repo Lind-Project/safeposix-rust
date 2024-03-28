@@ -1075,8 +1075,7 @@ impl Cage {
     //------------------------------------FCHDIR SYSCALL------------------------------------
    
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
-        let unlocked_fd = checkedfd.read();
+        let unlocked_fd = self.filedescriptortable[fd as usize].read();
 
         let path_string = match &*unlocked_fd {
             Some(File(normalfile_filedesc_obj)) => {
