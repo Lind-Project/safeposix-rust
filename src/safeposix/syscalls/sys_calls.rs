@@ -81,7 +81,8 @@ impl Cage {
         //construct new cage struct with a cloned fdtable
         let newfdtable = init_fdtable();
         for fd in 0..MAXFD {
-            let unlocked_fd = self.filedescriptortable[fd as usize].read();
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
+            let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
                     File(_normalfile_filedesc_obj) => {
@@ -160,7 +161,8 @@ impl Cage {
 
         let mut cloexecvec = vec!();
         for fd in 0..MAXFD {
-            let unlocked_fd = self.filedescriptortable[fd as usize].read();
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
+            let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 if match filedesc_enum {
                     File(f) => f.flags & O_CLOEXEC,

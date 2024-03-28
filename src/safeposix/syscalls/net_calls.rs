@@ -263,7 +263,8 @@ impl Cage {
     
 
     pub fn bind_inner(&self, fd: i32, localaddr: &interface::GenSockaddr, prereserved: bool) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -319,7 +320,8 @@ impl Cage {
     }
 
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -491,7 +493,8 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
-        let unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &*unlocked_fd {
             match filedesc_enum {
                 Socket(sockfdobj) => {
@@ -553,7 +556,8 @@ impl Cage {
     }
 
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -757,7 +761,8 @@ impl Cage {
     }
 
     pub fn recv_common(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32, addr: &mut Option<&mut interface::GenSockaddr>) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             return self.recv_common_inner(filedesc_enum, buf, buflen, flags, addr);
         } else {
@@ -775,7 +780,8 @@ impl Cage {
 
     //we currently ignore backlog
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
@@ -934,8 +940,8 @@ impl Cage {
     }
 
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
-
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
             if inner_result < 0 {
@@ -955,9 +961,6 @@ impl Cage {
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {
-
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //we need to reserve this fd early to make sure that we don't need to
@@ -1237,7 +1240,8 @@ impl Cage {
         let flags = MSG_PEEK;
         let mut buf = [0u8; 1];
         let bufptr = buf.as_mut_ptr();
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let oldflags;
             if let Socket(ref mut sockfdobj) = filedesc_enum {
@@ -1274,7 +1278,8 @@ impl Cage {
         let mut retval = 0; 
         loop { //we must block manually
             for fd in readfds.iter() {
-                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let mut unlocked_fd = checkedfd.write();
                 if let Some(filedesc_enum) = &mut *unlocked_fd {
                     match filedesc_enum {
                         Socket(ref mut sockfdobj) => {
@@ -1347,7 +1352,8 @@ impl Cage {
             }
 
             for fd in writefds.iter() {
-                let mut unlocked_fd = self.filedescriptortable[*fd as usize].write();
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let mut unlocked_fd = checkedfd.write();
                 if let Some(filedesc_enum) = &mut *unlocked_fd {
                     match filedesc_enum {
                         Socket(ref mut sockfdobj) => {
@@ -1391,7 +1397,8 @@ impl Cage {
             
             for fd in exceptfds.iter() {
                 //we say none of them ever have exceptional conditions
-                let unlocked_fd = self.filedescriptortable[*fd as usize].read();
+                let checkedfd = self.get_filedescriptor(*fd).unwrap();
+                let unlocked_fd = checkedfd.read();
                 if let None = *unlocked_fd { return syscall_error(Errno::EBADF, "select", "invalid file descriptor"); }
             }
 
@@ -1598,8 +1605,8 @@ impl Cage {
     }
 
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
-        
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
                 //checking that we recieved SOL_SOCKET
@@ -1672,8 +1679,8 @@ impl Cage {
     }
 
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
-        
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
                 //checking that we recieved SOL_SOCKET\
@@ -1768,7 +1775,8 @@ impl Cage {
     }
 
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
                 //if the socket is not connected, then we should return an error
@@ -1792,7 +1800,8 @@ impl Cage {
     }
 
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
                 let sock_tmp = sockfdobj.handle.clone();
@@ -1929,12 +1938,14 @@ impl Cage {
     pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
 
         //making sure that the epfd is really an epoll fd
-        let mut unlocked_fd = self.filedescriptortable[epfd as usize].write();
+        let checkedfd = self.get_filedescriptor(epfd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum_epollfd) = &mut *unlocked_fd {
             if let Epoll(epollfdobj) = filedesc_enum_epollfd {
 
                 //check if the other fd is an epoll or not...
-                let unlocked_fd = self.filedescriptortable[fd as usize].read();
+                let checkedfd = self.get_filedescriptor(fd).unwrap();
+                let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
                     if let Epoll(_) = filedesc_enum {
                         return syscall_error(Errno::EBADF, "epoll ctl", "provided fd is not a valid file descriptor")
@@ -1976,7 +1987,8 @@ impl Cage {
     }
 
     pub fn epoll_wait_syscall(&self, epfd: i32, events: &mut [EpollEvent], maxevents: i32, timeout: Option<interface::RustDuration>) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[epfd as usize].write();
+        let checkedfd = self.get_filedescriptor(epfd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Epoll(epollfdobj) = filedesc_enum {
                 if  maxevents <  0 {

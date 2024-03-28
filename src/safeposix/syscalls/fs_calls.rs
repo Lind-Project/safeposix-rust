@@ -510,7 +510,8 @@ impl Cage {
     //------------------------------------FSTAT SYSCALL------------------------------------
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
 
             //Delegate populating statbuf to the relevant helper depending on the file type.
@@ -575,7 +576,8 @@ impl Cage {
     //------------------------------------FSTATFS SYSCALL------------------------------------
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             
             //populate the dev id field -- can be done outside of the helper
@@ -612,7 +614,8 @@ impl Cage {
     //------------------------------------READ SYSCALL------------------------------------
 
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
@@ -689,7 +692,8 @@ impl Cage {
 
     //------------------------------------PREAD SYSCALL------------------------------------
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match filedesc_enum {
@@ -757,7 +761,8 @@ impl Cage {
     //------------------------------------WRITE SYSCALL------------------------------------
 
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
@@ -855,7 +860,8 @@ impl Cage {
     //------------------------------------PWRITE SYSCALL------------------------------------
 
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match filedesc_enum {
@@ -955,7 +961,8 @@ impl Cage {
 
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //confirm fd type is seekable
@@ -1075,7 +1082,8 @@ impl Cage {
     //------------------------------------FCHDIR SYSCALL------------------------------------
    
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
 
         let path_string = match &*unlocked_fd {
             Some(File(normalfile_filedesc_obj)) => {
@@ -1151,7 +1159,8 @@ impl Cage {
            return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
        }
 
-        let filedesc_enum = self.filedescriptortable[oldfd as usize].write();
+        let checkedfd = self.get_filedescriptor(oldfd).unwrap();
+        let filedesc_enum = checkedfd.write();
         let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         };
@@ -1241,7 +1250,8 @@ impl Cage {
     }
 
     pub fn _close_helper_inner(&self, fd: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             //Decide how to proceed depending on the fd type.
             //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
@@ -1355,7 +1365,8 @@ impl Cage {
         if inner_result < 0 { return inner_result; }
         
         //removing inode from fd table
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if unlocked_fd.is_some() {
             let _discarded_fd = unlocked_fd.take();
         }
@@ -1365,7 +1376,8 @@ impl Cage {
     //------------------------------------FCNTL SYSCALL------------------------------------
     
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             let flags = match filedesc_enum {
@@ -1444,7 +1456,8 @@ impl Cage {
     //------------------------------------IOCTL SYSCALL------------------------------------
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             match request {
@@ -1548,7 +1561,8 @@ impl Cage {
      //------------------------------------FCHMOD SYSCALL------------------------------------
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
@@ -1585,7 +1599,8 @@ impl Cage {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
 
-        let mut unlocked_fd = self.filedescriptortable[fildes as usize].write();
+        let checkedfd = self.get_filedescriptor(fildes).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
 
             //confirm fd type is mappable
@@ -1640,7 +1655,8 @@ impl Cage {
     //------------------------------------FLOCK SYSCALL------------------------------------
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
 
             let lock = match filedesc_enum {
@@ -1861,7 +1877,8 @@ impl Cage {
     //------------------FTRUNCATE SYSCALL------------------
     
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
-        let unlocked_fd = self.filedescriptortable[fd as usize].read();
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
 
             match filedesc_enum {
@@ -1938,8 +1955,9 @@ impl Cage {
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
-        
-        let mut unlocked_fd = self.filedescriptortable[fd as usize].write();
+
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             
             match filedesc_enum {
