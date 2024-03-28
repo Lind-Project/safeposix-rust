@@ -1178,7 +1178,7 @@ impl Cage {
             if fdguard.is_some() {
                 drop(fdguard);
                 //close the fd in the way of the new fd. If an error is returned from the helper, return the error, else continue to end
-                let close_result = Self::_close_helper_inner(&self, newfd);
+                let _close_result = Self::_close_helper_inner(&self, newfd);
                 // mirror the implementation of linux, ignore the potential error of the close here
             } else { drop(fdguard); }
             fdguard = self.filedescriptortable[newfd as usize].write();
@@ -1875,6 +1875,72 @@ impl Cage {
             Inode::Dir(_) => {
                 syscall_error(Errno::EISDIR, "truncate", "The named file is a directory")
             }
+        }
+    }
+
+    //------------------------------------FSYNC SYSCALL------------------------------------
+
+    pub fn fsync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fsync", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.fsync() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fsync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fsync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fsync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fsync", "invalid file descriptor")
+        }
+    }
+
+    //------------------------------------FDATASYNC SYSCALL------------------------------------
+
+    pub fn fdatasync_syscall(&self, fd: i32) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                File(ref mut normalfile_filedesc_obj) => {
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(Errno::EBADF, "fdatasync", "specified file not open for sync");
+                    }
+                    let inodeobj = FS_METADATA.inodetable.get(&normalfile_filedesc_obj.inode).unwrap();
+                    match &*inodeobj {
+                        Inode::File(_) => {
+                            let fileobject = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            match fileobject.fdatasync() {
+                                Ok(_) => 0,
+                                _ => syscall_error(Errno::EIO, "fdatasync", "an error occurred during synchronization")
+                            }
+                        }
+                        _ => {
+                            syscall_error(Errno::EROFS, "fdatasync", "does not support special files for synchronization")
+                        }
+                    }
+                }
+                _ => {syscall_error(Errno::EINVAL, "fdatasync", "fd is attached to an object which is unsuitable for synchronization")}
+            }
+        } else {
+            syscall_error(Errno::EBADF, "fdatasync", "invalid file descriptor")
         }
     }
 
