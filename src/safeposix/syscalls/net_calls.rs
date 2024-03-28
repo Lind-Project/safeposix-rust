@@ -2033,13 +2033,52 @@ impl Cage {
     // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
     // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
     pub fn socketpair_syscall(this: interface::RustRfc<Cage>, domain: i32, socktype: i32, protocol: i32, sv: &mut interface::SockPair) -> i32 {
-        let newprotocol = if protocol == 0 {IPPROTO_TCP} else {protocol};
-        // firstly check the parameters
-        if domain != AF_UNIX {
-            return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Linux socketpair only supports AF_UNIX aka AF_LOCAL domain.")
-        } else if socktype & 0x7 != SOCK_STREAM || newprotocol != IPPROTO_TCP {
-            return syscall_error(Errno::EOPNOTSUPP, "socketpair", "Socketpair currently only supports SOCK_STREAM TCP.")
+        let newdomain = if domain == AF_UNIX {AF_INET} else {domain};
+        let sock1fd = this.socket_syscall(newdomain, socktype, protocol);
+        if sock1fd < 0 {return sock1fd;}
+
+        // We set SO_REUSEADDR for socketpair because otherwise, after the sockets are closed, they
+        // can get into a TIME_WAIT state which makes the sockets unusable for 60 seconds--however
+        // because socketpair is local we don't need such a timeout for the peer to tell the socket
+        // has closed, so we set SO_REUSEADDR to allow rebinding--this prevents the case where if
+        // lind closes and is restarted within 60 seconds, it fails to bind a socket created via
+        // socketpair.
+        let setsockopt_res1 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
+        if setsockopt_res1 != 0 { //this should really only happen with ENOMEM/ENOBUFS
+            this.close_syscall(sock1fd);
+            return setsockopt_res1;
         }
+        let sock2fd = this.socket_syscall(newdomain, socktype, protocol);
+        if sock2fd < 0 {
+            this.close_syscall(sock1fd);
+            return sock2fd;
+        }
+        let setsockopt_res2 = this.setsockopt_syscall(sock1fd, SOL_SOCKET, SO_REUSEADDR, 1);
+        if setsockopt_res2 != 0 { //this should really only happen with ENOMEM/ENOBUFS
+            this.close_syscall(sock2fd);
+            this.close_syscall(sock1fd);
+            return setsockopt_res2;
+        }
+    
+        let portlessaddr = if newdomain == AF_INET {
+            let ipaddr = interface::V4Addr {s_addr: u32::from_ne_bytes([127, 0, 0, 1])};
+            let innersockaddr = interface::SockaddrV4{sin_family: newdomain as u16, sin_addr: ipaddr, sin_port: 0, padding: 0};
+            interface::GenSockaddr::V4(innersockaddr)
+        } else if domain == AF_INET6 {
+            let ipaddr = interface::V6Addr {s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]};
+            let innersockaddr = interface::SockaddrV6{sin6_family: newdomain as u16, sin6_addr: ipaddr, sin6_port: 0, sin6_flowinfo: 0, sin6_scope_id: 0};
+            interface::GenSockaddr::V6(innersockaddr)
+        } else {
+            unreachable!();
+        };
+    
+        if socktype == SOCK_STREAM {
+            let bindret = this.bind_inner(sock1fd, &portlessaddr, false); //len assigned arbitrarily large value
+            if bindret != 0 {
+                this.close_syscall(sock1fd);
+                this.close_syscall(sock2fd);
+                return bindret;
+            }
 
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
