@@ -636,21 +636,14 @@ impl Cage {
                 Pipe(pipe_filedesc_obj) => {
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(Errno::EBADF, "read", "specified file not open for reading");
-                    } 
+                    }
+
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    loop { // loop over pipe reads so we can periodically check for cancellation
-                        let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
-                        if pipe_filedesc_obj.flags & O_NONBLOCK == 0 && ret == -(Errno::EAGAIN as i32) {
-                            if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
-                                // if the cancel status is set in the cage, we trap around a cancel point
-                                // until the individual thread is signaled to cancel itself
-                                loop { interface::cancelpoint(self.cageid); }
-                            }
-                            continue; //received EAGAIN on blocking pipe, try again
-                        }
-                        return ret; // if we get here we can return
-                    }
+                    let ret = pipe_filedesc_obj.pipe.read_from_pipe(buf, count, nonblocking) as i32;
+                    if ret < 0 { return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later") }
+                    else { return ret };
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "read", "fd is attached to an object which is unsuitable for reading")}
             }
@@ -817,10 +810,10 @@ impl Cage {
 
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 { nonblocking = true;}
-                    
-                    let retval = pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32;
-                    if retval == -(Errno::EPIPE as i32) { interface::lind_kill_from_id(self.cageid, SIGPIPE); } // Trigger SIGPIPE
-                    retval
+                    let ret = pipe_filedesc_obj.pipe.write_to_pipe(buf, count, nonblocking) as i32;
+                    if ret < 0 { return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later") }
+                    else { return ret };
+  
                 }
                 Epoll(_) => {syscall_error(Errno::EINVAL, "write", "fd is attached to an object which is unsuitable for writing")}
             }
@@ -1291,37 +1284,25 @@ impl Cage {
                     let pipe = &pipe_filedesc_obj.pipe;
                     pipe.decr_ref(pipe_filedesc_obj.flags);
 
-                    if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
-                        // we're closing the last write end, lets set eof
-                        pipe.set_eof();
-                    }
+
+            }
+            Pipe(pipe_filedesc_obj) => {   
+                let pipe = &pipe_filedesc_obj.pipe;    
+                pipe.decr_ref(pipe_filedesc_obj.flags);
+
+                //Code below needs to reflect addition of pipes
+                if pipe.get_write_ref() == 0 && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY {
+                    // we're closing the last write end, lets set eof
+                    pipe.set_eof();
                 }
                 File(ref normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
-                    match *inodeobj {
-                        Inode::File(ref mut normalfile_inode_obj) => {
-                            normalfile_inode_obj.refcount -= 1;
-
-                            //if it's not a reg file, then we have nothing to close
-                            //Inode::File is a regular file by default
-                            if normalfile_inode_obj.refcount == 0 {
-                                FILEOBJECTTABLE.remove(&inodenum).unwrap().1.close().unwrap();
-                                if normalfile_inode_obj.linkcount == 0 {
-                                    drop(inodeobj);
-                                    //removing the file from the entire filesystem (interface, metadata, and object table)
-                                    FS_METADATA.inodetable.remove(&inodenum);
-                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                                    interface::removefile(sysfilename).unwrap();
-                                } else {
-                                    drop(inodeobj);
-                                }
-                                log_metadata(&FS_METADATA, inodenum);
-                            }
-                        },
-                        Inode::Dir(ref mut dir_inode_obj) => {
-                            dir_inode_obj.refcount -= 1;
+            }
+            File(normalfile_filedesc_obj) => {
+                let inodenum = normalfile_filedesc_obj.inode;
+                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
                             //if it's not a reg file, then we have nothing to close
                             match FILEOBJECTTABLE.get(&inodenum) {
@@ -1932,11 +1913,8 @@ impl Cage {
         let accflags = [O_RDONLY, O_WRONLY];
         for accflag in accflags {
 
-            let (fd, guardopt) = self.get_next_fd(None);
-            if fd < 0 { return fd }
-            let fdoption = &mut *guardopt.unwrap();
-            
-            let _insertval = fdoption.insert(Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}));
+            let filedesc_enum = Pipe(PipeDesc {pipe: pipe.clone(), flags: accflag | actualflags, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())});
+            let thisfd = self.get_next_fd(None, filedesc_enum);
 
             match accflag {
                 O_RDONLY => {pipefd.readfd = fd;},

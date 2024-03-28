@@ -10,7 +10,7 @@ pub use super::syscalls::net_constants::*;
 use super::filesystem::normpath;
 use super::net::SocketHandle;
 
-pub use crate::interface::{CAGE_TABLE};
+pub static CAGE_TABLE: interface::RustLazyGlobal<interface::RustHashMap<u64, interface::RustRfc<Cage>>> = interface::RustLazyGlobal::new(|| interface::new_hashmap());
 
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {
@@ -104,55 +104,14 @@ impl Cage {
         *cwdbox = newwd;
     }
 
-    // function to signal all cvs in a cage when forcing exit
-    pub fn signalcvs(&self) {
-        let cvtable = self.cv_table.read();
-        
-        for cv_handle in 0..cvtable.len() {
-            if cvtable[cv_handle  as usize].is_some() {
-                let clonedcv = cvtable[cv_handle  as usize].as_ref().unwrap().clone();
-                clonedcv.broadcast();
-            }
-        }
+    pub fn load_lower_handle_stubs(&mut self) {
+        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
+        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
+        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
+        let fdtable = &self.filedescriptortable;
+        fdtable.insert(0, stdin);
+        fdtable.insert(1, stdout);
+        fdtable.insert(2, stderr);
     }
 
-    pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {
-        for signo in 1..SIGNAL_MAX {
-            if interface::lind_sigismember(sigset, signo) {
-                interface::lind_threadkill(pthreadid, signo);
-            }
-        }
-    }
-
-    pub fn get_filedescriptor(&self, fd: i32) -> Result<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>, ()> {
-        if (fd < 0) || (fd >= MAXFD) {
-            Err(())
-        } else {
-            Ok(self.filedescriptortable[fd as usize].clone())
-        }
-    }
-}
-
-pub fn init_fdtable() -> FdTable {
-    let mut fdtable = Vec::new();
-    // load lower handle stubs
-    let stdin = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
-    let stdout = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
-    let stderr = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
-    fdtable.push(stdin);
-    fdtable.push(stdout);
-    fdtable.push(stderr);
-
-    for _fd in 3..MAXFD as usize {
-        fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
-    }
-    fdtable
-}
-
-pub fn create_unix_sockpipes() -> (interface::RustRfc<interface::EmulatedPipe>, interface::RustRfc<interface::EmulatedPipe>) {
-
-    let pipe1 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
-    let pipe2 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
-
-    (pipe1, pipe2)
 }

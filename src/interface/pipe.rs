@@ -32,14 +32,13 @@ pub struct EmulatedPipe {
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
     eof: Arc<AtomicBool>,
-    size: usize
 }
 
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         let (prod, cons) = rb.split();
-        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false)), size: size}
+        EmulatedPipe { write_end: Arc::new(Mutex::new(prod)), read_end: Arc::new(Mutex::new(cons)), refcount_write: Arc::new(AtomicU32::new(1)), refcount_read: Arc::new(AtomicU32::new(1)), eof: Arc::new(AtomicBool::new(false))}
     }
 
     pub fn set_eof(&self) {
