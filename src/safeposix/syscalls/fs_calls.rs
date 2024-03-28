@@ -1561,10 +1561,11 @@ impl Cage {
      //------------------------------------FCHMOD SYSCALL------------------------------------
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
-        let unlocked_fd = checkedfd.read();
-        if let Some(filedesc_enum) = &*unlocked_fd {
-            match filedesc_enum {
+        if let Some(wrappedfd) = self.filedescriptortable.get(&fd) {
+            let wrappedclone = wrappedfd.clone();
+            drop(wrappedfd);
+            let filedesc_enum = wrappedclone.read();
+            match &*filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
                     if mode & (S_IRWXA|(S_FILETYPEFLAGS as u32)) == mode {
