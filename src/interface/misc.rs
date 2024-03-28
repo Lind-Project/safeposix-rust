@@ -9,46 +9,72 @@ use std::io::{self, Read, Write};
 pub use dashmap::{DashSet as RustHashSet, DashMap as RustHashMap, mapref::entry::Entry as RustHashEntry};
 pub use std::collections::{VecDeque as RustDeque};
 pub use std::cmp::{max as rust_max, min as rust_min};
-pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
+pub use std::sync::atomic::{AtomicBool as RustAtomicBool, Ordering as RustAtomicOrdering, AtomicU16 as RustAtomicU16, AtomicI32 as RustAtomicI32, AtomicU64 as RustAtomicU64, AtomicUsize as RustAtomicUsize, AtomicU32 as RustAtomicU32};
 pub use std::thread::spawn as helper_thread;
 use std::str::{from_utf8, Utf8Error};
 use std::cell::RefCell;
 pub use std::sync::{Arc as RustRfc};
-pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockGuard, Mutex, Condvar};
+pub use parking_lot::{RwLock as RustLock, RwLockWriteGuard as RustLockWriteGuard, RwLockReadGuard as RustLockReadGuard, Mutex, Condvar};
 
-use libc::{mmap, pthread_self, pthread_exit, sched_yield};
-
+use libc::{mmap, pthread_self, pthread_exit, pthread_kill, sched_yield};
 use std::ffi::c_void;
 
 pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
+use crate::interface::types::{SigsetType};
 use crate::interface;
 use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
+use std::sync::LazyLock;
 
-const MAXCAGEID: i32 = 1024;
+pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS : i32 = 0;
+
+pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
+    RustAtomicBool::new(false)
+});
+
+thread_local! {
+    static TRUSTED_SIGNAL_FLAG: RefCell<u64> = RefCell::new(0);
+}
 
 use crate::safeposix::cage::{Cage};
 
 pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
+
+pub fn check_cageid(cageid: u64) {
+    if cageid >= MAXCAGEID as u64 {
+        panic!("Cage ID is outside of valid range");
+    }
+}
 
 pub fn cagetable_init() {
    unsafe { for _cage in 0..MAXCAGEID { CAGE_TABLE.push(None); }}
 }
 
 pub fn cagetable_insert(cageid: u64, cageobj: Cage) {
+    check_cageid(cageid);
     let _insertret = unsafe { CAGE_TABLE[cageid as usize].insert(RustRfc::new(cageobj)) };
 }
 
 pub fn cagetable_remove(cageid: u64) {
+    check_cageid(cageid);
     unsafe{ CAGE_TABLE[cageid as usize].take() };
 }
 
 pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
+    check_cageid(cageid);
     unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
+}
+
+pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
+    check_cageid(cageid);
+    unsafe { match CAGE_TABLE[cageid as usize].as_ref() {
+        Some(cage) => Some(cage.clone()),
+        None => None
+    }}
 }
 
 pub fn cagetable_clear() {
@@ -102,6 +128,10 @@ pub fn lind_threadexit() {
     unsafe { pthread_exit(0 as *mut c_void); }
 }
 
+pub fn lind_threadkill(thread_id: u64, sig: i32) -> i32 {
+    unsafe { pthread_kill(thread_id, sig) as i32 }
+}
+
 pub fn get_pthreadid() -> u64 {
     unsafe { pthread_self() as u64 } 
 }
@@ -120,12 +150,31 @@ pub fn check_thread(cageid: u64, tid: u64) -> bool {
 // in-rustposix cancelpoints checks if the thread is killable,
 // and if sets killable back to false and kills the thread
 pub fn cancelpoint(cageid: u64) {
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return; } // we don't use this when testing rustposix standalone
+    
     let pthread_id = get_pthreadid();
     if check_thread(cageid, pthread_id) {
         let cage = cagetable_getref(cageid);
         cage.thread_table.insert(pthread_id, false); 
         lind_threadexit(); 
     }
+}
+
+pub fn signalflag_set(value: u64) {
+    TRUSTED_SIGNAL_FLAG.with(|v| *v.borrow_mut() = value);
+}
+
+pub fn signalflag_get() -> u64 {
+    TRUSTED_SIGNAL_FLAG.with(|v| *v.borrow())
+}
+
+pub fn sigcheck() -> bool {
+    if RUSTPOSIX_TESTSUITE.load(RustAtomicOrdering::Relaxed) { return false; }
+
+    let boolptr = signalflag_get() as *const bool;
+    let sigbool = unsafe { *boolptr };
+
+    sigbool
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {

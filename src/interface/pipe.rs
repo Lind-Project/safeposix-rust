@@ -116,11 +116,13 @@ impl EmulatedPipe {
 
         let pipe_space = write_end.remaining();
         if nonblocking && (pipe_space == 0) {
-            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
+            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
         }
 
         while bytes_written < length {
-            if self.get_read_ref() == 0 { return syscall_error(Errno::EPIPE, "write", "broken pipe"); } // EPIPE, all read ends are closed
+            if self.get_read_ref() == 0 {
+                return syscall_error(Errno::EPIPE, "write", "broken pipe");
+            } // EPIPE, all read ends are closed
 
             let remaining = write_end.remaining();
 
@@ -150,6 +152,7 @@ impl EmulatedPipe {
         let mut read_end = self.read_end.lock();
         let mut pipe_space = read_end.len();
         if nonblocking && (pipe_space == 0) {
+            if self.eof.load(Ordering::SeqCst) { return 0; }
             return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
         }
 

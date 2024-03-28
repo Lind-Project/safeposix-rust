@@ -104,16 +104,36 @@ impl Cage {
                         pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
                     Socket(socket_filedesc_obj) => {
+                        // checking whether this is a domain socket
+                        let sock_tmp = socket_filedesc_obj.handle.clone();
+                        let mut sockhandle = sock_tmp.write();
+                        let socket_type = sockhandle.domain;
+                        if socket_type == AF_UNIX {
+                            if let Some(sockinfo) = &sockhandle.unix_info {
+                                if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
+                                    sendpipe.incr_ref(O_WRONLY);
+                                }
+                                if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
+                                    receivepipe.incr_ref(O_RDONLY);
+                                }
+                                if let Some(uinfo) = &mut sockhandle.unix_info {    
+                                    if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
+                                        sock.refcount += 1;
+                                    }
+                                }
+                            }
+                        }
+                        drop(sockhandle);
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
                         if let Some(uinfo) = &mut sockhandle.unix_info {
                             if let Inode::Socket(ref mut sock) = *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap()) { 
                                 sock.refcount += 1;
                             }
-                        }
-                    }
-                    _ => {}
+                       }
                 }
+                _ => {}
+            }
                 
                 let newfdobj = filedesc_enum.clone();
 
@@ -127,6 +147,17 @@ impl Cage {
                 cwddir.refcount += 1;
             } else {panic!("We changed from a directory that was not a directory in chdir!");}
         } else {panic!("We changed from a directory that was not a directory in chdir!");}
+
+        // we grab the parent cages main threads sigset and store it at 0
+        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
+        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        let newsigset = interface::RustHashMap::new();
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
+            let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
+            let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
+            newsigset.insert(0, mainsigset);
+        }
+
 
         /* 
         *  Construct a new semaphore table in child cage which equals to the one in the parent cage
@@ -150,8 +181,13 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             mutex_table: interface::RustLock::new(new_mutex_table),
             cv_table: interface::RustLock::new(new_cv_table),
-            thread_table: interface::RustHashMap::new(),
             sem_table: new_semtable,
+            thread_table: interface::RustHashMap::new(),
+            signalhandler: self.signalhandler.clone(),
+            sigset: newsigset,
+            pendingsigset: interface::RustHashMap::new(),
+            main_threadid: interface::RustAtomicU64::new(0),
+            interval_timer: interface::IntervalTimer::new(child_cageid)
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -164,7 +200,6 @@ impl Cage {
             drop(refs);
             shment.attached_cages.insert(child_cageid, childrefs);
         }
-        drop(shmtable);
         interface::cagetable_insert(child_cageid, cageobj);
 
         0
@@ -214,8 +249,13 @@ impl Cage {
             rev_shm: interface::Mutex::new(vec!()),
             mutex_table: interface::RustLock::new(vec!()),
             cv_table: interface::RustLock::new(vec!()),
-            thread_table: interface::RustHashMap::new(),
             sem_table: interface::RustHashMap::new(),
+            thread_table: interface::RustHashMap::new(),
+            signalhandler: interface::RustHashMap::new(),
+            sigset: newsigset,
+            pendingsigset: interface::RustHashMap::new(),
+            main_threadid: interface::RustAtomicU64::new(0),
+            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid)
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -241,6 +281,13 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+        
+        // Trigger SIGCHLD
+        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // dont trigger SIGCHLD for test suite
+            if self.cageid != self.parent {
+                interface::lind_kill_from_id(self.parent, SIGCHLD);
+            }
+        }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
