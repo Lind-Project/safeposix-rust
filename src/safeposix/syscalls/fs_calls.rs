@@ -1146,7 +1146,8 @@ impl Cage {
            return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
        }
 
-        if self.filedescriptortable[oldfd as usize].read().is_none() {
+        let filedesc_enum = self.filedescriptortable[oldfd as usize].write();
+        let filedesc_enum = if let Some(f) = &*filedesc_enum {f} else {
             return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor.");
         };
 
@@ -1169,64 +1170,62 @@ impl Cage {
             if newdupfd < 0 { return syscall_error(Errno::ENFILE, "dup2_helper", "no available file descriptor number could be found"); }
             (newdupfd, guardopt.unwrap())
         };
+
         let dupfdoption = &mut *dupfdguard;
 
-        let mut unlocked_fd = self.filedescriptortable[oldfd as usize].write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {
-            match filedesc_enum {
-                File(normalfile_filedesc_obj) => {
-                    let inodenum = normalfile_filedesc_obj.inode;
-                    let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                    //incrementing the ref count so that when close is executed on the dup'd file
-                    //the original file does not get a negative ref count
-                    match *inodeobj {
-                        Inode::File(ref mut normalfile_inode_obj) => {
-                            normalfile_inode_obj.refcount += 1;
-                        },
-                        Inode::Dir(ref mut dir_inode_obj) => {
-                            dir_inode_obj.refcount += 1;
-                        },
-                        Inode::CharDev(ref mut chardev_inode_obj) => {
-                            chardev_inode_obj.refcount += 1;
-                        },
-                        Inode::Socket(_) => panic!("dup: fd and inode do not match.")
-                    }
+        match filedesc_enum {
+            File(normalfile_filedesc_obj) => {
+                let inodenum = normalfile_filedesc_obj.inode;
+                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                //incrementing the ref count so that when close is executed on the dup'd file
+                //the original file does not get a negative ref count
+                match *inodeobj {
+                    Inode::File(ref mut normalfile_inode_obj) => {
+                        normalfile_inode_obj.refcount += 1;
+                    },
+                    Inode::Dir(ref mut dir_inode_obj) => {
+                        dir_inode_obj.refcount += 1;
+                    },
+                    Inode::CharDev(ref mut chardev_inode_obj) => {
+                        chardev_inode_obj.refcount += 1;
+                    },
+                    Inode::Socket(_) => panic!("dup: fd and inode do not match.")
                 }
-                Pipe(pipe_filedesc_obj) => {
-                    pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
-                }  
-                Socket(socket_filedesc_obj) => {
-                    if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                        NET_METADATA.socket_object_table.get_mut(&socknum).unwrap().write().0.refcnt += 1;
-                    }
-                }
-                Stream(_normalfile_filedesc_obj) => {
-                    // no stream refs
-                }
-                _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
             }
-
-            // get and clone fd, wrap and insert into table.
-            match filedesc_enum { // we don't want to pass on the CLOEXEC flag
-                File(ref mut normalfile_filedesc_obj) => {
-                    normalfile_filedesc_obj.flags = normalfile_filedesc_obj.flags & !O_CLOEXEC; 
-                }
-                Pipe(ref mut pipe_filedesc_obj) => {
-                    pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
-                }
-                Socket(ref mut socket_filedesc_obj) => {
-                    socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
-                }
-                Stream(ref mut stream_filedesc_obj) => {
-                    stream_filedesc_obj.flags = stream_filedesc_obj.flags & !O_CLOEXEC;
-                }
-                _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+            Pipe(pipe_filedesc_obj) => {
+                pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags);
             }
+            Socket(_socket_filedesc_obj) => {
+                //we handle the closing of these on drop
+            }
+            Stream(_normalfile_filedesc_obj) => {
+                // no stream refs
+            }
+            _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+        }
 
-            let _insertval = dupfdoption.insert(filedesc_enum.clone());
+        let mut dupd_fd_enum = filedesc_enum.clone(); //clones the arc for sockethandle
 
-            return dupfd;
-        } else { return syscall_error(Errno::EBADF, "dup2","Invalid old file descriptor."); }
+        // get and clone fd, wrap and insert into table.
+        match dupd_fd_enum { // we don't want to pass on the CLOEXEC flag
+            File(ref mut normalfile_filedesc_obj) => {
+                normalfile_filedesc_obj.flags = normalfile_filedesc_obj.flags & !O_CLOEXEC; 
+            }
+            Pipe(ref mut pipe_filedesc_obj) => {
+                pipe_filedesc_obj.flags = pipe_filedesc_obj.flags & !O_CLOEXEC;
+            }
+            Socket(ref mut socket_filedesc_obj) => {
+                socket_filedesc_obj.flags = socket_filedesc_obj.flags & !O_CLOEXEC;
+            }
+            Stream(ref mut stream_filedesc_obj) => {
+                stream_filedesc_obj.flags = stream_filedesc_obj.flags & !O_CLOEXEC;
+            }
+            _ => {return syscall_error(Errno::EACCES, "dup or dup2", "can't dup the provided file");},
+        }
+
+        let _insertval = dupfdoption.insert(dupd_fd_enum);
+
+        return dupfd;
     }
 
     //------------------------------------CLOSE SYSCALL------------------------------------
@@ -1248,37 +1247,28 @@ impl Cage {
                 Stream(_) => {}
                 Epoll(_) => {} //Epoll closing not implemented yet
                 Socket(ref socket_filedesc_obj) => {
-                    let mut cleanflag = false;
-                    if let Some(socknum) = socket_filedesc_obj.socketobjectid {
-                        let mut sockobjopt = NET_METADATA.socket_object_table.get_mut(&socknum);
-                        //in case shutdown?
-                        if let Some(ref mut sockobj) = sockobjopt {
-                            let mut so_tmp = sockobj.write();
-                            so_tmp.0.refcnt -= 1;
-                            cleanflag = so_tmp.0.refcnt == 0;
-                        }
+                    let sock_tmp = socket_filedesc_obj.handle.clone();
+                    let sockhandle = sock_tmp.write();
+                    let mut inodeopt = None;
+                    let mut pathopt = None;
+                    if let Some(ui) = &sockhandle.unix_info {
+                        inodeopt = Some(ui.inode);
+                        pathopt = Some(ui.reallocalpath.clone());
                     }
-                    if cleanflag {
-                        let mut fdclone = filedesc_enum.clone();
-                        let retval = self._cleanup_socket_inner(&mut fdclone, false, false);
-                        if retval < 0 {
-                            return retval;
-                        }
-                    }
-                    if let Some(inodenum) = socket_filedesc_obj.optinode {
+                    drop(sockhandle);
+                    if let Some(inodenum) = inodeopt {
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                        if let Inode::Socket(ref mut sock) = *inodeobj { 
-                            sock.refcount -= 1; 
+                        if let Inode::Socket(ref mut sock) = *inodeobj {
+                            sock.refcount -= 1;
                             if sock.refcount == 0 {
                                 if sock.linkcount == 0 {
                                     drop(inodeobj);
                                     FS_METADATA.inodetable.remove(&inodenum);
-                                    if let Some(truepath) = socket_filedesc_obj.reallocalpath.clone() {
-                                        NET_METADATA.domain_socket_table.remove(&truepath);
-                                    }
+                                    let truepath = pathopt.unwrap();
+                                    NET_METADATA.domain_socket_table.remove(&truepath);
                                 }
                             }
-                        } 
+                        }
                     }
                 }
                 Pipe(pipe_filedesc_obj) => {   
