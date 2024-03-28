@@ -7,27 +7,27 @@ pub mod net_tests {
     use std::sync::{Arc, Barrier};
     
     pub fn net_tests() {
-       ut_lind_net_bind();
-       ut_lind_net_bind_multiple();
-       ut_lind_net_bind_on_zero();
-       ut_lind_net_connect_basic_udp();
-       ut_lind_net_getpeername();
-       ut_lind_net_getsockname();
-       ut_lind_net_listen();
-       ut_lind_net_poll();
-       ut_lind_net_recvfrom();
-       ut_lind_net_select(); 
-       ut_lind_net_shutdown();
-       ut_lind_net_socket();
-       ut_lind_net_socketoptions();
-       ut_lind_net_socketpair(); 
-       ut_lind_net_udp_bad_bind();
-       ut_lind_net_udp_simple(); 
-       ut_lind_net_udp_connect(); 
-       ut_lind_net_gethostname();
-       ut_lind_net_dns_rootserver_ping();
-       ut_lind_net_domain_socket();
-       ut_lind_net_epoll();
+        ut_lind_net_bind();
+        ut_lind_net_bind_multiple();
+        ut_lind_net_bind_on_zero();
+        ut_lind_net_connect_basic_udp();
+        ut_lind_net_getpeername();
+        ut_lind_net_getsockname();
+        ut_lind_net_listen();
+        ut_lind_net_poll();
+        ut_lind_net_recvfrom();
+        ut_lind_net_select();
+        ut_lind_net_shutdown();
+        ut_lind_net_socket();
+        ut_lind_net_socketoptions();
+        ut_lind_net_socketpair();
+        ut_lind_net_udp_bad_bind();
+        ut_lind_net_udp_simple();
+        ut_lind_net_udp_connect();
+        ut_lind_net_gethostname();
+        ut_lind_net_dns_rootserver_ping();
+        ut_lind_net_domain_socket();
+        ut_lind_net_epoll();
     }
 
     pub fn ut_lind_net_bind() {
@@ -1457,7 +1457,7 @@ pub mod net_tests {
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         // Create and set up the file descriptor and sockets
-        let port: u16 = 53019;
+        let port: u16 = 53009;
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: port.to_be(),
@@ -1537,7 +1537,7 @@ pub mod net_tests {
                         // If the socket returned was listener socket, then there's a new connection
                         if event.fd == serversockfd {
                             // Handle new connections
-                            let port: u16 = 53019;
+                            let port: u16 = 53009;
                             let sockaddr = interface::SockaddrV4 {
                                 sin_family: AF_INET as u16,
                                 sin_port: port.to_be(),
