@@ -204,15 +204,87 @@ impl Cage {
         };
     
         newsockaddr.set_port(newlocalport);
-        let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&newsockaddr);
-    
-        if bindret < 0 {
-            match Errno::from_discriminant(interface::get_errno()) {
-                Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
-                Err(()) => panic!("Unknown errno value from socket bind returned!"),
-            };
+
+        if let None = sockfdobj.socketobjectid {
+            let sock = interface::Socket::new(sockfdobj.domain, sockfdobj.socktype, sockfdobj.protocol);
+            let id = NET_METADATA.insert_into_socketobjecttable(sock, ConnState::NOTCONNECTED).unwrap();
+            sockfdobj.socketobjectid = Some(id);
+        };
+
+        if sockfdobj.realdomain == AF_UNIX {
+            let path = localaddr.path();
+            //Check that path is not empty
+            if path.len() == 0 {return syscall_error(Errno::ENOENT, "open", "given path was null");}
+            let truepath = normpath(convpath(path), self);
+
+            match metawalkandparent(truepath.as_path()) {
+                //If neither the file nor parent exists
+                (None, None) => {return syscall_error(Errno::ENOENT, "bind", "a directory component in pathname does not exist or is a dangling symbolic link"); }
+                //If the file doesn't exist but the parent does
+                (None, Some(pardirinode)) => {
+                    let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+
+                    //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
+                    let newinodenum = FS_METADATA.nextinode.fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                    let newinode;
+
+                    if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                        let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
+                        let effective_mode = S_IFSOCK as u32 | mode;
+
+                        let time = interface::timestamp(); //We do a real timestamp now
+                        newinode = Inode::Socket(SocketInode {
+                            size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
+                            mode: effective_mode, linkcount: 1, refcount: 1,
+                            atime: time, ctime: time, mtime: time,
+                        });
+
+                        dir.filename_to_inode_dict.insert(filename.clone(), newinodenum);
+                        dir.linkcount += 1;
+                    } else {
+                       return syscall_error(Errno::ENOTDIR, "socket", "unix domain socket path made socket address child of non-directory file");
+                    }
+
+                    //we bind at this point in order that all errors that could have happened already did, but before we add any metadata, so as to minimize cleanup necessary
+
+                    let bindret = sockobj.0.bind(&newsockaddr);
+
+                    if bindret < 0 {
+                        //undo the insertion if the bind failed
+                        if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap()) {
+                            dir.filename_to_inode_dict.remove(&filename);
+                            dir.linkcount -= 1;
+                        } else {
+                            panic!("Known directory is somehow not a directory?");
+                        }
+
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
+                            Err(()) => panic!("Unknown errno value from socket bind returned!"),
+                        };
+                    }
+
+                    sockfdobj.optinode = Some(newinodenum.clone());
+                    FS_METADATA.inodetable.insert(newinodenum, newinode);
+                    NET_METADATA.domain_socket_table.insert(truepath.clone(), newsockaddr.clone());
+                    NET_METADATA.revds_table.insert(newsockaddr, localaddr.clone());
+                    sockfdobj.reallocalpath = Some(truepath);  
+                }
+                (Some(_inodenum), ..) => { return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use"); }
+            }
+        } else {
+            let bindret = sockobj.0.bind(&newsockaddr);
+
+            if bindret < 0 {
+                match Errno::from_discriminant(interface::get_errno()) {
+                    Ok(i) => {return syscall_error(i, "bind", "The libc call to bind failed!");},
+                    Err(()) => panic!("Unknown errno value from socket bind returned!"),
+                };
+            }
         }
-    
+
+        sockfdobj.localaddr = Some(newsockaddr);
+
         0
     }
     
@@ -294,10 +366,94 @@ impl Cage {
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(Errno::EINVAL, "connect", "An address with an invalid family for the given domain was specified");
                     }
-                    match sockhandle.protocol {
-                        IPPROTO_UDP => return self.connect_udp(&mut *sockhandle, remoteaddr),
-                        IPPROTO_TCP => return self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr),
-                        _ => return syscall_error(Errno::EOPNOTSUPP, "connect", "Unknown protocol in connect"),
+
+                    //for UDP, just set the addresses and return
+                    if sockfdobj.protocol == IPPROTO_UDP {
+                        //we don't need to check connection state for UDP, it's connectionless!
+                        sockfdobj.remoteaddr = Some(remoteaddr.clone());
+                        match sockfdobj.localaddr {
+                            Some(_) => return 0,
+                            None => {
+                                let localaddr = match Self::assign_new_addr(sockfdobj, sockfdobj.realdomain, sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
+                                    Ok(a) => a,
+                                    Err(e) => return e,
+                                };
+
+                                let sid = Self::getsockobjid(&mut *sockfdobj);
+                                let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                                let sockobj = locksock.read();
+
+                                return self.bind_inner_socket(sockfdobj, &localaddr, true, &*sockobj);
+                            }
+                        };
+                    } else if sockfdobj.protocol == IPPROTO_TCP {
+                        //for TCP, actually create the internal socket object and connect it
+                        let mut remoteclone = remoteaddr.clone();
+                        let sid = Self::getsockobjid(&mut *sockfdobj);
+                        let locksock = NET_METADATA.socket_object_table.get(&sid).unwrap().clone();
+                        let mut sockobj = locksock.write();
+
+                        if sockobj.1 != ConnState::NOTCONNECTED {
+                            return syscall_error(Errno::EISCONN, "connect", "The descriptor is already connected");
+                        }
+
+                        if let None = sockfdobj.localaddr {
+                            let localaddr = match Self::assign_new_addr(sockfdobj, sockfdobj.realdomain, sockfdobj.protocol & (1 << SO_REUSEPORT) != 0) {
+                                Ok(a) => a,
+                                Err(e) => return e,
+                            };
+
+                            if let interface::GenSockaddr::Unix(_) = localaddr {
+                                self.bind_inner_socket(sockfdobj, &localaddr, false, &*sockobj);
+                            } else {
+                                let bindret = sockobj.0.bind(&localaddr);
+                                if bindret < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {return syscall_error(i, "connect", "The libc call to bind within connect failed");},
+                                        Err(()) => panic!("Unknown errno value from socket bind within connect returned!"),
+                                    };
+                                }
+                                sockfdobj.localaddr = Some(localaddr);
+                            }
+                        } 
+                        
+                        if let interface::GenSockaddr::Unix(_) = remoteaddr {
+                            let path = remoteaddr.path().clone();
+                            let truepath = normpath(convpath(path), self);
+                            let maybe_remote = NET_METADATA.domain_socket_table.get(&truepath);
+                            remoteclone = if let Some(remote) = maybe_remote {
+                                remote.clone()
+                            } else {
+                                return syscall_error(Errno::ECONNREFUSED, "connect", "The libc call to connect failed!");
+                            };
+                            sockobj.0.set_blocking(); // unix domain sockets block on connect evne if nb, for now we fake them so set blocking and then unset after
+                        };
+
+                        let mut inprogress = false;
+                        let connectret = sockobj.0.connect(&remoteclone);
+                        if connectret < 0 {
+                            match Errno::from_discriminant(interface::get_errno()) {
+                                Ok(i) => {
+                                    if i == Errno::EINPROGRESS { inprogress = true; }
+                                    else { return syscall_error(i, "connect", "The libc call to connect failed!") };
+                                },
+                                Err(()) => panic!("Unknown errno value from socket connect returned!"),
+                            };
+
+                        }
+
+                        if let interface::GenSockaddr::Unix(_) = remoteaddr { sockobj.0.set_blocking(); };
+
+                        sockobj.1 = ConnState::CONNECTED;
+                        sockfdobj.remoteaddr = Some(remoteaddr.clone());
+                        sockfdobj.errno = 0;
+                        if inprogress {
+                            sockobj.1 = ConnState::INPROGRESS;
+                            return syscall_error(Errno::EINPROGRESS, "connect", "The libc call to connect is in progress.");
+                        }
+                        return 0;
+                    } else {
+                        return syscall_error(Errno::EOPNOTSUPP, "connect", "Unkown protocol in connect");
                     }
                 }
                 _ => {
