@@ -80,7 +80,7 @@ pub struct Cage {
 
 impl Cage {
 
-    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockWriteGuard<Option<FileDescriptor>>>) {
+    pub fn get_next_fd(&self, startfd: Option<i32>) -> (i32, Option<interface::RustLockGuard<Option<FileDescriptor>>>) {
 
         let start = match startfd {
             Some(startfd) => startfd,
@@ -104,14 +104,20 @@ impl Cage {
         *cwdbox = newwd;
     }
 
-    pub fn load_lower_handle_stubs(&mut self) {
-        let stdin = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let stdout = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let stderr = interface::RustRfc::new(interface::RustLock::new(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())})));
-        let fdtable = &self.filedescriptortable;
-        fdtable.insert(0, stdin);
-        fdtable.insert(1, stdout);
-        fdtable.insert(2, stderr);
-    }
+}
 
+pub fn init_fdtable() -> FdTable {
+    let mut fdtable = Vec::new();
+    // load lower handle stubs
+    let stdin = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 0, flags: O_RDONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
+    let stdout = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 1, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
+    let stderr = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(StreamDesc {position: 0, stream: 2, flags: O_WRONLY, advlock: interface::RustRfc::new(interface::AdvisoryLock::new())}))));
+    fdtable.push(stdin);
+    fdtable.push(stdout);
+    fdtable.push(stderr);
+
+    for _fd in 3..MAXFD as usize {
+        fdtable.push(interface::RustRfc::new(interface::RustLock::new(None)));
+    }
+    fdtable
 }

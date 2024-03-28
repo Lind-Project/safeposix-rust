@@ -604,10 +604,8 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
     incref_root();
     
     let utilcage = Cage{
-        cageid: 0, 
-        cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
-        parent: 0, 
-        filedescriptortable: interface::RustHashMap::new(),
+        cageid: 0, cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
+        parent: 0, filedescriptortable: init_fdtable(),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -624,7 +622,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
         parent: 1, 
         filedescriptortable: init_fdtable(),
-        cancelstatus: interface::RustAtomicBool::new(false),
         getgid: interface::RustAtomicI32::new(-1), 
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
@@ -633,7 +630,6 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         mutex_table: interface::RustLock::new(vec!()),
         cv_table: interface::RustLock::new(vec!()),
     };
-    initcage.load_lower_handle_stubs();
     interface::cagetable_insert(1, initcage);
 }
 

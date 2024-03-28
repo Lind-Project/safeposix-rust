@@ -2,7 +2,7 @@
 
 // System related system calls
 use crate::interface;
-use crate::safeposix::cage::{Arg, CAGE_TABLE, Cage, Errno, syscall_error, FileDescriptor::*, FSData, Rlimit, StatData};
+use crate::safeposix::cage::{*, FileDescriptor::*};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
@@ -81,8 +81,7 @@ impl Cage {
         //construct new cage struct with a cloned fdtable
         let newfdtable = init_fdtable();
         for fd in 0..MAXFD {
-            let checkedfd = self.get_filedescriptor(fd).unwrap();
-            let unlocked_fd = checkedfd.read();
+            let unlocked_fd = self.filedescriptortable[fd as usize].read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
                     File(_normalfile_filedesc_obj) => {
@@ -131,8 +130,6 @@ impl Cage {
                             }
                        }
                 }
-                _ => {}
-            }
                 
                 let newfdobj = filedesc_enum.clone();
 
@@ -140,6 +137,12 @@ impl Cage {
             }
 
         }
+        let cwd_container = self.cwd.read();
+        if let Some(cwdinodenum) = metawalk(&cwd_container) {
+            if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
+                cwddir.refcount += 1;
+            } else {panic!("We changed from a directory that was not a directory in chdir!");}
+        } else {panic!("We changed from a directory that was not a directory in chdir!");}
 
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
@@ -169,21 +172,19 @@ impl Cage {
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         interface::cagetable_remove(self.cageid);
 
-        let mut cloexecvec = vec!();
-        let iterator = self.filedescriptortable.iter();
-
         self.unmap_shm_mappings();
 
-        for pair in iterator {
-            let (&fdnum, inode) = pair.pair();
-            if match &*inode.read() {
-               File(f) => f.flags & O_CLOEXEC,
-               Stream(s) => s.flags & O_CLOEXEC,
-               Socket(s) => s.flags & O_CLOEXEC,
-               Pipe(p) => p.flags & O_CLOEXEC,
-               Epoll(p) => p.flags & O_CLOEXEC,
-            } != 0 {
-                cloexecvec.push(fdnum);
+        let mut cloexecvec = vec!();
+        for fd in 0..MAXFD {
+            let unlocked_fd = self.filedescriptortable[fd as usize].read();
+            if let Some(filedesc_enum) = &*unlocked_fd {
+                if match filedesc_enum {
+                    File(f) => f.flags & O_CLOEXEC,
+                    Stream(s) => s.flags & O_CLOEXEC,
+                    Socket(s) => s.flags & O_CLOEXEC,
+                    Pipe(p) => p.flags & O_CLOEXEC,
+                    Epoll(p) => p.flags & O_CLOEXEC,
+                } != 0 { cloexecvec.push(fd); }
             }
         };
         
@@ -203,7 +204,6 @@ impl Cage {
         let newcage = Cage {cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), 
             parent: self.parent, 
             filedescriptortable: self.filedescriptortable.clone(),
-            cancelstatus: interface::RustAtomicBool::new(false),
             getgid: interface::RustAtomicI32::new(-1), 
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
@@ -225,12 +225,9 @@ impl Cage {
 
         self.unmap_shm_mappings();
 
-        //close all remaining files in the fdtable
-        {
-            let fds_to_close = self.filedescriptortable.iter_mut().map(|x| *x.key()).collect::<Vec<i32>>();
-            for fd in  fds_to_close {
-                self._close_helper(fd);
-            }
+        // close fds
+        for fd in 0..MAXFD {
+            self._close_helper(fd);
         }
 
         //get file descriptor table into a vector

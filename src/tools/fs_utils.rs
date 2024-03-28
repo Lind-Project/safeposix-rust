@@ -109,7 +109,6 @@ fn main() {
                         cwd: interface::RustLock::new(interface::RustRfc::new(interface::RustPathBuf::from("/"))),
                         parent: 0, 
                         filedescriptortable: init_fdtable(),
-                        cancelstatus: interface::RustAtomicBool::new(false),
                         getgid: interface::RustAtomicI32::new(-1), 
                         getuid: interface::RustAtomicI32::new(-1), 
                         getegid: interface::RustAtomicI32::new(-1), 
