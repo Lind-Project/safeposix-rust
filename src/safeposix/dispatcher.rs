@@ -77,14 +77,6 @@ const COND_BROADCAST_SYSCALL: i32 = 78;
 const COND_SIGNAL_SYSCALL: i32 = 79;
 const COND_TIMEDWAIT_SYSCALL: i32 = 80;
 
-const SEM_INIT_SYSCALL: i32 = 91;
-const SEM_WAIT_SYSCALL: i32 = 92;
-const SEM_TRYWAIT_SYSCALL: i32 = 93;
-const SEM_TIMEDWAIT_SYSCALL: i32 = 94;
-const SEM_POST_SYSCALL: i32 = 95;
-const SEM_DESTROY_SYSCALL: i32 = 96;
-const SEM_GETVALUE_SYSCALL: i32 = 97;
-
 const GETHOSTNAME_SYSCALL: i32 = 125;
 const PREAD_SYSCALL: i32 = 126;
 const PWRITE_SYSCALL: i32 = 127;
@@ -518,45 +510,6 @@ pub extern "C" fn dispatcher(cageid: u64, callnum: i32, arg1: Arg, arg2: Arg, ar
         COND_TIMEDWAIT_SYSCALL => {
             check_and_dispatch!(cage.cond_timedwait_syscall, interface::get_int(arg1), interface::get_int(arg2), interface::duration_fromtimespec(arg3))
         }
-        TRUNCATE_SYSCALL => {
-            check_and_dispatch!(cage.truncate_syscall, interface::get_cstr(arg1), interface::get_isize(arg2))
-        }
-        FTRUNCATE_SYSCALL => {
-            check_and_dispatch!(cage.ftruncate_syscall, interface::get_int(arg1), interface::get_isize(arg2))
-        }
-        SIGACTION_SYSCALL => {
-            check_and_dispatch!(cage.sigaction_syscall, interface::get_int(arg1), interface::get_constsigactionstruct(arg2), interface::get_sigactionstruct(arg3))
-        }
-        KILL_SYSCALL => {
-            check_and_dispatch!(cage.kill_syscall, interface::get_int(arg1), interface::get_int(arg2))
-        }
-        SIGPROCMASK_SYSCALL => {
-            check_and_dispatch!(cage.sigprocmask_syscall, interface::get_int(arg1), interface::get_constsigsett(arg2), interface::get_sigsett(arg3))
-        }
-        SETITIMER_SYSCALL => {
-            check_and_dispatch!(cage.setitimer_syscall, interface::get_int(arg1), interface::get_constitimerval(arg2), interface::get_itimerval(arg3)) 
-        }
-        SEM_INIT_SYSCALL => {
-            check_and_dispatch!(cage.sem_init_syscall, interface::get_uint(arg1), interface::get_int(arg2), interface::get_uint(arg3))
-        }
-        SEM_WAIT_SYSCALL => {
-            check_and_dispatch!(cage.sem_wait_syscall, interface::get_uint(arg1))
-        }
-        SEM_POST_SYSCALL => {
-            check_and_dispatch!(cage.sem_post_syscall, interface::get_uint(arg1))
-        }
-        SEM_DESTROY_SYSCALL => {
-            check_and_dispatch!(cage.sem_destroy_syscall, interface::get_uint(arg1))
-        }
-        SEM_GETVALUE_SYSCALL => {
-            check_and_dispatch!(cage.sem_getvalue_syscall, interface::get_uint(arg1))
-        }
-        SEM_TRYWAIT_SYSCALL => {
-            check_and_dispatch!(cage.sem_trywait_syscall, interface::get_uint(arg1))
-        }
-        SEM_TIMEDWAIT_SYSCALL => {
-            check_and_dispatch!(cage.sem_timedwait_syscall, interface::get_uint(arg1), interface::duration_fromtimespec(arg2))
-        }
 
         _ => {//unknown syscall
             -1
@@ -654,7 +607,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!())
+        rev_shm: interface::Mutex::new(vec!()),
+        mutex_table: interface::RustLock::new(vec!()),
+        cv_table: interface::RustLock::new(vec!()),
     };
 
     interface::cagetable_insert(0, utilcage);
@@ -670,7 +625,9 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!())
+        rev_shm: interface::Mutex::new(vec!()),
+        mutex_table: interface::RustLock::new(vec!()),
+        cv_table: interface::RustLock::new(vec!()),
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean

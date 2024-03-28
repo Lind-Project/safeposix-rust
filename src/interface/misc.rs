@@ -23,73 +23,7 @@ pub use serde::{Serialize as SerdeSerialize, Deserialize as SerdeDeserialize};
 pub use serde_cbor::{ser::to_vec_packed as serde_serialize_to_bytes, from_slice as serde_deserialize_from_bytes};
 
 use crate::interface::errnos::{VERBOSE};
-use crate::interface::types::{SigsetType};
-use crate::interface;
-use crate::safeposix::syscalls::fs_constants::{SEM_VALUE_MAX};
 use std::time::Duration;
-use std::sync::LazyLock;
-
-pub const MAXCAGEID: i32 = 1024;
-const EXIT_SUCCESS : i32 = 0;
-
-pub static RUSTPOSIX_TESTSUITE: LazyLock<RustAtomicBool> = LazyLock::new(|| {
-    RustAtomicBool::new(false)
-});
-
-thread_local! {
-    static TRUSTED_SIGNAL_FLAG: RefCell<u64> = RefCell::new(0);
-}
-
-use crate::safeposix::cage::{Cage};
-
-pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
-
-pub fn check_cageid(cageid: u64) {
-    if cageid >= MAXCAGEID as u64 {
-        panic!("Cage ID is outside of valid range");
-    }
-}
-
-pub fn cagetable_init() {
-   unsafe { for _cage in 0..MAXCAGEID { CAGE_TABLE.push(None); }}
-}
-
-pub fn cagetable_insert(cageid: u64, cageobj: Cage) {
-    check_cageid(cageid);
-    let _insertret = unsafe { CAGE_TABLE[cageid as usize].insert(RustRfc::new(cageobj)) };
-}
-
-pub fn cagetable_remove(cageid: u64) {
-    check_cageid(cageid);
-    unsafe{ CAGE_TABLE[cageid as usize].take() };
-}
-
-pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
-    check_cageid(cageid);
-    unsafe { CAGE_TABLE[cageid as usize].as_ref().unwrap().clone() }
-}
-
-pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
-    check_cageid(cageid);
-    unsafe { match CAGE_TABLE[cageid as usize].as_ref() {
-        Some(cage) => Some(cage.clone()),
-        None => None
-    }}
-}
-
-pub fn cagetable_clear() {
-    let mut exitvec = Vec::new();
-    unsafe {
-        for cage in CAGE_TABLE.iter_mut() {
-            let cageopt = cage.take();
-            if cageopt.is_some() { exitvec.push(cageopt.unwrap()); }
-        }
-    }
-
-    for cage in exitvec {
-        cage.exit_syscall(EXIT_SUCCESS);
-    }
-}
 
 pub fn log_from_ptr(buf: *const u8, length: usize) {
     if let Ok(s) = from_utf8(unsafe{std::slice::from_raw_parts(buf, length)}) {
@@ -532,5 +466,100 @@ impl RustSemaphore {
                 return true;
             }
         }
+    }
+}
+
+pub struct RawMutex {
+    inner: libc::pthread_mutex_t
+}
+
+impl RawMutex {
+    pub fn create() -> Result<Self, i32> {
+        let inner;
+        let libcret;
+        unsafe {
+            inner = std::mem::MaybeUninit::uninit();
+            libcret = libc::pthread_mutex_init((&mut inner.assume_init()) as *mut libc::pthread_mutex_t, std::ptr::null());
+        }
+        if libcret < 0 { Err(libcret) } else { Ok(Self {inner: unsafe{inner.assume_init()}}) }
+    }
+
+    pub fn lock(&self) -> i32 {
+        unsafe {libc::pthread_mutex_lock((&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)}
+    }
+
+    pub fn trylock(&self) -> i32 {
+        unsafe {libc::pthread_mutex_trylock((&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)}
+    }
+
+    pub fn unlock(&self) -> i32 {
+        unsafe {libc::pthread_mutex_unlock((&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)}
+    }
+}
+
+impl std::fmt::Debug for RawMutex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<mutex>")
+    }
+}
+
+impl Drop for RawMutex {
+    fn drop(&mut self) {
+        unsafe{ libc::pthread_mutex_destroy((&mut self.inner) as *mut libc::pthread_mutex_t); }
+    }
+}
+
+pub struct RawCondvar {
+    inner: libc::pthread_cond_t
+}
+
+impl RawCondvar {
+    pub fn create() -> Result<Self, i32> {
+        let inner;
+        let libcret;
+        unsafe {
+            inner = std::mem::MaybeUninit::uninit();
+            libcret = libc::pthread_cond_init((&mut inner.assume_init()) as *mut libc::pthread_cond_t, std::ptr::null());
+        }
+        if libcret < 0 { Err(libcret) } else { Ok(Self {inner: unsafe{ inner.assume_init() }}) }
+    }
+
+    pub fn signal(&self) -> i32 {
+        unsafe {libc::pthread_cond_signal((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t)}
+    }
+
+    pub fn broadcast(&self) -> i32 {
+        unsafe {libc::pthread_cond_broadcast((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t)}
+    }
+
+    pub fn wait(&self, mutex: &RawMutex) -> i32 {
+        unsafe {
+            libc::pthread_cond_wait((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
+                                    (&mutex.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t)
+        }
+    }
+
+    pub fn timedwait(&self, mutex: &RawMutex, abs_duration: Duration) -> i32 {
+        let abstime = libc::timespec {
+            tv_sec: abs_duration.as_secs() as i64,
+            tv_nsec: (abs_duration.as_nanos() % 1000000000) as i64
+        };
+        unsafe {
+            libc::pthread_cond_timedwait((&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
+                                        (&mutex.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
+                                        (&abstime) as *const libc::timespec)
+        }
+    }
+}
+
+impl Drop for RawCondvar {
+    fn drop(&mut self) {
+        unsafe { libc::pthread_cond_destroy((&mut self.inner) as *mut libc::pthread_cond_t); }
+    }
+}
+
+impl std::fmt::Debug for RawCondvar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<condvar>")
     }
 }

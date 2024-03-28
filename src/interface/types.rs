@@ -99,12 +99,6 @@ pub struct TimeVal {
 }
 
 #[repr(C)]
-pub struct ITimerVal {
-    pub it_interval: TimeVal,
-    pub it_value: TimeVal,
-}
-
-#[repr(C)]
 pub struct TimeSpec {
     pub tv_sec: i64,
     pub tv_nsec: i64
@@ -578,24 +572,6 @@ pub fn duration_fromtimeval(union_argument: Arg) -> Result<Option<interface::Rus
         return Ok(Some(interface::RustDuration::new(times.tv_sec as u64, times.tv_usec as u32 * 1000)));
     } else {
         return Ok(None);
-    }
-}
-
-pub fn get_itimerval<'a>(union_argument: Arg) -> Result<Option<&'a mut ITimerVal>, i32> {
-    let pointer = unsafe{union_argument.dispatch_structitimerval};
-    if !pointer.is_null() {
-        Ok(Some(unsafe{&mut *pointer}))
-    } else {
-        Ok(None)
-    }
-}
-
-pub fn get_constitimerval<'a>(union_argument: Arg) -> Result<Option<&'a ITimerVal>, i32> {
-    let pointer = unsafe{union_argument.dispatch_conststructitimerval};
-    if !pointer.is_null() {
-        Ok(Some(unsafe{& *pointer}))
-    } else {
-        Ok(None)
     }
 }
 

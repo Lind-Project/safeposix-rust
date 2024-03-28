@@ -2,7 +2,7 @@
 
 // System related system calls
 use crate::interface;
-use crate::safeposix::cage::{*, FileDescriptor::*};
+use crate::safeposix::cage::{Arg, CAGE_TABLE, PIPE_TABLE, Cage, Errno, syscall_error, FileDescriptor::*, FSData, Rlimit, StatData};
 use crate::safeposix::filesystem::{FS_METADATA, Inode, metawalk, decref_dir};
 use crate::safeposix::net::{NET_METADATA};
 use crate::safeposix::shm::{SHM_METADATA};
@@ -78,6 +78,48 @@ impl Cage {
         }
         drop(cvtable);
 
+        //construct a new mutex in the child cage where each initialized mutex is in the parent cage
+        let mutextable = self.mutex_table.read();
+        let mut new_mutex_table = vec!();
+        for elem in mutextable.iter() {
+            if elem.is_some() {
+                let new_mutex_result = interface::RawMutex::create();
+                match new_mutex_result {
+                    Ok(new_mutex) => {new_mutex_table.push(Some(interface::RustRfc::new(new_mutex)))}
+                        Err(_) => {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_mutex_init failed!");},
+                            Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
+                        };
+                    }
+                }
+            } else {
+                new_mutex_table.push(None);
+            }
+        }
+        drop(mutextable);
+
+        //construct a new condvar in the child cage where each initialized condvar is in the parent cage
+        let cvtable = self.cv_table.read();
+        let mut new_cv_table = vec!();
+        for elem in cvtable.iter() {
+            if elem.is_some() {
+                let new_cv_result = interface::RawCondvar::create();
+                match new_cv_result {
+                    Ok(new_cv) => {new_cv_table.push(Some(interface::RustRfc::new(new_cv)))}
+                        Err(_) => {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {return syscall_error(i, "fork", "The libc call to pthread_cond_init failed!");},
+                            Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
+                        };
+                    }
+                }
+            } else {
+                new_cv_table.push(None);
+            }
+        }
+        drop(cvtable);
+
         //construct new cage struct with a cloned fdtable
         let newfdtable = init_fdtable();
         for fd in 0..MAXFD {
@@ -140,33 +182,6 @@ impl Cage {
             }
 
         }
-        let cwd_container = self.cwd.read();
-        if let Some(cwdinodenum) = metawalk(&cwd_container) {
-            if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap()) {
-                cwddir.refcount += 1;
-            } else {panic!("We changed from a directory that was not a directory in chdir!");}
-        } else {panic!("We changed from a directory that was not a directory in chdir!");}
-
-        // we grab the parent cages main threads sigset and store it at 0
-        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) { // we don't add these for the test suite
-            let mainsigsetatomic = self.sigset.get(&self.main_threadid.load(interface::RustAtomicOrdering::Relaxed)).unwrap();
-            let mainsigset = interface::RustAtomicU64::new(mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed));
-            newsigset.insert(0, mainsigset);
-        }
-
-
-        /* 
-        *  Construct a new semaphore table in child cage which equals to the one in the parent cage
-        */
-        let semtable = &self.sem_table;
-        let new_semtable: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>> = interface::RustHashMap::new();
-        // Loop all pairs
-        for pair in semtable.iter() {
-            new_semtable.insert((*pair.key()).clone(), pair.value().clone());
-        }
 
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
@@ -176,7 +191,9 @@ impl Cage {
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
             geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
-            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone())
+            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
+            mutex_table: interface::RustLock::new(new_mutex_table),
+            cv_table: interface::RustLock::new(new_cv_table),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -235,7 +252,9 @@ impl Cage {
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
             geteuid: interface::RustAtomicI32::new(-1),
-            rev_shm: interface::Mutex::new(vec!())
+            rev_shm: interface::Mutex::new(vec!()),
+            mutex_table: interface::RustLock::new(vec!()),
+            cv_table: interface::RustLock::new(vec!()),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
