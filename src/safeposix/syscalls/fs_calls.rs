@@ -1436,7 +1436,8 @@ impl Cage {
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => {
-                    self._dup2_helper(&filedesc_enum, arg, false)
+                    drop(filedesc_enum);
+                    self._dup2_helper(fd, arg, false)
                 }
                 //TO DO: implement. this one is saying get the signals
                 (F_GETOWN, ..) => {
@@ -2225,32 +2226,25 @@ impl Cage {
             let mut rev_shm = self.rev_shm.lock();
             rev_shm.push((shmaddr as u32, shmid));
             drop(rev_shm);
-
-            // update semaphores
-            if !segment.semaphor_offsets.is_empty() {
-                // lets just look at the first cage in the set, since we only need to grab the ref from one
-                if let Some(cageid) = segment.attached_cages.clone().into_read_only().keys().next() {
-                    let cage2 = interface::cagetable_getref(*cageid); 
-                    let cage2_rev_shm = cage2.rev_shm.lock();
-                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
-                    for offset in segment.semaphor_offsets.iter() {
-                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
-                        self.sem_table.insert(shmaddr as u32 + *offset, sementry);
-                    }
-                }
-            }
-
-            segment.map_shm(shmaddr, prot, self.cageid)
+            segment.map_shm(shmaddr, prot)
         } else { syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") }
     }
 
+    pub fn rev_shm_find(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+        for (index, val) in rev_shm.iter().enumerate() {
+            if val.0 == shmaddr as u32 {
+                return Some(index);
+            }
+        }
+        None
+    }
     //------------------SHMDT SYSCALL------------------
 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8)-> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
         let mut rev_shm = self.rev_shm.lock();
-        let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
+        let rev_shm_index = Self::rev_shm_find(&rev_shm, shmaddr as u32);
 
         if let Some(index) = rev_shm_index {
             let shmid = rev_shm[index].1;

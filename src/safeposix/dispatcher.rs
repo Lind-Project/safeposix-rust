@@ -117,8 +117,8 @@ use super::filesystem::{FS_METADATA, load_fs, incref_root, remove_domain_sock, p
 use super::shm::{SHM_METADATA};
 use super::net::{NET_METADATA};
 use crate::interface::errnos::*;
-use super::syscalls::{sys_constants::*, fs_constants::IPC_STAT};
-use crate::lib_fs_utils::{visit_children, lind_deltree};
+use super::syscalls::sys_constants::*;
+use super::syscalls::fs_constants::IPC_STAT;
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -654,16 +654,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!()),
-        mutex_table: interface::RustLock::new(vec!()),
-        cv_table: interface::RustLock::new(vec!()),
-        sem_table: interface::RustHashMap::new(),
-        thread_table: interface::RustHashMap::new(),
-        signalhandler: interface::RustHashMap::new(),
-        sigset: interface::RustHashMap::new(), 
-        pendingsigset: interface::RustHashMap::new(),
-        main_threadid: interface::RustAtomicU64::new(0),
-        interval_timer: interface::IntervalTimer::new(0)
+        rev_shm: interface::Mutex::new(vec!())
     };
 
     interface::cagetable_insert(0, utilcage);
@@ -679,16 +670,7 @@ pub extern "C" fn lindrustinit(verbosity: isize) {
         getuid: interface::RustAtomicI32::new(-1), 
         getegid: interface::RustAtomicI32::new(-1), 
         geteuid: interface::RustAtomicI32::new(-1),
-        rev_shm: interface::Mutex::new(vec!()),
-        mutex_table: interface::RustLock::new(vec!()),
-        cv_table: interface::RustLock::new(vec!()),
-        sem_table: interface::RustHashMap::new(),
-        thread_table: interface::RustHashMap::new(),
-        signalhandler: interface::RustHashMap::new(),
-        sigset: interface::RustHashMap::new(),
-        pendingsigset: interface::RustHashMap::new(),
-        main_threadid: interface::RustAtomicU64::new(0),
-        interval_timer: interface::IntervalTimer::new(1)
+        rev_shm: interface::Mutex::new(vec!())
     };
     interface::cagetable_insert(1, initcage);
     // make sure /tmp is clean

@@ -23,7 +23,6 @@ impl Cage {
                     let segment = occupied.get_mut();
                     segment.shminfo.shm_nattch -= 1;
                     segment.shminfo.shm_dtime = interface::timestamp() as isize;
-                    segment.attached_cages.remove(&self.cageid);
             
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         let key = segment.key;
@@ -172,22 +171,12 @@ impl Cage {
         let cageobj = Cage {
             cageid: child_cageid, cwd: interface::RustLock::new(self.cwd.read().clone()), parent: self.cageid,
             filedescriptortable: newfdtable,
-            cancelstatus: interface::RustAtomicBool::new(false),
             // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(self.getgid.load(interface::RustAtomicOrdering::Relaxed)), 
             getuid: interface::RustAtomicI32::new(self.getuid.load(interface::RustAtomicOrdering::Relaxed)), 
             getegid: interface::RustAtomicI32::new(self.getegid.load(interface::RustAtomicOrdering::Relaxed)), 
             geteuid: interface::RustAtomicI32::new(self.geteuid.load(interface::RustAtomicOrdering::Relaxed)),
-            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
-            mutex_table: interface::RustLock::new(new_mutex_table),
-            cv_table: interface::RustLock::new(new_cv_table),
-            sem_table: new_semtable,
-            thread_table: interface::RustHashMap::new(),
-            signalhandler: self.signalhandler.clone(),
-            sigset: newsigset,
-            pendingsigset: interface::RustHashMap::new(),
-            main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: interface::IntervalTimer::new(child_cageid)
+            rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone())
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -195,13 +184,10 @@ impl Cage {
         for rev_mapping in cageobj.rev_shm.lock().iter() {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
-            let refs = shment.attached_cages.get(&self.cageid).unwrap();
-            let childrefs = refs.clone();
-            drop(refs);
-            shment.attached_cages.insert(child_cageid, childrefs);
         }
-        interface::cagetable_insert(child_cageid, cageobj);
+        drop(shmtable);
 
+        mutcagetable.insert(child_cageid, interface::RustRfc::new(cageobj));
         0
     }
 
@@ -211,17 +197,20 @@ impl Cage {
         self.unmap_shm_mappings();
 
         let mut cloexecvec = vec!();
-        for fd in 0..MAXFD {
-            let checkedfd = self.get_filedescriptor(fd).unwrap();
-            let unlocked_fd = checkedfd.read();
-            if let Some(filedesc_enum) = &*unlocked_fd {
-                if match filedesc_enum {
-                    File(f) => f.flags & O_CLOEXEC,
-                    Stream(s) => s.flags & O_CLOEXEC,
-                    Socket(s) => s.flags & O_CLOEXEC,
-                    Pipe(p) => p.flags & O_CLOEXEC,
-                    Epoll(p) => p.flags & O_CLOEXEC,
-                } != 0 { cloexecvec.push(fd); }
+        let iterator = self.filedescriptortable.iter();
+
+        self.unmap_shm_mappings();
+
+        for pair in iterator {
+            let (&fdnum, inode) = pair.pair();
+            if match &*inode.read() {
+               File(f) => f.flags & O_CLOEXEC,
+               Stream(s) => s.flags & O_CLOEXEC,
+               Socket(s) => s.flags & O_CLOEXEC,
+               Pipe(p) => p.flags & O_CLOEXEC,
+               Epoll(p) => p.flags & O_CLOEXEC,
+            } != 0 {
+                cloexecvec.push(fdnum);
             }
         };
         
@@ -246,16 +235,7 @@ impl Cage {
             getuid: interface::RustAtomicI32::new(-1), 
             getegid: interface::RustAtomicI32::new(-1), 
             geteuid: interface::RustAtomicI32::new(-1),
-            rev_shm: interface::Mutex::new(vec!()),
-            mutex_table: interface::RustLock::new(vec!()),
-            cv_table: interface::RustLock::new(vec!()),
-            sem_table: interface::RustHashMap::new(),
-            thread_table: interface::RustHashMap::new(),
-            signalhandler: interface::RustHashMap::new(),
-            sigset: newsigset,
-            pendingsigset: interface::RustHashMap::new(),
-            main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid)
+            rev_shm: interface::Mutex::new(vec!())
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -270,9 +250,12 @@ impl Cage {
 
         self.unmap_shm_mappings();
 
-        // close fds
-        for fd in 0..MAXFD {
-            self._close_helper(fd);
+        //close all remaining files in the fdtable
+        {
+            let fds_to_close = self.filedescriptortable.iter_mut().map(|x| *x.key()).collect::<Vec<i32>>();
+            for fd in  fds_to_close {
+                self._close_helper(fd);
+            }
         }
 
         //get file descriptor table into a vector

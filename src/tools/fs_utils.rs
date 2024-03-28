@@ -114,17 +114,7 @@ fn main() {
                         getuid: interface::RustAtomicI32::new(-1), 
                         getegid: interface::RustAtomicI32::new(-1), 
                         geteuid: interface::RustAtomicI32::new(-1),
-                        rev_shm: interface::Mutex::new(vec!()),
-                        mutex_table: interface::RustLock::new(vec!()),
-                        cv_table: interface::RustLock::new(vec!()),
-                        sem_table: interface::RustHashMap::new(),
-                        thread_table: interface::RustHashMap::new(),
-                        signalhandler: interface::RustHashMap::new(),
-                        sigset: interface::RustHashMap::new(),
-                        pendingsigset: interface::RustHashMap::new(),
-                        main_threadid: interface::RustAtomicU64::new(0),
-                        interval_timer: interface::IntervalTimer::new(0)
-                    };
+                        rev_shm: interface::Mutex::new(vec!())};
 
     args.next();//first arg is executable, we don't care
     let command = if let Some(cmd) = args.next() {
