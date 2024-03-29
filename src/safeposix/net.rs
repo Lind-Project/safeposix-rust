@@ -73,7 +73,6 @@ pub fn mux_port(addr: interface::GenIpaddr, port: u16, domain: i32, istcp: bool)
 pub struct UnixSocketInfo {
     pub mode: i32,
     pub sendpipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
-    pub path: interface::RustPathBuf,
     pub receivepipe: Option<interface::RustRfc<interface::EmulatedPipe>>,
     pub inode: usize,
 }

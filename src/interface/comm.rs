@@ -206,7 +206,6 @@ pub struct SockaddrV6 {
 
 #[derive(Debug)]
 pub struct Socket {
-    pub refcnt: i32,
     pub raw_sys_fd: i32
 }
 
@@ -220,7 +219,7 @@ impl Socket {
         let timeoutval = libc::timeval { tv_sec: 1, tv_usec: 0 };
         unsafe {libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVTIMEO, (&timeoutval as *const libc::timeval) as *const libc::c_void, size_of::<libc::timeval>() as u32)};
         if fd < 0 {panic!("Socket creation failed when it should never fail");}
-        Self {refcnt: 1, raw_sys_fd: fd}
+        Self {raw_sys_fd: fd}
     }
 
     pub fn bind(&self, addr: &GenSockaddr) -> i32 {
@@ -296,7 +295,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
+                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
@@ -306,7 +305,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
+                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
     }
@@ -322,7 +321,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V4(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
+                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V4(inneraddrbuf))
             }
         } else {
             let mut inneraddrbuf = SockaddrV6::default();
@@ -334,7 +333,7 @@ impl Socket {
             if newfd < 0 {
                 (Err(newfd), GenSockaddr::V6(inneraddrbuf))
             } else {
-                (Ok(Self{refcnt: 1, raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
+                (Ok(Self{raw_sys_fd: newfd}), GenSockaddr::V6(inneraddrbuf))
             }
         };
     }
