@@ -131,12 +131,12 @@ impl EmulatedPipe {
         //     slice::from_raw_parts_mut(ptr, length)
         // };
 
-        let mut read_end = self.read_end.lock();
-        let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
-            if self.eof.load(Ordering::SeqCst) { return 0; }
-            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
-        }
+        // let mut read_end = self.read_end.lock();
+        // let mut pipe_space = read_end.len();
+        // if nonblocking && (pipe_space == 0) {
+        if self.eof.load(Ordering::SeqCst) { return 0; }
+        //     return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
+        // }
 
         // // wait for something to be in the pipe, but break on eof
         // // check cancel point after 2^20 cycles just in case
