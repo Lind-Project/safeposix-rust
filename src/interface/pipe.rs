@@ -86,76 +86,78 @@ impl EmulatedPipe {
     // Write length bytes from pointer into pipe
     pub fn write_to_pipe(&self, ptr: *const u8, length: usize, nonblocking: bool) -> i32 {
 
-        let mut bytes_written = 0;
+        // let mut bytes_written = 0;
 
-        let buf = unsafe {
-            assert!(!ptr.is_null());
-            slice::from_raw_parts(ptr, length)
-        };
+        // let buf = unsafe {
+        //     assert!(!ptr.is_null());
+        //     slice::from_raw_parts(ptr, length)
+        // };
 
-        let mut write_end = self.write_end.lock();
+        // let mut write_end = self.write_end.lock();
 
-        let pipe_space = write_end.remaining();
-        if nonblocking && (pipe_space == 0) {
-            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
-        }
+        // let pipe_space = write_end.remaining();
+        // if nonblocking && (pipe_space == 0) {
+        //     return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
+        // }
 
-        while bytes_written < length {
-            if self.get_read_ref() == 0 {
-                return syscall_error(Errno::EPIPE, "write", "broken pipe");
-            } // EPIPE, all read ends are closed
+        // while bytes_written < length {
+        //     if self.get_read_ref() == 0 {
+        //         return syscall_error(Errno::EPIPE, "write", "broken pipe");
+        //     } // EPIPE, all read ends are closed
 
-            let remaining = write_end.remaining();
+        //     let remaining = write_end.remaining();
 
-            if remaining == 0 {
-                interface::lind_yield(); //yield on a full pipe
-                continue 
-            }
-            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
-            if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
-            let bytes_to_write = min(length, bytes_written as usize + remaining);
-            write_end.push_slice(&buf[bytes_written..bytes_to_write]);
-            bytes_written = bytes_to_write;
-        }   
+        //     if remaining == 0 {
+        //         interface::lind_yield(); //yield on a full pipe
+        //         continue 
+        //     }
+        //     // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
+        //     if remaining != self.size  && (length - bytes_written) > PAGE_SIZE && remaining < PAGE_SIZE { continue };
+        //     let bytes_to_write = min(length, bytes_written as usize + remaining);
+        //     write_end.push_slice(&buf[bytes_written..bytes_to_write]);
+        //     bytes_written = bytes_to_write;
+        // }   
 
-        bytes_written as i32
+        // bytes_written as i32
+        length as i32
     }
 
     // Read length bytes from the pipe into pointer
     // Will wait for bytes unless pipe is empty and eof is set.
     pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
 
-        let buf = unsafe {
-            assert!(!ptr.is_null());
-            slice::from_raw_parts_mut(ptr, length)
-        };
+        // let buf = unsafe {
+        //     assert!(!ptr.is_null());
+        //     slice::from_raw_parts_mut(ptr, length)
+        // };
 
-        let mut read_end = self.read_end.lock();
-        let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
-            if self.eof.load(Ordering::SeqCst) { return 0; }
-            return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
-        }
+        // let mut read_end = self.read_end.lock();
+        // let mut pipe_space = read_end.len();
+        // if nonblocking && (pipe_space == 0) {
+        //     if self.eof.load(Ordering::SeqCst) { return 0; }
+        //     return syscall_error(Errno::EAGAIN, "read", "there is no data available right now, try again later");
+        // }
 
-        // wait for something to be in the pipe, but break on eof
-        // check cancel point after 2^20 cycles just in case
-        let mut count = 0;
-        while pipe_space == 0 {
-            if self.eof.load(Ordering::SeqCst) { return 0; }
+        // // wait for something to be in the pipe, but break on eof
+        // // check cancel point after 2^20 cycles just in case
+        // let mut count = 0;
+        // while pipe_space == 0 {
+        //     if self.eof.load(Ordering::SeqCst) { return 0; }
 
-            if count == CANCEL_CHECK_INTERVAL { 
-                return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
-            }
+        //     if count == CANCEL_CHECK_INTERVAL { 
+        //         return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
+        //     }
             
-            pipe_space = read_end.len();
-            count = count + 1;
-            if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
-        }
+        //     pipe_space = read_end.len();
+        //     count = count + 1;
+        //     if pipe_space == 0 { interface::lind_yield(); } // yield on an empty pipe
+        // }
 
-        let bytes_to_read = min(length, pipe_space);
-        read_end.pop_slice(&mut buf[0..bytes_to_read]);
+        // let bytes_to_read = min(length, pipe_space);
+        // read_end.pop_slice(&mut buf[0..bytes_to_read]);
    
-        bytes_to_read as i32
+        // bytes_to_read as i32
+        length as i32
     }
 
 }
