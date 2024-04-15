@@ -304,29 +304,29 @@ impl Cage {
 
 
     pub fn getppid_syscall(&self) -> i32 {
-        let total = 4294967296;
+        // let total = 4294967296;
 
-        for bufmult in 1..16 {
+        // for bufmult in 1..16 {
 
-            let size = 256 * bufmult;
-            let readmult = 16;
+        //     let size = 256 * bufmult;
+        //     let readmult = 16;
         
-            let mut buf = CircularBuffer::<65536, u8>::new();
+        //     let mut buf = CircularBuffer::<65536, u8>::new();
         
-            let iters = total/size;
+        //     let iters = total/size;
         
-            let mut writebuf : Vec<u8> = vec![0; size];
-            let mut readbuf : Vec<u8> = vec![0; readmult * size];
+        //     let mut writebuf : Vec<u8> = vec![0; size];
+        //     let mut readbuf : Vec<u8> = vec![0; readmult * size];
         
-            let now = Instant::now();
+        //     let now = Instant::now();
             
-            for x in 0..iters {
-                for x in 1..readmult { buf.write(&writebuf); }
-                buf.read(&mut readbuf);
-            }
+        //     for x in 0..iters {
+        //         for x in 1..readmult { buf.write(&writebuf); }
+        //         buf.read(&mut readbuf);
+        //     }
         
-            println!("{}", now.elapsed().as_micros());
-        }
+        //     println!("{}", now.elapsed().as_micros());
+        // }
         self.parent as i32
     }
 
