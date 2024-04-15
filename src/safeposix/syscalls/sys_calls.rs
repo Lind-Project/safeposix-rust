@@ -14,7 +14,6 @@ use std::sync::{Arc as RustRfc};
 
 
 use circular_buffer::CircularBuffer;
-use std::env;
 use std::time::{Duration, Instant};
 use std::io::{Read, Write};
 
