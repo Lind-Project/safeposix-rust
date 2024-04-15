@@ -327,7 +327,7 @@ impl Cage {
         
             println!("{}", now.elapsed().as_micros());
         }
-        0 
+        self.parent as i32
     }
 
     /*if its negative 1
