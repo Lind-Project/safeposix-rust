@@ -299,7 +299,7 @@ impl Cage {
     }
 
     pub fn getpid_syscall(&self) -> i32 {
-        return self.cageid;
+        self.cageid as i32
     }
 
 
@@ -327,7 +327,7 @@ impl Cage {
         
             println!("{}", now.elapsed().as_micros());
         }
-        0    
+        0 
     }
 
     /*if its negative 1
