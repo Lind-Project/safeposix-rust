@@ -306,7 +306,7 @@ impl Cage {
     pub fn getppid_syscall(&self) -> i32 {
         let total = 4294967296;
 
-        for bufmult in 0..16 {
+        for bufmult in 1..16 {
 
             let size = 256 * bufmult;
             let readmult = 16;
