@@ -299,6 +299,11 @@ impl Cage {
     }
 
     pub fn getpid_syscall(&self) -> i32 {
+        return self.cageid;
+    }
+
+
+    pub fn getppid_syscall(&self) -> i32 {
         let total = 4294967296;
 
         for bufmult in 0..16 {
@@ -322,12 +327,7 @@ impl Cage {
         
             println!("{}", now.elapsed().as_micros());
         }
-        0
-    }
-
-
-    pub fn getppid_syscall(&self) -> i32 {
-        self.parent as i32 // mimicing the call above -- easy to change later if necessary
+        0    
     }
 
     /*if its negative 1
