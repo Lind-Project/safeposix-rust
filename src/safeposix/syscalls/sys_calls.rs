@@ -12,6 +12,12 @@ use super::fs_constants::*;
 
 use std::sync::{Arc as RustRfc};
 
+
+use circular_buffer::CircularBuffer;
+use std::env;
+use std::time::{Duration, Instant};
+use std::io::{Read, Write};
+
 impl Cage {
     fn unmap_shm_mappings(&self) {
         //unmap shm mappings on exit or exec
@@ -294,8 +300,33 @@ impl Cage {
     }
 
     pub fn getpid_syscall(&self) -> i32 {
-        self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
+        let total = 4294967296;
+
+        for bufmult in 0..16 {
+
+            let size = 256 * bufmult;
+            let readmult = 16;
+        
+            let mut buf = CircularBuffer::<65536, u8>::new();
+        
+            let iters = total/size;
+        
+            let mut writebuf : Vec<u8> = vec![0; size];
+            let mut readbuf : Vec<u8> = vec![0; readmult * size];
+        
+            let now = Instant::now();
+            
+            for x in 0..iters {
+                for x in 1..readmult { buf.write(&writebuf); }
+                buf.read(&mut readbuf);
+            }
+        
+            println!("{}", now.elapsed().as_micros());
+        }
+        0
     }
+
+
     pub fn getppid_syscall(&self) -> i32 {
         self.parent as i32 // mimicing the call above -- easy to change later if necessary
     }
