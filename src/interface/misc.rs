@@ -214,7 +214,7 @@ pub fn new_hashmap<K: std::cmp::Eq + std::hash::Hash, V>() -> RustHashMap<K, V> 
     RustHashMap::new()
 }
 
-pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
+pub unsafe fn charstar_to_ruststr<'a>(cstr: *const u8) -> Result<&'a str, Utf8Error> {
     return std::ffi::CStr::from_ptr(cstr).to_str();         //returns a result to be unwrapped later
 }
 

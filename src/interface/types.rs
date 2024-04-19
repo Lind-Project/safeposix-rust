@@ -288,7 +288,7 @@ pub fn get_cstr<'a>(union_argument: Arg) -> Result<&'a str, i32> {
     
     let pointer = unsafe{union_argument.dispatch_cstr};
     if !pointer.is_null() {
-        if let Ok(ret_data) = unsafe{interface::charstar_to_ruststr(pointer)} {
+        if let Ok(ret_data) = unsafe{interface::charstar_to_ruststr(pointer as *const u8)} {
             return Ok(ret_data);
         } else {
             return Err(syscall_error(Errno::EILSEQ, "dispatcher", "could not parse input data to a string"));
@@ -309,7 +309,7 @@ pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
    
     if !pointer.is_null(){
         while unsafe{!(*pointer).is_null()} {
-            if let Ok(character_bytes) = unsafe{interface::charstar_to_ruststr(*pointer)} {
+            if let Ok(character_bytes) = unsafe{interface::charstar_to_ruststr(*pointer as *const u8)} {
                 data_vector.push(character_bytes);
                 pointer = pointer.wrapping_offset(1);
             } else {
