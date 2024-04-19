@@ -4,7 +4,7 @@ if [ -f "$FILE" ]; then
     echo "$FILE exists."
 else 
     echo "$FILE does not exist. Compiling."
-    gcc /home/lind/lind_project/src/safeposix-rust/gen_netdevs.c -o gen_netdevs
+    gcc /home/safeposix-rust/gen_netdevs.c -o gen_netdevs
 fi
 
 echo "Generating netdevs"
