@@ -1,12 +1,17 @@
 #!/bin/bash
-FILE=gen_netdevs
+WORKDIR=$(pwd)  # Set working directory to the output of pwd
+FILE="$WORKDIR/gen_netdevs"  # Use the full path for the file
 if [ -f "$FILE" ]; then
     echo "$FILE exists."
 else 
     echo "$FILE does not exist. Compiling."
-    gcc /home/lind/lind_project/src/safeposix-rust/gen_netdevs.c -o gen_netdevs
+    gcc "$WORKDIR/gen_netdevs.c" -o "$WORKDIR/gen_netdevs"
+    if [ $? -ne 0 ]; then  # Check if gcc succeeded
+        echo "Compilation failed."
+        exit 1
+    fi
 fi
 
 echo "Generating netdevs"
 
-./gen_netdevs > net_devices
+"$WORKDIR/gen_netdevs" > "$WORKDIR/net_devices"  # Execute and output using full paths
