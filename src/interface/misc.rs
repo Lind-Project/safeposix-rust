@@ -214,8 +214,14 @@ pub fn new_hashmap<K: std::cmp::Eq + std::hash::Hash, V>() -> RustHashMap<K, V> 
     RustHashMap::new()
 }
 
-pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
-    return std::ffi::CStr::from_ptr(cstr as *const u8).to_str();         //returns a result to be unwrapped later
+#[cfg(target_os = "macos")]
+type CharPtr = *const u8;
+
+#[cfg(not(target_os = "macos"))]
+type CharPtr = *const i8;
+
+pub unsafe fn charstar_to_ruststr<'a>(cstr: CharPtr) -> Result<&'a str, Utf8Error> {
+    std::ffi::CStr::from_ptr(cstr as *const _).to_str()         //returns a result to be unwrapped later
 }
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {

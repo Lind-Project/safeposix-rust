@@ -20,3 +20,4 @@ RUN rustup default nightly
 
 # Verify installation
 RUN rustc --version
+
