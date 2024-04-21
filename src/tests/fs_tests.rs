@@ -910,6 +910,13 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+
+#[cfg(target_os = "macos")]
+type CharPtr = *const u8;
+
+#[cfg(not(target_os = "macos"))]
+type CharPtr = *const i8;
+
     pub fn ut_lind_fs_getdents() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -929,7 +936,7 @@ pub mod fs_tests {
             assert_eq!(reclen_matched, true);
             
             let nameoffset = baseptr.wrapping_offset(interface::CLIPPED_DIRENT_SIZE as isize);
-            let returnedname = interface::RustCStr::from_ptr(nameoffset as *const u8);
+            let returnedname = interface::RustCStr::from_ptr(nameoffset as *const _);
             let name_matched: bool = (returnedname == interface::RustCStr::from_bytes_with_nul(b".\0").unwrap()) | (returnedname == interface::RustCStr::from_bytes_with_nul(b"..\0").unwrap());
             assert_eq!(name_matched, true);
             
