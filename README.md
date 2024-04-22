@@ -1,5 +1,7 @@
 # safeposix-rustc [![Build Status](https://github.com/Lind-Project/safeposix-rust/actions/workflows/lind-selfhost.yml/badge.svg?branch=develop)](https://github.com/Lind-Project/safeposix-rust/actions/workflows/lind-selfhost.yml)
 Rust implementation of SafePOSIX
 
-## Testing
-In order to test rustposix, run `cargo test --lib`
+More implementation details could be found at [wiki](https://github.com/Lind-Project/safeposix-rust/wiki).
+
+## Run SafePOSIX-Rust
+See reference at [Run RustPOSIX Independently](https://github.com/Lind-Project/safeposix-rust/wiki/Run-RustPOSIX-Independently)
