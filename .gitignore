@@ -15,3 +15,8 @@ Cargo.lock
 /target
 
 **/net_devices
+
+linddata*
+gen_netdevs
+lind.metadata
+lind.md.log
