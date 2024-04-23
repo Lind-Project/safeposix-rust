@@ -54,35 +54,40 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
 }
 
 fn is_allowed_char(c: char) -> bool{
-    char::is_alphanumeric(c) || c == '.'
+    char::is_alphanumeric(c) || c == '.' || c == '_'
+}
+
+#[derive(Debug, PartialEq)]
+pub enum FilenameError {
+    ExceedsMaxLength,
+    IllegalFilename,
+    DisallowedCharacters,
 }
 
 // Checker for illegal filenames
-fn assert_is_allowed_filename(filename: &String) {
-
+fn assert_is_allowed_filename(filename: &str) -> Result<(), FilenameError> {
     const MAX_FILENAME_LENGTH: usize = 120;
 
     if filename.len() > MAX_FILENAME_LENGTH {
-        panic!("ArgumentError: Filename exceeds maximum length.")
+        return Err(FilenameError::ExceedsMaxLength);
+    }
+
+    if filename.is_empty() || filename == "." || filename == ".." || filename.starts_with('.') {
+        return Err(FilenameError::IllegalFilename);
     }
 
     if !filename.chars().all(is_allowed_char) {
-        println!("'{}'", filename);
-        panic!("ArgumentError: Filename has disallowed characters.")
+        return Err(FilenameError::DisallowedCharacters);
     }
 
-    match filename.as_str() {
-        "" | "." | ".." => panic!("ArgumentError: Illegal filename."),
-        _ => {}
-    }
-
-    if filename.starts_with(".") {
-        panic!("ArgumentError: Filename cannot start with a period.")
-    }
+    Ok(())
 }
 
 pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-    EmulatedFile::new(filename, create)
+    match assert_is_allowed_filename(&filename) {
+        Ok(_) => EmulatedFile::new(filename, create),
+        Err(e) => panic!("Failed to validate filename: {:?}", e),
+    }
 }
 
 #[derive(Debug)]
@@ -94,39 +99,47 @@ pub struct EmulatedFile {
 }
 
 pub fn pathexists(filename: String) -> bool {
-    assert_is_allowed_filename(&filename);
-    let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
-    path.exists()
+    match assert_is_allowed_filename(&filename) {
+        Ok(_) => {
+            let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+            path.exists()
+        },
+        Err(e) => {
+            panic!("Failed to validate filename: {:?}", e);
+        }
+    }
 }
 
 impl EmulatedFile {
 
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-        assert_is_allowed_filename(&filename);
+        match assert_is_allowed_filename(&filename) {
+            Ok(_) => {
+                if OPEN_FILES.contains(&filename) {
+                    panic!("FileInUse");
+                }
 
-        if OPEN_FILES.contains(&filename) {
-            panic!("FileInUse");
+                let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+
+                let f = if !path.exists() {
+                    if !create {
+                      panic!("Cannot open non-existent file {}", filename);
+                    }
+
+                    OpenOptions::new().read(true).write(true).create(true).open(filename.clone())
+                } else {
+                    OpenOptions::new().read(true).write(true).open(filename.clone())
+                }?;
+
+                let absolute_filename = fs::canonicalize(&path)?;
+
+                OPEN_FILES.insert(filename.clone());
+                let filesize = f.metadata()?.len();
+
+                Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
+            },
+            Err(e) => panic!("Failed to validate filename: {:?}", e),
         }
-
-        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
-
-        let f = if !path.exists() {
-            if !create {
-              panic!("Cannot open non-existent file {}", filename);
-            }
-
-            OpenOptions::new().read(true).write(true).create(true).open(filename.clone())
-        } else {
-            OpenOptions::new().read(true).write(true).open(filename.clone())
-        }?;
-
-        let absolute_filename = fs::canonicalize(&path)?;
-
-        OPEN_FILES.insert(filename.clone());
-        let filesize = f.metadata()?.len();
-
-        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
-
     }
 
     pub fn close(&self) -> std::io::Result<()> {
@@ -325,36 +338,38 @@ impl EmulatedFileMap {
 
     fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
         // create new file like a normal emulated file, but always create
-        assert_is_allowed_filename(&filename);
+        match assert_is_allowed_filename(&filename) {
+            Ok(_) => {
+                let openfiles = &OPEN_FILES;
 
-        let openfiles = &OPEN_FILES;
+                if openfiles.contains(&filename) {
+                    panic!("FileInUse");
+                }
 
-        if openfiles.contains(&filename) {
-            panic!("FileInUse");
+                let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
+                let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+                let absolute_filename = canonicalize(&path)?;
+                openfiles.insert(filename.clone());
+
+                let mapsize = MAP_1MB - COUNTMAPSIZE;   
+                // set the file equal to where were mapping the count and the actual map
+                let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
+
+                let map : Vec::<u8>;
+                let countmap : Vec::<u8>;
+
+                // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
+                unsafe {
+                    let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+                    countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
+                    let map_ptr = map_addr as *mut u8;
+                    map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
+                }
+                
+                Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
+            },
+            Err(e) => panic!("Failed to validate filename: {:?}", e),
         }
-
-        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
-        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
-        let absolute_filename = canonicalize(&path)?;
-        openfiles.insert(filename.clone());
-
-        let mapsize = MAP_1MB - COUNTMAPSIZE;   
-        // set the file equal to where were mapping the count and the actual map
-        let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
-
-        let map : Vec::<u8>;
-        let countmap : Vec::<u8>;
-
-        // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
-        unsafe {
-            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
-            countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
-            let map_ptr = map_addr as *mut u8;
-            map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
-        }
-        
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
-
     }
 
     pub fn write_to_map(&mut self, bytes_to_write: &[u8]) -> std::io::Result<()> {
@@ -509,5 +524,56 @@ mod tests {
       }
       println!("{:?}", removefile("foobar".to_string()));
     }
-}
 
+    #[test]
+    fn test_allowed_filename() {
+        let filename = "valid_filename.txt";
+        assert_eq!(assert_is_allowed_filename(filename), Ok(()));
+    }
+
+    #[test]
+    fn test_exceeds_max_length() {
+        let filename = "a".repeat(121);
+        assert_eq!(
+            assert_is_allowed_filename(&filename),
+            Err(FilenameError::ExceedsMaxLength)
+        );
+    }
+
+    #[test]
+    fn test_empty_filename() {
+        let filename = "";
+        assert_eq!(
+            assert_is_allowed_filename(filename),
+            Err(FilenameError::IllegalFilename)
+        );
+    }
+
+    #[test]
+    fn test_dot_filenames() {
+        for filename in &[".", ".."] {
+            assert_eq!(
+                assert_is_allowed_filename(filename),
+                Err(FilenameError::IllegalFilename)
+            );
+        }
+    }
+
+    #[test]
+    fn test_filename_starts_with_dot() {
+        let filename = ".hiddenfile";
+        assert_eq!(
+            assert_is_allowed_filename(filename),
+            Err(FilenameError::IllegalFilename)
+        );
+    }
+
+    #[test]
+    fn test_disallowed_characters() {
+        let filename = "invalid/filename";
+        assert_eq!(
+            assert_is_allowed_filename(filename),
+            Err(FilenameError::DisallowedCharacters)
+        );
+    }
+}
