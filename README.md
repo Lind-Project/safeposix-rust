@@ -3,5 +3,13 @@ Rust implementation of SafePOSIX
 
 More implementation details could be found at [wiki](https://github.com/Lind-Project/safeposix-rust/wiki).
 
+## Development Guideline
+
+- All PRs should be merged to the Develop branch
+
+- Any imports from the standard library or any crates should be done in an interface file
+
+More detailed guideline will be in [SafePOSIX's wiki](https://github.com/Lind-Project/safeposix-rust/wiki/Style-Guide)
+
 ## Run SafePOSIX-Rust
-See reference at [Run RustPOSIX Independently][(https://github.com/Lind-Project/safeposix-rust/wiki/Run-RustPOSIX-Independently](https://github.com/Lind-Project/safeposix-rust/wiki/Run-SafePOSIX%E2%80%90rust-(RustPOSIX)-Independently))
+See reference at [Run RustPOSIX Independently](https://github.com/Lind-Project/safeposix-rust/wiki/Run-Independently)
