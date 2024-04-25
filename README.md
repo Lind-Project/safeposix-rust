@@ -1,4 +1,4 @@
-# safeposix-rustc [![Build Status](https://github.com/Lind-Project/safeposix-rust/actions/workflows/lind-selfhost.yml/badge.svg?branch=develop)](https://github.com/Lind-Project/safeposix-rust/actions/workflows/lind-selfhost.yml)
+# Safeposix [![Build Status](https://github.com/Lind-Project/safeposix-rust/actions/workflows/lind-selfhost.yml/badge.svg?branch=develop)](https://github.com/Lind-Project/safeposix-rust/actions/workflows/lind-selfhost.yml)
 Rust implementation of SafePOSIX
 
 SafePOSIX refers to a library operating system (libOS) built using the Rust programming language as part of the Lind project.
