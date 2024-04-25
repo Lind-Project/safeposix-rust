@@ -6,6 +6,8 @@ It is a component of the Lind sandbox that provides a subset of the POSIX API (f
 
 More implementation details could be found at [wiki](https://github.com/Lind-Project/safeposix-rust/wiki).
 
+![alt text](docs/RustPOSIX-README.jpg)
+
 ## Development Guideline
 
 - All PRs should be merged to the Develop branch
