@@ -1,5 +1,7 @@
 # Use an official Rust image as a parent image
 FROM ubuntu:latest
+ARG DEBIAN_FRONTEND=noninteractive
+ARG arch=x86_64
 
 # Install tools and dependencies for building Rust projects
 RUN apt-get update && apt-get install -y \
@@ -20,4 +22,20 @@ RUN rustup default nightly
 
 # Verify installation
 RUN rustc --version
+
+# Copy the application code
+COPY ../ /home
+
+# Set the working directory
+WORKDIR /home
+
+# Build the application
+RUN cargo build
+
+# Set execute permissions and run script
+RUN chmod +x gen_netdevs.sh
+RUN ./gen_netdevs.sh
+
+# Set the default command to run when the container starts
+CMD ["/bin/bash"]
 
