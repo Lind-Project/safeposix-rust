@@ -1134,70 +1134,86 @@ impl Cage {
                 }
                 let mut newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
-                // if we got a pending connection in select/poll/whatever, return that here instead
-                let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
-                let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
-                
-                let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
-                let pendingoption = pendingvec.pop();
+                loop { // we loop here so we can cancel blocking accept
 
-                let (acceptedresult, remote_addr) = match pendingoption {
-                    Some(pendingtup) => pendingtup,
-                    None => {
-                        //unwrap ok because listening
-                        if 0 == (sockfdobj.flags & O_NONBLOCK) {
-                            match sockhandle.domain {
-                                PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
-                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
-                                _ => panic!("Unknown domain in accepting socket"),
-                            }
-                        } else {
-                            match sockhandle.domain {
-                                PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
-                                PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
-                                _ => panic!("Unknown domain in accepting socket"),
+                    // if we got a pending connection in select/poll/whatever, return that here instead
+                    let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                    let porttuple = mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
+                    
+                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                    let pendingoption = pendingvec.pop();
+                    let (acceptedresult, remote_addr) = match pendingoption {
+                        Some(pendingtup) => pendingtup,
+                        None => {
+                            //unwrap ok because listening
+                            if 0 == (sockfdobj.flags & O_NONBLOCK) {
+                                match sockhandle.domain {
+                                    PF_INET => sockhandle.innersocket.as_ref().unwrap().accept(true),
+                                    PF_INET6 => sockhandle.innersocket.as_ref().unwrap().accept(false),
+                                    _ => panic!("Unknown domain in accepting socket"),
+                                }
+                            } else {
+                                match sockhandle.domain {
+                                    PF_INET => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(true),
+                                    PF_INET6 => sockhandle.innersocket.as_ref().unwrap().nonblock_accept(false),
+                                    _ => panic!("Unknown domain in accepting socket"),
+                                }
                             }
                         }
-                    }
-                };
-
-
-                if let Err(_) = acceptedresult {
-                    match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(e) => {
-                            return syscall_error(e, "accept", "host system accept call failed");
-                        },
-                        Err(()) => panic!("Unknown errno value from socket send returned!"),
                     };
-                }
-
-                let acceptedsock = acceptedresult.unwrap();
-
-                let mut newaddr = sockhandle.localaddr.unwrap().clone();
-                let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockhandle.protocol, sockhandle.domain, false) {
-                    Ok(portnum) => portnum,
-                    Err(errnum) => {
-                        return errnum;
+    
+                    if let Err(_) = acceptedresult {
+                        match Errno::from_discriminant(interface::get_errno()) {
+                            Ok(i) => {
+                                //We have the recieve timeout set to every one second, so
+                                //if our blocking socket ever returns EAGAIN, it must be
+                                //the case that this recv timeout was exceeded, and we
+                                //should thus not treat this as a failure in our emulated
+                                //socket; see comment in Socket::new in interface/comm.rs
+                                if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                    if self.cancelstatus.load(interface::RustAtomicOrdering::Relaxed) {
+                                        // if the cancel status is set in the cage, we trap around a cancel point
+                                        // until the individual thread is signaled to cancel itself
+                                        loop { interface::cancelpoint(self.cageid); }
+                                    }
+                                    continue; // EAGAIN, try again
+                                }
+    
+                                return syscall_error(i, "accept", "Internal call to accept failed");
+                            },
+                            Err(()) => panic!("Unknown errno value from socket accept returned!"),
+                        };
                     }
-                };
-                newaddr.set_port(newport);
 
-                let newsock_tmp = newsockfd.handle.clone();
-                let mut newsockhandle = newsock_tmp.write();
+                    // if we get here we have an accepted socket
+                    let acceptedsock = acceptedresult.unwrap();
 
-                newsockhandle.localaddr = Some(newaddr);
-                newsockhandle.remoteaddr = Some(remote_addr.clone());
-
-                //create socket object for new connected socket
-                newsockhandle.innersocket = Some(acceptedsock);
-                // set lock-free rawfd for select
-                newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
-                
-                
-                let _insertval = newfdoption.insert(Socket(newsockfd));
-                *addr = remote_addr; //populate addr with what address it connected to
-
-                return newfd;
+                    let mut newaddr = sockhandle.localaddr.unwrap().clone();
+                    let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockhandle.protocol, sockhandle.domain, false) {
+                        Ok(portnum) => portnum,
+                        Err(errnum) => {
+                            return errnum;
+                        }
+                    };
+                    newaddr.set_port(newport);
+    
+                    let newsock_tmp = newsockfd.handle.clone();
+                    let mut newsockhandle = newsock_tmp.write();
+    
+                    newsockhandle.localaddr = Some(newaddr);
+                    newsockhandle.remoteaddr = Some(remote_addr.clone());
+    
+                    //create socket object for new connected socket
+                    newsockhandle.innersocket = Some(acceptedsock);
+                    // set lock-free rawfd for select
+                    newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
+                    
+                    
+                    let _insertval = newfdoption.insert(Socket(newsockfd));
+                    *addr = remote_addr; //populate addr with what address it connected to
+    
+                    return newfd;
+                }
             }
             _ => {
                 return syscall_error(Errno::EOPNOTSUPP, "accept", "Unkown protocol in accept");
