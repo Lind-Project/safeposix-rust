@@ -23,19 +23,3 @@ RUN rustup default nightly
 # Verify installation
 RUN rustc --version
 
-# Copy the application code
-COPY ../ /home
-
-# Set the working directory
-WORKDIR /home
-
-# Build the application
-RUN cargo build
-
-# Set execute permissions and run script
-RUN chmod +x gen_netdevs.sh
-RUN ./gen_netdevs.sh
-
-# Set the default command to run when the container starts
-CMD ["/bin/bash"]
-
