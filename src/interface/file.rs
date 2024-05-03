@@ -31,8 +31,12 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn openfile(filename: String) -> std::io::Result<EmulatedFile> {
-    EmulatedFile::new(filename)
+pub fn openfile(filename: String, filesize: usize) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new(filename, filesize)
+}
+
+pub fn openmetadata(filename: String) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new_metadata(filename)
 }
 
 #[derive(Debug)]
@@ -49,7 +53,13 @@ pub fn pathexists(filename: String) -> bool {
 
 impl EmulatedFile {
 
-    fn new(filename: String) -> std::io::Result<EmulatedFile> {
+    fn new(filename: String, filesize: usize) -> std::io::Result<EmulatedFile> {
+
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize})
+    }
+
+    fn new_metadata(filename: String) -> std::io::Result<EmulatedFile> {
 
         let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
 
@@ -57,6 +67,7 @@ impl EmulatedFile {
 
         Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
     }
+
 
     pub fn close(&self) -> std::io::Result<()> {
         Ok(())
