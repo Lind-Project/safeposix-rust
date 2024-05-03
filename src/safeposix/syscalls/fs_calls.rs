@@ -1314,10 +1314,10 @@ impl Cage {
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
+                                    log_metadata(&FS_METADATA, inodenum);
                                 } else {
                                     drop(inodeobj);
                                 }
-                                log_metadata(&FS_METADATA, inodenum);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {

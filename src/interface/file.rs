@@ -53,34 +53,6 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
     Ok(())
 }
 
-fn is_allowed_char(c: char) -> bool{
-    char::is_alphanumeric(c) || c == '.'
-}
-
-// Checker for illegal filenames
-fn assert_is_allowed_filename(filename: &String) {
-
-    const MAX_FILENAME_LENGTH: usize = 120;
-
-    if filename.len() > MAX_FILENAME_LENGTH {
-        panic!("ArgumentError: Filename exceeds maximum length.")
-    }
-
-    if !filename.chars().all(is_allowed_char) {
-        println!("'{}'", filename);
-        panic!("ArgumentError: Filename has disallowed characters.")
-    }
-
-    match filename.as_str() {
-        "" | "." | ".." => panic!("ArgumentError: Illegal filename."),
-        _ => {}
-    }
-
-    if filename.starts_with(".") {
-        panic!("ArgumentError: Filename cannot start with a period.")
-    }
-}
-
 pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
     EmulatedFile::new(filename, create)
 }
@@ -88,13 +60,11 @@ pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile>
 #[derive(Debug)]
 pub struct EmulatedFile {
     filename: String,
-    abs_filename: RustPathBuf,
     fobj: Option<Arc<Mutex<File>>>,
     filesize: usize,
 }
 
 pub fn pathexists(filename: String) -> bool {
-    assert_is_allowed_filename(&filename);
     let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
     path.exists()
 }
@@ -102,8 +72,6 @@ pub fn pathexists(filename: String) -> bool {
 impl EmulatedFile {
 
     fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-        assert_is_allowed_filename(&filename);
-
         if OPEN_FILES.contains(&filename) {
             panic!("FileInUse");
         }
@@ -120,12 +88,10 @@ impl EmulatedFile {
             OpenOptions::new().read(true).write(true).open(filename.clone())
         }?;
 
-        let absolute_filename = fs::canonicalize(&path)?;
-
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len();
 
-        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
+        Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
 
     }
 
@@ -309,7 +275,6 @@ pub const MAP_1MB : usize = usize::pow(2, 20);
 #[derive(Debug)]
 pub struct EmulatedFileMap {
     filename: String,
-    abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
     map: Arc<Mutex<Option<Vec<u8>>>>,
     count: usize,
@@ -324,18 +289,13 @@ pub fn mapfilenew(filename: String) -> std::io::Result<EmulatedFileMap> {
 impl EmulatedFileMap {
 
     fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
-        // create new file like a normal emulated file, but always create
-        assert_is_allowed_filename(&filename);
-
         let openfiles = &OPEN_FILES;
 
         if openfiles.contains(&filename) {
             panic!("FileInUse");
         }
 
-        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
         let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
-        let absolute_filename = canonicalize(&path)?;
         openfiles.insert(filename.clone());
 
         let mapsize = MAP_1MB - COUNTMAPSIZE;   
@@ -353,7 +313,7 @@ impl EmulatedFileMap {
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
         }
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
 
     }
 
