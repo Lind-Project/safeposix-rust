@@ -127,7 +127,7 @@ impl FilesystemMetadata {
     pub fn init_fs_metadata() -> FilesystemMetadata {
         // Read CBOR from file
         if interface::pathexists(METADATAFILENAME.to_string()) {
-            let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), false).unwrap();
+            let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string()).unwrap();
             let metadatabytes = metadata_fileobj.readfile_to_new_bytes().unwrap();
             metadata_fileobj.close().unwrap();
     
@@ -226,13 +226,13 @@ pub fn load_fs() {
     // If the metadata file exists, just close the file for later restore
     // If it doesn't, lets create a new one, load special files, and persist it.
     if interface::pathexists(METADATAFILENAME.to_string()) {
-        let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+        let metadata_fileobj = interface::openfile(METADATAFILENAME.to_string()).unwrap();
         metadata_fileobj.close().unwrap();
 
         // if we have a log file at this point, we need to sync it with the existing metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
 
-            let log_fileobj = interface::openfile(LOGFILENAME.to_string(), false).unwrap();
+            let log_fileobj = interface::openfile(LOGFILENAME.to_string()).unwrap();
             // read log file and parse count
             let mut logread = log_fileobj.readfile_to_new_bytes().unwrap();
             let logsize = interface::convert_bytes_to_size(&logread[0..interface::COUNTMAPSIZE]);
@@ -333,7 +333,7 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
-    let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string(), true).unwrap();
+    let mut metadata_fileobj = interface::openfile(METADATAFILENAME.to_string()).unwrap();
     metadata_fileobj.writefile_from_bytes(&metadatabytes).unwrap();
     metadata_fileobj.close().unwrap();
 }

@@ -53,8 +53,8 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-    EmulatedFile::new(filename, create)
+pub fn openfile(filename: String) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new(filename)
 }
 
 #[derive(Debug)]
@@ -71,22 +71,12 @@ pub fn pathexists(filename: String) -> bool {
 
 impl EmulatedFile {
 
-    fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
+    fn new(filename: String) -> std::io::Result<EmulatedFile> {
         if OPEN_FILES.contains(&filename) {
             panic!("FileInUse");
         }
 
-        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
-
-        let f = if !path.exists() {
-            if !create {
-              panic!("Cannot open non-existent file {}", filename);
-            }
-
-            OpenOptions::new().read(true).write(true).create(true).open(filename.clone())
-        } else {
-            OpenOptions::new().read(true).write(true).open(filename.clone())
-        }?;
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
 
         OPEN_FILES.insert(filename.clone());
         let filesize = f.metadata()?.len();

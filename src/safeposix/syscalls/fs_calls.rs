@@ -79,7 +79,7 @@ impl Cage {
 
                 if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum){
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
-                    vac.insert(interface::openfile(sysfilename, true).unwrap());
+                    vac.insert(interface::openfile(sysfilename).unwrap());
                 }
                 
                 let _insertval = fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
@@ -116,7 +116,7 @@ impl Cage {
                         
                         if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            vac.insert(interface::openfile(sysfilename, true).unwrap());
+                            vac.insert(interface::openfile(sysfilename).unwrap());
                         }
                         
                         size = f.size;
@@ -1828,7 +1828,7 @@ impl Cage {
                     panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
                 } else {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    tempbind = interface::openfile(sysfilename, true).unwrap();
+                    tempbind = interface::openfile(sysfilename).unwrap();
                     close_on_exit = true;
                     &mut tempbind
                 };
