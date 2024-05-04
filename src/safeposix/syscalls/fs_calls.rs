@@ -1828,7 +1828,7 @@ impl Cage {
                     panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
                 } else {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    tempbind = interface::openfile(sysfilename, filesize).unwrap(); // create new file
+                    tempbind = interface::openfile(sysfilename, filesize).unwrap(); // open file with size given from inode
                     close_on_exit = true;
                     &mut tempbind
                 };
