@@ -488,6 +488,11 @@ mod tests {
     extern crate libc;
     use std::mem;
     use super::*;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use tempfile::tempdir;
+    use std::env;
+
     #[test]
     pub fn filewritetest() {
       println!("{:?}", listfiles());
@@ -509,5 +514,38 @@ mod tests {
       }
       println!("{:?}", removefile("foobar".to_string()));
     }
-}
 
+    #[test]
+    fn test_listfiles() {
+        let original_dir = env::current_dir().unwrap();
+        let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Change the current directory to our temp directory
+        env::set_current_dir(&temp_path).unwrap();
+
+        // Create some files
+        let file_names = vec!["test1.txt", "test2.txt", "test3.txt"];
+        for file_name in &file_names {
+            let file_path = temp_path.join(file_name);
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Testing").unwrap(); 
+        }
+
+        // Run the function under test
+        let listed_files = listfiles();
+
+        // Check if the listed files match the created files
+        let mut listed_files_sorted = listed_files.clone();
+        listed_files_sorted.sort();
+        let mut expected_files_sorted = file_names.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+        expected_files_sorted.sort();
+
+        assert_eq!(listed_files_sorted, expected_files_sorted, "Files listed do not match files created");
+
+        // Restore the original directory
+        env::set_current_dir(&original_dir).unwrap();
+
+        // Clean up is handled by the tempfile crate when temp_dir goes out of scope
+    }
+}
