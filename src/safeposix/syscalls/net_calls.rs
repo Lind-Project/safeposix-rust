@@ -1161,7 +1161,7 @@ impl Cage {
                             }
                         }
                     };
-    
+                    
                     if let Err(_) = acceptedresult {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
@@ -1196,7 +1196,7 @@ impl Cage {
                         }
                     };
                     newaddr.set_port(newport);
-    
+
                     let newsock_tmp = newsockfd.handle.clone();
                     let mut newsockhandle = newsock_tmp.write();
     
