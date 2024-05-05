@@ -79,7 +79,7 @@ impl Cage {
 
                 if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum){
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
-                    vac.insert(interface::openfile(sysfilename, true).unwrap());
+                    vac.insert(interface::openfile(sysfilename, 0).unwrap()); // new file of size 0
                 }
                 
                 let _insertval = fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
@@ -116,7 +116,7 @@ impl Cage {
                         
                         if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum){
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            vac.insert(interface::openfile(sysfilename, true).unwrap());
+                            vac.insert(interface::openfile(sysfilename, f.size).unwrap()); // use existing file size
                         }
                         
                         size = f.size;
@@ -1314,10 +1314,10 @@ impl Cage {
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
+                                    log_metadata(&FS_METADATA, inodenum);
                                 } else {
                                     drop(inodeobj);
                                 }
-                                log_metadata(&FS_METADATA, inodenum);
                             }
                         },
                         Inode::Dir(ref mut dir_inode_obj) => {
@@ -1828,7 +1828,7 @@ impl Cage {
                     panic!("Somehow a normal file with an fd was truncated but there was no file object in rustposix?");
                 } else {
                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                    tempbind = interface::openfile(sysfilename, true).unwrap();
+                    tempbind = interface::openfile(sysfilename, filesize).unwrap(); // open file with size given from inode
                     close_on_exit = true;
                     &mut tempbind
                 };

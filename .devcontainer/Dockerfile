@@ -1,5 +1,7 @@
 # Use an official Rust image as a parent image
 FROM ubuntu:latest
+ARG DEBIAN_FRONTEND=noninteractive
+ARG arch=x86_64
 
 # Install tools and dependencies for building Rust projects
 RUN apt-get update && apt-get install -y \

@@ -6,7 +6,12 @@ edition = "2018"
 
 [lib]
 path = "src/lib.rs"
-crate-type = ["cdylib"]
+# cdylib is a dynamically linkable library, which is great for linking into
+# C programs and similar. rlib is needed for the criterion benchmarking libary
+# and creates one of Rust's static libraries.  We are currently not generating
+# dylib files which are Rust's internal (non-stable) ABI.  
+# Source: https://users.rust-lang.org/t/what-is-the-difference-between-dylib-and-cdylib/28847/3
+crate-type = ["cdylib","rlib"]
 test = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,6 +23,14 @@ libc = "0.2"
 ringbuf = "0.2.6"
 dashmap = { version = "5.1", features=["serde"] }
 parking_lot = "0.12"
+
+[dev-dependencies]
+criterion = { version = "0.3", features = ["html_reports"]}
+
+[[bench]]
+name = "basic_rustposix_benchmark"
+path = "benches/rustposix-criterion.rs"
+harness= false
 
 [[bin]]
 name = "lind_fs_utils"
