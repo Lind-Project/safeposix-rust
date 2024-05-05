@@ -1,17 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 use rustposix::safeposix::cage::*;
 use rustposix::interface;
-
-// This is just a dummy benchmark to see if there is a problem with the
-// benchmarker.  We can remove this once things are well setup and tested.
-fn fibonacci(n: u64) -> u64 {
-    match n {
-        0 => 1,
-        1 => 1,
-        n => fibonacci(n-1) + fibonacci(n-2),
-    }
-}
 
 
 fn get_dummy_cage() -> Cage {
@@ -46,14 +36,20 @@ fn get_dummy_cage() -> Cage {
 
 pub fn basic_rustposix_benchmark(c: &mut Criterion) {
 
-    // First, just do a basic benchmark to show the runner works...
-    c.bench_function("fib 20", |b| b.iter(|| fibonacci(black_box(20))));
+    // I'm not setting this up properly because I think I don't need that much
+    // state.  I just want to call system calls.
     let a = get_dummy_cage();
 
-    // Now, let's have a combined benchmark of all of the get*id* system calls
+    // --- COMPARING get*id CALLS ACROSS Lind + Native OS kernel ---
+    let mut group = c.benchmark_group("Compare get*ids");
+
+    // These should be quite different, so use a log axis..
+    group.plot_config(criterion::PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic));
+
+    // let's have a combined benchmark of all of the get*id* system calls
     // in RustPOSIX...  I'm not running these separately, because they should
     // not vary too much.
-    c.bench_function("get*ids", |b| b.iter(|| 
+    group.bench_function("Lind get*ids", |b| b.iter(|| 
         {
             a.getpid_syscall();
             a.getppid_syscall();
@@ -63,6 +59,21 @@ pub fn basic_rustposix_benchmark(c: &mut Criterion) {
             a.geteuid_syscall();
         }
     ));
+    // For comparison let's time the native OS...
+    group.bench_function("Native OS kernel get*ids", |b| b.iter(|| 
+        {
+            unsafe{
+                libc::getpid();
+                libc::getppid();
+                libc::getgid();
+                libc::getegid();
+                libc::getuid();
+                libc::geteuid();
+            }
+        }
+    ));
+    group.finish()
+
 }
 
 criterion_group!(benches, basic_rustposix_benchmark);
