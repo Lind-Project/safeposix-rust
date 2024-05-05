@@ -20,30 +20,8 @@ use std::ffi::c_void;
 use std::convert::TryInto;
 use crate::interface::errnos::{Errno, syscall_error};
 
-static OPEN_FILES: RustLazyGlobal<Arc<DashSet<String>>> = RustLazyGlobal::new(|| Arc::new(DashSet::new()));
-
-pub fn listfiles() -> Vec<String> {
-    let paths = fs::read_dir(&RustPath::new(
-        &env::current_dir().unwrap())).unwrap();
-      
-    let names =
-    paths.filter_map(|entry| {
-      entry.ok().and_then(|e|
-        e.path().file_name()
-        .and_then(|n| n.to_str().map(|s| String::from(s)))
-      )
-    }).collect::<Vec<String>>();
-
-    return names;
-}
 
 pub fn removefile(filename: String) -> std::io::Result<()> {
-    let openfiles = &OPEN_FILES;
-
-    if openfiles.contains(&filename) {
-        panic!("FileInUse");
-    }
-
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
 
     let absolute_filename = canonicalize(&path)?; //will return an error if the file does not exist
@@ -53,84 +31,45 @@ pub fn removefile(filename: String) -> std::io::Result<()> {
     Ok(())
 }
 
-fn is_allowed_char(c: char) -> bool{
-    char::is_alphanumeric(c) || c == '.'
+pub fn openfile(filename: String, filesize: usize) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new(filename, filesize)
 }
 
-// Checker for illegal filenames
-fn assert_is_allowed_filename(filename: &String) {
-
-    const MAX_FILENAME_LENGTH: usize = 120;
-
-    if filename.len() > MAX_FILENAME_LENGTH {
-        panic!("ArgumentError: Filename exceeds maximum length.")
-    }
-
-    if !filename.chars().all(is_allowed_char) {
-        println!("'{}'", filename);
-        panic!("ArgumentError: Filename has disallowed characters.")
-    }
-
-    match filename.as_str() {
-        "" | "." | ".." => panic!("ArgumentError: Illegal filename."),
-        _ => {}
-    }
-
-    if filename.starts_with(".") {
-        panic!("ArgumentError: Filename cannot start with a period.")
-    }
-}
-
-pub fn openfile(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-    EmulatedFile::new(filename, create)
+pub fn openmetadata(filename: String) -> std::io::Result<EmulatedFile> {
+    EmulatedFile::new_metadata(filename)
 }
 
 #[derive(Debug)]
 pub struct EmulatedFile {
     filename: String,
-    abs_filename: RustPathBuf,
     fobj: Option<Arc<Mutex<File>>>,
     filesize: usize,
 }
 
 pub fn pathexists(filename: String) -> bool {
-    assert_is_allowed_filename(&filename);
     let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
     path.exists()
 }
 
 impl EmulatedFile {
 
-    fn new(filename: String, create: bool) -> std::io::Result<EmulatedFile> {
-        assert_is_allowed_filename(&filename);
+    fn new(filename: String, filesize: usize) -> std::io::Result<EmulatedFile> {
 
-        if OPEN_FILES.contains(&filename) {
-            panic!("FileInUse");
-        }
-
-        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
-
-        let f = if !path.exists() {
-            if !create {
-              panic!("Cannot open non-existent file {}", filename);
-            }
-
-            OpenOptions::new().read(true).write(true).create(true).open(filename.clone())
-        } else {
-            OpenOptions::new().read(true).write(true).open(filename.clone())
-        }?;
-
-        let absolute_filename = fs::canonicalize(&path)?;
-
-        OPEN_FILES.insert(filename.clone());
-        let filesize = f.metadata()?.len();
-
-        Ok(EmulatedFile {filename: filename, abs_filename: absolute_filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
-
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+        Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize})
     }
 
+    fn new_metadata(filename: String) -> std::io::Result<EmulatedFile> {
+
+        let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
+
+        let filesize = f.metadata()?.len();
+
+        Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
+    }
+
+
     pub fn close(&self) -> std::io::Result<()> {
-        OPEN_FILES.remove(&self.filename);
         Ok(())
     }
 
@@ -309,7 +248,6 @@ pub const MAP_1MB : usize = usize::pow(2, 20);
 #[derive(Debug)]
 pub struct EmulatedFileMap {
     filename: String,
-    abs_filename: RustPathBuf,
     fobj: Arc<Mutex<File>>,
     map: Arc<Mutex<Option<Vec<u8>>>>,
     count: usize,
@@ -324,19 +262,7 @@ pub fn mapfilenew(filename: String) -> std::io::Result<EmulatedFileMap> {
 impl EmulatedFileMap {
 
     fn new(filename: String) -> std::io::Result<EmulatedFileMap> {
-        // create new file like a normal emulated file, but always create
-        assert_is_allowed_filename(&filename);
-
-        let openfiles = &OPEN_FILES;
-
-        if openfiles.contains(&filename) {
-            panic!("FileInUse");
-        }
-
-        let path: RustPathBuf = [".".to_string(), filename.clone()].iter().collect();
         let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
-        let absolute_filename = canonicalize(&path)?;
-        openfiles.insert(filename.clone());
 
         let mapsize = MAP_1MB - COUNTMAPSIZE;   
         // set the file equal to where were mapping the count and the actual map
@@ -353,7 +279,7 @@ impl EmulatedFileMap {
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
         }
         
-        Ok(EmulatedFileMap {filename: filename, abs_filename: absolute_filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
+        Ok(EmulatedFileMap {filename: filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
 
     }
 
@@ -418,9 +344,6 @@ impl EmulatedFileMap {
     }
 
     pub fn close(&self) -> std::io::Result<()> {
-        // remove file as open file and deconstruct map
-        let openfiles = &OPEN_FILES;
-        openfiles.remove(&self.filename);
 
         let mut mapopt = self.map.lock();
         let map = mapopt.take().unwrap();
@@ -481,33 +404,5 @@ impl ShmFile {
 pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
     let sizearray : [u8; 8] = bytes_to_write.try_into().unwrap();
     usize::from_be_bytes(sizearray)
-}
-
-#[cfg(test)]
-mod tests {
-    extern crate libc;
-    use std::mem;
-    use super::*;
-    #[test]
-    pub fn filewritetest() {
-      println!("{:?}", listfiles());
-      let mut f = openfile("foobar".to_string(), true).expect("?!");
-      println!("{:?}", listfiles());
-      let q = unsafe{libc::malloc(mem::size_of::<u8>() * 9) as *mut u8};
-      unsafe{std::ptr::copy_nonoverlapping("fizzbuzz!".as_bytes().as_ptr() , q as *mut u8, 9)};
-      println!("{:?}", f.writeat(q, 9, 0));
-      println!("fsync: {:?}", f.fsync().unwrap());
-      println!("fdatasync: {:?}", f.fdatasync().unwrap());
-      let b = unsafe{libc::malloc(mem::size_of::<u8>() * 9)} as *mut u8;
-      println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
-      println!("{:?}", f.readat(b, 9, 0));
-      println!("{:?}", String::from_utf8(unsafe{std::slice::from_raw_parts(b, 9)}.to_vec()));
-      println!("{:?}", f.close());
-      unsafe {
-        libc::free(q as *mut libc::c_void);
-        libc::free(b as *mut libc::c_void);
-      }
-      println!("{:?}", removefile("foobar".to_string()));
-    }
 }
 
