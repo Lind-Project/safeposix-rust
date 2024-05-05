@@ -1134,7 +1134,7 @@ impl Cage {
                 }
                 let mut newsockfd = self._socket_initializer(sockhandle.domain, sockhandle.socktype, sockhandle.protocol, sockfdobj.flags & O_NONBLOCK != 0, sockfdobj.flags & O_CLOEXEC != 0, ConnState::CONNECTED);
 
-                loop { // we loop here so we can cancel blocking accept
+                loop { // we loop here so we can cancel blocking accept, see comments below and in Socket::new in interface/comm.rs
 
                     // if we got a pending connection in select/poll/whatever, return that here instead
                     let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
@@ -1165,7 +1165,7 @@ impl Cage {
                     if let Err(_) = acceptedresult {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
-                                //We have the recieve timeout set to every one second, so
+                                //We have the socket timeout set to every one second, so
                                 //if our blocking socket ever returns EAGAIN, it must be
                                 //the case that this recv timeout was exceeded, and we
                                 //should thus not treat this as a failure in our emulated
