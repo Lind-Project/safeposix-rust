@@ -1161,7 +1161,7 @@ impl Cage {
                             }
                         }
                     };
-                    
+
                     if let Err(_) = acceptedresult {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
@@ -1187,7 +1187,7 @@ impl Cage {
 
                     // if we get here we have an accepted socket
                     let acceptedsock = acceptedresult.unwrap();
-
+                    
                     let mut newaddr = sockhandle.localaddr.unwrap().clone();
                     let newport = match NET_METADATA._reserve_localport(newaddr.addr(), 0, sockhandle.protocol, sockhandle.domain, false) {
                         Ok(portnum) => portnum,
