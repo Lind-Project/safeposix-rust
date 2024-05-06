@@ -135,7 +135,7 @@ pub fn basic_rustposix_benchmark(c: &mut Criterion) {
                 let _ = libc::write(fd,CString::new("Well, hello there!!!").unwrap().as_ptr() as *const c_void,20);
                 let mut read_buffer = sizecbuf(20);
                 libc::lseek(fd,0,SEEK_SET);
-                cage.read_syscall(fd,read_buffer.as_mut_ptr(), 20);
+                libc::read(fd,read_buffer.as_mut_ptr() as *mut c_void, 20);
                 libc::lseek(fd,0,SEEK_SET);
             }
         }
