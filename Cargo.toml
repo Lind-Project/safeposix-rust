@@ -27,11 +27,30 @@ parking_lot = "0.12"
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"]}
 
-[[bench]]
-name = "basic_rustposix_benchmark"
-path = "benches/rustposix-criterion.rs"
-harness= false
-
 [[bin]]
 name = "lind_fs_utils"
 path = "src/tools/fs_utils.rs"
+
+# many benchmarks follow.  Don't put any non-benchmarks below this...
+[[bench]]
+name = "gen_getid"
+path = "benches/gen_getid.rs"
+harness= false
+
+[[bench]]
+name = "fs_open_close"
+path = "benches/fs_open_close.rs"
+harness= false
+
+[[bench]]
+name = "fs_read_write"
+path = "benches/fs_read_write.rs"
+harness= false
+
+[[bench]]
+name = "fs_read_write_seek"
+path = "benches/fs_read_write_seek.rs"
+harness= false
+
+
+# Don't put any thing below this...  benchmarks above!

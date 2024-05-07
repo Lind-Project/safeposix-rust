@@ -8,5 +8,5 @@
 // way to 'use' them for benchmarking.
 pub mod interface;
 pub mod safeposix;
-mod tests;
+pub mod tests;
 mod lib_fs_utils;
