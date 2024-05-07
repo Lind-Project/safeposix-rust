@@ -1,12 +1,6 @@
 /* Benchmarks for the microvisor implementation.  In general, I'm not doing
  * results checking / assertations to avoid adding bias to the results.  */
 
-// I hate allowing this, but this is apparently a known issue for a lot of
-// code with CStrings.  https://github.com/rust-lang/rust/issues/78691
-// I've tried to sanity check where this occurs, but please, please, please
-// double check these parts of the code!
-#![allow(temporary_cstring_as_ptr)]
-
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
@@ -71,14 +65,14 @@ pub fn run_benchmark(c: &mut Criterion) {
     let fd: c_int;
 
     unsafe {
-        fd = libc::open(CString::new("/tmp/foo").unwrap().as_ptr(),O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
+        fd = libc::open(tests::str2cbuf("/tmp/foo"),O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
     }
 
     // For comparison let's time the native OS...
     group.bench_function("Native OS kernel write", |b| b.iter(||
         {
             unsafe{
-                let _ = libc::write(fd,CString::new("Well, hello there!!!").unwrap().as_ptr() as *const c_void,20);
+                let _ = libc::write(fd,tests::str2cbuf("Well, hello there!!!")as *const c_void,20);
             }
         }
     ));
@@ -97,7 +91,7 @@ pub fn run_benchmark(c: &mut Criterion) {
 
     unsafe {
         libc::close(fd);
-        libc::unlink(CString::new("/tmp/foo").unwrap().as_ptr());
+        libc::unlink(tests::str2cbuf("/tmp/foo"));
     }
 
 
