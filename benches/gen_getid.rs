@@ -37,7 +37,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     // let's have a combined benchmark of all of the get*id* system calls
     // in RustPOSIX...  I'm not running these separately, because they should
     // not vary too much.
-    group.bench_function("Lind get*ids", |b| b.iter(|| 
+    group.bench_function("TG01: Lind get*ids", |b| b.iter(|| 
         {
             cage.getpid_syscall();
             cage.getppid_syscall();
@@ -48,7 +48,7 @@ pub fn run_benchmark(c: &mut Criterion) {
         }
     ));
     // For comparison let's time the native OS...
-    group.bench_function("Native OS kernel get*ids", |b| b.iter(|| 
+    group.bench_function("TG01: Native OS kernel get*ids", |b| b.iter(|| 
         {
             unsafe{
                 libc::getpid();

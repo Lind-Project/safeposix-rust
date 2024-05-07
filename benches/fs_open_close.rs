@@ -45,7 +45,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     group.plot_config(criterion::PlotConfiguration::default().summary_scale(criterion::AxisScale::Linear));
 
     // Let's see how fast various file system calls are
-    group.bench_function("Lind open+close", |b| b.iter(||
+    group.bench_function("TF01: Lind open+close", |b| b.iter(||
         {
             let fd = cage.open_syscall("foo",O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
             cage.close_syscall(fd);
@@ -53,7 +53,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     ));
 
     // For comparison let's time the native OS...
-    group.bench_function("Native OS kernel open+close", |b| b.iter(||
+    group.bench_function("TF01: Native OS kernel open+close", |b| b.iter(||
         {
             unsafe{
                 let fd = libc::open(CString::new("/tmp/foo").unwrap().as_ptr(),O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);

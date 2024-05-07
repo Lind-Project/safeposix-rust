@@ -40,7 +40,7 @@ pub fn run_benchmark(c: &mut Criterion) {
 
     let fd = cage.open_syscall("foo",O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
     // Let's see how fast various file system calls are
-    group.bench_function("Lind write+read+lseek", |b| b.iter(||
+    group.bench_function("TF03: Lind write+read+lseek", |b| b.iter(||
         {
             let _ = cage.write_syscall(fd,tests::str2cbuf("Well, hello there!!!"),20);
             cage.lseek_syscall(fd,0,SEEK_SET);
@@ -61,7 +61,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     }
 
     // For comparison let's time the native OS...
-    group.bench_function("Native OS kernel write+read+lseek", |b| b.iter(||
+    group.bench_function("TF03: Native OS kernel write+read+lseek", |b| b.iter(||
         {
             unsafe{
                 let _ = libc::write(fd,tests::str2cbuf("Well, hello there!!!") as *const c_void,20);
