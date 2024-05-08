@@ -80,8 +80,13 @@ pub fn run_benchmark(c: &mut Criterion) {
     // Iterate for different buffer sizes...
     for buflen in [1,64,1024,65536].iter() {
         let fd: c_int;
-        let c_str = CString::new("/tmp/foo").unwrap();
+
+        #[cfg(target_os = "macos")]
+        let path = c_str.into_raw() as *const u8;
+
+        #[cfg(not(target_os = "macos"))]
         let path = c_str.into_raw() as *const i8;
+        
         unsafe {
             fd = libc::open(path,O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
         }
