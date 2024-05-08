@@ -92,9 +92,10 @@ pub fn run_benchmark(c: &mut Criterion) {
     for buflen in [1,64,1024,65536].iter() {
 
         let fd: c_int;
-
+        let c_str = CString::new("/tmp/foo").unwrap();
+        let path = c_str.into_raw() as *const i8;
         unsafe {
-            fd = libc::open(tests::str2cbuf("/tmp/foo"),O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
+            fd = libc::open(path,O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
         }
 
         let deststring = tests::str2cbuf(& String::from_utf8(vec![b'X'; *buflen]).expect("error building string"));
@@ -125,7 +126,7 @@ pub fn run_benchmark(c: &mut Criterion) {
 
         unsafe {
             libc::close(fd);
-            libc::unlink(tests::str2cbuf("/tmp/foo"));
+            libc::unlink(path);
         }
 
 
