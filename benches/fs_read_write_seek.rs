@@ -82,12 +82,12 @@ pub fn run_benchmark(c: &mut Criterion) {
         let fd: c_int;
 
         let c_str = CString::new("/tmp/foo").unwrap();
-        
-        #[cfg(target_os = "macos")]
+
+        // #[cfg(target_os = "macos")]
         let path = c_str.into_raw() as *const u8;
 
-        #[cfg(not(target_os = "macos"))]
-        let path = c_str.into_raw() as *const i8;
+        // #[cfg(not(target_os = "macos"))]
+        // let path = c_str.into_raw() as *const i8;
 
         unsafe {
             fd = libc::open(path,O_CREAT | O_TRUNC | O_WRONLY,S_IRWXA);
