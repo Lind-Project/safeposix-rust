@@ -1270,7 +1270,7 @@ impl Cage {
             } else {
                 // at this point lets check if we got a signal before sleeping
                 if interface::sigcheck() { return syscall_error(Errno::EINTR, "select", "interrupted function call"); }
-                interface::sleep(BLOCK_TIME);
+                interface::lind_yield();
             }
         }
 
@@ -1778,6 +1778,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
+                if interface::sigcheck() { return syscall_error(Errno::EINTR, "poll", "interrupted function call"); }
                 interface::lind_yield();
             }
         }
