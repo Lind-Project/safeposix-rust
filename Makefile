@@ -1,4 +1,4 @@
-.PHONY: test clean
+.PHONY: test clean format
 
 test: clean
 	chmod +x gen_netdevs.sh
@@ -10,3 +10,5 @@ clean:
 	rm -f linddata.*
 	rm -f lind.metadata
 
+format:
+	cargo fmt -- --check

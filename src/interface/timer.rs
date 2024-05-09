@@ -1,18 +1,21 @@
 // Author: Nicholas Renner
 //
-// Timer functions for Rust interface. 
+// Timer functions for Rust interface.
 #![allow(dead_code)]
 
-use std::thread;
-use std::time::SystemTime;
 use std::sync::{Arc, Mutex, MutexGuard};
-pub use std::time::Instant as RustInstant;
+use std::thread;
 pub use std::time::Duration as RustDuration;
+pub use std::time::Instant as RustInstant;
+use std::time::SystemTime;
 
 use crate::interface::lind_kill_from_id;
 
 pub fn timestamp() -> u64 {
-    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 // Create a new timer
@@ -34,7 +37,7 @@ pub fn sleep(dur: RustDuration) {
 struct _IntervalTimer {
     pub cageid: u64,
     pub init_instant: RustInstant, // The instant this process is created
-    
+
     pub start_instant: RustInstant,
     pub curr_duration: RustDuration,
     pub next_duration: RustDuration,
@@ -50,16 +53,14 @@ pub struct IntervalTimer {
 impl IntervalTimer {
     pub fn new(cageid: u64) -> Self {
         Self {
-            _ac: Arc::new(Mutex::new(
-                _IntervalTimer {
-                    cageid: cageid,
-                    init_instant: RustInstant::now(),
-                    start_instant: RustInstant::now(),
-                    curr_duration: RustDuration::ZERO,
-                    next_duration: RustDuration::ZERO,
-                    is_ticking: false,
-                }
-            ))
+            _ac: Arc::new(Mutex::new(_IntervalTimer {
+                cageid: cageid,
+                init_instant: RustInstant::now(),
+                start_instant: RustInstant::now(),
+                curr_duration: RustDuration::ZERO,
+                next_duration: RustDuration::ZERO,
+                is_ticking: false,
+            })),
         }
     }
 
@@ -70,7 +71,12 @@ impl IntervalTimer {
         (guard.curr_duration, guard.next_duration)
     }
 
-    fn _set_itimer(&self, guard: &mut MutexGuard<_IntervalTimer>, curr_duration: RustDuration, next_duration: RustDuration) {
+    fn _set_itimer(
+        &self,
+        guard: &mut MutexGuard<_IntervalTimer>,
+        curr_duration: RustDuration,
+        next_duration: RustDuration,
+    ) {
         if curr_duration.is_zero() {
             guard.is_ticking = false;
         } else {
@@ -82,8 +88,9 @@ impl IntervalTimer {
                 guard.is_ticking = true;
 
                 let self_dup = self.clone();
-                thread::spawn(move || { // There is a chance that there'll be two ticking threads running
-                                        // at the same time
+                thread::spawn(move || {
+                    // There is a chance that there'll be two ticking threads running
+                    // at the same time
                     self_dup.tick();
                 });
             }
@@ -101,14 +108,16 @@ impl IntervalTimer {
                 let mut guard = self._ac.lock().unwrap();
 
                 if guard.is_ticking {
-                    let remaining_seconds = guard.curr_duration.saturating_sub(guard.start_instant.elapsed());
+                    let remaining_seconds = guard
+                        .curr_duration
+                        .saturating_sub(guard.start_instant.elapsed());
 
                     if remaining_seconds == RustDuration::ZERO {
                         lind_kill_from_id(guard.cageid, 14);
-                        
+
                         let new_curr_duration = guard.next_duration;
                         // Repeat the intervals until user cancel it
-                        let new_next_duration = guard.next_duration; 
+                        let new_next_duration = guard.next_duration;
 
                         self._set_itimer(&mut guard, new_curr_duration, new_next_duration);
                         // Calling self.set_itimer will automatically turn of the timer if

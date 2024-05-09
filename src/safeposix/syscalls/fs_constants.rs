@@ -58,12 +58,12 @@ pub const S_IWOTH: u32 = 0o002;
 pub const S_IXOTH: u32 = 0o001;
 
 //Commands for FCNTL
-pub const F_DUPFD: i32= 0;
-pub const F_GETFD: i32= 1;
-pub const F_SETFD: i32= 2;
-pub const F_GETFL: i32= 3;
-pub const F_SETFL: i32= 4;
-pub const F_GETLK: i32= 5;
+pub const F_DUPFD: i32 = 0;
+pub const F_GETFD: i32 = 1;
+pub const F_SETFD: i32 = 2;
+pub const F_GETFL: i32 = 3;
+pub const F_SETFL: i32 = 4;
+pub const F_GETLK: i32 = 5;
 pub const F_GETLK64: i32 = 5;
 pub const F_SETLK: i32 = 6;
 pub const F_SETLK64: i32 = 6;
@@ -109,7 +109,6 @@ pub const PROT_READ: i32 = 1;
 pub const PROT_WRITE: i32 = 2;
 pub const PROT_EXEC: i32 = 4;
 
-
 pub const SEEK_SET: i32 = 0;
 pub const SEEK_CUR: i32 = 1;
 pub const SEEK_END: i32 = 2;
@@ -133,64 +132,65 @@ pub const SHM_RND: i32 = 0o20000;
 pub const SHM_REMAP: i32 = 0o40000;
 pub const SHM_EXEC: i32 = 0o100000;
 
-pub const SHMMIN: u32 =  1;
-pub const SHMMNI: u32 =  4096;
-pub const SHMMAX: u32 =  4278190079; // (ULONG_MAX - (1UL << 24))
-pub const SHMALL: u32 =  4278190079; // (ULONG_MAX - (1UL << 24));
-pub const SHMSEG: u32 =  SHMMNI;
+pub const SHMMIN: u32 = 1;
+pub const SHMMNI: u32 = 4096;
+pub const SHMMAX: u32 = 4278190079; // (ULONG_MAX - (1UL << 24))
+pub const SHMALL: u32 = 4278190079; // (ULONG_MAX - (1UL << 24));
+pub const SHMSEG: u32 = SHMMNI;
 
 pub const SEM_VALUE_MAX: u32 = 2147483647;
 
 //device info for char files
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, PartialEq, Eq, Debug)]
 pub struct DevNo {
-  pub major: u32,
-  pub minor: u32
+    pub major: u32,
+    pub minor: u32,
 }
-pub const NULLDEVNO: DevNo = DevNo {major: 1, minor: 3};
-pub const ZERODEVNO: DevNo = DevNo {major: 1, minor: 5};
-pub const RANDOMDEVNO: DevNo = DevNo {major: 1, minor: 8};
-pub const URANDOMDEVNO: DevNo = DevNo {major: 1, minor: 9};
+pub const NULLDEVNO: DevNo = DevNo { major: 1, minor: 3 };
+pub const ZERODEVNO: DevNo = DevNo { major: 1, minor: 5 };
+pub const RANDOMDEVNO: DevNo = DevNo { major: 1, minor: 8 };
+pub const URANDOMDEVNO: DevNo = DevNo { major: 1, minor: 9 };
 
 pub const FILEDATAPREFIX: &str = "linddata.";
 
 pub fn is_reg(mode: u32) -> bool {
-  (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
+    (mode as i32 & S_FILETYPEFLAGS) == S_IFREG
 }
 
 pub fn is_chr(mode: u32) -> bool {
-  (mode as i32 & S_FILETYPEFLAGS) == S_IFCHR
+    (mode as i32 & S_FILETYPEFLAGS) == S_IFCHR
 }
 
 pub fn is_dir(mode: u32) -> bool {
-  (mode as i32 & S_FILETYPEFLAGS) == S_IFDIR
+    (mode as i32 & S_FILETYPEFLAGS) == S_IFDIR
 }
 
 pub fn is_wronly(flags: i32) -> bool {
-  (flags & O_RDWRFLAGS) == O_WRONLY
+    (flags & O_RDWRFLAGS) == O_WRONLY
 }
 pub fn is_rdonly(flags: i32) -> bool {
-  (flags & O_RDWRFLAGS) == O_RDONLY
+    (flags & O_RDWRFLAGS) == O_RDONLY
 }
 
 //the same as the glibc makedev
 pub fn makedev(dev: &DevNo) -> u64 {
-    ((dev.major as u64 & 0x00000fff) <<  8) |
-    ((dev.major as u64 & 0xfffff000) << 32) |
-    ((dev.minor as u64 & 0x000000ff) <<  0) |
-    ((dev.minor as u64 & 0xffffff00) << 12)
+    ((dev.major as u64 & 0x00000fff) << 8)
+        | ((dev.major as u64 & 0xfffff000) << 32)
+        | ((dev.minor as u64 & 0x000000ff) << 0)
+        | ((dev.minor as u64 & 0xffffff00) << 12)
 }
 
 //the same as the glibc major and minor functions
 pub fn major(devnum: u64) -> u32 {
-    (((devnum & 0x00000000000fff00) >>  8) |
-     ((devnum & 0xfffff00000000000) >> 32)) as u32
+    (((devnum & 0x00000000000fff00) >> 8) | ((devnum & 0xfffff00000000000) >> 32)) as u32
 }
 pub fn minor(devnum: u64) -> u32 {
-    (((devnum & 0x00000000000000ff) >>  0) |
-     ((devnum & 0x00000ffffff00000) >> 12)) as u32
+    (((devnum & 0x00000000000000ff) >> 0) | ((devnum & 0x00000ffffff00000) >> 12)) as u32
 }
 
 pub fn devtuple(devnum: u64) -> DevNo {
-    DevNo{major: major(devnum), minor: minor(devnum)}
+    DevNo {
+        major: major(devnum),
+        minor: minor(devnum),
+    }
 }
