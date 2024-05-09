@@ -56,7 +56,7 @@ impl EmulatedFile {
     fn new(filename: String, filesize: usize) -> std::io::Result<EmulatedFile> {
 
         let f = OpenOptions::new().read(true).write(true).create(true).open(filename.clone()).unwrap();
-        Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize})
+        Ok(EmulatedFile {filename, fobj: Some(Arc::new(Mutex::new(f))), filesize })
     }
 
     fn new_metadata(filename: String) -> std::io::Result<EmulatedFile> {
@@ -65,7 +65,7 @@ impl EmulatedFile {
 
         let filesize = f.metadata()?.len();
 
-        Ok(EmulatedFile {filename: filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
+        Ok(EmulatedFile {filename, fobj: Some(Arc::new(Mutex::new(f))), filesize: filesize as usize})
     }
 
 
@@ -268,18 +268,18 @@ impl EmulatedFileMap {
         // set the file equal to where were mapping the count and the actual map
         let _newsize = f.set_len((COUNTMAPSIZE + mapsize) as u64).unwrap();
 
-        let map : Vec::<u8>;
-        let countmap : Vec::<u8>;
+        let map : Vec<u8>;
+        let countmap : Vec<u8>;
 
         // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
         unsafe {
-            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0 as i64);
+            let map_addr = mmap(0 as *mut c_void, MAP_1MB, PROT_READ | PROT_WRITE, MAP_SHARED, f.as_raw_fd() as i32, 0i64);
             countmap =  Vec::<u8>::from_raw_parts(map_addr as *mut u8, COUNTMAPSIZE, COUNTMAPSIZE);
             let map_ptr = map_addr as *mut u8;
             map =  Vec::<u8>::from_raw_parts(map_ptr.offset(COUNTMAPSIZE as isize), mapsize, mapsize);
         }
         
-        Ok(EmulatedFileMap {filename: filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize: mapsize})
+        Ok(EmulatedFileMap {filename, fobj: Arc::new(Mutex::new(f)), map: Arc::new(Mutex::new(Some(map))), count: 0, countmap: Arc::new(Mutex::new(Some(countmap))), mapsize })
 
     }
 
@@ -321,8 +321,8 @@ impl EmulatedFileMap {
         let new_mapsize = self.mapsize + MAP_1MB;
         let _newsize = f.set_len((COUNTMAPSIZE + new_mapsize) as u64).unwrap();
 
-        let newmap : Vec::<u8>;
-        let newcountmap : Vec::<u8>;
+        let newmap : Vec<u8>;
+        let newcountmap : Vec<u8>;
 
         // destruct count and map and re-map
         unsafe {
@@ -389,7 +389,7 @@ impl ShmFile {
         f.set_len(size as u64)?;
         // unlink file
         fs::remove_file(filename)?;
-        let shmfile = ShmFile {fobj: Arc::new(Mutex::new(f)), key: key, size: size};
+        let shmfile = ShmFile {fobj: Arc::new(Mutex::new(f)), key, size };
 
         Ok(shmfile)
     }
@@ -406,3 +406,22 @@ pub fn convert_bytes_to_size(bytes_to_write: &[u8]) -> usize {
     usize::from_be_bytes(sizearray)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_path_exists_true() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_str().unwrap().to_string();
+        assert!(pathexists(file_path));
+    }
+
+    #[test]
+    fn test_path_exists_false() {
+        // Test that pathexists returns false for a non-existent file
+        let non_existent_file = "/tmp/non_existent_file.txt";
+        assert!(!pathexists(non_existent_file.to_string()));
+    }
+}
