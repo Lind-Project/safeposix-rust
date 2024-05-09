@@ -26,6 +26,8 @@ parking_lot = "0.12"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"]}
+tempfile = "3.2.0"
+grcov="0.8.19" # code coverage
 
 [[bin]]
 name = "lind_fs_utils"
