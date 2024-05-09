@@ -182,7 +182,7 @@ impl Cage {
                 } else {
                     return syscall_error(Errno::ENOTDIR, "bind", "unix domain socket path made socket address child of non-directory file");
                 }
-                sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0666, sendpipe: None, receivepipe: None, inode: newinodenum});  
+                sockhandle.unix_info = Some(UnixSocketInfo {mode: S_IFSOCK | 0o666, sendpipe: None, receivepipe: None, inode: newinodenum});  
                 NET_METADATA.domsock_paths.insert(truepath);
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
             }

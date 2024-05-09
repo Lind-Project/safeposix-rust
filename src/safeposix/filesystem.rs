@@ -171,7 +171,7 @@ pub fn format_fs() {
     let time = interface::timestamp(); //We do a real timestamp now
     let devdirinode = Inode::Dir(DirectoryInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        mode: (S_IFDIR | 0755) as u32,
+        mode: (S_IFDIR | 0o755) as u32,
         linkcount: 3 + 4, //3 for ., .., and the parent dir, 4 is one for each child we will create
         refcount: 0,
         atime: time, ctime: time, mtime: time,
@@ -179,31 +179,31 @@ pub fn format_fs() {
     }); //inode 2
     let nullinode = Inode::CharDev(DeviceInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        mode: (S_IFCHR | 0o666) as u32, linkcount: 1, refcount: 0,
         atime: time, ctime: time, mtime: time,
         dev: DevNo {major: 1, minor: 3},
     }); //inode 3
     let zeroinode = Inode::CharDev(DeviceInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        mode: (S_IFCHR | 0o666) as u32, linkcount: 1, refcount: 0,
         atime: time, ctime: time, mtime: time,
         dev: DevNo {major: 1, minor: 5},
     }); //inode 4
     let urandominode = Inode::CharDev(DeviceInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        mode: (S_IFCHR | 0o666) as u32, linkcount: 1, refcount: 0,
         atime: time, ctime: time, mtime: time,
         dev: DevNo {major: 1, minor: 9},
     }); //inode 5
     let randominode = Inode::CharDev(DeviceInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_UID,
-        mode: (S_IFCHR | 0666) as u32, linkcount: 1, refcount: 0,
+        mode: (S_IFCHR | 0o666) as u32, linkcount: 1, refcount: 0,
         atime: time, ctime: time, mtime: time,
         dev: DevNo {major: 1, minor: 8},
     }); //inode 6
     let tmpdirinode = Inode::Dir(DirectoryInode {
         size: 0, uid: DEFAULT_UID, gid: DEFAULT_GID,
-        mode: (S_IFDIR | 0755) as u32,
+        mode: (S_IFDIR | 0o755) as u32,
         linkcount: 3 + 4, 
         refcount: 0,
         atime: time, ctime: time, mtime: time,
