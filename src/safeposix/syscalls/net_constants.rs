@@ -18,8 +18,8 @@ pub const SOCK_DGRAM: i32 = 2; //datagram socket
 pub const SOCK_RAW: i32 = 3; //raw protocol interface
 pub const SOCK_RDM: i32 = 4; //reliably delivered message
 pub const SOCK_SEQPACKET: i32 = 5; //sequenced packet stream
-pub const SOCK_CLOEXEC: i32 = 02000000;
-pub const SOCK_NONBLOCK: i32 = 0x4000;
+pub const SOCK_CLOEXEC: i32 =  0o02000000; // Atomically set close-on-exec 
+pub const SOCK_NONBLOCK: i32 = 0o00004000;// Mark as non-blocking
 
 /* Supported address families. */
 pub const AF_UNSPEC: i32 = 0;
@@ -351,12 +351,13 @@ pub const MINSOCKOBJID: i32 = 0;
 pub const MAXSOCKOBJID: i32 = 1024;
 
 //POLL CONSTANTS
-pub const POLLIN: i16 = 01; // There is data to read.
-pub const POLLPRI: i16 = 02; //There is urgent data to read.
-pub const POLLOUT: i16 = 04; // Writing now will not block.
-pub const POLLERR: i16 = 010; // Error condition.
-pub const POLLHUP: i16 = 020; // Hung up.
-pub const POLLNVAL: i16 = 040; // Invalid polling request.
+pub const POLLIN: i16 = 0o1; // There is data to read.
+pub const POLLPRI: i16 = 0o2; //There is urgent data to read.
+pub const POLLOUT: i16 = 0o4; // Writing now will not block.
+pub const POLLERR: i16 = 0o10; // Error condition.
+pub const POLLHUP: i16 = 0o20; // Hung up.
+pub const POLLNVAL: i16 = 0o40; // Invalid polling request.
+
 
 //EPOLL CONSTANTS
 pub const EPOLLIN: i32 = 0x001;

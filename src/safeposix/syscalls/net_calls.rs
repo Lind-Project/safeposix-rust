@@ -279,11 +279,12 @@ impl Cage {
                     );
                 }
                 sockhandle.unix_info = Some(UnixSocketInfo {
-                    mode: S_IFSOCK | 0666,
+                    mode: S_IFSOCK | 0o666,
                     sendpipe: None,
                     receivepipe: None,
                     inode: newinodenum,
                 });
+
                 NET_METADATA.domsock_paths.insert(truepath);
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
             }
