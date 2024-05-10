@@ -1,14 +1,14 @@
 #![allow(dead_code)] //suppress warning for these functions not being used in main library target
 
-use std::fs::File;
-use std::io::{Read, prelude};
 use std::ffi::CStr;
+use std::fs::File;
+use std::io::{prelude, Read};
 use std::os::raw::c_char;
 
-use crate::safeposix::{cage::*, filesystem::*};
-use crate::interface::errnos::{Errno, syscall_error};
-use crate::interface::types::{ClippedDirent, CLIPPED_DIRENT_SIZE};
 use crate::interface;
+use crate::interface::errnos::{syscall_error, Errno};
+use crate::interface::types::{ClippedDirent, CLIPPED_DIRENT_SIZE};
+use crate::safeposix::{cage::*, filesystem::*};
 
 const LINUX_MAX_RW_COUNT: usize = 0x7FFFF000;
 
@@ -43,7 +43,10 @@ pub fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lin
 
 fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str) {
     if !hostfilepath.exists() || !hostfilepath.is_file() {
-        println!("{:?} does not exist or is not a regular file, skipping", hostfilepath);
+        println!(
+            "{:?} does not exist or is not a regular file, skipping",
+            hostfilepath
+        );
         return;
     }
     let fmetadata = hostfilepath.metadata().unwrap();
@@ -66,7 +69,10 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
     }
 
     if lind_exists && !lind_isfile {
-        println!("{:?} on lind file system is not a regular file, skipping", hostfilepath);
+        println!(
+            "{:?} on lind file system is not a regular file, skipping",
+            hostfilepath
+        );
         return;
     }
 
@@ -92,18 +98,26 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
         }
         cp_into_lind(cage, hostfilepath, lindfilepath, true);
     } else {
-        println!("Same files on host and lind--{:?} and {}, skipping", hostfilepath, lindfilepath);
+        println!(
+            "Same files on host and lind--{:?} and {}, skipping",
+            hostfilepath, lindfilepath
+        );
     }
 }
 
-pub fn cp_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str, create_missing_dirs: bool) {
+pub fn cp_dir_into_lind(
+    cage: &Cage,
+    hostfilepath: &interface::RustPath,
+    lindfilepath: &str,
+    create_missing_dirs: bool,
+) {
     if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("following symlink at {:?} on host fs", hostfilepath);
         } //if read_link succeeds it's a symlink, whose destination must exist because of the nature of the .exists function
     } else {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
-        return
+        return;
     }
 
     //update directly if not a directory on the host, otherwise recursively handle children
@@ -118,19 +132,29 @@ pub fn cp_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfil
             } else {
                 format!("{}/{}", lindfilepath, child.file_name().to_str().unwrap())
             };
-            cp_dir_into_lind(cage, child.path().as_path(), newlindpath.as_str(), create_missing_dirs);
+            cp_dir_into_lind(
+                cage,
+                child.path().as_path(),
+                newlindpath.as_str(),
+                create_missing_dirs,
+            );
         }
     }
 }
 
-fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &str, create_missing_dirs: bool) {
+fn cp_into_lind(
+    cage: &Cage,
+    hostfilepath: &interface::RustPath,
+    lindfilepath: &str,
+    create_missing_dirs: bool,
+) {
     if !hostfilepath.exists() {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
-        return
+        return;
     }
     if !hostfilepath.is_file() {
         eprintln!("File is not a regular file on host fs: {:?}", hostfilepath);
-        return
+        return;
     }
 
     let lindtruepath = normpath(convpath(lindfilepath), cage);
@@ -158,12 +182,16 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
         //check whether we are supposed to create missing directories, and whether we'd be
         //clobbering anything to do so (if so error out)
         if create_missing_dirs {
-            if cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA) != 0 { //let's not mirror stat data
+            if cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA) != 0 {
+                //let's not mirror stat data
                 eprintln!("Lind fs path does not exist but should not be created (is rooted at non-directory) {:?}", ancestor);
                 return;
             }
         } else {
-            eprintln!("Lind fs path does not exist but should not be created {:?}", ancestor);
+            eprintln!(
+                "Lind fs path does not exist but should not be created {:?}",
+                ancestor
+            );
             return;
         }
     }
@@ -173,12 +201,16 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
     let mut filecontents: Vec<u8> = Vec::new();
     host_fileobj.read_to_end(&mut filecontents).unwrap();
 
-    let lindfd = cage.open_syscall(lindtruepath.to_str().unwrap(), O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+    let lindfd = cage.open_syscall(
+        lindtruepath.to_str().unwrap(),
+        O_CREAT | O_TRUNC | O_WRONLY,
+        S_IRWXA,
+    );
     assert!(lindfd >= 0);
 
     let veclen = filecontents.len();
     let mut writtenlen: usize = 0;
-    
+
     //on Linux, write() (and similar system calls) will transfer at most 0x7ffff000 (2,147,479,552) bytes
     //dividing filecontents into chunks of 0x7ffff000 (2,147,479,552) bytes and writing each chunk
     for chunk in filecontents.chunks(LINUX_MAX_RW_COUNT) {
@@ -197,7 +229,12 @@ fn cp_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepath: &
     println!("Copied {:?} as {} ({})", hostfilepath, lindfilepath, inode);
 }
 
-pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&Cage, &str, bool, Option<usize>)) {
+pub fn visit_children(
+    cage: &Cage,
+    path: &str,
+    arg: Option<usize>,
+    visitor: fn(&Cage, &str, bool, Option<usize>),
+) {
     //get buffer in which getdents will write its stuff
     let mut bigbuffer = [0u8; 65536];
     let dentptr = bigbuffer.as_mut_ptr();
@@ -207,9 +244,11 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
 
     loop {
         let direntres = cage.getdents_syscall(dirfd, dentptr, 65536);
-        
+
         //if we've read every entry in this directory, we're done
-        if direntres == 0 {break;}
+        if direntres == 0 {
+            break;
+        }
 
         let mut dentptrindex = 0isize;
 
@@ -217,17 +256,19 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
         while dentptrindex < direntres as isize {
             //get information for where the next entry is (if relevant)
             let clipped_dirent_ptr = dentptr.wrapping_offset(dentptrindex) as *mut ClippedDirent;
-            let clipped_dirent = unsafe{&*clipped_dirent_ptr};
+            let clipped_dirent = unsafe { &*clipped_dirent_ptr };
 
             //get the file name for the child
             let cstrptr = dentptr.wrapping_offset(dentptrindex + CLIPPED_DIRENT_SIZE as isize);
-            let filenamecstr = unsafe{CStr::from_ptr(cstrptr as *const c_char)};
+            let filenamecstr = unsafe { CStr::from_ptr(cstrptr as *const c_char) };
             let filenamestr = filenamecstr.to_str().unwrap();
 
             dentptrindex += clipped_dirent.d_reclen as isize;
 
             //ignore these entries
-            if filenamestr == "." || filenamestr == ".." {continue;}
+            if filenamestr == "." || filenamestr == ".." {
+                continue;
+            }
 
             let fullstatpath = if path.ends_with("/") {
                 [path, filenamestr].join("")
@@ -240,7 +281,12 @@ pub fn visit_children(cage: &Cage, path: &str, arg: Option<usize>, visitor: fn(&
             let _stat_us = cage.stat_syscall(fullstatpath.as_str(), &mut lindstat_res);
 
             //call the visitor function on the child path
-            visitor(cage, fullstatpath.as_str(), is_dir(lindstat_res.st_mode), arg);
+            visitor(
+                cage,
+                fullstatpath.as_str(),
+                is_dir(lindstat_res.st_mode),
+                arg,
+            );
         }
     }
     cage.close_syscall(dirfd);

@@ -6,7 +6,6 @@ use std::sync::OnceLock;
 
 pub static VERBOSE: OnceLock<isize> = OnceLock::new();
 
-
 //A macro which takes the enum and adds to it a try_from trait which can convert values back to
 //enum variants
 macro_rules! reversible_enum {
@@ -28,7 +27,6 @@ macro_rules! reversible_enum {
         }
     }
 }
-
 
 reversible_enum! {
     #[derive(Debug, PartialEq, Eq)]
