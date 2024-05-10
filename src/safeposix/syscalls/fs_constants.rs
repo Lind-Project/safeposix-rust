@@ -173,7 +173,10 @@ pub fn is_rdonly(flags: i32) -> bool {
   (flags & O_RDWRFLAGS) == O_RDONLY
 }
 
-//the same as the glibc makedev
+// In order to keep this the same as the glibc makedev in bits/sysmacros.h
+// we do operations like <<0, which have no effect.  These are used to set
+// up devices (like /dev/urandom, etc.) so processes can use them
+#[allow(clippy::identity_op)]
 pub fn makedev(dev: &DevNo) -> u64 {
     ((dev.major as u64 & 0x00000fff) <<  8) |
     ((dev.major as u64 & 0xfffff000) << 32) |
@@ -186,6 +189,11 @@ pub fn major(devnum: u64) -> u32 {
     (((devnum & 0x00000000000fff00) >>  8) |
      ((devnum & 0xfffff00000000000) >> 32)) as u32
 }
+
+// Similarly, here I am ignoring the >> 0 being a noop, because this matches
+// glibc's source code and we want to make it easier to validate that in the
+// future.
+#[allow(clippy::identity_op)]
 pub fn minor(devnum: u64) -> u32 {
     (((devnum & 0x00000000000000ff) >>  0) |
      ((devnum & 0x00000ffffff00000) >> 12)) as u32
