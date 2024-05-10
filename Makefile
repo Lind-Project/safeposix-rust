@@ -10,3 +10,5 @@ clean:
 	rm -f linddata.*
 	rm -f lind.metadata
 
+format:
+	cargo fmt -- --check

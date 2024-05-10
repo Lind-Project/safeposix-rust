@@ -4,16 +4,16 @@
 // this interface limits kernel access from Rust to the popular paths as defined in Lock-in-Pop
 
 mod comm;
-mod file;
-mod pipe;
-mod misc;
-mod timer;
 pub mod errnos;
+mod file;
+mod misc;
+mod pipe;
+mod timer;
 pub mod types;
 pub use comm::*;
+pub use errnos::*;
 pub use file::*;
-pub use pipe::*;
 pub use misc::*;
+pub use pipe::*;
 pub use timer::*;
 pub use types::*;
-pub use errnos::*;
