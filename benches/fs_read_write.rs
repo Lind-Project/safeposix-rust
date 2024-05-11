@@ -177,7 +177,6 @@ pub fn run_benchmark(c: &mut Criterion) {
             // reset the file position
             libc::lseek(fd, 0, SEEK_SET);
         }
-        println!("FILE LENGTH: {}", file_length);
 
         // My current position when reading...
         let mut pos = 0;
@@ -197,7 +196,6 @@ pub fn run_benchmark(c: &mut Criterion) {
                     if file_length <= pos {
                         libc::lseek(fd, 0, SEEK_SET);
                         pos = 0;
-                        print!(".");
                     }
                     assert_eq!(
                         libc::read(fd, read_buffer.as_mut_ptr() as *mut c_void, *buflen),
