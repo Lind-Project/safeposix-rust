@@ -54,6 +54,12 @@ pub fn run_benchmark(c: &mut Criterion) {
             &String::from_utf8(vec![b'X'; *buflen]).expect("error building string"),
         );
 
+        // The size of the buffer and the amount we expect to read and write.
+        // I need to type convert this because it's a usize by default.
+        // I'm lazily converting with as here because it's not feasible to
+        // test values where usize would overflow this.
+        let expected_retval = *buflen as i32;
+
         let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         // Let's see how fast various file system calls are
         group.bench_with_input(
@@ -61,12 +67,18 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| {
-                    let _ = cage.write_syscall(fd, deststring, *buflen);
+                    assert_eq!(cage.write_syscall(fd, deststring, *buflen),expected_retval);
                 })
             },
         );
 
+        // I'll read the file length so I don't overrun this with my reads...
+        let file_length = cage.lseek_syscall(fd, 0, SEEK_CUR);
+
         cage.lseek_syscall(fd, 0, SEEK_SET);
+
+        // My current position when reading...
+        let mut pos = 0;
 
         let mut read_buffer = tests::sizecbuf(*buflen);
 
@@ -75,7 +87,15 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| {
-                    cage.read_syscall(fd, read_buffer.as_mut_ptr(), *buflen);
+                    // Track the file pointer so you can backtrack if you make
+                    // it to the end of the file.  This avoids having a bunch
+                    // of garbage, 0 length reads skew the results...
+                    pos += expected_retval;
+                    if file_length <= pos {
+                        cage.lseek_syscall(fd, 0, SEEK_SET);
+                        pos = 0;
+                    }
+                    assert_eq!(cage.read_syscall(fd, read_buffer.as_mut_ptr(), *buflen),expected_retval);
                 })
             },
         );
@@ -90,6 +110,14 @@ pub fn run_benchmark(c: &mut Criterion) {
     for buflen in [1, 64, 1024, 65536].iter() {
         let fd: c_int;
         let c_str = CString::new("/tmp/foo").unwrap();
+
+        // The size of the buffer and the amount we expect to read and write.
+        // I need to type convert this because it's a usize by default.
+        // I'm lazily converting with as here because it's not feasible to
+        // test values where usize would overflow this.
+        // NOTE: This has a different type than Lind, which is i32.  I think
+        // this is likely okay.
+        let expected_retval = *buflen as isize;
 
         let path = c_str.into_raw() as *const u8;
 
@@ -107,14 +135,22 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| unsafe {
-                    let _ = libc::write(fd, deststring as *const c_void, *buflen);
+                    assert_eq!(libc::write(fd, deststring as *const c_void, *buflen),expected_retval);
                 })
             },
         );
 
+        // I'll read the file length so I don't overrun this with my reads...
+        let file_length:isize;
         unsafe {
+            file_length = libc::lseek(fd, 0, SEEK_CUR) as isize;
+
+            // reset the file position
             libc::lseek(fd, 0, SEEK_SET);
         }
+
+        // My current position when reading...
+        let mut pos = 0;
 
         let mut read_buffer = tests::sizecbuf(*buflen);
 
@@ -124,7 +160,15 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| unsafe {
-                    libc::read(fd, read_buffer.as_mut_ptr() as *mut c_void, *buflen);
+                    // Track the file pointer so you can backtrack if you make
+                    // it to the end of the file.  This avoids having a bunch
+                    // of garbage, 0 length reads skew the results...
+                    pos += expected_retval;
+                    if file_length <= pos {
+                        libc::lseek(fd, 0, SEEK_SET);
+                        pos = 0;
+                    }
+                    assert_eq!(libc::read(fd, read_buffer.as_mut_ptr() as *mut c_void, *buflen),expected_retval);
                 })
             },
         );
@@ -141,7 +185,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     rustposix::safeposix::dispatcher::lindrustfinalize();
 }
 
-criterion_group!(name=benches; 
+criterion_group!(name=benches;
                  // Add the global settings here so we don't type it everywhere
                  config=global_criterion_settings::get_criterion(); 
                  targets=run_benchmark);
