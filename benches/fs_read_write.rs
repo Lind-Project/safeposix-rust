@@ -54,7 +54,7 @@ pub fn run_benchmark(c: &mut Criterion) {
             &String::from_utf8(vec![b'X'; *buflen]).expect("error building string"),
         );
 
-        let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+        let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         // Let's see how fast various file system calls are
         group.bench_with_input(
             BenchmarkId::new("TF02:Lind write", buflen),
@@ -94,7 +94,7 @@ pub fn run_benchmark(c: &mut Criterion) {
         let path = c_str.into_raw() as *const u8;
 
         unsafe {
-            fd = libc::open(path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+            fd = libc::open(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         }
 
         let deststring = tests::str2cbuf(

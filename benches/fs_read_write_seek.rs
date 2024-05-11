@@ -47,7 +47,7 @@ pub fn run_benchmark(c: &mut Criterion) {
 
     // Iterate for different buffer sizes...
     for buflen in [1, 64, 1024, 65536].iter() {
-        let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+        let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
 
         let deststring = tests::str2cbuf(
             &String::from_utf8(vec![b'X'; *buflen]).expect("error building string"),
@@ -83,7 +83,7 @@ pub fn run_benchmark(c: &mut Criterion) {
         let path = c_str.into_raw() as *const u8;
 
         unsafe {
-            fd = libc::open(path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+            fd = libc::open(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         }
 
         let deststring = tests::str2cbuf(
