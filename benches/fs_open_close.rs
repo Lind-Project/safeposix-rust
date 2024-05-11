@@ -43,8 +43,8 @@ pub fn run_benchmark(c: &mut Criterion) {
     group.bench_function("TF01: Lind open+close", |b| {
         b.iter(|| {
             let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
-            assert!(fd>2); // Ensure we didn't get an error or an odd fd
-            assert_eq!(cage.close_syscall(fd),0);  // close the file w/o error
+            assert!(fd > 2); // Ensure we didn't get an error or an odd fd
+            assert_eq!(cage.close_syscall(fd), 0); // close the file w/o error
         })
     });
 
@@ -56,8 +56,8 @@ pub fn run_benchmark(c: &mut Criterion) {
                 O_CREAT | O_TRUNC | O_WRONLY,
                 S_IRWXA,
             );
-            assert!(fd>2); // Ensure we didn't get an error or an odd fd
-            assert_eq!(libc::close(fd),0);  // close the file w/o error
+            assert!(fd > 2); // Ensure we didn't get an error or an odd fd
+            assert_eq!(libc::close(fd), 0); // close the file w/o error
         })
     });
     group.finish();

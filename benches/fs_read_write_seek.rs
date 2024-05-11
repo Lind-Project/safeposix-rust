@@ -66,10 +66,10 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| {
-                    assert_eq!(cage.write_syscall(fd, deststring, *buflen),expected_retval);
-                    assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET),0);
-                    assert_eq!(cage.read_syscall(fd, read_buffer, *buflen),expected_retval);
-                    assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET),0);
+                    assert_eq!(cage.write_syscall(fd, deststring, *buflen), expected_retval);
+                    assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+                    assert_eq!(cage.read_syscall(fd, read_buffer, *buflen), expected_retval);
+                    assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
                 })
             },
         );
@@ -112,10 +112,16 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| unsafe {
-                    assert_eq!(libc::write(fd, deststring as *const c_void, *buflen),expected_retval);
-                    assert_eq!(libc::lseek(fd, 0, SEEK_SET),0);
-                    assert_eq!(libc::read(fd, read_buffer as *mut c_void, *buflen),expected_retval);
-                    assert_eq!(libc::lseek(fd, 0, SEEK_SET),0);
+                    assert_eq!(
+                        libc::write(fd, deststring as *const c_void, *buflen),
+                        expected_retval
+                    );
+                    assert_eq!(libc::lseek(fd, 0, SEEK_SET), 0);
+                    assert_eq!(
+                        libc::read(fd, read_buffer as *mut c_void, *buflen),
+                        expected_retval
+                    );
+                    assert_eq!(libc::lseek(fd, 0, SEEK_SET), 0);
                 })
             },
         );
