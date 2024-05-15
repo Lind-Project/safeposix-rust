@@ -110,6 +110,8 @@ const FSYNC_SYSCALL: i32 = 162;
 const FDATASYNC_SYSCALL: i32 = 163;
 const SYNC_FILE_RANGE: i32 = 164;
 
+const WRITEV_SYSCALL: i32 = 170;
+
 use super::cage::*;
 use super::filesystem::{
     incref_root, load_fs, persist_metadata, remove_domain_sock, FilesystemMetadata, FS_METADATA,
@@ -922,7 +924,14 @@ pub extern "C" fn dispatcher(
                 interface::duration_fromtimespec(arg2)
             )
         }
-
+        WRITEV_SYSCALL => {
+            check_and_dispatch!(
+                cage.writev_syscall,
+                interface::get_int(arg1),
+                interface::get_iovecstruct(arg2),
+                interface::get_int(arg3)
+            )
+        }
         _ => {
             //unknown syscall
             -1

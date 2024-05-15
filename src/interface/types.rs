@@ -155,6 +155,8 @@ pub struct SigactionStruct {
     pub sa_flags: i32,
 }
 
+pub type IovecStruct = libc::iovec;
+
 //redefining the Arg union to maintain the flow of the program
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -191,6 +193,7 @@ pub union Arg {
     pub dispatch_structitimerval: *mut ITimerVal,
     pub dispatch_conststructitimerval: *const ITimerVal,
     pub dispatch_fdset: *mut libc::fd_set,
+    pub dispatch_iovecstruct: *const interface::IovecStruct,
 }
 
 use std::mem::size_of;
@@ -342,6 +345,18 @@ pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
             }
         }
         return Ok(data_vector);
+    }
+    return Err(syscall_error(
+        Errno::EFAULT,
+        "dispatcher",
+        "input data not valid",
+    ));
+}
+
+pub fn get_iovecstruct(union_argument: Arg) -> Result<*const interface::IovecStruct, i32> {
+    let data = unsafe { union_argument.dispatch_iovecstruct };
+    if !data.is_null() {
+        return Ok(data);
     }
     return Err(syscall_error(
         Errno::EFAULT,
