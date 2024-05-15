@@ -755,7 +755,7 @@ impl Cage {
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
                             if fileobject.filename == "libgcc_s.so.1" && count == 832 {
-                                let libgcc_path = "/home/lind/lind_project/libgcc_s.so.1";
+                                let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
                                 let libgcc = interface::File::open(libgcc_path).unwrap();
                                 let fd_libc = libgcc.as_raw_fd();
                                 let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
@@ -763,7 +763,7 @@ impl Cage {
                             }
 
                             if fileobject.filename == "hello.nexe" && count == 832 {
-                                let hello_path = "/home/lind/lind_project/hello.nexe";
+                                let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                                 let hello = interface::File::open(hello_path).unwrap();
                                 let fd_hello = hello.as_raw_fd();
                                 let bytesread = unsafe{ interface::LibcRead(fd_hello, buf as *mut interface::c_void, count) };
@@ -2074,7 +2074,7 @@ impl Cage {
                             let fd_libc;
                             let ret;
                             if filename == "hello.nexe" {
-                                let hello_path = "/home/lind/lind_project/lind/lindenv/fs/hello.nexe";
+                                let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                                 // let hello = interface::File::open(hello_path).unwrap();
                                 let hello = interface::OpenOptions::new().write(true).read(true).open(hello_path).unwrap();
                                 println!("[DEBUG] Hello: {:?}", hello);
