@@ -10,6 +10,10 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 
+//AW
+use std::os::fd::AsRawFd;
+use std::io::Write;
+
 impl Cage {
     //------------------------------------OPEN SYSCALL------------------------------------
 
@@ -749,6 +753,22 @@ impl Cage {
                             let position = normalfile_filedesc_obj.position;
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+
+                            if fileobject.filename == "libgcc_s.so.1" && count == 832 {
+                                let libgcc_path = "/home/lind/lind_project/libgcc_s.so.1";
+                                let libgcc = interface::File::open(libgcc_path).unwrap();
+                                let fd_libc = libgcc.as_raw_fd();
+                                let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
+                                return bytesread as i32;
+                            }
+
+                            if fileobject.filename == "hello.nexe" && count == 832 {
+                                let hello_path = "/home/lind/lind_project/hello.nexe";
+                                let hello = interface::File::open(hello_path).unwrap();
+                                let fd_hello = hello.as_raw_fd();
+                                let bytesread = unsafe{ interface::LibcRead(fd_hello, buf as *mut interface::c_void, count) };
+                                return bytesread as i32;
+                            }
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
@@ -2049,10 +2069,41 @@ impl Cage {
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
                             //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
                             //this is the system fd number--the number of the lind.<inodenum> file in our host system
-                            let fobjfdno = fobj.as_fd_handle_raw_int();
+                            
+                            let filename = &fobj.filename;
+                            let fd_libc;
+                            let ret;
+                            if filename == "hello.nexe" {
+                                let hello_path = "/home/lind/lind_project/lind/lindenv/fs/hello.nexe";
+                                // let hello = interface::File::open(hello_path).unwrap();
+                                let hello = interface::OpenOptions::new().write(true).read(true).open(hello_path).unwrap();
+                                println!("[DEBUG] Hello: {:?}", hello);
+                                std::io::stdout().flush().unwrap();
+                                fd_libc = hello.as_raw_fd();
+                                ret = interface::libc_mmap(addr, len, prot, flags, fd_libc, off);
+                            } else if filename == "libgcc_s.so.1" {
+                                let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
+                                let libgcc = interface::File::open(libgcc_path).unwrap();
+                                fd_libc = libgcc.as_raw_fd();
+                                ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
+                            } else {
+                                let libc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libc.so.990e7c45";
+                                let libc = interface::File::open(libc_path).unwrap();
+                                fd_libc = libc.as_raw_fd();
+                                ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
+                            }
+                            
+                            if ret == -1 {
+                                let err = std::io::Error::last_os_error().raw_os_error().unwrap();
+                                println!("failed: {:?}", err);
+                                std::io::stdout().flush().unwrap();
+                            }
+                            return ret;
+
+                            // let fobjfdno = fobj.as_fd_handle_raw_int();
 
 
-                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
+                            // interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
                         }
 
                         Inode::CharDev(_chardev_inode_obj) => {
