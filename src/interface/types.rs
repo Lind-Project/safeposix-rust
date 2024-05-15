@@ -193,7 +193,7 @@ pub union Arg {
     pub dispatch_structitimerval: *mut ITimerVal,
     pub dispatch_conststructitimerval: *const ITimerVal,
     pub dispatch_fdset: *mut libc::fd_set,
-    pub dispatch_iovecstruct: *const interface::IovecStruct,
+    pub dispatch_constiovecstruct: *const interface::IovecStruct,
 }
 
 use std::mem::size_of;
@@ -354,7 +354,7 @@ pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
 }
 
 pub fn get_iovecstruct(union_argument: Arg) -> Result<*const interface::IovecStruct, i32> {
-    let data = unsafe { union_argument.dispatch_iovecstruct };
+    let data = unsafe { union_argument.dispatch_constiovecstruct };
     if !data.is_null() {
         return Ok(data);
     }
