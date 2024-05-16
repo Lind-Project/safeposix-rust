@@ -1186,9 +1186,9 @@ impl Cage {
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
-                // we're only implementing this for sockets right now
+                
+                // we're only implementing this for INET/tcp sockets right now
                 match filedesc_enum {
-                    //we must borrow the filedesc object as a mutable reference to update the position
                     Socket(sockfdobj) => {
                         let sock_tmp = sockfdobj.handle.clone();
                         let sockhandle = sock_tmp.write();
@@ -1218,7 +1218,7 @@ impl Cage {
                                                 return syscall_error(
                                                     i,
                                                     "writev",
-                                                    "The libc call to sendto failed!",
+                                                    "The libc call to writev failed!",
                                                 );
                                             }
                                             Err(()) => panic!(
