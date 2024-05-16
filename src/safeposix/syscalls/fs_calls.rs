@@ -753,8 +753,8 @@ impl Cage {
                             let position = normalfile_filedesc_obj.position;
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-
-                            if fileobject.filename == "libgcc_s.so.1" && count == 832 {
+                            let fname = &fileobject.filename;
+                            if fname == "libgcc_s.so.1" && count == 832 {
                                 let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
                                 let libgcc = interface::File::open(libgcc_path).unwrap();
                                 let fd_libc = libgcc.as_raw_fd();
@@ -762,7 +762,7 @@ impl Cage {
                                 return bytesread as i32;
                             }
 
-                            if fileobject.filename == "hello.nexe" && count == 832 {
+                            if fname == "hello.nexe" && count == 832 {
                                 let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                                 let hello = interface::File::open(hello_path).unwrap();
                                 let fd_hello = hello.as_raw_fd();
