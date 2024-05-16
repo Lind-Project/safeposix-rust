@@ -224,7 +224,6 @@ pub struct SockaddrV6 {
     pub sin6_scope_id: u32,
 }
 
-
 #[derive(Debug)]
 pub struct Socket {
     pub raw_sys_fd: i32,
@@ -321,13 +320,7 @@ impl Socket {
     }
 
     pub fn writev(&self, iov: *const interface::IovecStruct, iovcnt: i32) -> i32 {
-        unsafe {
-            libc::writev(
-                self.raw_sys_fd,
-                iov as *const libc::iovec,
-                iovcnt,
-            ) as i32
-        }
+        unsafe { libc::writev(self.raw_sys_fd, iov as *const libc::iovec, iovcnt) as i32 }
     }
 
     pub fn recvfrom(&self, buf: *mut u8, len: usize, addr: &mut Option<&mut GenSockaddr>) -> i32 {

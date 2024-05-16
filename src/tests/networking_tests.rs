@@ -3,9 +3,9 @@ pub mod net_tests {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
-    use libc::c_void;
 
     pub fn net_tests() {
         ut_lind_net_bind();
@@ -2333,17 +2333,22 @@ pub mod net_tests {
         //connect to the server
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
 
-        let iovec : [interface::IovecStruct; 3] = [
-            interface::IovecStruct{iov_base: str2cbuf(&"A".repeat(100)) as *mut c_void, iov_len: 100},
-            interface::IovecStruct{iov_base: str2cbuf(&"B".repeat(100)) as *mut c_void, iov_len: 100},
-            interface::IovecStruct{iov_base: str2cbuf(&"C".repeat(100)) as *mut c_void, iov_len: 100},
-            ];
-        
+        let iovec: [interface::IovecStruct; 3] = [
+            interface::IovecStruct {
+                iov_base: str2cbuf(&"A".repeat(100)) as *mut c_void,
+                iov_len: 100,
+            },
+            interface::IovecStruct {
+                iov_base: str2cbuf(&"B".repeat(100)) as *mut c_void,
+                iov_len: 100,
+            },
+            interface::IovecStruct {
+                iov_base: str2cbuf(&"C".repeat(100)) as *mut c_void,
+                iov_len: 100,
+            },
+        ];
 
-        assert_eq!(
-            cage.writev_syscall(clientsockfd, iovec.as_ptr(), 3),
-            300
-        );
+        assert_eq!(cage.writev_syscall(clientsockfd, iovec.as_ptr(), 3), 300);
 
         thread.join().unwrap();
 
