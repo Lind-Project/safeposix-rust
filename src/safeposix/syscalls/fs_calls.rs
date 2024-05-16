@@ -1186,7 +1186,7 @@ impl Cage {
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let mut unlocked_fd = checkedfd.write();
             if let Some(filedesc_enum) = &mut *unlocked_fd {
-                
+
                 // we're only implementing this for INET/tcp sockets right now
                 match filedesc_enum {
                     Socket(sockfdobj) => {
@@ -1196,6 +1196,7 @@ impl Cage {
                         match sockhandle.domain {
                             AF_INET | AF_INET6 => match sockhandle.protocol {
                                 IPPROTO_TCP => {
+                                    // to be able to send here we either need to be fully connected, or connected for write only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                     && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1206,7 +1207,8 @@ impl Cage {
                                         );
                                     }
 
-                                    //because socket must be connected it must have an inner socket
+                                    //because socket must be connected it must have an inner raw socket
+                                    // lets call the kernel writev on that socket
                                     let retval = sockhandle
                                         .innersocket
                                         .as_ref()
@@ -1231,7 +1233,7 @@ impl Cage {
                                 }
                                 _ => {
                                     return syscall_error(
-                                        Errno::ENOSYS,
+                                        Errno::EOPNOTSUPP,
                                         "writev",
                                         "System call not implemented for this socket protocol",
                                     );
@@ -1239,7 +1241,7 @@ impl Cage {
                             }
                             _ => {
                                     return syscall_error(
-                                        Errno::ENOSYS,
+                                        Errno::EOPNOTSUPP,
                                         "writev",
                                         "System call not implemented for this socket domain",
                                     );
@@ -1248,7 +1250,7 @@ impl Cage {
                     }
                     _ => {
                         return syscall_error(
-                            Errno::ENOSYS,
+                            Errno::EOPNOTSUPP,
                             "writev",
                             "System call not implemented for this fd type",
                         );
