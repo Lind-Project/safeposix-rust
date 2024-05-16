@@ -764,7 +764,7 @@ impl Cage {
                                 return bytesread as i32;
                             }
 
-                            if fname == "hello.nexe" && count == 832 {
+                            if fname == "linddata.745" && count == 832 {
                                 let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                                 let hello = interface::File::open(hello_path).unwrap();
                                 let fd_hello = hello.as_raw_fd();
@@ -2075,7 +2075,7 @@ impl Cage {
                             let filename = &fobj.filename;
                             let fd_libc;
                             let ret;
-                            if filename == "hello.nexe" {
+                            if filename == "linddata.745" {
                                 let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                                 // let hello = interface::File::open(hello_path).unwrap();
                                 let hello = interface::OpenOptions::new().write(true).read(true).open(hello_path).unwrap();
