@@ -754,9 +754,9 @@ impl Cage {
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
                             let fname = &fileobject.filename;
-                            println!("[DEBUG] Hello: {:?}", fname);
+                            println!("[DEBUG - read] Hello: {:?}", fname);
                             std::io::stdout().flush().unwrap();
-                            if fname == "libgcc_s.so.1" && count == 832 {
+                            if fname == "linddata.416" && count == 832 {
                                 let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
                                 let libgcc = interface::File::open(libgcc_path).unwrap();
                                 let fd_libc = libgcc.as_raw_fd();
@@ -2079,7 +2079,7 @@ impl Cage {
                                 let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                                 // let hello = interface::File::open(hello_path).unwrap();
                                 let hello = interface::OpenOptions::new().write(true).read(true).open(hello_path).unwrap();
-                                println!("[DEBUG] Hello: {:?}", hello);
+                                println!("[DEBUG - mmap] Hello: {:?}", hello);
                                 std::io::stdout().flush().unwrap();
                                 fd_libc = hello.as_raw_fd();
                                 ret = interface::libc_mmap(addr, len, prot, flags, fd_libc, off);
