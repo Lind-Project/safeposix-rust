@@ -754,6 +754,8 @@ impl Cage {
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
                             let fname = &fileobject.filename;
+                            println!("[DEBUG] Hello: {:?}", fname);
+                            std::io::stdout().flush().unwrap();
                             if fname == "libgcc_s.so.1" && count == 832 {
                                 let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
                                 let libgcc = interface::File::open(libgcc_path).unwrap();
