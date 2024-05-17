@@ -319,6 +319,10 @@ impl Socket {
         }
     }
 
+    pub fn writev(&self, iov: *const interface::IovecStruct, iovcnt: i32) -> i32 {
+        unsafe { libc::writev(self.raw_sys_fd, iov as *const libc::iovec, iovcnt) as i32 }
+    }
+
     pub fn recvfrom(&self, buf: *mut u8, len: usize, addr: &mut Option<&mut GenSockaddr>) -> i32 {
         let (finalsockaddr, mut addrlen) = match addr {
             Some(GenSockaddr::V6(ref mut addrref6)) => (

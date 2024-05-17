@@ -18,8 +18,8 @@ pub const SOCK_DGRAM: i32 = 2; //datagram socket
 pub const SOCK_RAW: i32 = 3; //raw protocol interface
 pub const SOCK_RDM: i32 = 4; //reliably delivered message
 pub const SOCK_SEQPACKET: i32 = 5; //sequenced packet stream
-pub const SOCK_CLOEXEC: i32 =  0o02000000; // Atomically set close-on-exec 
-pub const SOCK_NONBLOCK: i32 = 0o00004000;// Mark as non-blocking
+pub const SOCK_CLOEXEC: i32 = 0o02000000; // Atomically set close-on-exec
+pub const SOCK_NONBLOCK: i32 = 0o00004000; // Mark as non-blocking
 
 /* Supported address families. */
 pub const AF_UNSPEC: i32 = 0;
@@ -357,7 +357,6 @@ pub const POLLOUT: i16 = 0o4; // Writing now will not block.
 pub const POLLERR: i16 = 0o10; // Error condition.
 pub const POLLHUP: i16 = 0o20; // Hung up.
 pub const POLLNVAL: i16 = 0o40; // Invalid polling request.
-
 
 //EPOLL CONSTANTS
 pub const EPOLLIN: i32 = 0x001;

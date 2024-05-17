@@ -3,6 +3,7 @@ pub mod net_tests {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
 
@@ -28,6 +29,7 @@ pub mod net_tests {
         ut_lind_net_dns_rootserver_ping();
         ut_lind_net_domain_socket();
         ut_lind_net_epoll();
+        ut_lind_net_writev();
     }
 
     pub fn ut_lind_net_bind() {
@@ -2267,6 +2269,90 @@ pub mod net_tests {
         thread2.join().unwrap();
         thread3.join().unwrap();
 
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_writev() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        let port: u16 = 53077;
+
+        //making sure that the assigned fd's are valid
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+
+        //binding to a socket
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
+
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        //creating a thread for the server so that the information can be sent between the two threads
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            interface::sleep(interface::RustDuration::from_millis(100));
+
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4 {
+                sin_family: AF_INET as u16,
+                sin_port: port.to_be(),
+                sin_addr: interface::V4Addr {
+                    s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+                },
+                padding: 0,
+            }); //127.0.0.1
+            let sockfd = cage2.accept_syscall(serversockfd, &mut socket2); //really can only make sure that the fd is valid
+            assert!(sockfd > 0);
+
+            //process the first test...
+            //Writing 100, then peek 100, then read 100
+            let mut buf = sizecbuf(300);
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 300, 0, &mut Some(&mut socket2)),
+                300
+            ); //reading the input message
+
+            assert_eq!(cage2.close_syscall(sockfd), 0);
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        //connect to the server
+        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+
+        let iovec: [interface::IovecStruct; 3] = [
+            interface::IovecStruct {
+                iov_base: str2cbuf(&"A".repeat(100)) as *mut c_void,
+                iov_len: 100,
+            },
+            interface::IovecStruct {
+                iov_base: str2cbuf(&"B".repeat(100)) as *mut c_void,
+                iov_len: 100,
+            },
+            interface::IovecStruct {
+                iov_base: str2cbuf(&"C".repeat(100)) as *mut c_void,
+                iov_len: 100,
+            },
+        ];
+
+        assert_eq!(cage.writev_syscall(clientsockfd, iovec.as_ptr(), 3), 300);
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }

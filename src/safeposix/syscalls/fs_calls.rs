@@ -1180,6 +1180,91 @@ impl Cage {
         }
     }
 
+    //------------------------------------WRITEV SYSCALL------------------------------------
+
+    pub fn writev_syscall(
+        &self,
+        fd: i32,
+        iovec: *const interface::IovecStruct,
+        iovcnt: i32,
+    ) -> i32 {
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            // we're only implementing this for INET/tcp sockets right now
+            match filedesc_enum {
+                Socket(sockfdobj) => {
+                    let sock_tmp = sockfdobj.handle.clone();
+                    let sockhandle = sock_tmp.write();
+
+                    match sockhandle.domain {
+                        AF_INET | AF_INET6 => match sockhandle.protocol {
+                            IPPROTO_TCP => {
+                                // to be able to send here we either need to be fully connected, or connected for write only
+                                if (sockhandle.state != ConnState::CONNECTED)
+                                    && (sockhandle.state != ConnState::CONNWRONLY)
+                                {
+                                    return syscall_error(
+                                        Errno::ENOTCONN,
+                                        "send",
+                                        "The descriptor is not connected",
+                                    );
+                                }
+
+                                //because socket must be connected it must have an inner raw socket
+                                // lets call the kernel writev on that socket
+                                let retval = sockhandle
+                                    .innersocket
+                                    .as_ref()
+                                    .unwrap()
+                                    .writev(iovec, iovcnt);
+                                if retval < 0 {
+                                    match Errno::from_discriminant(interface::get_errno()) {
+                                        Ok(i) => {
+                                            return syscall_error(
+                                                i,
+                                                "writev",
+                                                "The libc call to writev failed!",
+                                            );
+                                        }
+                                        Err(()) => panic!(
+                                            "Unknown errno value from socket writev returned!"
+                                        ),
+                                    };
+                                } else {
+                                    return retval;
+                                }
+                            }
+                            _ => {
+                                return syscall_error(
+                                    Errno::EOPNOTSUPP,
+                                    "writev",
+                                    "System call not implemented for this socket protocol",
+                                );
+                            }
+                        },
+                        _ => {
+                            return syscall_error(
+                                Errno::EOPNOTSUPP,
+                                "writev",
+                                "System call not implemented for this socket domain",
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    return syscall_error(
+                        Errno::EOPNOTSUPP,
+                        "writev",
+                        "System call not implemented for this fd type",
+                    );
+                }
+            }
+        } else {
+            syscall_error(Errno::EBADF, "write", "invalid file descriptor")
+        }
+    }
+
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
