@@ -2074,7 +2074,7 @@ impl Cage {
                             
                             let filename = &fobj.filename;
                             let fd_libc;
-                            let mut ret = 0;
+                            let ret;
                             // if filename == "linddata.745" {
                             //     let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                             //     // let hello = interface::File::open(hello_path).unwrap();
@@ -2091,6 +2091,12 @@ impl Cage {
                                 std::io::stdout().flush().unwrap();
                                 fd_libc = libgcc.as_raw_fd();
                                 ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
+                                if ret == -1 {
+                                    let err = std::io::Error::last_os_error().raw_os_error().unwrap();
+                                    println!("failed: {:?}", err);
+                                    std::io::stdout().flush().unwrap();
+                                }
+                                return ret;
                             } 
                             // else {
                             //     let libc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libc.so.990e7c45";
@@ -2099,17 +2105,10 @@ impl Cage {
                             //     ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
                             // }
                             
-                            if ret == -1 {
-                                let err = std::io::Error::last_os_error().raw_os_error().unwrap();
-                                println!("failed: {:?}", err);
-                                std::io::stdout().flush().unwrap();
-                            }
-                            return ret;
-
-                            // let fobjfdno = fobj.as_fd_handle_raw_int();
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
 
 
-                            // interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
+                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
                         }
 
                         Inode::CharDev(_chardev_inode_obj) => {
