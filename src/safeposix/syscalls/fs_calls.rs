@@ -756,21 +756,21 @@ impl Cage {
                             let fname = &fileobject.filename;
                             println!("[DEBUG - read] :{:?}", fname);
                             std::io::stdout().flush().unwrap();
-                            // if fname == "linddata.416" && count == 832 {
-                            //     let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
-                            //     let libgcc = interface::File::open(libgcc_path).unwrap();
-                            //     let fd_libc = libgcc.as_raw_fd();
-                            //     let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
-                            //     return bytesread as i32;
-                            // }
-
-                            if fname == "linddata.745" && count == 832 {
-                                let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
-                                let hello = interface::File::open(hello_path).unwrap();
-                                let fd_hello = hello.as_raw_fd();
-                                let bytesread = unsafe{ interface::LibcRead(fd_hello, buf as *mut interface::c_void, count) };
+                            if fname == "linddata.416" && count == 832 {
+                                let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
+                                let libgcc = interface::File::open(libgcc_path).unwrap();
+                                let fd_libc = libgcc.as_raw_fd();
+                                let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
                                 return bytesread as i32;
                             }
+
+                            // if fname == "linddata.745" && count == 832 {
+                            //     let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
+                            //     let hello = interface::File::open(hello_path).unwrap();
+                            //     let fd_hello = hello.as_raw_fd();
+                            //     let bytesread = unsafe{ interface::LibcRead(fd_hello, buf as *mut interface::c_void, count) };
+                            //     return bytesread as i32;
+                            // }
 
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
@@ -2075,25 +2075,29 @@ impl Cage {
                             let filename = &fobj.filename;
                             let fd_libc;
                             let ret;
-                            if filename == "linddata.745" {
-                                let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
-                                // let hello = interface::File::open(hello_path).unwrap();
-                                let hello = interface::OpenOptions::new().write(true).read(true).open(hello_path).unwrap();
-                                println!("[DEBUG - mmap] : {:?}", hello);
-                                std::io::stdout().flush().unwrap();
-                                fd_libc = hello.as_raw_fd();
-                                ret = interface::libc_mmap(addr, len, prot, flags, fd_libc, off);
-                            } else if filename == "libgcc_s.so.1" {
+                            // if filename == "linddata.745" {
+                            //     let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
+                            //     // let hello = interface::File::open(hello_path).unwrap();
+                            //     let hello = interface::OpenOptions::new().write(true).read(true).open(hello_path).unwrap();
+                            //     println!("[DEBUG - mmap] : {:?}", hello);
+                            //     std::io::stdout().flush().unwrap();
+                            //     fd_libc = hello.as_raw_fd();
+                            //     ret = interface::libc_mmap(addr, len, prot, flags, fd_libc, off);
+                            // } 
+                            if filename == "linddata.416" {
                                 let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
                                 let libgcc = interface::File::open(libgcc_path).unwrap();
+                                println!("[DEBUG - mmap] : {:?}", libgcc);
+                                std::io::stdout().flush().unwrap();
                                 fd_libc = libgcc.as_raw_fd();
                                 ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
-                            } else {
-                                let libc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libc.so.990e7c45";
-                                let libc = interface::File::open(libc_path).unwrap();
-                                fd_libc = libc.as_raw_fd();
-                                ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
-                            }
+                            } 
+                            // else {
+                            //     let libc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libc.so.990e7c45";
+                            //     let libc = interface::File::open(libc_path).unwrap();
+                            //     fd_libc = libc.as_raw_fd();
+                            //     ret = interface::libc_mmap(addr, len, prot, MAP_FIXED | MAP_PRIVATE, fd_libc, off);
+                            // }
                             
                             if ret == -1 {
                                 let err = std::io::Error::last_os_error().raw_os_error().unwrap();
