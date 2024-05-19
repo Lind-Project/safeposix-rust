@@ -74,13 +74,15 @@ impl Cage {
         }
         0
     }
-
+//Creates a new socket, ensuring the requested domain, socket type, and protocol are supported by SafePOSIX and also
+//validates the requested communication domain, socket type, and protocol permitting only combinations that are known
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
-        let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
+        let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
+        // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is automatically closed if the current process executes another program, preventing unintended inheritance of the socket by the new program.
 
-        match real_socktype {
+        match real_socktype {// Handles different socket types SOCK_STREAM or SOCK_DGRAM in this cases
             SOCK_STREAM => {
                 //SOCK_STREAM defaults to TCP for protocol, otherwise protocol is unsupported
                 let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol };
@@ -92,8 +94,10 @@ impl Cage {
                         "The only SOCK_STREAM implemented is TCP. Unknown protocol input.",
                     );
                 }
-                match domain {
-                    PF_INET | PF_UNIX => {
+                match domain {// Handles different communication domains in this case PF_INET/PF_UNIX 
+                    PF_INET | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
+                        //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same
+                        //https://man7.org/linux/man-pages/man2/socket.2.html
                         let sockfdobj = self._socket_initializer(
                             domain,
                             socktype,
@@ -102,14 +106,16 @@ impl Cage {
                             cloexec,
                             ConnState::NOTCONNECTED,
                         );
+                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a helper function that encapsulates the internal details of socket creation and initialization.
                         return self._socket_inserter(Socket(sockfdobj));
+                        // Inserts the newly created socket descriptor into the cage's file descriptor table,making it accessible to the application. Returns the file descriptor (an integer) representing the socket.
                     }
                     _ => {
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "socket",
                             "trying to use an unimplemented domain",
-                        );
+                        );// Returns an error if an unsupported domain is requested.
                     }
                 }
             }
@@ -125,8 +131,10 @@ impl Cage {
                         "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.",
                     );
                 }
-                match domain {
-                    PF_INET | PF_UNIX => {
+                match domain {// Handles different communication domains in this case PF_INET/PF_UNIX 
+                    PF_INET | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
+                        //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same 
+                        //https://man7.org/linux/man-pages/man2/socket.2.html
                         let sockfdobj = self._socket_initializer(
                             domain,
                             socktype,
@@ -135,7 +143,9 @@ impl Cage {
                             cloexec,
                             ConnState::NOTCONNECTED,
                         );
+                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a helper function that encapsulates the internal details of socket creation and initialization.
                         return self._socket_inserter(Socket(sockfdobj));
+                        // Inserts the newly created socket descriptor into the cage's file descriptor table,making it accessible to the application. Returns the file descriptor (an integer) representing the socket.
                     }
                     _ => {
                         return syscall_error(
@@ -152,7 +162,7 @@ impl Cage {
                     Errno::EOPNOTSUPP,
                     "socket",
                     "trying to use an unimplemented socket type",
-                );
+                );// Returns an error if an unsupported domain is requested.
             }
         }
     }
