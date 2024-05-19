@@ -2074,7 +2074,7 @@ impl Cage {
                             
                             let filename = &fobj.filename;
                             let fd_libc;
-                            let ret;
+                            let mut ret = 0;
                             // if filename == "linddata.745" {
                             //     let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
                             //     // let hello = interface::File::open(hello_path).unwrap();
