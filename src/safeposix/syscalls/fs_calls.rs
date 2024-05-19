@@ -756,13 +756,13 @@ impl Cage {
                             let fname = &fileobject.filename;
                             println!("[DEBUG - read] :{:?}", fname);
                             std::io::stdout().flush().unwrap();
-                            if fname == "linddata.416" && count == 832 {
-                                let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
-                                let libgcc = interface::File::open(libgcc_path).unwrap();
-                                let fd_libc = libgcc.as_raw_fd();
-                                let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
-                                return bytesread as i32;
-                            }
+                            // if fname == "linddata.416" && count == 832 {
+                            //     let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
+                            //     let libgcc = interface::File::open(libgcc_path).unwrap();
+                            //     let fd_libc = libgcc.as_raw_fd();
+                            //     let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
+                            //     return bytesread as i32;
+                            // }
 
                             if fname == "linddata.745" && count == 832 {
                                 let hello_path = "/home/lind/lind_project/src/safeposix-rust/loading/hello.nexe";
