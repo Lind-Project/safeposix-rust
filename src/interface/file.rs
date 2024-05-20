@@ -40,7 +40,7 @@ pub fn openmetadata(filename: String) -> std::io::Result<EmulatedFile> {
 
 #[derive(Debug)]
 pub struct EmulatedFile {
-    filename: String,
+    pub filename: String,
     fobj: Option<Arc<Mutex<File>>>,
     filesize: usize,
 }
