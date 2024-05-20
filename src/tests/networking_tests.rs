@@ -1297,46 +1297,40 @@ pub mod net_tests {
     pub fn ut_lind_net_socket() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-    
-        // Valid socket creations
-        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        assert!(sockfd > 0, "Expected a valid file descriptor, got {}", sockfd); 
-    
+
+        let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(sockfd > 0, "Expected a valid file descriptor, got error");
+
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        assert!(sockfd2 > 0, "Expected a valid file descriptor, got {}", sockfd2); 
-    
+        assert!(sockfd2 > 0, "Expected a valid file descriptor, got error");
+
         let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        assert!(sockfd3 > 0, "Expected a valid file descriptor, got {}", sockfd3);
-    
+        assert!(sockfd3 > 0, "Expected a valid file descriptor, got error");
+        
         let sockfd4 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        assert!(sockfd4 > 0, "Expected a valid file descriptor, got {}", sockfd4);
-    
+        assert!(sockfd4 > 0, "Expected a valid file descriptor, got error");
+
+
+        //let's check an illegal operation...
         let sockfddomain = cage.socket_syscall(AF_UNIX, SOCK_DGRAM, 0);
-        assert!(sockfddomain > 0, "Expected a valid file descriptor, got {}", sockfddomain);
-    
-    
-        // Error checks for unsupported combinations:
-    
-        // Invalid protocol for SOCK_STREAM
+        assert!(sockfddomain > 0, "Expected a valid file descriptor, got error");
+
         let sockfd_err1 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_UDP); 
         assert!(sockfd_err1 < 0, "Expected an error, got {}", sockfd_err1);
-    
-        // Invalid protocol for SOCK_DGRAM
+        
         let sockfd_err2 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_TCP); 
         assert!(sockfd_err2 < 0, "Expected an error, got {}", sockfd_err2);
-    
-        // Unsupported socket type 
+        
         let sockfd_err3 = cage.socket_syscall(AF_INET, SOCK_RAW, 0);
         assert!(sockfd_err3 < 0, "Expected an error, got {}", sockfd_err3);
-    
-        // Unsupported domain 
+        
         let sockfd_err4 = cage.socket_syscall(AF_IPX, SOCK_STREAM, 0); // Assuming AF_IPX is not supported
         assert!(sockfd_err4 < 0, "Expected an error, got {}", sockfd_err4);
-    
-        // Closing and exiting
+
+
         sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        assert!(sockfd > 0, "Expected a valid file descriptor, got {}", sockfd);
-    
+        assert!(sockfd > 0, "Expected a valid file descriptor, got error");
+
         assert_eq!(cage.close_syscall(sockfd), 0, "Expected successful close, got error");
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS, "Expected successful exit, got error");
         lindrustfinalize();
