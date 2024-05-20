@@ -84,6 +84,9 @@ impl Cage {
        
         // additional flags are not supported
         // filtering out any socktypes with unexpected flags set.
+        // This is important as we dont want to pass down any flags that are not supported by SafePOSIX.
+        // which may potentially cause issues with the underlying libc call. or the socket creation process.
+        // leading to unexpected behavior.
         if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
             return syscall_error(
                 Errno::EOPNOTSUPP,

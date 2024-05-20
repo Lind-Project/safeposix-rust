@@ -1298,6 +1298,20 @@ pub mod net_tests {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
+        // Following checks are inplace to ensure that the socket types are correctly defined
+        // and that the assumptions about the values of the socket types are correct across platforms.
+        // Check that SOCK_STREAM only uses the lowest 3 bits
+        assert_eq!(SOCK_STREAM & !0x7, 0);
+
+        // Check that SOCK_DGRAM only uses the lowest 3 bits
+        assert_eq!(SOCK_DGRAM & !0x7, 0);
+
+        // Check that SOCK_NONBLOCK does not use the lowest 3 bits
+        assert_eq!(SOCK_NONBLOCK & 0x7, 0);
+
+        // Check that SOCK_CLOEXEC does not use the lowest 3 bits
+        assert_eq!(SOCK_CLOEXEC & 0x7, 0);
+
         //let's check an illegal operation...
         // RDM is not a valid socket type for SOCK_DGRAM (UDP) as its not implemented yet.
         let sockfd5 = cage.socket_syscall(AF_INET, SOCK_RDM, 0);
