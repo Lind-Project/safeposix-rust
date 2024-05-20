@@ -749,8 +749,12 @@ impl Cage {
                             let position = normalfile_filedesc_obj.position;
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-
+                            
+                            println!("[DEBUG - read] :{:?}", fname);
+                            std::io::stdout().flush().unwrap();
                             println!("[DEBUG] File Descriptor Offset: {:?}", position);
+                            std::io::stdout().flush().unwrap();
+                            
                             if let Ok(bytesread) = fileobject.readat(buf, count, position) {
                                 //move position forward by the number of bytes we've read
 
