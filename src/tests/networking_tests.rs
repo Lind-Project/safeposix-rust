@@ -1310,6 +1310,23 @@ pub mod net_tests {
         let sockfd4 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         assert!(sockfd4 > 0, "Expected a valid file descriptor, got error");
 
+         //test unsupported domain family
+        let sockfd_invalid_domain = cage.socket_syscall(AF_UNSPEC, SOCK_STREAM, 0);
+        assert!(sockfd_invalid_domain < 0, "Expected error for invalid domain, got {}", sockfd_invalid_domain);
+
+        //test unsupported socket type
+        let sockfd_invalid_type = cage.socket_syscall(AF_INET, SOCK_RAW, 0);
+        assert!(sockfd_invalid_type < 0, "Expected error for invalid socket type, got {}", sockfd_invalid_type);
+
+        //test unsupported protocol 
+        let sockfd_invalid_proto = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_IP);
+        assert!(sockfd_invalid_proto < 0, "Expected error for invalid protocol, got {}", sockfd_invalid_proto);
+
+        //test invalid flag combination (SOCK_RAW with SOCK_STREAM flags)
+        let sockfd_invalid_flags = cage.socket_syscall(AF_INET, SOCK_RAW | SOCK_NONBLOCK, 0);
+        assert!(sockfd_invalid_flags < 0, "Expected error for invalid flag combination, got {}", sockfd_invalid_flags);
+
+
 
         //let's check an illegal operation...
         let sockfddomain = cage.socket_syscall(AF_UNIX, SOCK_DGRAM, 0);
