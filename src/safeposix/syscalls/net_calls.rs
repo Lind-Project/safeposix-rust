@@ -81,6 +81,16 @@ impl Cage {
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
         // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is automatically closed if the current process executes another program, preventing unintended inheritance of the socket by the new program.
+       
+        // additional flags are not supported
+        // filtering out any socktypes with unexpected flags set.
+        if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
+            return syscall_error(
+                Errno::EOPNOTSUPP,
+                "socket",
+                "Invalid combination of flags"
+            );
+        }
 
         match real_socktype {// Handles different socket types SOCK_STREAM or SOCK_DGRAM in this cases
             SOCK_STREAM => {
