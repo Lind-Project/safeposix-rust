@@ -17,7 +17,7 @@ pub use std::sync::LazyLock as RustLazyGlobal;
 
 use crate::interface::errnos::{syscall_error, Errno};
 // AW
-pub use libc::{mmap, mremap, munmap, off64_t, MAP_SHARED, MREMAP_MAYMOVE, PROT_READ, PROT_WRITE, read as LibcRead};
+pub use libc::{mmap, mremap, munmap, off64_t, MAP_SHARED, MREMAP_MAYMOVE, PROT_READ, PROT_WRITE, read as LibcRead, lseek as LibcLseek};
 use std::convert::TryInto;
 // AW
 pub use std::ffi::c_void;

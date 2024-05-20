@@ -13,6 +13,7 @@ use crate::safeposix::shm::*;
 //AW
 use std::os::fd::AsRawFd;
 use std::io::Write;
+use std::os::raw::c_void;
 
 impl Cage {
     //------------------------------------OPEN SYSCALL------------------------------------
@@ -757,10 +758,20 @@ impl Cage {
                             println!("[DEBUG - read] :{:?}", fname);
                             std::io::stdout().flush().unwrap();
                             if fname == "linddata.416" && count == 832 {
+                                
                                 let libgcc_path = "/home/lind/lind_project/src/safeposix-rust/loading/lib/glibc/libgcc_s.so.1";
                                 let libgcc = interface::File::open(libgcc_path).unwrap();
                                 let fd_libc = libgcc.as_raw_fd();
-                                let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut interface::c_void, count) };
+                                let current_pos = unsafe {
+                                    interface::LibcLseek(fd_libc, 0, SEEK_CUR)
+                                };
+                                println!("Current file pointer position: {}", current_pos);
+                                std::io::stdout().flush().unwrap();
+                                // let buf_ptr = unsafe {
+                                //     assert!(!buf.is_null());
+                                //     std::slice::from_raw_parts_mut(buf, count)
+                                // };
+                                let bytesread = unsafe{ interface::LibcRead(fd_libc, buf as *mut c_void, count) };
                                 return bytesread as i32;
                             }
 
