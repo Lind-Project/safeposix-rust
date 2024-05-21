@@ -40,6 +40,7 @@ pub mod net_tests {
     
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
+        use rand::prelude::IteratorRandom;
     
         // First socket and bind
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
