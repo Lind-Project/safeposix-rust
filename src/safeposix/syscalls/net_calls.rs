@@ -79,6 +79,7 @@ impl Cage {
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
+        //By performing its own SOCK_NONBLOCK check, SafePOSIX ensures consistent behaviour and maintains its configured operation—this added layer of control and security safeguards against potential issues within its sandboxed environment.
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
         // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is automatically closed if the current process executes another program, preventing unintended inheritance of the socket by the new program.
        
@@ -94,7 +95,8 @@ impl Cage {
                 "Invalid combination of flags"
             );
         }
-
+        //SafePOSIX intentionally supports only a restricted subset of socket types . This is to make sure that applications not creating other socket types which may lead to security issues. 
+        //By using the match statement, SafePOSIX ensures that only these approved socket types are allowed.
         match real_socktype {// Handles different socket types SOCK_STREAM or SOCK_DGRAM in this cases
             SOCK_STREAM => {
                 //SOCK_STREAM defaults to TCP for protocol, otherwise protocol is unsupported
