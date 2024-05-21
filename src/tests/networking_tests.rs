@@ -6,6 +6,9 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
+    use rand::Rng;
+    const MIN_PORT: u16 = 32768;
+    const MAX_PORT: u16 = 61000;
 
     pub fn net_tests() {
         ut_lind_net_bind();
