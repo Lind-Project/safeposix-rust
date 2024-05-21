@@ -35,16 +35,22 @@ pub mod net_tests {
     pub fn ut_lind_net_bind() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let cage = interface::cagetable_getref(1);
 
+        // Generate a random port 
+        let mut rng = rand::thread_rng();
+        let random_port = rng.gen_range(MIN_PORT..=MAX_PORT);
+    
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: 50102u16.to_be(),
+            // Use the random port here
+            sin_port: random_port.to_be(), 
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
             padding: 0,
-        }); //127.0.0.1
+        }); 
 
         //first bind should work... but second bind should not
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
