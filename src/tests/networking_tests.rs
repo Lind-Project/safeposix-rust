@@ -44,13 +44,13 @@ pub mod net_tests {
         let mut used_ports: HashSet<u16> = HashSet::new();
         let mut rng = rand::thread_rng();
     
-        // First bind (should succeed)
+        // First bind
         let random_port = loop {
             let port = rng.gen_range(MIN_PORT..=MAX_PORT);
             if used_ports.insert(port) {
                 break port;
             }
-            println!("Port {} already used, retrying...", port); // Logging for debugging
+            println!("Port {} already used, retrying...", port);
         };
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4 {
@@ -60,36 +60,23 @@ pub mod net_tests {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
             padding: 0,
-        });
-        assert_eq!(cage.bind_syscall(sockfd, &socket), Ok(())); // Assert Ok(()) for success
+        }); 
+    
+        // Assert that the first bind succeeds 
+        assert_eq!(cage.bind_syscall(sockfd, &socket), Ok(()));
     
         // Second bind (should fail with EINVAL)
-        assert_eq!(
-            cage.bind_syscall(sockfd, &socket),
-            Err(Errno::EINVAL)
-        );
+        match cage.bind_syscall(sockfd, &socket) {
+            Err(e) => assert_eq!(e, Errno::EINVAL),
+            _ => panic!("Expected EINVAL for second bind, but got success"),
+        };
     
         // Trying to bind another socket to the same IP/PORT (should fail with EADDRINUSE)
-        let random_port2 = loop {
-            let port = rng.gen_range(MIN_PORT..=MAX_PORT);
-            if used_ports.insert(port) {
-                break port;
-            }
-            println!("Port {} already used, retrying...", port); // Logging for debugging
-        };
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        let socket2 = interface::GenSockaddr::V4(interface::SockaddrV4 {
-            sin_family: AF_INET as u16,
-            sin_port: random_port2.to_be(),
-            sin_addr: interface::V4Addr {
-                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-            },
-            padding: 0,
-        });
-        assert_eq!(
-            cage.bind_syscall(sockfd2, &socket2),
-            Err(Errno::EADDRINUSE)
-        );
+        match cage.bind_syscall(sockfd2, &socket) {
+            Err(e) => assert_eq!(e, Errno::EADDRINUSE),
+            _ => panic!("Expected EADDRINUSE, but got success"),
+        };
     
         // UDP should still work (using a new random port)
         let random_port3 = loop {
@@ -97,7 +84,7 @@ pub mod net_tests {
             if used_ports.insert(port) {
                 break port;
             }
-            println!("Port {} already used, retrying...", port); // Logging for debugging
+            println!("Port {} already used, retrying...", port);
         };
         let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         let socket3 = interface::GenSockaddr::V4(interface::SockaddrV4 {
@@ -107,7 +94,7 @@ pub mod net_tests {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
             padding: 0,
-        });
+        }); 
         assert_eq!(cage.bind_syscall(sockfd3, &socket3), Ok(()));
     
     
