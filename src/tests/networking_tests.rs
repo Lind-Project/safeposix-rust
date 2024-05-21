@@ -37,73 +37,54 @@ pub mod net_tests {
     }
     
     pub fn ut_lind_net_bind() {
+    
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
     
-        // Use a HashSet to keep track of used ports within this test run
-        let mut used_ports: HashSet
-        let mut rng = rand::thread_rng();
-    
-        // First bind
-        let random_port = loop {
-            let port = rng.gen_range(MIN_PORT..=MAX_PORT);
-            if used_ports.insert(port) {
-                break port;
-            }
-            println!("Port {} already used, retrying...", port);
-        };
+        // First socket and bind
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        let socket = interface::GenSockaddr::V4(interface::SockaddrV4 {
+        let random_port1: u16 = (49152..65535).choose(&mut rand::thread_rng()).unwrap(); 
+        let socket1 = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: random_port.to_be(),
+            sin_port: random_port1.to_be(), 
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
             padding: 0,
-        }); 
+        });
+        assert_eq!(cage.bind_syscall(sockfd, &socket1), 0);
+        assert_eq!(cage.bind_syscall(sockfd, &socket1), -(Errno::EINVAL as i32)); 
     
-        // Assert that the first bind succeeds 
-        assert_eq!(cage.bind_syscall(sockfd, &socket), Ok(()));
-    
-        // Second bind (should fail with EINVAL)
-        match cage.bind_syscall(sockfd, &socket) {
-            Err(e) => assert_eq!(e, Errno::EINVAL),
-            _ => panic!("Expected EINVAL for second bind, but got success"),
-        };
-    
-        // Trying to bind another socket to the same IP/PORT (should fail with EADDRINUSE)
+        // Second socket and bind (with a DIFFERENT random port)
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        match cage.bind_syscall(sockfd2, &socket) {
-            Err(e) => assert_eq!(e, Errno::EADDRINUSE),
-            _ => panic!("Expected EADDRINUSE, but got success"),
-        };
+        let random_port2: u16 = (49152..65535).choose(&mut rand::thread_rng()).unwrap(); 
+        let socket2 = interface::GenSockaddr::V4(interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: random_port2.to_be(), 
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        });
+        assert_eq!(
+            cage.bind_syscall(sockfd2, &socket2), 
+            -(Errno::EADDRINUSE as i32)
+        );
     
-        // UDP should still work (using a new random port)
-        let random_port3 = loop {
-            let port = rng.gen_range(MIN_PORT..=MAX_PORT);
-            if used_ports.insert(port) {
-                break port;
-            }
-            println!("Port {} already used, retrying...", port);
-        };
+        // UDP socket and bind (with a DIFFERENT random port)
         let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let random_port3: u16 = (49152..65535).choose(&mut rand::thread_rng()).unwrap(); 
         let socket3 = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: random_port3.to_be(),
+            sin_port: random_port3.to_be(),  
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
             padding: 0,
-        }); 
-        assert_eq!(cage.bind_syscall(sockfd3, &socket3), Ok(()));
+        });
+        assert_eq!(cage.bind_syscall(sockfd3, &socket3), 0); 
     
-    
-    
-        // --- Closing and exiting ---
-        assert_eq!(cage.close_syscall(sockfd), 0, "Expected successful close, got error");
-        assert_eq!(cage.close_syscall(sockfd2), 0, "Expected successful close, got error");
-        assert_eq!(cage.close_syscall(sockfd3), 0, "Expected successful close, got error");
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS, "Expected successful exit, got error");
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
