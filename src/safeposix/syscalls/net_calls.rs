@@ -79,7 +79,7 @@ impl Cage {
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
-        //By performing its own SOCK_NONBLOCK check, SafePOSIX ensures consistent behaviour and maintains its configured operation—this added layer of control and security safeguards against potential issues within its sandboxed environment.
+        //Check blocking status for storage in the file descriptor, we'll need this for calls that don't access the kernel socket, unix sockets, and properly directing kernel calls for recv and accept
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
         // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is automatically closed if the current process executes another program, preventing unintended inheritance of the socket by the new program.
        
