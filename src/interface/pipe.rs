@@ -144,62 +144,21 @@ impl EmulatedPipe {
 
     // Write length bytes from pointer into pipe
     pub fn write_vectored_to_pipe(&self, ptr: *const interface::IovecStruct, iovcnt: i32, nonblocking: bool) -> i32 {
-        let mut total_bytes_written = 0;
 
-        let mut iovecs = Vec::new();
+        let mut buf = Vec::new();
+        let mut length = 0;
 
         for _iov in 0..iovcnt {
             unsafe {
                 let iovec = *ptr;
                 assert!(!ptr.is_null());
-                let buf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
-                iovecs.push((buf, iovec.iov_len));
+                let iovbuf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
+                buf.extend_from_slice(iovbuf);
+                length = length + iovec.iov_len
             };
         }
 
-        let mut write_end = self.write_end.lock();
-
-        let pipe_space = write_end.remaining();
-        if nonblocking && (pipe_space == 0) {
-            return syscall_error(
-                Errno::EAGAIN,
-                "write",
-                "there is no data available right now, try again later",
-            );
-        }
-
-        for iovec in iovecs {
-            let mut bytes_written = 0;
-
-            let buf = iovec.0;
-            let length = iovec.1;
-
-            while bytes_written < length {
-                if self.get_read_ref() == 0 {
-                    return syscall_error(Errno::EPIPE, "write", "broken pipe");
-                } // EPIPE, all read ends are closed
-
-                let remaining = write_end.remaining();
-
-                if remaining == 0 {
-                    interface::lind_yield(); //yield on a full pipe
-                    continue;
-                }
-                // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
-                if remaining != self.size
-                    && (length - bytes_written) > PAGE_SIZE
-                    && remaining < PAGE_SIZE
-                {
-                    continue;
-                };
-                let bytes_to_write = min(length, bytes_written as usize + remaining);
-                write_end.push_slice(&buf[bytes_written..bytes_to_write]);
-                bytes_written = bytes_to_write;
-            }
-            total_bytes_written = total_bytes_written + bytes_written;
-        }
-
-        total_bytes_written as i32
+        self.write_to_pipe(buf.as_ptr(), length, nonblocking)
     }
 
     // Read length bytes from the pipe into pointer
