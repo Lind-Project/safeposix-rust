@@ -35,9 +35,6 @@ pub mod net_tests {
         ut_lind_net_epoll();
         ut_lind_net_writev();
     }
-
-    use std::collections::HashSet;
-    use rand::Rng;
     
     // ... (other imports and constants, including MIN_PORT and MAX_PORT) ...
     
