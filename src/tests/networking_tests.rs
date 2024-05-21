@@ -38,7 +38,6 @@ pub mod net_tests {
     pub fn ut_lind_net_bind() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-        let cage = interface::cagetable_getref(1);
 
         // Generate a random port 
         let mut rng = rand::thread_rng();
