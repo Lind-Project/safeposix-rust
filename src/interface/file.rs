@@ -19,6 +19,7 @@ use libc::{mmap, mremap, munmap, off64_t, MAP_SHARED, MREMAP_MAYMOVE, PROT_READ,
 use std::convert::TryInto;
 use std::ffi::c_void;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::fs::{FileExt};
 
 pub fn removefile(filename: String) -> std::io::Result<()> {
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
@@ -151,12 +152,11 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => {
-                let mut fobj = f.lock();
+                let fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                let bytes_read = fobj.read(buf)?;
+                let bytes_read = fobj.read_at(buf, offset as u64)?;
                 Ok(bytes_read)
             }
         }
@@ -179,12 +179,11 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => {
-                let mut fobj = f.lock();
+                let fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                bytes_written = fobj.write(buf)?;
+                bytes_written = fobj.write_at(buf, offset as u64)?;
             }
         }
 
