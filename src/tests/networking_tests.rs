@@ -41,7 +41,7 @@ pub mod net_tests {
         let cage = interface::cagetable_getref(1);
     
         // Use a HashSet to keep track of used ports within this test run
-        let mut used_ports: HashSet<u16> = HashSet::new();
+        let mut used_ports: HashSet
         let mut rng = rand::thread_rng();
     
         // First bind
