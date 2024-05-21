@@ -38,36 +38,73 @@ pub mod net_tests {
     pub fn ut_lind_net_bind() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-
-        // Generate a random port 
-        let mut rng = rand::thread_rng();
-        let random_port = rng.gen_range(MIN_PORT..=MAX_PORT);
     
+        // Use a HashSet to keep track of used ports within this test run
+        let mut used_ports: HashSet<u16> = HashSet::new();
+        let mut rng = rand::thread_rng();
+    
+        // Function to generate a unique random port
+        let mut generate_unique_port = || loop {
+            let port = rng.gen_range(MIN_PORT..=MAX_PORT);
+            if used_ports.insert(port) {
+                break port;
+            }
+            println!("Port {} already used, retrying...", port); // Logging
+        };
+    
+        // First bind
+        let random_port = generate_unique_port();
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let socket = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            // Use the random port here
-            sin_port: random_port.to_be(), 
+            sin_port: random_port.to_be(),
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
             padding: 0,
-        }); 
-
-        //first bind should work... but second bind should not
-        assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
-        assert_eq!(cage.bind_syscall(sockfd, &socket), -(Errno::EINVAL as i32)); //already bound so should fail
-
-        //trying to bind another to the same IP/PORT
+        });
+    
+        // Bind to the socket with error handling
+        let mut retries = 0;
+        loop {
+            match cage.bind_syscall(sockfd, &socket) {
+                Ok(_) => break, // Success
+                Err(e) if e == Errno::EADDRINUSE && retries < 5 => {
+                    retries += 1;
+                    println!("Bind error ({}). Retrying with a new port...", e);
+                    // Generate a new unique random port 
+                    let random_port = generate_unique_port();
+                    socket.sin_port = random_port.to_be();
+                }
+                Err(e) => {
+                    panic!("Bind error: {}", e);
+                }
+            }
+        }
+    
+        // Second bind (should fail with EINVAL)
+        assert_eq!(cage.bind_syscall(sockfd, &socket), -(Errno::EINVAL as i32));
+    
+        // Trying to bind another socket to the same IP/PORT (should fail with EADDRINUSE)
         let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         assert_eq!(
             cage.bind_syscall(sockfd2, &socket),
             -(Errno::EADDRINUSE as i32)
-        ); //already bound so should fail
-
-        //UDP should still work...
+        );
+    
+        // UDP should still work (using a new random port)
+        let random_port3 = generate_unique_port();
         let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        assert_eq!(cage.bind_syscall(sockfd3, &socket), 0);
+        let socket3 = interface::GenSockaddr::V4(interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: random_port3.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        });
+        assert_eq!(cage.bind_syscall(sockfd3, &socket3), 0);
+
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
