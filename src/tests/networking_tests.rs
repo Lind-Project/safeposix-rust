@@ -36,8 +36,6 @@ pub mod net_tests {
         ut_lind_net_writev();
     }
     
-    // ... (other imports and constants, including MIN_PORT and MAX_PORT) ...
-    
     pub fn ut_lind_net_bind() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -67,28 +65,28 @@ pub mod net_tests {
             padding: 0,
         }); 
     
-        // Bind to the socket with error handling
-        let mut retries = 0;
-        loop {
-            match cage.bind_syscall(sockfd, &socket) {
-                Ok(_) => break, // Success
-                Err(e) if e == Errno::EADDRINUSE && retries < 5 => {
-                    retries += 1;
-                    println!("Bind error ({}). Retrying with a new port...", e);
-                    // Generate a new unique random port 
-                    let random_port = loop {
-                        let port = rng.gen_range(MIN_PORT..=MAX_PORT);
-                        if used_ports.insert(port) { 
-                            break port; 
-                        }
-                    };
-                    socket.set_port(random_port.to_be()); // Update the socket object
-                }
-                Err(e) => {
-                    panic!("Bind error: {}", e);
-                }
+    // Bind to the socket with error handling
+    let mut retries = 0;
+    loop {
+        match cage.bind_syscall(sockfd, &socket) {
+            Ok(_) => break, // Success
+            Err(e) if e == Errno::EADDRINUSE && retries < 5 => {
+                retries += 1;
+                println!("Bind error ({}). Retrying with a new port...", e);
+                // Generate a new unique random port
+                let random_port = loop {
+                    let port = rng.gen_range(MIN_PORT..=MAX_PORT);
+                    if used_ports.insert(port) { 
+                        break port; 
+                    }
+                };
+                socket.set_port(random_port.to_be()); // Update the socket's port
+            }
+            Err(e) => {
+                panic!("Bind error: {}", e);
             }
         }
+    }   
     
         // --- Second bind (should fail with EINVAL) ---
         assert_eq!(cage.bind_syscall(sockfd, &socket), -(Errno::EINVAL as i32));
