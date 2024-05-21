@@ -23,6 +23,7 @@ libc = "0.2"
 ringbuf = "0.2.6"
 dashmap = { version = "5.1", features=["serde"] }
 parking_lot = "0.12"
+rand = "0.8"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"]}
