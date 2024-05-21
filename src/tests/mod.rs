@@ -7,19 +7,24 @@ mod networking_tests;
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
-#[cfg(test)]
 mod main_tests {
-    use crate::tests::fs_tests::fs_tests::test_fs;
-    use crate::tests::ipc_tests::ipc_tests::test_ipc;
-    use crate::tests::networking_tests::net_tests::net_tests;
 
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
 
     use std::process::Command;
+    use lazy_static::lazy_static;
+    use std::sync::Mutex;
 
-    #[test]
-    pub fn tests() {
+    lazy_static! {
+        // This has a junk value (a bool).  Could be anything...
+        #[derive(Debug)]
+        pub static ref TESTMUTEX: Mutex<bool> = {
+            Mutex::new(true)
+        };
+    }
+
+    pub fn test_setup() {
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 
         lindrustinit(0);
@@ -62,15 +67,6 @@ mod main_tests {
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         }
         lindrustfinalize();
-
-        println!("FS TESTS");
-        test_fs();
-
-        println!("NET TESTS");
-        net_tests();
-
-        println!("IPC TESTS");
-        test_ipc();
     }
 }
 
