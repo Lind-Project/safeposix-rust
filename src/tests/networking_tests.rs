@@ -1756,8 +1756,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    use std::time::{Duration, Instant};
+    use std::io::ErrorKind;
+    
     pub fn ut_lind_net_dns_rootserver_ping() {
-        //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
         struct DnsHeader {
             xid: u16,
@@ -1767,8 +1769,7 @@ pub mod net_tests {
             nscount: u16,
             arcount: u16,
         }
-
-        /* Structure of the bytes for an IPv4 answer */
+    
         #[repr(C, packed(1))]
         struct DnsRecordAT {
             compression: u16,
@@ -1778,13 +1779,13 @@ pub mod net_tests {
             length: u16,
             addr: interface::V4Addr,
         }
-
+    
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-
+    
         let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(dnssocket > 0);
-
+    
         let dnsh = DnsHeader {
             xid: 0x1234u16.to_be(),
             flags: 0x0100u16.to_be(),
@@ -1793,51 +1794,74 @@ pub mod net_tests {
             nscount: 0,
             arcount: 0,
         };
-
-        //specify payload information for dns request
-        let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes(); //numbers signify how many characters until next dot
+    
+        let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes();
         let dnstype = 1u16;
         let dnsclass = 1u16;
-
-        //construct packet
+    
         let packetlen = std::mem::size_of::<DnsHeader>()
             + hostname.len()
             + std::mem::size_of::<u16>()
             + std::mem::size_of::<u16>();
         let mut packet = vec![0u8; packetlen];
-
+    
         let packslice = packet.as_mut_slice();
         let mut pslen = std::mem::size_of::<DnsHeader>();
         unsafe {
             let dnss = ::std::slice::from_raw_parts(
-                ((&dnsh) as *const DnsHeader) as *const u8,
+                (&dnsh as *const DnsHeader) as *const u8,
                 std::mem::size_of::<DnsHeader>(),
             );
             packslice[..pslen].copy_from_slice(dnss);
         }
-        packslice[pslen..pslen + hostname.len()].copy_from_slice(hostname.as_slice());
+        packslice[pslen..pslen + hostname.len()].copy_from_slice(&hostname);
         pslen += hostname.len();
         packslice[pslen..pslen + 2].copy_from_slice(&dnstype.to_be_bytes());
         packslice[pslen + 2..pslen + 4].copy_from_slice(&dnsclass.to_be_bytes());
-
-        //send packet
+    
+        let random_port = generate_random_port();
+        println!("Using random port: {}", random_port);
+    
         let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
+            sin_port: 53u16.to_be(),  // Port 53 is the standard DNS port for queries.
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([208, 67, 222, 222]),
             },
             padding: 0,
-        }); //opendns ip addr
+        });
+    
+        let local_addr = interface::GenSockaddr::V4(interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: random_port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([0, 0, 0, 0]),  // INADDR_ANY
+            },
+            padding: 0,
+        });
+    
+        // Bind the socket to the local address with the random port
+        assert_eq!(
+            cage.bind_syscall(dnssocket, &local_addr),
+            0
+        );
+    
         assert_eq!(
             cage.sendto_syscall(dnssocket, packslice.as_ptr(), packslice.len(), 0, &dnsaddr),
             packslice.len() as i32
         );
-
+    
         let mut dnsresp = [0u8; 512];
-
-        //recieve DNS response
+    
+        let timeout_duration = Duration::from_secs(5);
+        let start_time = Instant::now();
+    
         loop {
+            let elapsed_time = start_time.elapsed();
+            if elapsed_time >= timeout_duration {
+                panic!("Timeout waiting for DNS response");
+            }
+    
             let result = cage.recvfrom_syscall(
                 dnssocket,
                 dnsresp.as_mut_ptr(),
@@ -1845,35 +1869,36 @@ pub mod net_tests {
                 0,
                 &mut Some(&mut dnsaddr),
             );
-
+    
             if result != -libc::EINTR {
                 assert!(result >= 0);
                 break;
             }
-            // if the error was EINTR, retry the syscall
         }
-
-        //extract packet header
+    
         let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader) };
         assert_eq!(u16::from_be(response_header.flags) & 0xf, 0);
-
-        //skip over the name
+    
         let mut nameptr = std::mem::size_of::<DnsHeader>();
         while dnsresp[nameptr] != 0 {
             nameptr += dnsresp[nameptr] as usize + 1;
         }
-
-        //next we need to skip the null byte, qtype, and qclass to extract the main response payload
+    
         let recordptr =
             dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
         let record = unsafe { &*recordptr };
         let addr = u32::from_be(record.addr.s_addr);
-        assert_eq!(addr, 0x23ac5973); //check that what is returned is the actual ip, 35.172.89.115
-                                      //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-
+        assert_eq!(addr, 0x23ac5973);
+    
         lindrustfinalize();
     }
-
+    
+    fn generate_random_port() -> u16 {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        rng.gen_range(49152..65535)
+    }
+    
     pub fn ut_lind_net_domain_socket() {
         //bind net zero test reformatted for domain sockets
 
