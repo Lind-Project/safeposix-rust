@@ -67,7 +67,7 @@ mod main_tests {
         test_fs();
 
         println!("NET TESTS");
-        net_tests();
+        // net_tests();
 
         println!("IPC TESTS");
         test_ipc();

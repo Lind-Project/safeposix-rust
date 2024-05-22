@@ -142,7 +142,8 @@ impl EmulatedFile {
         unsafe { libc::sync_file_range(*fd, offset as off64_t, nbytes as off64_t, flags) }
     }
 
-    // Read from file into provided C-buffer
+    // Wrapper around Rust's file object read_at function
+    // Reads from file at specified offset into provided C-buffer
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -161,8 +162,8 @@ impl EmulatedFile {
             }
         }
     }
-
-    // Write to file from provided C-buffer
+    // Wrapper around Rust's file object write_at function
+    // Writes from provided C-buffer into file at specified offset
     pub fn writeat(
         &mut self,
         ptr: *const u8,
@@ -187,6 +188,7 @@ impl EmulatedFile {
             }
         }
 
+        // update the filesize if we've written past the old filesize
         if offset + length > self.filesize {
             self.filesize = offset + length;
         }
