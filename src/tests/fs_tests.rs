@@ -7,6 +7,7 @@ pub mod fs_tests {
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
+    use libc::c_void;
 
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
@@ -1023,7 +1024,6 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    use libc::c_void;
     pub fn ut_lind_fs_shm() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);

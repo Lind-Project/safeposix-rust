@@ -6,6 +6,7 @@ pub mod ipc_tests {
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
     use std::time::Instant;
+    use libc::c_void;
 
     //#[test]
     pub fn test_ipc() {
@@ -331,6 +332,64 @@ pub mod ipc_tests {
         cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
         assert_eq!(cbuf2str(&buf2), "Socketpair Test");
 
+        thread.join().unwrap();
+
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_ipc_writev() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        let cage2 = cage.clone();
+
+        let thread = interface::helper_thread(move || {
+            let mut buf = sizecbuf(10);
+            cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+
+            interface::sleep(interface::RustDuration::from_millis(30));
+            
+            let iovec: [interface::IovecStruct; 3] = [
+                interface::IovecStruct {
+                    iov_base: str2cbuf(&"A".repeat(100)) as *mut c_void,
+                    iov_len: 100,
+                },
+                interface::IovecStruct {
+                    iov_base: str2cbuf(&"B".repeat(100)) as *mut c_void,
+                    iov_len: 100,
+                },
+                interface::IovecStruct {
+                    iov_base: str2cbuf(&"C".repeat(100)) as *mut c_void,
+                    iov_len: 100,
+                },
+            ];
+    
+            assert_eq!(cage2.writev_syscall(socketpair.sock2, iovec.as_ptr(), 3), 300);
+        });
+
+        let iovec2: [interface::IovecStruct; 1] = [
+            interface::IovecStruct {
+                iov_base: str2cbuf("test") as *mut c_void,
+                iov_len: 4,
+            }
+        ];
+        assert_eq!(cage.writev_syscall(socketpair.sock1, iovec2.as_ptr(), 1), 4);
+
+
+        let mut buf2 = sizecbuf(300);
+        assert_eq!(
+            cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 300, 0),
+            300
+        );
         thread.join().unwrap();
 
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
