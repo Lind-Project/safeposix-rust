@@ -1195,6 +1195,7 @@ pub mod net_tests {
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
                             outputs.set(sock);
+                            inputs.clear(sock);
                             continue;
                         }
                     } else {
