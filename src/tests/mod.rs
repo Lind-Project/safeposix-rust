@@ -65,13 +65,13 @@ mod main_tests {
         lindrustfinalize();
 
         println!("FS TESTS");//
-        //test_fs();
+        test_fs();
 
         println!("NET TESTS");
         net_tests();
 
         println!("IPC TESTS");//
-        //test_ipc();
+        test_ipc();
     }
 }
 
