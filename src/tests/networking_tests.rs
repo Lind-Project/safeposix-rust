@@ -23,7 +23,7 @@ pub mod net_tests {
         ut_lind_net_socketoptions();
         ut_lind_net_socketpair();
         ut_lind_net_udp_bad_bind();
-        // ut_lind_net_udp_simple();
+        ut_lind_net_udp_simple();
         // ut_lind_net_udp_connect();
         // ut_lind_net_gethostname();
         // ut_lind_net_dns_rootserver_ping();
