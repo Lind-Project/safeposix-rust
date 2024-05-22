@@ -94,5 +94,5 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
 //add randomizded fun
 fn generate_random_port() -> u16 {
     let mut rng = rand::thread_rng();
-    rng.gen_range(49152..65535)s
+    rng.gen_range(49152..65535)
 }
