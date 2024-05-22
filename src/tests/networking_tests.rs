@@ -7,7 +7,8 @@ pub mod net_tests {
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
     use std::io;
-
+    use crate::safeposix::cage::Cage;
+    
     pub fn net_tests() {
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
@@ -2179,11 +2180,22 @@ pub mod net_tests {
             },
         ];
     
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: generate_random_port().to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr);
+    
         cage.fork_syscall(2);
+        let thread1_socket = socket.clone();
         let thread1 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(30));
             let cage2 = interface::cagetable_getref(2);
-            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
+            assert_eq!(cage2.connect_syscall(clientsockfd1, &thread1_socket), 0);
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(100));
             assert_eq!(cage2.close_syscall(serversockfd), 0);
@@ -2191,10 +2203,11 @@ pub mod net_tests {
         });
     
         cage.fork_syscall(3);
+        let thread2_socket = socket.clone();
         let thread2 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(45));
             let cage3 = interface::cagetable_getref(3);
-            assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
+            assert_eq!(cage3.connect_syscall(clientsockfd2, &thread2_socket), 0);
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(100));
             assert_eq!(cage3.close_syscall(serversockfd), 0);
@@ -2266,7 +2279,6 @@ pub mod net_tests {
         lindrustfinalize();
     }
     
-
     pub fn ut_lind_net_writev() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
