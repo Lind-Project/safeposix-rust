@@ -29,7 +29,7 @@ pub mod net_tests {
         ut_lind_net_dns_rootserver_ping();
         ut_lind_net_domain_socket();
         ut_lind_net_epoll();
-        // ut_lind_net_writev();
+        ut_lind_net_writev();
     }
 
     pub fn ut_lind_net_bind() {
