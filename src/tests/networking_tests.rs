@@ -2126,7 +2126,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    fn bind_socket_with_retry(cage: &interface::Cage, socket_fd: i32, max_retries: usize) -> Result<(), io::Error> {
+    fn bind_socket_with_retry(cage: &Cage, socket_fd: i32, max_retries: usize) -> Result<(), io::Error> {
         for _ in 0..max_retries {
             let random_port = generate_random_port();
             let sockaddr = interface::SockaddrV4 {
