@@ -26,7 +26,7 @@ pub mod net_tests {
         ut_lind_net_udp_simple();
         ut_lind_net_udp_connect();
         ut_lind_net_gethostname();
-        // ut_lind_net_dns_rootserver_ping();
+        ut_lind_net_dns_rootserver_ping();
         // ut_lind_net_domain_socket();
         // ut_lind_net_epoll();
         // ut_lind_net_writev();
