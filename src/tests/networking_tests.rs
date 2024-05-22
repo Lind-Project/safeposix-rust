@@ -1164,7 +1164,7 @@ pub mod net_tests {
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-            for &sock in inputs.fds_as_vec().iter() {
+            for &sock in inputs.active_fds(11).iter() {
                 if !inputs.is_set(sock) {
                     continue;
                 }
@@ -1207,7 +1207,7 @@ pub mod net_tests {
             }
 
             //for sock in boutputs {
-            for &sock in outputs.fds_as_vec().iter() {
+            for &sock in outputs.active_fds(11).iter() {
                 if !outputs.is_set(sock) {
                     continue;
                 }
