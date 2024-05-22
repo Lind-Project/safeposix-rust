@@ -3,6 +3,7 @@
 mod fs_tests;
 mod ipc_tests;
 mod networking_tests;
+use rand::Rng;
 
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
@@ -89,4 +90,10 @@ pub fn sizecbuf<'a>(size: usize) -> Box<[u8]> {
 
 pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
+}
+
+pub fn generate_random_port() -> u16 {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    rng.gen_range(49152..65535)
 }
