@@ -144,6 +144,7 @@ impl EmulatedFile {
 
     // Wrapper around Rust's file object read_at function
     // Reads from file at specified offset into provided C-buffer
+    // We need to specify the offset for read/write operations because multiple cages may refer to same system file handle
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -162,8 +163,10 @@ impl EmulatedFile {
             }
         }
     }
+
     // Wrapper around Rust's file object write_at function
     // Writes from provided C-buffer into file at specified offset
+    // We need to specify the offset for read/write operations because multiple cages may refer to same system file handle
     pub fn writeat(
         &mut self,
         ptr: *const u8,
@@ -188,7 +191,7 @@ impl EmulatedFile {
             }
         }
 
-        // update the filesize if we've written past the old filesize
+        // update our recorded filesize if we've written past the old filesize
         if offset + length > self.filesize {
             self.filesize = offset + length;
         }
