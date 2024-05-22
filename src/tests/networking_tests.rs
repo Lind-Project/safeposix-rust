@@ -8,7 +8,6 @@ pub mod net_tests {
     use std::sync::{Arc, Barrier};
     use std::io;
     use crate::tests::Cage;
-    use std::time::Duration;
 
     pub fn net_tests() {
         ut_lind_net_bind();
