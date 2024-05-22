@@ -5,6 +5,8 @@ mod ipc_tests;
 mod networking_tests;
 use rand::Rng;
 
+use std::io;
+
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
@@ -95,4 +97,27 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
 fn generate_random_port() -> u16 {
     let mut rng = rand::thread_rng();
     rng.gen_range(49152..65535)
+}
+
+fn bind_socket_with_retry(cage: &interface::Cage, socket_fd: i32, max_retries: usize) -> Result<(), io::Error> {
+    for _ in 0..max_retries {
+        let random_port = generate_random_port();
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: random_port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr);
+        let result = cage.bind_syscall(socket_fd, &socket);
+        if result == 0 {
+            println!("Successfully bound to port: {}", random_port);
+            return Ok(());
+        } else if result != -98 {
+            return Err(io::Error::from_raw_os_error(result));
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::AddrInUse, "All attempts to bind socket failed"))
 }
