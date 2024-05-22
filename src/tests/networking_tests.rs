@@ -9,15 +9,15 @@ pub mod net_tests {
 
     pub fn net_tests() {
         ut_lind_net_bind();
-        // ut_lind_net_bind_multiple();
-        // ut_lind_net_bind_on_zero();
-        // ut_lind_net_connect_basic_udp();
-        // ut_lind_net_getpeername();
-        // ut_lind_net_getsockname();
-        // ut_lind_net_listen();
-        // ut_lind_net_poll();
-        // ut_lind_net_recvfrom();
-        // ut_lind_net_select();
+        ut_lind_net_bind_multiple();
+        ut_lind_net_bind_on_zero();
+        ut_lind_net_connect_basic_udp();
+        ut_lind_net_getpeername();
+        ut_lind_net_getsockname();
+        ut_lind_net_listen();
+        ut_lind_net_poll();
+        ut_lind_net_recvfrom();
+        ut_lind_net_select();
         // ut_lind_net_shutdown();
         // ut_lind_net_socket();
         // ut_lind_net_socketoptions();
@@ -1069,10 +1069,10 @@ pub mod net_tests {
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        ////let port: u16 = 53008;
+        let port: u16 = generate_random_port().to_be();
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
+            sin_port: port.to_be,
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
