@@ -8,7 +8,8 @@ pub mod net_tests {
     use std::sync::{Arc, Barrier};
     use std::io;
     use crate::tests::Cage;
-    
+    use std::time::Duration;
+
     pub fn net_tests() {
         ut_lind_net_bind();
         ut_lind_net_bind_multiple();
@@ -2126,7 +2127,12 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    fn bind_socket_with_retry(cage: &Cage, socket_fd: i32, max_retries: usize) -> Result<(), io::Error> {
+
+    /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using
+    epoll_wait_syscall(). It handles the events based on their types (EPOLLIN or EPOLLOUT) and performs the necessary operations
+    like accepting new connections, sending/receiving data, and modifying the event flags */
+
+    fn bind_socket_with_retry(cage: &Cage, socket_fd: i32, max_retries: usize) -> Result<interface::GenSockaddr, io::Error> {
         for _ in 0..max_retries {
             let random_port = generate_random_port();
             let sockaddr = interface::SockaddrV4 {
@@ -2141,17 +2147,14 @@ pub mod net_tests {
             let result = cage.bind_syscall(socket_fd, &socket);
             if result == 0 {
                 println!("Successfully bound to port: {}", random_port);
-                return Ok(());
+                return Ok(socket);
             } else if result != -98 {
                 return Err(io::Error::from_raw_os_error(result));
             }
         }
         Err(io::Error::new(io::ErrorKind::AddrInUse, "All attempts to bind socket failed"))
     }
-
-    /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using
-    epoll_wait_syscall(). It handles the events based on their types (EPOLLIN or EPOLLOUT) and performs the necessary operations
-    like accepting new connections, sending/receiving data, and modifying the event flags */
+    
     pub fn ut_lind_net_epoll() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -2165,7 +2168,7 @@ pub mod net_tests {
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
     
-        bind_socket_with_retry(&cage, serversockfd, 10).unwrap();
+        let socket = bind_socket_with_retry(&cage, serversockfd, 10).unwrap();
     
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
     
@@ -2180,21 +2183,12 @@ pub mod net_tests {
             },
         ];
     
-        let sockaddr = interface::SockaddrV4 {
-            sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
-            sin_addr: interface::V4Addr {
-                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-            },
-            padding: 0,
-        };
-        let socket = interface::GenSockaddr::V4(sockaddr);
-    
         cage.fork_syscall(2);
         let thread1_socket = socket.clone();
         let thread1 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(30));
+            interface::sleep(interface::RustDuration::from_millis(100)); // Increased delay
             let cage2 = interface::cagetable_getref(2);
+            println!("Client 1 attempting to connect...");
             assert_eq!(cage2.connect_syscall(clientsockfd1, &thread1_socket), 0);
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(100));
@@ -2205,8 +2199,9 @@ pub mod net_tests {
         cage.fork_syscall(3);
         let thread2_socket = socket.clone();
         let thread2 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(45));
+            interface::sleep(interface::RustDuration::from_millis(120)); // Increased delay
             let cage3 = interface::cagetable_getref(3);
+            println!("Client 2 attempting to connect...");
             assert_eq!(cage3.connect_syscall(clientsockfd2, &thread2_socket), 0);
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(100));
