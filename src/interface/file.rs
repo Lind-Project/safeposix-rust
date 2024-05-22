@@ -19,6 +19,7 @@ use libc::{mmap, mremap, munmap, off64_t, MAP_SHARED, MREMAP_MAYMOVE, PROT_READ,
 use std::convert::TryInto;
 use std::ffi::c_void;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::fs::{FileExt};
 
 pub fn removefile(filename: String) -> std::io::Result<()> {
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
@@ -141,7 +142,9 @@ impl EmulatedFile {
         unsafe { libc::sync_file_range(*fd, offset as off64_t, nbytes as off64_t, flags) }
     }
 
-    // Read from file into provided C-buffer
+    // Wrapper around Rust's file object read_at function
+    // Reads from file at specified offset into provided C-buffer
+    // We need to specify the offset for read/write operations because multiple cages may refer to same system file handle
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -151,18 +154,19 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => {
-                let mut fobj = f.lock();
+                let fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                let bytes_read = fobj.read(buf)?;
+                let bytes_read = fobj.read_at(buf, offset as u64)?;
                 Ok(bytes_read)
             }
         }
     }
 
-    // Write to file from provided C-buffer
+    // Wrapper around Rust's file object write_at function
+    // Writes from provided C-buffer into file at specified offset
+    // We need to specify the offset for read/write operations because multiple cages may refer to same system file handle
     pub fn writeat(
         &mut self,
         ptr: *const u8,
@@ -179,15 +183,15 @@ impl EmulatedFile {
         match &self.fobj {
             None => panic!("{} is already closed.", self.filename),
             Some(f) => {
-                let mut fobj = f.lock();
+                let fobj = f.lock();
                 if offset > self.filesize {
                     panic!("Seek offset extends past the EOF!");
                 }
-                fobj.seek(SeekFrom::Start(offset as u64))?;
-                bytes_written = fobj.write(buf)?;
+                bytes_written = fobj.write_at(buf, offset as u64)?;
             }
         }
 
+        // update our recorded filesize if we've written past the old filesize
         if offset + length > self.filesize {
             self.filesize = offset + length;
         }
@@ -477,5 +481,61 @@ mod tests {
         // Test that pathexists returns false for a non-existent file
         let non_existent_file = "/tmp/non_existent_file.txt";
         assert!(!pathexists(non_existent_file.to_string()));
+    }
+    #[test]
+    fn test_new_emulated_file() {
+        let filename = "test_file.txt";
+        let filesize = 1024;
+
+        let emulated_file = EmulatedFile::new(filename.to_string(), filesize).unwrap();
+
+        assert_eq!(emulated_file.filename, filename);
+        assert_eq!(emulated_file.filesize, filesize);
+        assert!(emulated_file.fobj.is_some());
+    }
+
+    #[test]
+    fn test_new_metadata_emulated_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_str().unwrap().to_string();
+
+        let emulated_file = EmulatedFile::new_metadata(file_path.clone()).unwrap();
+
+        assert_eq!(emulated_file.filename, file_path);
+        assert!(emulated_file.fobj.is_some());
+    }
+    #[test]
+    fn test_readat_emulated_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_str().unwrap().to_string();
+        let file_content = b"Hello, world!";
+        temp_file.as_file().write_all(file_content).unwrap();
+
+        let emulated_file = EmulatedFile::new(file_path.clone(), file_content.len()).unwrap();
+
+        let mut buffer = vec![0; file_content.len()];
+        let bytes_read = emulated_file.readat(buffer.as_mut_ptr(), buffer.len(), 0).unwrap();
+
+        assert_eq!(bytes_read, file_content.len());
+        assert_eq!(buffer, file_content);
+    }
+
+    #[test]
+    fn test_writeat_emulated_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_str().unwrap().to_string();
+        let file_content = b"Hello, world!";
+
+        let mut emulated_file = EmulatedFile::new(file_path.clone(), file_content.len()).unwrap();
+
+        let new_content = b"test_writeat_emulated_file, world!";
+        let bytes_written = emulated_file.writeat(new_content.as_ptr(), new_content.len(), 0).unwrap();
+
+        assert_eq!(bytes_written, new_content.len());
+        assert_eq!(emulated_file.filesize, new_content.len());
+
+        let mut buffer = vec![0; new_content.len()];
+        emulated_file.readat(buffer.as_mut_ptr(), buffer.len(), 0).unwrap();
+        assert_eq!(buffer, new_content);
     }
 }
