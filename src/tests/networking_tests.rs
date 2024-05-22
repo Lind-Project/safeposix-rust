@@ -7,7 +7,7 @@ pub mod net_tests {
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
     use std::io;
-    use crate::safeposix::cage::Cage;
+    use crate::tests::Cage;
     
     pub fn net_tests() {
         ut_lind_net_bind();
