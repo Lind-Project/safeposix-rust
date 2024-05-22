@@ -1895,12 +1895,6 @@ pub mod net_tests {
         lindrustfinalize();
     }
     
-    fn generate_random_port() -> u16 {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        rng.gen_range(49152..65535)
-    }
-    
     pub fn ut_lind_net_domain_socket() {
         //bind net zero test reformatted for domain sockets
 
