@@ -74,7 +74,7 @@ pub mod net_tests {
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        //let port: u16 = 53002;
+        ////let port: u16 = 53002;
 
         //making sure that the assigned fd's are valid
         assert!(serversockfd > 0);
@@ -102,7 +102,7 @@ pub mod net_tests {
             let cage2 = interface::cagetable_getref(2);
             let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4 {
                 sin_family: AF_INET as u16,
-                sin_port: port.to_be(),
+                sin_port: generate_random_port().to_be(),
                 sin_addr: interface::V4Addr { s_addr: 0 },
                 padding: 0,
             }); //0.0.0.0
@@ -673,7 +673,7 @@ pub mod net_tests {
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        let port: u16 = 53009;
+        ////let port: u16 = 53009;
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: generate_random_port().to_be(),
@@ -764,7 +764,7 @@ pub mod net_tests {
                     //If the socket returned was listerner socket, then there's a new connection
                     //so we accept it, and put the client socket in the list of inputs.
                     if sockfd == serversockfd {
-                        let port: u16 = 53009;
+                        ////let port: u16 = 53009;
                         let sockaddr = interface::SockaddrV4 {
                             sin_family: AF_INET as u16,
                             sin_port: generate_random_port().to_be(),
@@ -856,7 +856,7 @@ pub mod net_tests {
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        let port: u16 = 53001;
+        ////let port: u16 = 53001;
 
         //making sure that the assigned fd's are valid
         assert!(serversockfd > 0);
@@ -1069,7 +1069,7 @@ pub mod net_tests {
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        let port: u16 = 53008;
+        ////let port: u16 = 53008;
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: generate_random_port().to_be(),
@@ -2114,7 +2114,7 @@ pub mod net_tests {
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
         // Create and set up the file descriptor and sockets
-        let port: u16 = 53019;
+        ////let port: u16 = 53019;
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: generate_random_port().to_be(),
@@ -2204,7 +2204,7 @@ pub mod net_tests {
                         // If the socket returned was listener socket, then there's a new connection
                         if event.fd == serversockfd {
                             // Handle new connections
-                            let port: u16 = 53019;
+                            ////let port: u16 = 53019;
                             let sockaddr = interface::SockaddrV4 {
                                 sin_family: AF_INET as u16,
                                 sin_port: generate_random_port().to_be(),
@@ -2279,7 +2279,7 @@ pub mod net_tests {
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-        let port: u16 = 53077;
+        //let port: u16 = 53077;
 
         //making sure that the assigned fd's are valid
         assert!(serversockfd > 0);
