@@ -152,16 +152,19 @@ impl EmulatedPipe {
         let mut buf = Vec::new();
         let mut length = 0;
 
+        // we're going to loop through the iovec array and combine the buffers into one slice, recording the length
+        // this is hacky but is the best way to do this for now
         for _iov in 0..iovcnt {
             unsafe {
-                let iovec = *ptr;
                 assert!(!ptr.is_null());
+                let iovec = *ptr;
                 let iovbuf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
                 buf.extend_from_slice(iovbuf);
                 length = length + iovec.iov_len
             };
         }
 
+        // now that we have a single buffer we can use the usual write to pipe function
         self.write_to_pipe(buf.as_ptr(), length, nonblocking)
     }
 
