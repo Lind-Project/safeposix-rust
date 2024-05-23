@@ -1206,7 +1206,7 @@ impl Cage {
                                 {
                                     return syscall_error(
                                         Errno::ENOTCONN,
-                                        "send",
+                                        "writev",
                                         "The descriptor is not connected",
                                     );
                                 }
@@ -1246,41 +1246,35 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    if sockhandle.state != ConnState::CONNECTED {
+                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    if (sockhandle.state != ConnState::CONNECTED)
+                                        && (sockhandle.state != ConnState::CONNWRONLY)
+                                    {
                                         return syscall_error(
                                             Errno::ENOTCONN,
-                                            "send",
+                                            "writev",
                                             "The descriptor is not connected",
                                         );
                                     }
-        
                                     // get the socket pipe, write to it, and return bytes written
-                                    if let Some(sockinfo) = &sockhandle.unix_info {
-                                        let mut nonblocking = false;
-                                        if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
-                                            nonblocking = true;
-                                        }
-                                        let retval = match sockinfo.sendpipe.as_ref() {
-                                            Some(sendpipe) => {
-                                                sendpipe.write_vectored_to_pipe(iovec, iovcnt, nonblocking)
-                                                    as i32
-                                            }
-                                            None => {
-                                                return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
-                                            }
-                                        };
-                                        if retval < 0 {
-                                            return syscall_error(Errno::EAGAIN, "write", "there is no data available right now, try again later");
-                                        } else {
-                                            return retval;
-                                        }
+                                    let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    let mut nonblocking = false;
+                                    if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
+                                        nonblocking = true;
                                     }
-        
-                                    return syscall_error(
-                                        Errno::EINPROGRESS,
-                                        "connect",
-                                        "The libc call to connect failed!",
-                                    );
+                                    let retval = match sockinfo.sendpipe.as_ref() {
+                                        Some(sendpipe) => {
+                                            sendpipe.write_vectored_to_pipe(iovec, iovcnt, nonblocking)
+                                                as i32
+                                        }
+                                        None => {
+                                            return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
+                                        }
+                                    };
+                                    if retval == -(Errno::EPIPE as i32) {
+                                        interface::lind_kill_from_id(self.cageid, SIGPIPE);
+                                    } // Trigger SIGPIPE
+                                    retval
                                 }
                                 _ => {
                                     return syscall_error(
@@ -1324,6 +1318,7 @@ impl Cage {
                     retval
                 },
                 _ => {
+                    // we currently don't support writev for files/streams
                     return syscall_error(
                         Errno::EOPNOTSUPP,
                         "writev",
