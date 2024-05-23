@@ -348,11 +348,23 @@ pub fn fsck() {
         match inode_obj {
             Inode::File(ref mut normalfile_inode) => normalfile_inode.linkcount != 0,
             Inode::Dir(ref mut dir_inode) => {
+                dir_inode.filename_to_inode_dict.retain(|_filename, inodenum| {
+                    let inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                        match *inodeobj {
+                            Inode::File(_) => { true }
+                            Inode::Dir(_) => { true }
+                            Inode::CharDev(_) => { true }
+                            Inode::Socket(_) => { false }
+                        }
+                    }
+                );
                 //2 because . and .. always contribute to the linkcount of a directory
                 dir_inode.linkcount > 2
             }
             Inode::CharDev(ref mut char_inodej) => char_inodej.linkcount != 0,
-            Inode::Socket(_) => false,
+            Inode::Socket(_) => {
+                false
+            },
         }
     });
 }
