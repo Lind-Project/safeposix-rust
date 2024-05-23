@@ -842,8 +842,8 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected, or connected for write only
-                                    if (sockhandle.state != ConnState::CONNECTED)
+                                        // to be able to send here we either need to be fully connected, or connected for write only
+                                        if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
                                         return syscall_error(
@@ -855,12 +855,12 @@ impl Cage {
                                     // get the socket pipe, write to it, and return bytes written
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                     let mut nonblocking = false;
-                                    if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
+                                    if sockfdobj.flags & O_NONBLOCK != 0 {
                                         nonblocking = true;
                                     }
                                     let retval = match sockinfo.sendpipe.as_ref() {
                                         Some(sendpipe) => {
-                                            sendpipe.write_vectored_to_pipe(iovec, iovcnt, nonblocking)
+                                            sendpipe.write_to_pipe(buf, buflen, nonblocking)
                                                 as i32
                                         }
                                         None => {
