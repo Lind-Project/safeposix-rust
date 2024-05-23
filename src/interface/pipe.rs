@@ -143,8 +143,12 @@ impl EmulatedPipe {
     }
 
     // Write length bytes from pointer into pipe
-    pub fn write_vectored_to_pipe(&self, ptr: *const interface::IovecStruct, iovcnt: i32, nonblocking: bool) -> i32 {
-
+    pub fn write_vectored_to_pipe(
+        &self,
+        ptr: *const interface::IovecStruct,
+        iovcnt: i32,
+        nonblocking: bool,
+    ) -> i32 {
         let mut buf = Vec::new();
         let mut length = 0;
 

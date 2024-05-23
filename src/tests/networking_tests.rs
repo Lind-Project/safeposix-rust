@@ -3,9 +3,9 @@ pub mod net_tests {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
-    use libc::c_void;
 
     pub fn net_tests() {
         ut_lind_net_bind();

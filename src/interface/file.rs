@@ -18,8 +18,8 @@ use crate::interface::errnos::{syscall_error, Errno};
 use libc::{mmap, mremap, munmap, off64_t, MAP_SHARED, MREMAP_MAYMOVE, PROT_READ, PROT_WRITE};
 use std::convert::TryInto;
 use std::ffi::c_void;
+use std::os::unix::fs::FileExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::os::unix::fs::{FileExt};
 
 pub fn removefile(filename: String) -> std::io::Result<()> {
     let path: RustPathBuf = [".".to_string(), filename].iter().collect();
@@ -514,7 +514,9 @@ mod tests {
         let emulated_file = EmulatedFile::new(file_path.clone(), file_content.len()).unwrap();
 
         let mut buffer = vec![0; file_content.len()];
-        let bytes_read = emulated_file.readat(buffer.as_mut_ptr(), buffer.len(), 0).unwrap();
+        let bytes_read = emulated_file
+            .readat(buffer.as_mut_ptr(), buffer.len(), 0)
+            .unwrap();
 
         assert_eq!(bytes_read, file_content.len());
         assert_eq!(buffer, file_content);
@@ -529,13 +531,17 @@ mod tests {
         let mut emulated_file = EmulatedFile::new(file_path.clone(), file_content.len()).unwrap();
 
         let new_content = b"test_writeat_emulated_file, world!";
-        let bytes_written = emulated_file.writeat(new_content.as_ptr(), new_content.len(), 0).unwrap();
+        let bytes_written = emulated_file
+            .writeat(new_content.as_ptr(), new_content.len(), 0)
+            .unwrap();
 
         assert_eq!(bytes_written, new_content.len());
         assert_eq!(emulated_file.filesize, new_content.len());
 
         let mut buffer = vec![0; new_content.len()];
-        emulated_file.readat(buffer.as_mut_ptr(), buffer.len(), 0).unwrap();
+        emulated_file
+            .readat(buffer.as_mut_ptr(), buffer.len(), 0)
+            .unwrap();
         assert_eq!(buffer, new_content);
     }
 }

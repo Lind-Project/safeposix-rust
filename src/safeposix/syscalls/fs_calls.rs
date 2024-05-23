@@ -1263,10 +1263,12 @@ impl Cage {
                                         nonblocking = true;
                                     }
                                     let retval = match sockinfo.sendpipe.as_ref() {
-                                        Some(sendpipe) => {
-                                            sendpipe.write_vectored_to_pipe(iovec, iovcnt, nonblocking)
-                                                as i32
-                                        }
+                                        Some(sendpipe) => sendpipe.write_vectored_to_pipe(
+                                            iovec,
+                                            iovcnt,
+                                            nonblocking,
+                                        )
+                                            as i32,
                                         None => {
                                             return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
                                         }
@@ -1284,7 +1286,7 @@ impl Cage {
                                     );
                                 }
                             }
-                        },
+                        }
                         _ => {
                             return syscall_error(
                                 Errno::EOPNOTSUPP,
@@ -1293,7 +1295,7 @@ impl Cage {
                             );
                         }
                     }
-                },
+                }
                 Pipe(pipe_filedesc_obj) => {
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(
@@ -1308,15 +1310,16 @@ impl Cage {
                         nonblocking = true;
                     }
 
-                    let retval = pipe_filedesc_obj
-                        .pipe
-                        .write_vectored_to_pipe(iovec, iovcnt, nonblocking)
-                        as i32;
+                    let retval =
+                        pipe_filedesc_obj
+                            .pipe
+                            .write_vectored_to_pipe(iovec, iovcnt, nonblocking)
+                            as i32;
                     if retval == -(Errno::EPIPE as i32) {
                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
                     } // Trigger SIGPIPE
                     retval
-                },
+                }
                 _ => {
                     // we currently don't support writev for files/streams
                     return syscall_error(

@@ -842,8 +842,8 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                        // to be able to send here we either need to be fully connected, or connected for write only
-                                        if (sockhandle.state != ConnState::CONNECTED)
+                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
                                         return syscall_error(
@@ -860,8 +860,7 @@ impl Cage {
                                     }
                                     let retval = match sockinfo.sendpipe.as_ref() {
                                         Some(sendpipe) => {
-                                            sendpipe.write_to_pipe(buf, buflen, nonblocking)
-                                                as i32
+                                            sendpipe.write_to_pipe(buf, buflen, nonblocking) as i32
                                         }
                                         None => {
                                             return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
