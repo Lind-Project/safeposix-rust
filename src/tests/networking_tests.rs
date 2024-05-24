@@ -1166,8 +1166,8 @@ pub mod net_tests {
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-            //for sock in 0..FD_SET_MAX_FD {
-            for &sock in inputs.active_fds(FD_SET_MAX_FD).iter() {
+            for sock in 0..FD_SET_MAX_FD {
+            //for &sock in inputs.active_fds(FD_SET_MAX_FD).iter() {
                 
                 if !inputs.is_set(sock) {
                     continue;
@@ -1211,8 +1211,8 @@ pub mod net_tests {
             }
 
             //for sock in boutputs {
-            //for sock in 0..FD_SET_MAX_FD {
-            for &sock in outputs.active_fds(FD_SET_MAX_FD).iter() {
+            for sock in 0..FD_SET_MAX_FD {
+            //for &sock in outputs.active_fds(FD_SET_MAX_FD).iter() {
                 if !outputs.is_set(sock) {
                     continue;
                 }
