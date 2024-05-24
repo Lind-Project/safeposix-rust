@@ -1166,7 +1166,7 @@ pub mod net_tests {
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-            for &sock in inputs.active_fds(11).iter() {
+            for &sock in inputs.active_fds(FD_SET_MAX_FD).iter() {
                 if !inputs.is_set(sock) {
                     continue;
                 }
@@ -1197,7 +1197,7 @@ pub mod net_tests {
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
                             outputs.set(sock);
-                            inputs.clear(sock);
+                            inputs.clear(sock);//Clear socket from inputs set , need to test this
                             continue;
                         }
                     } else {
@@ -1209,7 +1209,7 @@ pub mod net_tests {
             }
 
             //for sock in boutputs {
-            for &sock in outputs.active_fds(11).iter() {
+            for &sock in outputs.active_fds(FD_SET_MAX_FD).iter() {
                 if !outputs.is_set(sock) {
                     continue;
                 }
@@ -1894,7 +1894,7 @@ pub mod net_tests {
     
         lindrustfinalize();
     }
-    
+
     pub fn ut_lind_net_domain_socket() {
         //bind net zero test reformatted for domain sockets
 
