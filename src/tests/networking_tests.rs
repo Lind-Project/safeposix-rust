@@ -6,6 +6,7 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
+    use crate::tests::Cage;
 
     pub fn net_tests() {
         ut_lind_net_bind();
