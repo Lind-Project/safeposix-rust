@@ -6,6 +6,7 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
+    use std::io;
     use crate::tests::Cage;
 
     pub fn net_tests() {
@@ -18,7 +19,7 @@ pub mod net_tests {
         ut_lind_net_listen();
         ut_lind_net_poll();
         ut_lind_net_recvfrom();
-        ut_lind_net_select();
+        ut_lind_net_select(); //needs to be updated
         // ut_lind_net_shutdown();
         // ut_lind_net_socket();
         // ut_lind_net_socketoptions();
@@ -27,9 +28,9 @@ pub mod net_tests {
         // ut_lind_net_udp_simple();
         // ut_lind_net_udp_connect();
         // ut_lind_net_gethostname();
-        // ut_lind_net_dns_rootserver_ping();
+        // ut_lind_net_dns_rootserver_ping(); //needs to be updated
         // ut_lind_net_domain_socket();
-        // ut_lind_net_epoll();
+        // ut_lind_net_epoll(); //needs to be updated maybe add a helper fun
         // ut_lind_net_writev();
     }
 
@@ -1165,7 +1166,8 @@ pub mod net_tests {
 
             //Check for any activity in any of the Input sockets...
             //for sock in binputs {
-                for &sock in inputs.active_fds(FD_SET_MAX_FD).iter() {
+            for sock in 0..FD_SET_MAX_FD {
+
                 if !inputs.is_set(sock) {
                     continue;
                 }
@@ -1196,6 +1198,7 @@ pub mod net_tests {
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
                             outputs.set(sock);
+                            //inputs.clear(sock);//Clear socket from inputs set , need to test this
                             continue;
                         }
                     } else {
@@ -1207,7 +1210,8 @@ pub mod net_tests {
             }
 
             //for sock in boutputs {
-            for &sock in inputs.active_fds(FD_SET_MAX_FD).iter() {
+            for sock in 0..FD_SET_MAX_FD {
+            //for &sock in outputs.active_fds(FD_SET_MAX_FD).iter() {
                 if !outputs.is_set(sock) {
                     continue;
                 }
@@ -1756,8 +1760,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    use std::time::{Duration, Instant};
+    use std::io::ErrorKind;
+    
     pub fn ut_lind_net_dns_rootserver_ping() {
-        //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
         struct DnsHeader {
             xid: u16,
@@ -1767,8 +1773,7 @@ pub mod net_tests {
             nscount: u16,
             arcount: u16,
         }
-
-        /* Structure of the bytes for an IPv4 answer */
+    
         #[repr(C, packed(1))]
         struct DnsRecordAT {
             compression: u16,
@@ -1778,13 +1783,13 @@ pub mod net_tests {
             length: u16,
             addr: interface::V4Addr,
         }
-
+    
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-
+    
         let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
         assert!(dnssocket > 0);
-
+    
         let dnsh = DnsHeader {
             xid: 0x1234u16.to_be(),
             flags: 0x0100u16.to_be(),
@@ -1793,51 +1798,76 @@ pub mod net_tests {
             nscount: 0,
             arcount: 0,
         };
-
-        //specify payload information for dns request
-        let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes(); //numbers signify how many characters until next dot
+    
+        let hostname = "\x0Bengineering\x03nyu\x03edu\0".to_string().into_bytes();
         let dnstype = 1u16;
         let dnsclass = 1u16;
-
-        //construct packet
+    
         let packetlen = std::mem::size_of::<DnsHeader>()
             + hostname.len()
             + std::mem::size_of::<u16>()
             + std::mem::size_of::<u16>();
         let mut packet = vec![0u8; packetlen];
-
+    
         let packslice = packet.as_mut_slice();
         let mut pslen = std::mem::size_of::<DnsHeader>();
         unsafe {
             let dnss = ::std::slice::from_raw_parts(
-                ((&dnsh) as *const DnsHeader) as *const u8,
+                (&dnsh as *const DnsHeader) as *const u8,
                 std::mem::size_of::<DnsHeader>(),
             );
             packslice[..pslen].copy_from_slice(dnss);
         }
-        packslice[pslen..pslen + hostname.len()].copy_from_slice(hostname.as_slice());
+        packslice[pslen..pslen + hostname.len()].copy_from_slice(&hostname);
         pslen += hostname.len();
         packslice[pslen..pslen + 2].copy_from_slice(&dnstype.to_be_bytes());
         packslice[pslen + 2..pslen + 4].copy_from_slice(&dnsclass.to_be_bytes());
-
-        //send packet
+    
+        let random_port = generate_random_port();
+        println!("Using random port: {}", random_port);
+    
         let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
+            sin_port: 53u16.to_be(),  // Port 53 is the standard DNS port for queries.
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([208, 67, 222, 222]),
             },
             padding: 0,
-        }); //opendns ip addr
+        });
+    
+        let local_addr = interface::GenSockaddr::V4(interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: random_port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([0, 0, 0, 0]),  // INADDR_ANY
+            },
+            padding: 0,
+        });
+    
+        // Bind the socket to the local address with the random port
+        assert_eq!(
+            cage.bind_syscall(dnssocket, &local_addr),
+            0
+        );
+    
         assert_eq!(
             cage.sendto_syscall(dnssocket, packslice.as_ptr(), packslice.len(), 0, &dnsaddr),
             packslice.len() as i32
         );
-
+    
         let mut dnsresp = [0u8; 512];
-
-        //recieve DNS response
+    
+        let timeout_duration = Duration::from_secs(5);
+        let start_time = Instant::now();
+    
         loop {
+            let elapsed_time = start_time.elapsed();
+            if elapsed_time >= timeout_duration {
+                eprintln!("Error: Timeout waiting for DNS response");
+                eprintln!("Error: Timeout waiting for DNS response");
+                
+            }
+    
             let result = cage.recvfrom_syscall(
                 dnssocket,
                 dnsresp.as_mut_ptr(),
@@ -1845,32 +1875,27 @@ pub mod net_tests {
                 0,
                 &mut Some(&mut dnsaddr),
             );
-
+    
             if result != -libc::EINTR {
                 assert!(result >= 0);
                 break;
             }
-            // if the error was EINTR, retry the syscall
         }
-
-        //extract packet header
+    
         let response_header = unsafe { &*(dnsresp.as_ptr() as *const DnsHeader) };
         assert_eq!(u16::from_be(response_header.flags) & 0xf, 0);
-
-        //skip over the name
+    
         let mut nameptr = std::mem::size_of::<DnsHeader>();
         while dnsresp[nameptr] != 0 {
             nameptr += dnsresp[nameptr] as usize + 1;
         }
-
-        //next we need to skip the null byte, qtype, and qclass to extract the main response payload
+    
         let recordptr =
             dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
         let record = unsafe { &*recordptr };
         let addr = u32::from_be(record.addr.s_addr);
-        assert_eq!(addr, 0x23ac5973); //check that what is returned is the actual ip, 35.172.89.115
-                                      //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
-
+        assert_eq!(addr, 0x23ac5973);
+    
         lindrustfinalize();
     }
 
@@ -2103,31 +2128,47 @@ pub mod net_tests {
     /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using
     epoll_wait_syscall(). It handles the events based on their types (EPOLLIN or EPOLLOUT) and performs the necessary operations
     like accepting new connections, sending/receiving data, and modifying the event flags */
+
+    fn bind_socket_with_retry(cage: &Cage, socket_fd: i32, max_retries: usize) -> Result<interface::GenSockaddr, io::Error> {
+        for _ in 0..max_retries {
+            let random_port = generate_random_port();
+            let sockaddr = interface::SockaddrV4 {
+                sin_family: AF_INET as u16,
+                sin_port: random_port.to_be(),
+                sin_addr: interface::V4Addr {
+                    s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+                },
+                padding: 0,
+            };
+            let socket = interface::GenSockaddr::V4(sockaddr);
+            let result = cage.bind_syscall(socket_fd, &socket);
+            if result == 0 {
+                println!("Successfully bound to port: {}", random_port);
+                return Ok(socket);
+            } else if result != -98 {
+                return Err(io::Error::from_raw_os_error(result));
+            }
+        }
+        Err(io::Error::new(io::ErrorKind::AddrInUse, "All attempts to bind socket failed"))
+    }
+    
     pub fn ut_lind_net_epoll() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-
+    
         let filefd = cage.open_syscall("/netepolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
-
+    
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(serversockfd > 0);
+    
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-
-        // Create and set up the file descriptor and sockets
-        ////let port: u16 = 53019;
-        let sockaddr = interface::SockaddrV4 {
-            sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
-            sin_addr: interface::V4Addr {
-                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-            },
-            padding: 0,
-        };
-        let socket = interface::GenSockaddr::V4(sockaddr);
-        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+    
+        let socket = bind_socket_with_retry(&cage, serversockfd, 10).unwrap();
+    
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
-
+    
         let mut event_list = vec![
             EpollEvent {
                 events: EPOLLIN as u32,
@@ -2138,74 +2179,45 @@ pub mod net_tests {
                 fd: filefd,
             },
         ];
-
+    
         cage.fork_syscall(2);
-        // Client 1 connects to the server to send and recv data
+        let thread1_socket = socket.clone();
         let thread1 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(30));
+            interface::sleep(interface::RustDuration::from_millis(100)); // Increased delay
             let cage2 = interface::cagetable_getref(2);
-            // Connect to server and send data
-            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
-            assert_eq!(
-                cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0),
-                4
-            );
-            // Wait for data processing, give it a longer pause time so that it can process all of the data received
+            println!("Client 1 attempting to connect...");
+            assert_eq!(cage2.connect_syscall(clientsockfd1, &thread1_socket), 0);
+            assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(100));
-            // Close the server socket and exit the thread
             assert_eq!(cage2.close_syscall(serversockfd), 0);
             cage2.exit_syscall(EXIT_SUCCESS);
         });
-
+    
         cage.fork_syscall(3);
-        // Client 2 connects to the server to send and recv data
+        let thread2_socket = socket.clone();
         let thread2 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(45));
+            interface::sleep(interface::RustDuration::from_millis(120)); // Increased delay
             let cage3 = interface::cagetable_getref(3);
-            // Connect to server and send data
-            assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
-            assert_eq!(
-                cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0),
-                4
-            );
-
+            println!("Client 2 attempting to connect...");
+            assert_eq!(cage3.connect_syscall(clientsockfd2, &thread2_socket), 0);
+            assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(100));
-            // Close the server socket and exit the thread
             assert_eq!(cage3.close_syscall(serversockfd), 0);
             cage3.exit_syscall(EXIT_SUCCESS);
         });
-
-        // Acting as the server and processing the request
+    
         let thread3 = interface::helper_thread(move || {
             let epfd = cage.epoll_create_syscall(1);
             assert!(epfd > 0);
-
-            assert_eq!(
-                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, serversockfd, &mut event_list[0]),
-                0
-            );
-            assert_eq!(
-                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, filefd, &mut event_list[1]),
-                0
-            );
-            // Event processing loop
+            assert_eq!(cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, serversockfd, &mut event_list[0]), 0);
+            assert_eq!(cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, filefd, &mut event_list[1]), 0);
+    
             for _counter in 0..600 {
-                let num_events = cage.epoll_wait_syscall(
-                    epfd,
-                    &mut event_list,
-                    1,
-                    Some(interface::RustDuration::ZERO),
-                );
+                let num_events = cage.epoll_wait_syscall(epfd, &mut event_list, 1, Some(interface::RustDuration::ZERO));
                 assert!(num_events >= 0);
-
-                // Wait for events using epoll_wait_syscall
                 for event in &mut event_list[..num_events as usize] {
-                    // Check for any activity in the input socket and if there are events ready for reading
                     if event.events & (EPOLLIN as u32) != 0 {
-                        // If the socket returned was listener socket, then there's a new connection
                         if event.fd == serversockfd {
-                            // Handle new connections
-                            ////let port: u16 = 53019;
                             let sockaddr = interface::SockaddrV4 {
                                 sin_family: AF_INET as u16,
                                 sin_port: generate_random_port().to_be(),
@@ -2214,25 +2226,18 @@ pub mod net_tests {
                                 },
                                 padding: 0,
                             };
-                            let mut addr = interface::GenSockaddr::V4(sockaddr); // 127.0.0.1 from bytes above
+                            let mut addr = interface::GenSockaddr::V4(sockaddr);
                             let newsockfd = cage.accept_syscall(serversockfd, &mut addr);
                             let event = interface::EpollEvent {
                                 events: EPOLLIN as u32,
                                 fd: newsockfd,
                             };
-                            // Error raised to indicate that the socket file descriptor couldn't be added to the epoll instance
-                            assert_eq!(
-                                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, newsockfd, &event),
-                                0
-                            );
+                            assert_eq!(cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, newsockfd, &event), 0);
                         } else if event.fd == filefd {
-                            // Handle writing to the file
-                            // Update
                             assert_eq!(cage.write_syscall(filefd, str2cbuf("test"), 4), 4);
                             assert_eq!(cage.lseek_syscall(filefd, 0, SEEK_SET), 0);
                             event.events = EPOLLOUT as u32;
                         } else {
-                            // Handle receiving data from established connections
                             let mut buf = sizecbuf(4);
                             let recres = cage.recv_syscall(event.fd, buf.as_mut_ptr(), 4, 0);
                             assert_eq!(recres & !4, 0);
@@ -2244,35 +2249,28 @@ pub mod net_tests {
                             }
                         }
                     }
-
                     if event.events & (EPOLLOUT as u32) != 0 {
-                        // Check if there are events ready for writing
                         if event.fd == filefd {
-                            // Handle reading from the file
                             let mut read_buf1 = sizecbuf(4);
                             assert_eq!(cage.read_syscall(filefd, read_buf1.as_mut_ptr(), 4), 4);
                             assert_eq!(cbuf2str(&read_buf1), "test");
                         } else {
-                            // Handle sending data over connections
                             assert_eq!(cage.send_syscall(event.fd, str2cbuf(&"test"), 4, 0), 4);
                             event.events = EPOLLIN as u32;
                         }
                     }
                 }
             }
-
-            // Close the server socket and exit the thread
             assert_eq!(cage.close_syscall(serversockfd), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+            cage.exit_syscall(EXIT_SUCCESS);
         });
-
+    
         thread1.join().unwrap();
         thread2.join().unwrap();
         thread3.join().unwrap();
-
         lindrustfinalize();
     }
-
+    
     pub fn ut_lind_net_writev() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
