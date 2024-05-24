@@ -94,8 +94,34 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
 }
 //add randomizded fun
+use std::net::{TcpListener, UdpSocket};
+use std::io::ErrorKind; 
+
 fn generate_random_port() -> u16 {
     let mut rng = rand::thread_rng();
-    rng.gen_range(49152..65535)
-}
 
+    loop {
+        let port = rng.gen_range(49152..65535);
+
+        // Attempt to bind a TCP listener and a UDP socket to the port
+        if let Ok(_) = TcpListener::bind(("127.0.0.1", port)) {
+            if let Ok(_) = UdpSocket::bind(("127.0.0.1", port)) {
+                return port; // Port is available for both TCP and UDP
+            }
+        }
+
+        // If the bind fails with an "Address already in use" error, try a different port
+        if let Err(e) = TcpListener::bind(("127.0.0.1", port)) {
+            if e.kind() == ErrorKind::AddrInUse {
+                continue; // Try a different port
+            }
+        }
+
+        // If the bind fails for any other reason, re-attempt to bind to the same port
+        // as this error could be transient
+        // and if the port is available, it will succeed on a retry
+        if let Err(_) = TcpListener::bind(("127.0.0.1", port)) {
+            continue;
+        }
+    }
+}
