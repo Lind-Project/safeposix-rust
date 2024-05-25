@@ -538,14 +538,27 @@ pub fn getifaddrs_from_file() -> String {
 pub struct FdSet(libc::fd_set);
 
 impl FdSet {
+    // pub fn active_fds(&self, nfds: i32) -> Vec<i32> {
+    //     let mut active_fds = Vec::new();
+    //     for fd in 0..nfds {
+    //         if self.is_set(fd) {
+    //             active_fds.push(fd);
+    //         }
+    //     }
+    //     active_fds
+    // }
+    
+    // pub fn active_fds(&self) -> Vec<i32> {
+    //     let mut active_fds = Vec::new();
+    //     for fd in self.0.iter() {
+    //         active_fds.push(*fd);
+    //     }
+    //     active_fds
+    // }
     pub fn active_fds(&self, nfds: i32) -> Vec<i32> {
-        let mut active_fds = Vec::new();
-        for fd in 0..nfds {
-            if self.is_set(fd) {
-                active_fds.push(fd);
-            }
-        }
-        active_fds
+        (0..nfds)
+            .filter_map(|fd| if self.is_set(fd) { Some(fd) } else { None })
+            .collect()
     }
     pub fn new() -> FdSet {
         unsafe {
