@@ -5,6 +5,7 @@ pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
@@ -1023,7 +1024,6 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    use libc::c_void;
     pub fn ut_lind_fs_shm() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);

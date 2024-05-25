@@ -1193,8 +1193,8 @@ impl Cage {
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             // we're only implementing this for INET/tcp sockets right now
             match filedesc_enum {
-                Socket(sockfdobj) => {
-                    let sock_tmp = sockfdobj.handle.clone();
+                Socket(socket_filedesc_obj) => {
+                    let sock_tmp = socket_filedesc_obj.handle.clone();
                     let sockhandle = sock_tmp.write();
 
                     match sockhandle.domain {
@@ -1206,7 +1206,7 @@ impl Cage {
                                 {
                                     return syscall_error(
                                         Errno::ENOTCONN,
-                                        "send",
+                                        "writev",
                                         "The descriptor is not connected",
                                     );
                                 }
@@ -1243,6 +1243,50 @@ impl Cage {
                                 );
                             }
                         },
+                        AF_UNIX => {
+                            match sockhandle.protocol {
+                                IPPROTO_TCP => {
+                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    if (sockhandle.state != ConnState::CONNECTED)
+                                        && (sockhandle.state != ConnState::CONNWRONLY)
+                                    {
+                                        return syscall_error(
+                                            Errno::ENOTCONN,
+                                            "writev",
+                                            "The descriptor is not connected",
+                                        );
+                                    }
+                                    // get the socket pipe, write to it, and return bytes written
+                                    let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    let mut nonblocking = false;
+                                    if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
+                                        nonblocking = true;
+                                    }
+                                    let retval = match sockinfo.sendpipe.as_ref() {
+                                        Some(sendpipe) => sendpipe.write_vectored_to_pipe(
+                                            iovec,
+                                            iovcnt,
+                                            nonblocking,
+                                        )
+                                            as i32,
+                                        None => {
+                                            return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
+                                        }
+                                    };
+                                    if retval == -(Errno::EPIPE as i32) {
+                                        interface::lind_kill_from_id(self.cageid, SIGPIPE);
+                                    } // Trigger SIGPIPE
+                                    retval
+                                }
+                                _ => {
+                                    return syscall_error(
+                                        Errno::EOPNOTSUPP,
+                                        "send",
+                                        "Unkown protocol in send",
+                                    );
+                                }
+                            }
+                        }
                         _ => {
                             return syscall_error(
                                 Errno::EOPNOTSUPP,
@@ -1252,7 +1296,32 @@ impl Cage {
                         }
                     }
                 }
+                Pipe(pipe_filedesc_obj) => {
+                    if is_rdonly(pipe_filedesc_obj.flags) {
+                        return syscall_error(
+                            Errno::EBADF,
+                            "write",
+                            "specified pipe not open for writing",
+                        );
+                    }
+
+                    let mut nonblocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
+                        nonblocking = true;
+                    }
+
+                    let retval =
+                        pipe_filedesc_obj
+                            .pipe
+                            .write_vectored_to_pipe(iovec, iovcnt, nonblocking)
+                            as i32;
+                    if retval == -(Errno::EPIPE as i32) {
+                        interface::lind_kill_from_id(self.cageid, SIGPIPE);
+                    } // Trigger SIGPIPE
+                    retval
+                }
                 _ => {
+                    // we currently don't support writev for files/streams
                     return syscall_error(
                         Errno::EOPNOTSUPP,
                         "writev",
