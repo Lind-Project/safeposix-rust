@@ -6,7 +6,7 @@
 use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
 
-use parking_lot::Mutex;
+use std::sync::Mutex;
 use ringbuf::{Consumer, Producer, RingBuffer};
 use std::cmp::min;
 use std::fmt;
@@ -80,7 +80,7 @@ impl EmulatedPipe {
     }
 
     pub fn check_select_read(&self) -> bool {
-        let read_end = self.read_end.lock();
+        let read_end = self.read_end.lock().unwrap();
         let pipe_space = read_end.len();
 
         if (pipe_space > 0) || self.eof.load(Ordering::SeqCst) {
@@ -90,7 +90,7 @@ impl EmulatedPipe {
         }
     }
     pub fn check_select_write(&self) -> bool {
-        let write_end = self.write_end.lock();
+        let write_end = self.write_end.lock().unwrap();
         let pipe_space = write_end.remaining();
 
         return pipe_space != 0;
@@ -105,7 +105,7 @@ impl EmulatedPipe {
             slice::from_raw_parts(ptr, length)
         };
 
-        let mut write_end = self.write_end.lock();
+        let mut write_end = self.write_end.lock().unwrap();
 
         let pipe_space = write_end.remaining();
         if nonblocking && (pipe_space == 0) {
@@ -176,7 +176,7 @@ impl EmulatedPipe {
             slice::from_raw_parts_mut(ptr, length)
         };
 
-        let mut read_end = self.read_end.lock();
+        let mut read_end = self.read_end.lock().unwrap();
         let mut pipe_space = read_end.len();
         if nonblocking && (pipe_space == 0) {
             if self.eof.load(Ordering::SeqCst) {
