@@ -133,6 +133,7 @@ impl EmulatedPipe {
 
             if remaining == 0 {
                 interface::lind_yield(); //yield on a full pipe
+                drop(tuple);
                 continue;
             }
             // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
@@ -140,6 +141,7 @@ impl EmulatedPipe {
                 && (length - bytes_written) > PAGE_SIZE
                 && remaining < PAGE_SIZE
             {
+                drop(tuple);
                 continue;
             };
             let bytes_to_write = min(length, bytes_written as usize + remaining);
@@ -219,6 +221,7 @@ impl EmulatedPipe {
             count = count + 1;
             if pipe_space == 0 {
                 interface::lind_yield();
+                drop(tuple);
                 continue;
             } // yield on an empty pipe
 
