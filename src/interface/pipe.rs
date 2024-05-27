@@ -27,8 +27,9 @@ pub fn new_pipe(size: usize) -> EmulatedPipe {
 
 #[derive(Clone)]
 pub struct EmulatedPipe {
-    write_end: Arc<Mutex<Producer<u8>>>,
-    read_end: Arc<Mutex<Consumer<u8>>>,
+    // write_end: Arc<Mutex<Producer<u8>>>,
+    // read_end: Arc<Mutex<Consumer<u8>>>,
+    pub ringbuf: Arc<Mutex<(Producer<u8>, Consumer<u8>)>>,
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
     eof: Arc<AtomicBool>,
@@ -38,10 +39,11 @@ pub struct EmulatedPipe {
 impl EmulatedPipe {
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
-        let (prod, cons) = rb.split();
+        // let (prod, cons) = rb.split();
         EmulatedPipe {
-            write_end: Arc::new(Mutex::new(prod)),
-            read_end: Arc::new(Mutex::new(cons)),
+            // write_end: Arc::new(Mutex::new(prod)),
+            // read_end: Arc::new(Mutex::new(cons)),
+            ringbuf: Arc::new(Mutex::new(rb.split())),
             refcount_write: Arc::new(AtomicU32::new(1)),
             refcount_read: Arc::new(AtomicU32::new(1)),
             eof: Arc::new(AtomicBool::new(false)),
@@ -80,7 +82,9 @@ impl EmulatedPipe {
     }
 
     pub fn check_select_read(&self) -> bool {
-        let read_end = self.read_end.lock().unwrap();
+        // let read_end = self.read_end.lock().unwrap();
+        let tuple = self.ringbuf.lock().unwrap();
+        let read_end = &tuple.1;
         let pipe_space = read_end.len();
 
         if (pipe_space > 0) || self.eof.load(Ordering::SeqCst) {
@@ -90,7 +94,9 @@ impl EmulatedPipe {
         }
     }
     pub fn check_select_write(&self) -> bool {
-        let write_end = self.write_end.lock().unwrap();
+        // let write_end = self.write_end.lock().unwrap();
+        let tuple = self.ringbuf.lock().unwrap();
+        let write_end = &tuple.0;
         let pipe_space = write_end.remaining();
 
         return pipe_space != 0;
@@ -105,22 +111,24 @@ impl EmulatedPipe {
             slice::from_raw_parts(ptr, length)
         };
 
-        let mut write_end = self.write_end.lock().unwrap();
+        // let mut write_end = self.write_end.lock().unwrap();
 
-        let pipe_space = write_end.remaining();
-        if nonblocking && (pipe_space == 0) {
-            return syscall_error(
-                Errno::EAGAIN,
-                "write",
-                "there is no data available right now, try again later",
-            );
-        }
+        // let pipe_space = write_end.remaining();
+        // if nonblocking && (pipe_space == 0) {
+        //     return syscall_error(
+        //         Errno::EAGAIN,
+        //         "write",
+        //         "there is no data available right now, try again later",
+        //     );
+        // }
 
         while bytes_written < length {
             if self.get_read_ref() == 0 {
                 return syscall_error(Errno::EPIPE, "write", "broken pipe");
             } // EPIPE, all read ends are closed
 
+            let mut tuple = self.ringbuf.lock().unwrap();
+            let write_end = &mut tuple.0;
             let remaining = write_end.remaining();
 
             if remaining == 0 {
@@ -176,19 +184,23 @@ impl EmulatedPipe {
             slice::from_raw_parts_mut(ptr, length)
         };
 
-        let mut read_end = self.read_end.lock().unwrap();
-        let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
-            if self.eof.load(Ordering::SeqCst) {
-                return 0;
-            }
-            return syscall_error(
-                Errno::EAGAIN,
-                "read",
-                "there is no data available right now, try again later",
-            );
-        }
+        // let mut read_end = self.read_end.lock().unwrap();
+        // let mut pipe_space = read_end.len();
+        // if nonblocking && (pipe_space == 0) {
+        //     if self.eof.load(Ordering::SeqCst) {
+        //         return 0;
+        //     }
+        //     return syscall_error(
+        //         Errno::EAGAIN,
+        //         "read",
+        //         "there is no data available right now, try again later",
+        //     );
+        // }
 
+        let mut pipe_space = 0;
+
+        
+        let mut bytes_to_read = 0;
         // wait for something to be in the pipe, but break on eof
         // check cancel point after 2^20 cycles just in case
         let mut count = 0;
@@ -196,6 +208,8 @@ impl EmulatedPipe {
             if self.eof.load(Ordering::SeqCst) {
                 return 0;
             }
+            let mut tuple = self.ringbuf.lock().unwrap();
+            let read_end = &mut tuple.1;
 
             if count == CANCEL_CHECK_INTERVAL {
                 return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
@@ -205,11 +219,14 @@ impl EmulatedPipe {
             count = count + 1;
             if pipe_space == 0 {
                 interface::lind_yield();
+                continue;
             } // yield on an empty pipe
-        }
 
-        let bytes_to_read = min(length, pipe_space);
-        read_end.pop_slice(&mut buf[0..bytes_to_read]);
+
+            bytes_to_read = min(length, pipe_space);
+            read_end.pop_slice(&mut buf[0..bytes_to_read]);
+            
+        }
 
         bytes_to_read as i32
     }

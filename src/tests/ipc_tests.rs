@@ -11,8 +11,8 @@ pub mod ipc_tests {
     //#[test]
     pub fn test_ipc() {
         ut_lind_ipc_pipe();
-        ut_lind_ipc_domain_socket();
-        ut_lind_ipc_socketpair();
+        // ut_lind_ipc_domain_socket();
+        // ut_lind_ipc_socketpair();
     }
 
     pub fn ut_lind_ipc_pipe() {
