@@ -1499,9 +1499,11 @@ pub mod net_tests {
             Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
             0
         );
-        let cage2 = cage.clone();
+        
+        cage.fork_syscall(2);
 
         let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
             let mut buf = sizecbuf(10);
             loop {
                 let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
