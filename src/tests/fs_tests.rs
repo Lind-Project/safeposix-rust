@@ -50,6 +50,11 @@ pub mod fs_tests {
         ut_lind_fs_sem_trytimed();
         ut_lind_fs_sem_test();
         ut_lind_fs_tmp_file_test();
+        ut_lind_fs_mkdir_empty_directory();
+        ut_lind_fs_mkdir_nonexisting_directory();
+        ut_lind_fs_mkdir_existing_directory();
+        ut_lind_fs_mkdir_invalid_modebits();
+        ut_lind_fs_mkdir_success();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -1237,6 +1242,63 @@ pub mod fs_tests {
         // Check if file is still there (it shouldn't be, assert no)
         assert_eq!(cage.access_syscall(file_path, F_OK), -2);
 
+        lindrustfinalize();
+    }   
+
+    pub fn ut_lind_fs_mkdir_empty_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "";
+        // Check for error when directory is empty
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_nonexisting_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir/dir";
+        // Check for error when both parent and child directories don't exist 
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_existing_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir";
+        // Create a parent directory
+        cage.mkdir_syscall(path, S_IRWXA);
+        // Check for error when the same directory is created again
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::EEXIST as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_invalid_modebits() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir";
+        let invalid_mode = 0o77777; // Invalid mode bits
+        // Create a parent directory
+        cage.mkdir_syscall(path, S_IRWXA);
+        // Check for error when a directory is being created with invalid mode
+        assert_eq!(cage.mkdir_syscall("/parentdir/dir", invalid_mode), -(Errno::EPERM as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_success() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir";
+        // Create a parent directory
+        cage.mkdir_syscall(path, S_IRWXA);
+        // Create a child directory inside parent directory with valid mode bits
+        assert_eq!(cage.mkdir_syscall("/parentdir/dir", S_IRWXA), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }
