@@ -50,11 +50,14 @@ pub mod fs_tests {
         ut_lind_fs_sem_trytimed();
         ut_lind_fs_sem_test();
         ut_lind_fs_tmp_file_test();
+
+        //mkdir_syscall_tests
         ut_lind_fs_mkdir_empty_directory();
         ut_lind_fs_mkdir_nonexisting_directory();
         ut_lind_fs_mkdir_existing_directory();
         ut_lind_fs_mkdir_invalid_modebits();
         ut_lind_fs_mkdir_success();
+        ut_lind_fs_mkdir_using_symlink();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -1298,6 +1301,24 @@ pub mod fs_tests {
         cage.mkdir_syscall(path, S_IRWXA);
         // Create a child directory inside parent directory with valid mode bits
         assert_eq!(cage.mkdir_syscall("/parentdir/dir", S_IRWXA), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_using_symlink() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        // Create a directory which will be referred to as originaldir 
+        let fd = cage.open_syscall("/originaldir", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
+        
+        // Create a link between two directories where the symlinkdir is originally not present
+        // But while linking, symlinkdir will get created
+        assert_eq!(cage.link_syscall("/originaldir", "/symlinkdir"), 0);
+
+        // Check for error while creating the symlinkdir again as it would already be created while linking the two directories above.
+        assert_eq!(cage.mkdir_syscall("/symlinkdir", S_IRWXA), -(Errno::EEXIST as i32));
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
