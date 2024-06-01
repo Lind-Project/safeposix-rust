@@ -541,7 +541,8 @@ impl FdSet {
     
     pub fn active_fds(&self, nfds: i32) -> Vec<i32> {
         (0..nfds)
-            .filter_map(|fd| if self.is_set(fd) { Some(fd) } else { None })
+            //.filter_map(|fd| if self.is_set(fd) { Some(fd) } else { None })
+            .filter(|fd| self.is_set(*fd)) 
             //.sorted()
             .collect()
     }
