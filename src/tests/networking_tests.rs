@@ -1120,7 +1120,7 @@ pub mod net_tests {
                 padding: 0,
             });
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
+            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket1), 0);
             barrier_clone1.wait();
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(1));
@@ -1144,7 +1144,7 @@ pub mod net_tests {
                 },
                 padding: 0,
             });
-            assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
+            assert_eq!(cage3.connect_syscall(clientsockfd2, &socket2), 0);
             barrier_clone2.wait();
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf("test"), 4, 0), 4);
             interface::sleep(interface::RustDuration::from_millis(1));
