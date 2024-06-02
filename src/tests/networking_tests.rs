@@ -1112,16 +1112,16 @@ pub mod net_tests {
         let barrier = Arc::new(Barrier::new(3));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
-    
+
         //client 1 connects to the server to send and recv data...
         let threadclient1 = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-    
+
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
             barrier_clone1.wait();
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
-    
+
             interface::sleep(interface::RustDuration::from_millis(1));
 
             let mut buf = sizecbuf(4);
