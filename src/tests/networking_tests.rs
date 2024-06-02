@@ -1059,11 +1059,6 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    pub fn generate_random_port() -> u16 {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        rng.gen_range(49152..65535)
-    }
     
     pub fn ut_lind_net_select() {
         lindrustinit(0);
