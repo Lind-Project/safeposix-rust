@@ -1062,6 +1062,8 @@ pub mod net_tests {
     pub fn ut_lind_net_select() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(serversockfd > 0);
     
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
