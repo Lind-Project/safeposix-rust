@@ -610,6 +610,13 @@ impl FdSet {
         }
     }
 }
+impl Clone for FdSet {
+    fn clone(&self) -> Self {
+        let mut new_fdset = Self::new();
+        new_fdset.copy_from(self);
+        new_fdset
+    }
+}
 
 // for unwrapping in kernel_select
 fn to_fdset_ptr(opt: Option<&mut FdSet>) -> *mut libc::fd_set {
