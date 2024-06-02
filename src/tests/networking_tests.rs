@@ -1065,6 +1065,13 @@ pub mod net_tests {
     
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
+            // Declare master_set and working_set outside the loop
+        let mut master_set = interface::FdSet::new();
+        let mut working_set = interface::FdSet::new();
+
+        // Add server socket to master_set and filefd to both
+        master_set.set(serversockfd);
+        master_set.set(filefd);
     
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
