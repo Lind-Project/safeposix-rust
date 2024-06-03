@@ -22,6 +22,7 @@ pub mod net_tests {
        ut_lind_net_socket();
        ut_lind_net_socketoptions();
        ut_lind_net_socketpair(); 
+       ut_lind_net_socketpair_bad_input();
        ut_lind_net_socketpair_closexec(); 
        ut_lind_net_socketpair_nonblocking(); 
        ut_lind_net_udp_bad_bind();
@@ -1556,7 +1557,8 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_net_socketpair_closexec() {
+    pub fn ut_lind_net_socketpair_bad_input() {
+        // test for error cases of socketpair
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1589,6 +1591,14 @@ pub mod net_tests {
             -(Errno::EOPNOTSUPP as i32)
         );
 
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_socketpair_closexec() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
         // try with closexec flag
         assert_eq!(
             Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &mut socketpair),
