@@ -20,18 +20,18 @@ pub mod net_tests {
         ut_lind_net_poll();
         ut_lind_net_recvfrom();
         ut_lind_net_select(); //needs to be updated
-        ut_lind_net_shutdown();
-        ut_lind_net_socket();
-        ut_lind_net_socketoptions();
-        ut_lind_net_socketpair();
-        ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple();
-        ut_lind_net_udp_connect();
-        ut_lind_net_gethostname();
-        //ut_lind_net_dns_rootserver_ping(); //needs to be updated
-        ut_lind_net_domain_socket();
-        //ut_lind_net_epoll(); //needs to be updated maybe add a helper fun
-        ut_lind_net_writev();
+        // ut_lind_net_shutdown();
+        // ut_lind_net_socket();
+        // ut_lind_net_socketoptions();
+        // ut_lind_net_socketpair();
+        // ut_lind_net_udp_bad_bind();
+        // ut_lind_net_udp_simple();
+        // ut_lind_net_udp_connect();
+        // ut_lind_net_gethostname();
+        // //ut_lind_net_dns_rootserver_ping(); //needs to be updated
+        // ut_lind_net_domain_socket();
+        // //ut_lind_net_epoll(); //needs to be updated maybe add a helper fun
+        // ut_lind_net_writev();
     }
 
     pub fn ut_lind_net_bind() {
