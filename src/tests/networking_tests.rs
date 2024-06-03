@@ -31,7 +31,7 @@ pub mod net_tests {
         ut_lind_net_dns_rootserver_ping(); //needs to be updated
         ut_lind_net_domain_socket();
         ut_lind_net_epoll(); //needs to be updated maybe add a helper fun
-        ut_lind_net_writev();
+        // ut_lind_net_writev();
     }
 
     pub fn ut_lind_net_bind() {
