@@ -1263,8 +1263,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
-    
+
 
     pub fn ut_lind_net_shutdown() {
         lindrustinit(0);
