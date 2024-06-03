@@ -1064,9 +1064,11 @@ pub mod net_tests {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
     
+        // Open a file for testing purposes
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
     
+        // Create server and client sockets
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -1091,6 +1093,17 @@ pub mod net_tests {
     
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
     
+        // Define the sockaddr structure once for reuse
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr);
+    
         let master_set = &mut interface::FdSet::new();
         let working_set = &mut interface::FdSet::new();
         let outputs = &mut interface::FdSet::new();
@@ -1108,19 +1121,10 @@ pub mod net_tests {
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
     
+        // Client 1 thread
         let threadclient1 = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-    
-            let sockaddr = interface::SockaddrV4 {
-                sin_family: AF_INET as u16,
-                sin_port: port.to_be(),
-                sin_addr: interface::V4Addr {
-                    s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-                },
-                padding: 0,
-            };
-            let socket = interface::GenSockaddr::V4(sockaddr);
     
             println!("Client 1: Attempting to connect");
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
@@ -1141,20 +1145,10 @@ pub mod net_tests {
             cage2.exit_syscall(EXIT_SUCCESS);
         });
     
+        // Client 2 thread
         let threadclient2 = interface::helper_thread(move || {
             let cage3 = interface::cagetable_getref(3);
-    
             assert_eq!(cage3.close_syscall(serversockfd), 0);
-    
-            let sockaddr = interface::SockaddrV4 {
-                sin_family: AF_INET as u16,
-                sin_port: port.to_be(),
-                sin_addr: interface::V4Addr {
-                    s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-                },
-                padding: 0,
-            };
-            let socket = interface::GenSockaddr::V4(sockaddr);
     
             println!("Client 2: Attempting to connect");
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
@@ -1184,6 +1178,7 @@ pub mod net_tests {
     
         barrier.wait();
     
+        // Server loop to handle connections and I/O
         for _counter in 0..600 {
             working_set.copy_from(master_set);
     
@@ -1196,6 +1191,7 @@ pub mod net_tests {
             );
             assert!(select_result >= 0);
     
+            // Process readable sockets
             for sock in 0..FD_SET_MAX_FD {
                 if !working_set.is_set(sock) {
                     continue;
@@ -1226,7 +1222,6 @@ pub mod net_tests {
                             continue;
                         }
                     } else if recvresult == -libc::ECONNRESET {
-                        // Handle connection reset by peer
                         println!("Connection reset by peer on socket {}", sock);
                         assert_eq!(cage.close_syscall(sock as i32), 0);
                         master_set.clear(sock);
@@ -1239,6 +1234,7 @@ pub mod net_tests {
                 }
             }
     
+            // Process writable sockets
             for sock in 0..FD_SET_MAX_FD {
                 if !outputs.is_set(sock) {
                     continue;
@@ -1262,8 +1258,7 @@ pub mod net_tests {
     
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
-
+    }    
 
     pub fn ut_lind_net_shutdown() {
         lindrustinit(0);
