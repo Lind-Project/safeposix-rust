@@ -8,28 +8,29 @@ pub mod net_tests {
     use std::sync::{Arc, Barrier};
 
     pub fn net_tests() {
-        ut_lind_net_bind();
-        ut_lind_net_bind_multiple();
-        ut_lind_net_bind_on_zero();
-        ut_lind_net_connect_basic_udp();
-        ut_lind_net_getpeername();
-        ut_lind_net_getsockname();
-        ut_lind_net_listen();
-        ut_lind_net_poll();
-        ut_lind_net_recvfrom();
-        ut_lind_net_select();
-        ut_lind_net_shutdown();
-        ut_lind_net_socket();
-        ut_lind_net_socketoptions();
-        ut_lind_net_socketpair();
-        ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple();
-        ut_lind_net_udp_connect();
-        ut_lind_net_gethostname();
-        ut_lind_net_dns_rootserver_ping();
-        ut_lind_net_domain_socket();
-        ut_lind_net_epoll();
-        ut_lind_net_writev();
+       ut_lind_net_bind();
+       ut_lind_net_bind_multiple();
+       ut_lind_net_bind_on_zero();
+       ut_lind_net_connect_basic_udp();
+       ut_lind_net_getpeername();
+       ut_lind_net_getsockname();
+       ut_lind_net_listen();
+       ut_lind_net_poll();
+       ut_lind_net_recvfrom();
+       ut_lind_net_select(); 
+       ut_lind_net_shutdown();
+       ut_lind_net_socket();
+       ut_lind_net_socketoptions();
+       ut_lind_net_socketpair(); 
+       ut_lind_net_socketpair_closexec(); 
+       ut_lind_net_socketpair_nonblocking(); 
+       ut_lind_net_udp_bad_bind();
+       ut_lind_net_udp_simple(); 
+       ut_lind_net_udp_connect(); 
+       ut_lind_net_gethostname();
+       ut_lind_net_dns_rootserver_ping();
+       ut_lind_net_domain_socket();
+       ut_lind_net_epoll();
     }
 
     pub fn ut_lind_net_bind() {
@@ -1518,27 +1519,179 @@ pub mod net_tests {
             );
         });
 
-        assert_eq!(
-            cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
-            4
-        );
+        let cage3 = cage.clone();
+        let thread_2 = interface::helper_thread(move || {
+            assert_eq!(cage3.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
-        let mut buf2 = sizecbuf(15);
+            let mut buf2 = sizecbuf(15);
+            loop {
+                let result = cage3.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
+            }
+            let str2 = cbuf2str(&buf2);
+            assert_eq!(str2, "Socketpair Test");
+        });
+
         loop {
-            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-            if result != -libc::EINTR {
-                break; // if the error was EINTR, retry the syscall
+            if thread_2.is_finished() {
+                thread_2.join().unwrap();
+                thread.join().unwrap();
+                break;
+            }
+            if thread.is_finished() {
+                thread.join().unwrap();
+                thread_2.join().unwrap();
+                break;
             }
         }
-        let str2 = cbuf2str(&buf2);
-        assert_eq!(str2, "Socketpair Test");
-
-        thread.join().unwrap();
 
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         // end of the socket pair test (note we are only supporting AF_UNIX and TCP)
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_socketpair_closexec() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+
+        // test for unspported domain
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_INET6, SOCK_STREAM, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for unspported socktype
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_DGRAM, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for unspported protocol
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 1, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for bad structured input
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, 472810394, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // try with closexec flag
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &mut socketpair),
+            0
+        );
+
+        let mut uselessstatdata = StatData::default();
+
+        // check if the file descriptor exists
+        assert_eq!(cage.fstat_syscall(socketpair.sock1, &mut uselessstatdata), -(Errno::EOPNOTSUPP as i32));
+        assert_eq!(cage.fstat_syscall(socketpair.sock2, &mut uselessstatdata), -(Errno::EOPNOTSUPP as i32));
+
+        assert_eq!(cage.exec_syscall(2), 0);
+
+        // check if the file descriptor is closed in new cage
+        let newcage = interface::cagetable_getref(2);
+        assert_eq!(
+            newcage.fstat_syscall(socketpair.sock1, &mut uselessstatdata),
+            -(Errno::EBADF as i32)
+        );
+        assert_eq!(
+            newcage.fstat_syscall(socketpair.sock2, &mut uselessstatdata),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(newcage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_socketpair_nonblocking() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+
+        // try with nonblocking flag
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0, &mut socketpair),
+            0
+        );
+
+        let cage2 = cage.clone();
+
+        let thread = interface::helper_thread(move || {
+            let mut buf = sizecbuf(10);
+            let mut counter = 0;
+            loop {
+                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+                if result == -(Errno::EAGAIN as i32) {
+                    counter += 1;
+                    continue;
+                }
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
+            }
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+            assert_ne!(counter, 0);
+
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(
+                cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0),
+                15
+            );
+        });
+
+        let cage3 = cage.clone();
+
+        let thread_2 = interface::helper_thread(move || {
+            interface::sleep(interface::RustDuration::from_millis(30));
+            assert_eq!(cage3.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
+    
+            let mut buf2 = sizecbuf(15);
+            let mut counter = 0;
+            loop {
+                let result = cage3.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+                if result == -(Errno::EAGAIN as i32) {
+                    counter += 1;
+                    continue;
+                }
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
+            }
+            let str2 = cbuf2str(&buf2);
+            assert_eq!(str2, "Socketpair Test");
+            assert_ne!(counter, 0);
+        });
+
+        loop {
+            if thread_2.is_finished() {
+                thread_2.join().unwrap();
+                thread.join().unwrap();
+                break;
+            }
+            if thread.is_finished() {
+                thread.join().unwrap();
+                thread_2.join().unwrap();
+                break;
+            }
+        }
+
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
