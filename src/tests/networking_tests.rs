@@ -1091,7 +1091,17 @@ pub mod net_tests {
         };
 
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
-        
+
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr);
+
         let master_set = &mut interface::FdSet::new();
         let working_set = &mut interface::FdSet::new();
         let outputs = &mut interface::FdSet::new();
