@@ -1124,7 +1124,7 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
 
         // these barriers ensures that the clients finish the connect before we do the select
-        let barrier = Arc::new(Barrier::new(3));
+        let barrier = Arc::new(Barrier::new(2));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
 
