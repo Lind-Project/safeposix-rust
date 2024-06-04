@@ -1060,41 +1060,33 @@ pub mod net_tests {
         lindrustfinalize();
     }
     
+
+    use std::thread;
+    use std::time::Duration;
+    
+    use crate::interface::{self, O_CREAT, O_EXCL, O_RDWR, S_IRWXA, AF_INET, SOCK_STREAM, FD_SET_MAX_FD, SEEK_SET, EXIT_SUCCESS};
+    use crate::tests::networking_tests::net_tests::generate_random_port;
+    
     pub fn ut_lind_net_select() {
-        lindrustinit(0);
+        // Initialize the Lind runtime
+        interface::lindrustinit(0);
         let cage = interface::cagetable_getref(1);
     
         // Open a file for testing purposes
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-        println!("File opened with fd: {}", filefd);
         assert!(filefd > 0);
     
         // Create server and client sockets
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        println!("Server socket created with fd: {}", serversockfd);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        println!("Client socket 1 created with fd: {}", clientsockfd1);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        println!("Client socket 2 created with fd: {}", clientsockfd2);
+        assert!(serversockfd >= 0);
+        assert!(clientsockfd1 >= 0);
+        assert!(clientsockfd2 >= 0);
     
-        // Generate a random port and bind with retry logic
+        // Generate a random port and bind the server socket with retry logic
         let port = loop {
             let port = generate_random_port();
-            println!("Generated random port: {}", port);
-            let condvar = Condvar::new();
-            let mutex = Mutex::new(());
-            let result = condvar.wait_timeout(mutex.lock().unwrap(), Duration::from_secs(10));
-            match result {
-                Ok((_, timeout)) if timeout.timed_out() => {
-                    println!("Timed out waiting on condition variable");
-                }
-                Ok(_) => {
-                    println!("Received signal on condition variable");
-                }
-                Err(e) => {
-                    println!("Error waiting on condition variable: {:?}", e);
-                }
-            }
             let sockaddr = interface::SockaddrV4 {
                 sin_family: AF_INET as u16,
                 sin_port: port.to_be(),
@@ -1112,7 +1104,7 @@ pub mod net_tests {
     
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
     
-        // Define the sockaddr structure once for reuse
+        // Define the sockaddr structure for reuse
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: port.to_be(),
@@ -1123,6 +1115,7 @@ pub mod net_tests {
         };
         let socket = interface::GenSockaddr::V4(sockaddr);
     
+        // Initialize the file descriptor sets
         let master_set = &mut interface::FdSet::new();
         let working_set = &mut interface::FdSet::new();
         let outputs = &mut interface::FdSet::new();
@@ -1130,55 +1123,58 @@ pub mod net_tests {
         master_set.set(serversockfd);
         master_set.set(filefd);
     
+        // Fork to simulate multiple client cages
         assert_eq!(cage.fork_syscall(2), 0);
         assert_eq!(cage.fork_syscall(3), 0);
     
+        // Close unnecessary file descriptors in the main thread
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
     
+        // Create a barrier to synchronize the client threads and the main thread
         let barrier = Arc::new(Barrier::new(3));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
     
-    // Client 1 thread
-        let threadclient1 = interface::helper_thread(move || {
+        // Client 1 thread
+        let threadclient1 = thread::spawn(move || {
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-
+    
             println!("Client 1: Attempting to connect");
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
             println!("Client 1: Connected");
             barrier_clone1.wait();
-            assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
+            assert_eq!(cage2.send_syscall(clientsockfd1, interface::str2cbuf("test"), 4, 0), 4);
             println!("Client 1: Sent data");
-
-            interface::sleep(interface::RustDuration::from_millis(1));
-
-            let mut buf = sizecbuf(4);
+    
+            thread::sleep(Duration::from_millis(1));
+    
+            let mut buf = interface::sizecbuf(4);
             assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
-            assert_eq!(cbuf2str(&buf), "test");
+            assert_eq!(interface::cbuf2str(&buf), "test");
             println!("Client 1: Received data");
-
+    
             assert_eq!(cage2.close_syscall(clientsockfd1), 0);
             println!("Client 1: Socket closed");
             cage2.exit_syscall(EXIT_SUCCESS);
-        }); 
+        });
     
         // Client 2 thread
-        let threadclient2 = interface::helper_thread(move || {
+        let threadclient2 = thread::spawn(move || {
             let cage3 = interface::cagetable_getref(3);
             assert_eq!(cage3.close_syscall(serversockfd), 0);
-
+    
             println!("Client 2: Attempting to connect");
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
             println!("Client 2: Connected");
             barrier_clone2.wait();
-            assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf("test"), 4, 0), 4);
+            assert_eq!(cage3.send_syscall(clientsockfd2, interface::str2cbuf("test"), 4, 0), 4);
             println!("Client 2: Sent data");
-
-            interface::sleep(interface::RustDuration::from_millis(1));
-
-            let mut buf = sizecbuf(4);
+    
+            thread::sleep(Duration::from_millis(1));
+    
+            let mut buf = interface::sizecbuf(4);
             let mut result: i32;
             loop {
                 result = cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0);
@@ -1187,14 +1183,15 @@ pub mod net_tests {
                 }
             }
             assert_eq!(result, 4);
-            assert_eq!(cbuf2str(&buf), "test");
+            assert_eq!(interface::cbuf2str(&buf), "test");
             println!("Client 2: Received data");
-
+    
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
             println!("Client 2: Socket closed");
             cage3.exit_syscall(EXIT_SUCCESS);
         });
     
+        // Wait for the clients to connect
         barrier.wait();
     
         // Server loop to handle connections and I/O
@@ -1223,11 +1220,11 @@ pub mod net_tests {
                     master_set.set(sockfd);
                     outputs.set(sockfd);
                 } else if sock == filefd {
-                    assert_eq!(cage.write_syscall(sock as i32, str2cbuf("test"), 4), 4);
+                    assert_eq!(cage.write_syscall(sock as i32, interface::str2cbuf("test"), 4), 4);
                     assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
                     master_set.clear(sock);
                 } else {
-                    let mut buf = sizecbuf(4);
+                    let mut buf = interface::sizecbuf(4);
                     let mut recvresult: i32;
                     loop {
                         recvresult = cage.recv_syscall(sock as i32, buf.as_mut_ptr(), 4, 0);
@@ -1236,7 +1233,7 @@ pub mod net_tests {
                         }
                     }
                     if recvresult == 4 {
-                        if cbuf2str(&buf) == "test" {
+                        if interface::cbuf2str(&buf) == "test" {
                             outputs.set(sock);
                             continue;
                         }
@@ -1259,25 +1256,29 @@ pub mod net_tests {
                     continue;
                 }
                 if sock == filefd {
-                    let mut buf = sizecbuf(4);
+                    let mut buf = interface::sizecbuf(4);
                     assert_eq!(cage.read_syscall(sock as i32, buf.as_mut_ptr(), 4), 4);
-                    assert_eq!(cbuf2str(&buf), "test");
+                    assert_eq!(interface::cbuf2str(&buf), "test");
                     outputs.clear(sock);
                 } else {
-                    assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
+                    assert_eq!(cage.send_syscall(sock as i32, interface::str2cbuf("test"), 4, 0), 4);
                     outputs.clear(sock);
                 }
             }
         }
     
+        // Clean up and close sockets
         assert_eq!(cage.close_syscall(serversockfd), 0);
     
+        // Wait for client threads to finish
         threadclient1.join().unwrap();
         threadclient2.join().unwrap();
     
+        // Finalize and exit
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        interface::lindrustfinalize();
     }
+    
     
 
     
