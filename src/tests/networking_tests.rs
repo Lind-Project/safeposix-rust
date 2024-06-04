@@ -1093,6 +1093,7 @@ pub mod net_tests {
                 break port;
             }
         };
+        assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
             sin_port: port.to_be(),
@@ -1102,8 +1103,7 @@ pub mod net_tests {
             padding: 0,
         };
         let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
-        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
-        assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
+        
 
         // allocate spaces for fd_set bitmaps
         let inputs = &mut interface::FdSet::new();
