@@ -1076,7 +1076,7 @@ pub mod net_tests {
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        
+
         let port = loop {
             let port = generate_random_port();
             let sockaddr = interface::SockaddrV4 {
@@ -1092,6 +1092,14 @@ pub mod net_tests {
             if cage.bind_syscall(serversockfd, &socket) == 0 {
                 break port;
             }
+        };
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
         };
         let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
