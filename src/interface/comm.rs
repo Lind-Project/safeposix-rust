@@ -545,6 +545,11 @@ impl FdSet {
             FdSet(raw_fd_set.assume_init())
         }
     }
+    pub fn active_fds(&self, nfds: i32) -> Vec<i32> {
+        (0..nfds)
+            .filter_map(|fd| if self.is_set(fd) { Some(fd) } else { None })
+            .collect()
+    }
 
     pub fn new_from_ptr(raw_fdset_ptr: *const libc::fd_set) -> &'static mut FdSet {
         unsafe { &mut *(raw_fdset_ptr as *mut FdSet) }
