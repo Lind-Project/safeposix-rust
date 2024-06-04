@@ -6,11 +6,11 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
-    use crate::interface::Mutex;
-    use parking_lot::Mutex;
     use std::sync::Mutex;
     use core::time::Duration;
-    use std::time::Duration;
+    use crate::interface::Condvar;
+    use parking_lot::Condvar;
+    use std::sync::Condvar;
 
     pub fn net_tests() {
         ut_lind_net_bind();
