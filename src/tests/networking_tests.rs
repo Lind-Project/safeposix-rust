@@ -1129,11 +1129,14 @@ pub mod net_tests {
         let barrier_clone2 = barrier.clone();
 
         //client 1 connects to the server to send and recv data...
-        let threadclient1 = interface::helper_thread(move || {
+        // let threadclient1 = interface::helper_thread(move || {
+        let threadclient1 = interface::helper_thread(move || -> Result<(), ClientThreadError> {
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
-            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
+            // Handle connect_syscall error on the FIRST call
+            cage2.connect_syscall(clientsockfd1, &socket).map_err(|e| ClientThreadError::ConnectError(e))?; 
+
             barrier_clone1.wait();
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
 
@@ -1145,6 +1148,7 @@ pub mod net_tests {
 
             assert_eq!(cage2.close_syscall(clientsockfd1), 0);
             cage2.exit_syscall(EXIT_SUCCESS);
+            Ok(())
         });
 
         //client 2 connects to the server to send and recv data...
