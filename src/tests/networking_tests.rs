@@ -1064,16 +1064,35 @@ pub mod net_tests {
     
         // Open a file for testing purposes
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        println!("File opened with fd: {}", filefd);
         assert!(filefd > 0);
     
         // Create server and client sockets
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        println!("Server socket created with fd: {}", serversockfd);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        println!("Client socket 1 created with fd: {}", clientsockfd1);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        println!("Client socket 2 created with fd: {}", clientsockfd2);
     
         // Generate a random port and bind with retry logic
         let port = loop {
             let port = generate_random_port();
+            println!("Generated random port: {}", port);
+            let condvar = Condvar::new();
+            let mutex = Mutex::new(());
+            let result = condvar.wait_timeout(mutex.lock().unwrap(), Duration::from_secs(10));
+            match result {
+                Ok((_, timeout)) if timeout.timed_out() => {
+                    println!("Timed out waiting on condition variable");
+                }
+                Ok(_) => {
+                    println!("Received signal on condition variable");
+                }
+                Err(e) => {
+                    println!("Error waiting on condition variable: {:?}", e);
+                }
+            }
             let sockaddr = interface::SockaddrV4 {
                 sin_family: AF_INET as u16,
                 sin_port: port.to_be(),
