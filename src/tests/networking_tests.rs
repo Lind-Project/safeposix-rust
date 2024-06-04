@@ -1135,8 +1135,11 @@ pub mod net_tests {
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
 
-            // Handle connect_syscall error on the FIRST call
-            cage2.connect_syscall(clientsockfd1, &socket).map_err(|e| ClientThreadError::ConnectError(e))?; 
+            // Check for connect_syscall error
+            let connect_result = cage2.connect_syscall(clientsockfd1, &socket);
+            if connect_result != 0 {
+                return Err(ClientThreadError::ConnectError(connect_result));
+            }
 
             barrier_clone1.wait();
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
