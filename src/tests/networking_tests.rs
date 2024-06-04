@@ -1247,7 +1247,11 @@ pub mod net_tests {
         }
         assert_eq!(cage.close_syscall(serversockfd), 0);
 
-        threadclient1.join().unwrap();
+        // threadclient1.join().unwrap();
+        match threadclient1.join() {
+            Ok(_) => (), // Thread finished successfully
+            Err(e) => panic!("Client thread panicked: {:?}", e), 
+        } 
         threadclient2.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
