@@ -101,6 +101,11 @@ pub enum GenIpaddr {
     V4(V4Addr),
     V6(V6Addr),
 }
+pub enum ClientThreadError {
+    ConnectError(i32),
+    SendError(i32),
+    RecvError(i32),
+}
 
 impl GenIpaddr {
     pub fn is_unspecified(&self) -> bool {
