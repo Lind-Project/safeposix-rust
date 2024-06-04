@@ -1130,16 +1130,19 @@ pub mod net_tests {
     
         // Client 1 thread
         let threadclient1 = interface::helper_thread(move || -> Result<(), ClientThreadError> {
+            println!("Client 1: Starting");
             let cage2 = interface::cagetable_getref(2);
             assert_eq!(cage2.close_syscall(serversockfd), 0);
         
             // Check for connect_syscall error
+            println!("Client 1: Before connect");
             let connect_result = cage2.connect_syscall(clientsockfd1, &socket);
             if connect_result != 0 {
                 return Err(ClientThreadError::ConnectError(connect_result));
             }
-        
+            println!("Client 1: Before barrier");
             barrier_clone1.wait();
+            println!("Client 1: After barrier");
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
         
             interface::sleep(interface::RustDuration::from_millis(1));
@@ -1150,6 +1153,7 @@ pub mod net_tests {
         
             assert_eq!(cage2.close_syscall(clientsockfd1), 0);
             cage2.exit_syscall(EXIT_SUCCESS);
+            println!("Client 1: Exiting");
             Ok(())
         });
     
