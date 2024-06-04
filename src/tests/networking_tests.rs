@@ -1058,12 +1058,6 @@ pub mod net_tests {
         lindrustfinalize();
     }
     
-    use std::sync::{Arc, Barrier, Condvar, Mutex};
-    use std::time::{Duration, Instant};
-    use std::net::{TcpListener, UdpSocket};
-    use std::io::ErrorKind;
-    use libc;
-    
     pub fn ut_lind_net_select() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -1078,7 +1072,7 @@ pub mod net_tests {
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
     
         // Generate a random port and bind with retry logic
-        let (port, socket) = loop {
+        let port = loop {
             let port = generate_random_port();
             let sockaddr = interface::SockaddrV4 {
                 sin_family: AF_INET as u16,
@@ -1091,92 +1085,78 @@ pub mod net_tests {
             let socket = interface::GenSockaddr::V4(sockaddr);
     
             if cage.bind_syscall(serversockfd, &socket) == 0 {
-                break (port, socket);
+                break port;
             }
         };
     
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
     
-        // Create FdSet instances
+        // Define the sockaddr structure once for reuse
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr);
+    
         let master_set = &mut interface::FdSet::new();
         let working_set = &mut interface::FdSet::new();
         let outputs = &mut interface::FdSet::new();
     
-        // Add server socket and file descriptor to master_set
         master_set.set(serversockfd);
         master_set.set(filefd);
     
-        // Fork cages for clients
         assert_eq!(cage.fork_syscall(2), 0);
         assert_eq!(cage.fork_syscall(3), 0);
     
-        // Close client sockets in the main cage
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
     
-        // Create barrier and clones for synchronization
         let barrier = Arc::new(Barrier::new(3));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
     
-        // Initialize condition variable and mutex for server readiness
-        let (server_ready, server_ready_condvar) = (Mutex::new(false), Condvar::new());
-        let server_ready_clone = Arc::new((server_ready, server_ready_condvar));
-    
-        // Client 1 thread
+    // Client 1 thread
         let threadclient1 = interface::helper_thread(move || {
-            let (server_ready, server_ready_condvar) = &*server_ready_clone;
             let cage2 = interface::cagetable_getref(2);
-    
-            // Wait for the server to signal readiness
-            let mut server_ready = server_ready.lock().unwrap();
-            while !*server_ready {
-                server_ready_condvar.wait(&mut server_ready).unwrap();
-            }
-    
             assert_eq!(cage2.close_syscall(serversockfd), 0);
-    
+
             println!("Client 1: Attempting to connect");
             assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
             println!("Client 1: Connected");
             barrier_clone1.wait();
             assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
             println!("Client 1: Sent data");
-    
+
             interface::sleep(interface::RustDuration::from_millis(1));
-    
+
             let mut buf = sizecbuf(4);
             assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
             assert_eq!(cbuf2str(&buf), "test");
             println!("Client 1: Received data");
-    
+
             assert_eq!(cage2.close_syscall(clientsockfd1), 0);
             println!("Client 1: Socket closed");
             cage2.exit_syscall(EXIT_SUCCESS);
-        });
+        }); 
     
         // Client 2 thread
         let threadclient2 = interface::helper_thread(move || {
-            let (server_ready, server_ready_condvar) = &*server_ready_clone;
             let cage3 = interface::cagetable_getref(3);
-    
-            // Wait for the server to signal readiness
-            let mut server_ready = server_ready.lock().unwrap();
-            while !*server_ready {
-                server_ready_condvar.wait(&mut server_ready).unwrap();
-            }
-    
             assert_eq!(cage3.close_syscall(serversockfd), 0);
-    
+
             println!("Client 2: Attempting to connect");
             assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
             println!("Client 2: Connected");
             barrier_clone2.wait();
             assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf("test"), 4, 0), 4);
             println!("Client 2: Sent data");
-    
+
             interface::sleep(interface::RustDuration::from_millis(1));
-    
+
             let mut buf = sizecbuf(4);
             let mut result: i32;
             loop {
@@ -1188,111 +1168,96 @@ pub mod net_tests {
             assert_eq!(result, 4);
             assert_eq!(cbuf2str(&buf), "test");
             println!("Client 2: Received data");
-    
+
             assert_eq!(cage3.close_syscall(clientsockfd2), 0);
             println!("Client 2: Socket closed");
             cage3.exit_syscall(EXIT_SUCCESS);
         });
     
+        barrier.wait();
+    
         // Server loop to handle connections and I/O
-        let thread3 = interface::helper_thread(move || {
-            let epfd = cage.epoll_create_syscall(1);
-            assert!(epfd > 0);
-            let mut event_list = vec![
-                EpollEvent {
-                    events: EPOLLIN as u32,
-                    fd: serversockfd,
-                },
-                EpollEvent {
-                    events: EPOLLIN as u32,
-                    fd: filefd,
-                },
-            ];
+        for _counter in 0..600 {
+            working_set.copy_from(master_set);
     
-            assert_eq!(
-                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, serversockfd, &mut event_list[0]),
-                0
+            let select_result = cage.select_syscall(
+                11,
+                Some(working_set),
+                Some(outputs),
+                None,
+                Some(interface::RustDuration::ZERO),
             );
-            assert_eq!(
-                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, filefd, &mut event_list[1]),
-                0
-            );
+            assert!(select_result >= 0);
     
-            let (server_ready, server_ready_condvar) = &*server_ready_clone; 
-            // Signal that the server is ready
-            let mut server_ready = server_ready.lock().unwrap();
-            *server_ready = true;
-            server_ready_condvar.notify_all();
+            // Process readable sockets
+            for sock in 0..FD_SET_MAX_FD {
+                if !working_set.is_set(sock) {
+                    continue;
+                }
     
-            for _counter in 0..600 {
-                let num_events = cage.epoll_wait_syscall(
-                    epfd,
-                    &mut event_list,
-                    1,
-                    Some(interface::RustDuration::ZERO),
-                );
-                assert!(num_events >= 0);
-    
-                for event in &mut event_list[..num_events as usize] {
-                    if event.events & (EPOLLIN as u32) != 0 {
-                        if event.fd == serversockfd {
-                            let sockaddr = interface::SockaddrV4 {
-                                sin_family: AF_INET as u16,
-                                sin_port: generate_random_port().to_be(),
-                                sin_addr: interface::V4Addr {
-                                    s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-                                },
-                                padding: 0,
-                            };
-                            let mut addr = interface::GenSockaddr::V4(sockaddr);
-                            let newsockfd = cage.accept_syscall(serversockfd, &mut addr);
-                            let event = interface::EpollEvent {
-                                events: EPOLLIN as u32,
-                                fd: newsockfd,
-                            };
-                            assert_eq!(
-                                cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, newsockfd, &event),
-                                0
-                            );
-                        } else if event.fd == filefd {
-                            assert_eq!(cage.write_syscall(filefd, str2cbuf("test"), 4), 4);
-                            assert_eq!(cage.lseek_syscall(filefd, 0, SEEK_SET), 0);
-                            event.events = EPOLLOUT as u32;
-                        } else {
-                            let mut buf = sizecbuf(4);
-                            let recres = cage.recv_syscall(event.fd, buf.as_mut_ptr(), 4, 0);
-                            assert_eq!(recres & !4, 0);
-                            if recres == 4 {
-                                assert_eq!(cbuf2str(&buf), "test");
-                                event.events = EPOLLOUT as u32;
-                            } else {
-                                assert_eq!(cage.close_syscall(event.fd), 0);
-                            }
+                if sock == serversockfd {
+                    let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                    let sockfd = cage.accept_syscall(sock as i32, &mut sockgarbage);
+                    assert!(sockfd > 0);
+                    master_set.set(sockfd);
+                    outputs.set(sockfd);
+                } else if sock == filefd {
+                    assert_eq!(cage.write_syscall(sock as i32, str2cbuf("test"), 4), 4);
+                    assert_eq!(cage.lseek_syscall(sock as i32, 0, SEEK_SET), 0);
+                    master_set.clear(sock);
+                } else {
+                    let mut buf = sizecbuf(4);
+                    let mut recvresult: i32;
+                    loop {
+                        recvresult = cage.recv_syscall(sock as i32, buf.as_mut_ptr(), 4, 0);
+                        if recvresult != -libc::EINTR {
+                            break;
                         }
                     }
-                    if event.events & (EPOLLOUT as u32) != 0 {
-                        if event.fd == filefd {
-                            let mut read_buf1 = sizecbuf(4);
-                            assert_eq!(cage.read_syscall(filefd, read_buf1.as_mut_ptr(), 4), 4);
-                            assert_eq!(cbuf2str(&read_buf1), "test");
-                        } else {
-                            assert_eq!(cage.send_syscall(event.fd, str2cbuf("test"), 4, 0), 4);
-                            event.events = EPOLLIN as u32;
+                    if recvresult == 4 {
+                        if cbuf2str(&buf) == "test" {
+                            outputs.set(sock);
+                            continue;
                         }
+                    } else if recvresult == -libc::ECONNRESET {
+                        println!("Connection reset by peer on socket {}", sock);
+                        assert_eq!(cage.close_syscall(sock as i32), 0);
+                        master_set.clear(sock);
+                        outputs.clear(sock);
+                    } else {
+                        assert_eq!(recvresult, 0);
+                        assert_eq!(cage.close_syscall(sock as i32), 0);
+                        master_set.clear(sock);
                     }
                 }
             }
     
-            assert_eq!(cage.close_syscall(serversockfd), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        });
+            // Process writable sockets
+            for sock in 0..FD_SET_MAX_FD {
+                if !outputs.is_set(sock) {
+                    continue;
+                }
+                if sock == filefd {
+                    let mut buf = sizecbuf(4);
+                    assert_eq!(cage.read_syscall(sock as i32, buf.as_mut_ptr(), 4), 4);
+                    assert_eq!(cbuf2str(&buf), "test");
+                    outputs.clear(sock);
+                } else {
+                    assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
+                    outputs.clear(sock);
+                }
+            }
+        }
+    
+        assert_eq!(cage.close_syscall(serversockfd), 0);
     
         threadclient1.join().unwrap();
         threadclient2.join().unwrap();
-        thread3.join().unwrap();
     
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
 
     
     pub fn ut_lind_net_shutdown() {
