@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub mod net_tests {
     use super::super::*;
+    use crate::interface::ClientThreadError;
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use libc::c_void;
