@@ -1058,9 +1058,7 @@ pub mod net_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
-    
-    
+    }  
 
     // pub fn ut_lind_net_select() {
     //     lindrustinit(0);
@@ -1093,7 +1091,7 @@ pub mod net_tests {
     //     };
 
     //     assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
-
+    //     let port = generate_random_port();
     //     let sockaddr = interface::SockaddrV4 {
     //         sin_family: AF_INET as u16,
     //         sin_port: port.to_be(),
@@ -2009,10 +2007,9 @@ pub mod net_tests {
         packslice[pslen + 2..pslen + 4].copy_from_slice(&dnsclass.to_be_bytes());
 
         //send packet
-        // let port = generate_random_port();
         let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            // sin_port: port.to_be(),
+            // static port is used beacuse this test doesn't bind.
             sin_port: 53u16.to_be(),
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([208, 67, 222, 222]),
