@@ -1292,7 +1292,7 @@ pub mod net_tests {
             let port = generate_random_port();
             let sockaddr = interface::SockaddrV4 {
                 sin_family: AF_INET as u16,
-                sin_port: generate_random_port().to_be(),
+                sin_port: port.to_be(),
                 sin_addr: interface::V4Addr {
                     s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
                 },
@@ -1309,7 +1309,7 @@ pub mod net_tests {
 
         let sockaddr = interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
+            sin_port: port.to_be(),
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
             },
