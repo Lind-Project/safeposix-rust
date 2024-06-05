@@ -2052,9 +2052,10 @@ pub mod net_tests {
         packslice[pslen + 2..pslen + 4].copy_from_slice(&dnsclass.to_be_bytes());
 
         //send packet
+        let port = generate_random_port();
         let mut dnsaddr = interface::GenSockaddr::V4(interface::SockaddrV4 {
             sin_family: AF_INET as u16,
-            sin_port: generate_random_port().to_be(),
+            sin_port: port.to_be(),
             //sin_port: 53u16.to_be(),
             sin_addr: interface::V4Addr {
                 s_addr: u32::from_ne_bytes([208, 67, 222, 222]),
