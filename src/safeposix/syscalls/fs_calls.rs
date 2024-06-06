@@ -187,6 +187,8 @@ impl Cage {
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "mkdir", "given path was null");
         }
+
+        // Get the absolute path
         let truepath = normpath(convpath(path), self);
 
         //pass the metadata to this helper. If passed table is none, then create new instance
@@ -205,12 +207,12 @@ impl Cage {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 let effective_mode = S_IFDIR as u32 | mode;
-
                 //assert sane mode bits
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
+                // Create a new inode of type Directory
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
@@ -221,32 +223,37 @@ impl Cage {
                     uid: DEFAULT_UID,
                     gid: DEFAULT_GID,
                     mode: effective_mode,
-                    linkcount: 3,
-                    refcount: 0, //2 because ., and .., as well as reference in parent directory
+                    linkcount: 3, //3 represents the directory name, itself, and reference to the parent directory
+                    refcount: 0, //because no file descriptors are pointing to it currently
                     atime: time,
                     ctime: time,
                     mtime: time,
                     filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode),
                 });
 
-                if let Inode::Dir(ref mut parentdir) =
-                    *(metadata.inodetable.get_mut(&pardirinode).unwrap())
+                //insert a reference to the file in the parent directory and update the inode attributes
+                if let Inode::Dir(ref mut parentdir) = *(metadata.inodetable.get_mut(&pardirinode).unwrap())
                 {
                     parentdir
                         .filename_to_inode_dict
                         .insert(filename, newinodenum);
                     parentdir.linkcount += 1;
+                    parentdir.ctime = time;
+                    parentdir.mtime = time;
+                    // Here, update the ctime and mtime for the parent directory as well
                 }
-                //insert a reference to the file in the parent directory
                 else {
                     unreachable!();
                 }
+                // Insert the newly formed inode to the inodetable
                 metadata.inodetable.insert(newinodenum, newinode);
+                // Update the logs with metadata
                 log_metadata(&metadata, pardirinode);
                 log_metadata(&metadata, newinodenum);
                 0 //mkdir has succeeded
             }
 
+            // When the directory name already exists, return the error.
             (Some(_), ..) => syscall_error(
                 Errno::EEXIST,
                 "mkdir",

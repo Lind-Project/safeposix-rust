@@ -1299,8 +1299,25 @@ pub mod fs_tests {
         let path = "/parentdir";
         // Create a parent directory
         cage.mkdir_syscall(path, S_IRWXA);
+
+        // Get the stat data for the parent directory and check for inode link count to be 3 initially
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(statdata.st_nlink, 3);
+
         // Create a child directory inside parent directory with valid mode bits
         assert_eq!(cage.mkdir_syscall("/parentdir/dir", S_IRWXA), 0);
+        
+        // Get the stat data for the child directory and check for inode link count to be 3 initially
+        let mut statdata2 = StatData::default();
+        assert_eq!(cage.stat_syscall("/parentdir/dir", &mut statdata2), 0);
+        assert_eq!(statdata2.st_nlink, 3);
+
+        // Get the stat data for the parent directory and check for inode link count to be 4 now as a new child directory has been created.
+        let mut statdata3 = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata3), 0);
+        assert_eq!(statdata3.st_nlink, 4);
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
