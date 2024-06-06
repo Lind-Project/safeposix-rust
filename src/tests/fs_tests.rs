@@ -21,6 +21,7 @@ pub mod fs_tests {
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
         ut_lind_fs_fcntl();
+        ut_lind_fs_fcntl_invalid_fd();
         ut_lind_fs_ioctl();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
@@ -461,6 +462,19 @@ pub mod fs_tests {
 
         assert_eq!(cage.close_syscall(filefd), 0);
         assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_fcntl_invalid_fd(){
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        //valid file descriptors range from 0 to 1024 (excluded)
+        //passing an invalid file descriptor outside of that range 
+        //should produce a 'Bad file descriptor' error
+        assert_eq!(cage.fcntl_syscall(-10, F_GETFD, 0), -(Errno::EBADF as i32));
+        assert_eq!(cage.fcntl_syscall(2048, F_GETFD, 0), -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
