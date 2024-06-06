@@ -1900,14 +1900,20 @@ impl Cage {
     //------------------------------------FCNTL SYSCALL------------------------------------
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
+        //panicking if the provided file descriptor is out of bounds
+        //returning a file descriptor table entry otherwise
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //performing the specified command if the file descriptor entry is not empty
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            //'flags' consists of bitwise-or'd access mode, file creation, and file status flags
+            //to retrieve a particular flag, it can bitwise-and'd with 'flags'
             let flags = match filedesc_enum {
                 Epoll(obj) => &mut obj.flags,
                 Pipe(obj) => &mut obj.flags,
                 Stream(obj) => &mut obj.flags,
                 File(obj) => &mut obj.flags,
+                //not clear why running F_SETFL on Socket type requires special treatment
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
                         let sock_tmp = sockfdobj.handle.clone();
@@ -1944,6 +1950,8 @@ impl Cage {
             //matching the tuple
             match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
+                //currently, O_CLOEXEC is the only defined file descriptor flag, thus only this flag is
+                //masked when using F_GETFD or F_SETFD
                 (F_GETFD, ..) => *flags & O_CLOEXEC,
                 // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
@@ -1954,6 +1962,9 @@ impl Cage {
                     }
                     0
                 }
+                //F_GETFL should return file access mode and the file status flags, thus excluding
+                //the file creation flags. It is not clear why O_CLOEXEC is the only masked-out flag,
+                //when there are other file creation flags, like O_CREAT, O_DIRECTORY, etc. 
                 (F_GETFL, ..) => {
                     //for get, we just need to return the flags
                     *flags & !O_CLOEXEC
