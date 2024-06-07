@@ -1088,10 +1088,6 @@ pub mod net_tests {
         let working_set = &mut interface::FdSet::new();
         let outputs = &mut interface::FdSet::new();
 
-        // assert_eq!(master_set.is_set(serversockfd), true);
-        // assert_eq!(master_set.is_set(filefd), true);
-        // assert_eq!(outputs.is_set(filefd), true);
-
         master_set.set(serversockfd);
         master_set.set(filefd);
         
