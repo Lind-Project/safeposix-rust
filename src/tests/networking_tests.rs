@@ -1200,9 +1200,9 @@ pub mod net_tests {
                         outputs.clear(sock);
                     } else {
                         assert_eq!(recvresult, 0);
+                        assert_eq!(cage.close_syscall(sock as i32), 0);
+                        master_set.clear(sock);
                     }
-                    assert_eq!(cage.close_syscall(sock as i32), 0);
-                    master_set.clear(sock);
                 }
             }
 
