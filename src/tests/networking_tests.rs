@@ -1094,7 +1094,7 @@ pub mod net_tests {
         assert_eq!(master_set.is_set(serversockfd), true);
         assert_eq!(master_set.is_set(filefd), true);
         assert_eq!(outputs.is_set(filefd), true);
-        
+
         assert_eq!(cage.fork_syscall(2), 0);
         assert_eq!(cage.fork_syscall(3), 0);
 
@@ -1204,9 +1204,9 @@ pub mod net_tests {
                         outputs.clear(sock);
                     } else {
                         assert_eq!(recvresult, 0);
-                        assert_eq!(cage.close_syscall(sock as i32), 0);
-                        master_set.clear(sock);
                     }
+                    assert_eq!(cage.close_syscall(sock as i32), 0);
+                    master_set.clear(sock);
                 }
             }
 
