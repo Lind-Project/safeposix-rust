@@ -20,8 +20,10 @@ pub mod fs_tests {
         ut_lind_fs_dir_multiple();
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
-        ut_lind_fs_fcntl();
+        ut_lind_fs_fcntl_valid_args();
+        ut_lind_fs_fcntl_invalid_args();
         ut_lind_fs_fcntl_invalid_fd();
+        ut_lind_fs_fcntl_dup();
         ut_lind_fs_ioctl();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
@@ -438,30 +440,49 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_fcntl() {
+    pub fn ut_lind_fs_fcntl_valid_args() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        let filefd = cage.open_syscall("/fcntl_file", O_CREAT | O_EXCL, S_IRWXA);
+        let filefd = cage.open_syscall("/fcntl_file_1", O_CREAT | O_EXCL, S_IRWXA);
 
-        //set the setfd flag
+        //changing O_CLOEXEC file descriptor flag and checking if it was correctly set
         assert_eq!(cage.fcntl_syscall(sockfd, F_SETFD, O_CLOEXEC), 0);
-
-        //checking to see if the wrong flag was set or not
         assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0), O_CLOEXEC);
 
-        //let's get some more flags on the filefd
-        assert_eq!(
-            cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY | O_NONBLOCK),
-            0
-        );
-
-        //checking if the flags are updated...
+        //changing the file access mode to read-only, enabling the 
+        //O_NONBLOCK file status flag, and checking if they were correctly set
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY | O_NONBLOCK), 0);
         assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, 0), 2048);
+
+        //when provided with 'F_GETFD' or 'F_GETFL' command, 'arg' should be ignored, thus even
+        //negative arg values should produce nomal behavior
+        //However, testing results in two errors
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, -132), O_CLOEXEC);
+        assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, -1998), 2048);
 
         assert_eq!(cage.close_syscall(filefd), 0);
         assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_fcntl_invalid_args(){
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let filefd = cage.open_syscall("/fcntl_file_2", O_CREAT | O_EXCL, S_IRWXA);
+        //when presented with a nonexistent command, 'Invalid Argument' error should be thrown
+        //29 is an arbitrary number that does not correspond to any of the defined 'fcntl' commands
+        assert_eq!(cage.fcntl_syscall(filefd, 29, 0), -(Errno::EINVAL as i32));
+        //when a negative arg is provided with F_SETFD, F_SETFL, or F_DUPFD,
+        //Invalid Argument' error should be thrown as well
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFD, -5), -(Errno::EINVAL as i32));
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, -5), -(Errno::EINVAL as i32));
+        assert_eq!(cage.fcntl_syscall(filefd, F_DUPFD, -5), -(Errno::EINVAL as i32));
+
+        assert_eq!(cage.close_syscall(filefd), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -472,13 +493,50 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
         //valid file descriptors range from 0 to 1024 (excluded)
         //passing an invalid file descriptor outside of that range 
-        //should produce a 'Bad file descriptor' error
+        //should produce a 'Bad file number' error
         assert_eq!(cage.fcntl_syscall(-10, F_GETFD, 0), -(Errno::EBADF as i32));
         assert_eq!(cage.fcntl_syscall(2048, F_GETFD, 0), -(Errno::EBADF as i32));
+
+        //calling 'fcntl' on an unused file descriptor should throw 'Bad file number' error
+        let filefd = cage.open_syscall("/fcntl_file_3", O_CREAT | O_EXCL, S_IRWXA);
+        //since no other file is created inside the current thread right after 'close' is called
+        //on 'filefd', it should become unused
+        cage.close_syscall(filefd);
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFD, O_CLOEXEC), -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
+    pub fn ut_lind_fs_fcntl_dup(){
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        let filefd1 = cage.open_syscall("/fcntl_file_4", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        //on success, returning the new file descriptor greater than or equal to 100
+        //and different from the original file descriptor
+        let filefd2 = cage.fcntl_syscall(filefd1, F_DUPFD, 100);
+        assert!(filefd2 >= 100 && filefd2 != filefd1);
+
+        //to check if both file descriptors refer to the same fie, we can write into a file
+        //using one file descriptor, read from the file using another file descriptor,
+        //and make sure that the contents are the same
+        let mut temp_buffer = sizecbuf(9);
+        assert_eq!(cage.write_syscall(filefd1, str2cbuf("Test text"), 9), 9);
+        assert_eq!(cage.read_syscall(filefd2, temp_buffer.as_mut_ptr(), 9), 9);
+        assert_eq!(cbuf2str(&temp_buffer), "Test text");
+
+        //file status flags are shared by duplicated file descriptors resulting from
+        //a single opening of the file
+        assert_eq!(cage.fcntl_syscall(filefd1, F_GETFL, 0), cage.fcntl_syscall(filefd2, F_GETFL, 0));
+
+        assert_eq!(cage.close_syscall(filefd1), 0);
+        assert_eq!(cage.close_syscall(filefd2), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
 
     pub fn ut_lind_fs_ioctl() {
         lindrustinit(0);
