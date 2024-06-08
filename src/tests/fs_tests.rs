@@ -1158,7 +1158,6 @@ pub mod fs_tests {
         thread_parent.join().unwrap();
         lindrustfinalize();
     }
-        
 
     pub fn ut_lind_fs_sem_trytimed() {
         lindrustinit(0);
