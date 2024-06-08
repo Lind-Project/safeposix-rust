@@ -1192,16 +1192,12 @@ pub mod net_tests {
                             break; // if the error was EINTR, retry the syscall
                         }
                     }
+                    
                     if recvresult == 4 {
                         if cbuf2str(&buf) == "test" {
                             outputs.set(sock);
                             continue;
                         }
-                    // } else if recvresult == -libc::ECONNRESET {
-                    //     println!("Connection reset by peer on socket {}", sock);
-                    //     assert_eq!(cage.close_syscall(sock as i32), 0);
-                    //     master_set.clear(sock);
-                    //     outputs.clear(sock);
                     } else {
                         assert_eq!(recvresult, 0);
                     }
