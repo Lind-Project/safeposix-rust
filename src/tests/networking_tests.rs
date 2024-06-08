@@ -1363,12 +1363,6 @@ pub mod net_tests {
                         assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
                         outputs.clear(sock);
                         continue;
-                    } else if recvresult == -libc::ECONNRESET {
-                        println!("Connection reset by peer on socket {}", sock);
-                        assert_eq!(cage.close_syscall(sock as i32), 0);
-                        master_set.clear(sock);
-                        outputs.clear(sock);
-                        continue;
                     } else {
                         assert_eq!(recvresult, 0);
                     }
