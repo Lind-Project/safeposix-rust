@@ -1366,11 +1366,11 @@ pub mod net_tests {
                             outputs.set(sock);
                             continue;
                         }
-                    // } else if recvresult == -libc::ECONNRESET {
-                    //     println!("Connection reset by peer on socket {}", sock);
-                    //     assert_eq!(cage.close_syscall(sock as i32), 0);
-                    //     master_set.clear(sock);
-                    //     outputs.clear(sock);
+                    } else if recvresult == -libc::ECONNRESET {
+                        println!("Connection reset by peer on socket {}", sock);
+                        assert_eq!(cage.close_syscall(sock as i32), 0);
+                        master_set.clear(sock);
+                        outputs.clear(sock);
                     }else {
                         assert_eq!(recvresult, 0);
                         assert_eq!(cage.close_syscall(sock as i32), 0);
