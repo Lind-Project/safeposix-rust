@@ -1901,7 +1901,7 @@ impl Cage {
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         //if the provided file descriptor is out of bounds, get_filedescriptor returns Err(),
-        //and using unwrap on Err() causes a thread to panick
+        //and using unwrap on Err() causes a thread to panic
         //instead, I propose using the 'if let' construct to be able to report an error to 
         //the user instead of simply panicking
         //otherwise, file descriptor table entry is stored in 'checkedfd'
