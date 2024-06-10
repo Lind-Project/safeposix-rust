@@ -1220,6 +1220,9 @@ pub mod fs_tests {
         let thread_child = interface::helper_thread(move || {
             let cage1 = interface::cagetable_getref(2);
     
+            // Add a delay to ensure parent has time to proceed with its operation
+            interface::sleep(interface::RustDuration::from_millis(50));
+    
             // Child waits for the semaphore
             let child_wait_ret = cage1.sem_trywait_syscall(shmatret as u32);
             println!("Child semaphore wait result: {}", child_wait_ret);
@@ -1283,6 +1286,7 @@ pub mod fs_tests {
         thread_parent.join().unwrap();
         lindrustfinalize();
     }
+    
     
 
     pub fn ut_lind_fs_sem_test() {
