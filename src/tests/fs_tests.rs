@@ -458,7 +458,6 @@ pub mod fs_tests {
 
         //when provided with 'F_GETFD' or 'F_GETFL' command, 'arg' should be ignored, thus even
         //negative arg values should produce nomal behavior
-        //However, testing results in two errors
         assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, -132), O_CLOEXEC);
         assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, -1998), 2048);
 
