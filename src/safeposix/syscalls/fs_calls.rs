@@ -1898,6 +1898,15 @@ impl Cage {
     }
 
     //------------------------------------FCNTL SYSCALL------------------------------------
+    
+    //fcntl performs operations, like returning or setting file status flags,
+    //duplicating a file descriptor, etc., on an open file descriptor 
+    //it accepts three parameters: fd - an open file descriptor, cmd - an operation to be performed on fd,
+    //and arg - an optional argument (whether or not arg is required is determined by cmd)
+    //for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
+    //value of file descriptor flags, value of status flags, etc.
+    //for more detailed description of all the commands and return values, see 
+    //https://linux.die.net/man/2/fcntl
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         //if the provided file descriptor is out of bounds, get_filedescriptor returns Err(),
