@@ -1994,13 +1994,12 @@ impl Cage {
                                 0
                             }
                             (F_DUPFD, arg) if arg >= 0 => self._dup2_helper(&filedesc_enum, arg, false),
-                            //TO DO: implement. this one is saying get the signals
+                            //TO DO: F_GETOWN and F_SETOWN commands are not implemented yet
                             (F_GETOWN, ..) => {
-                                0 //TO DO: traditional SIGIO behavior
+                                0 
                             }
                             (F_SETOWN, arg) if arg >= 0 => {
-                                0 //this would return the PID if positive and the process group if negative,
-                                //either way do nothing and return success
+                                0
                             }
                             _ => {
                                 let err_msg = format!("Arguments pair ({}, {}) does not match implemented parameters", cmd, arg);
