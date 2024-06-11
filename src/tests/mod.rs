@@ -98,7 +98,7 @@ fn is_port_available(port: u16) -> bool {
 }
 
 pub fn generate_random_port() -> u16 {
-    loop {
+    for _ in 0..100 {
         let port = generate_random_port();
         if is_port_available(port) {
             return port;
