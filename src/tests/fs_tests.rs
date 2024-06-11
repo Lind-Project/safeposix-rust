@@ -1102,7 +1102,7 @@ pub mod fs_tests {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            interface::sleep(interface::RustDuration::from_millis(200)); //a shorter sleep time ,child thread might not have released the semaphore yet due to the 40ms sleep.
+            interface::sleep(interface::RustDuration::from_millis(100)); //a shorter sleep time ,child thread might not have released the semaphore yet due to the 40ms sleep.
             // Release the semaphore
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
@@ -1112,7 +1112,7 @@ pub mod fs_tests {
             // Parents waits for the semaphore
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-            interface::sleep(interface::RustDuration::from_millis(100));
+            interface::sleep(interface::RustDuration::from_millis(200)); //increse to 200 from 100
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1); //main issue  parent expects to be 1 but its 0
