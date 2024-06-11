@@ -98,12 +98,10 @@ fn is_port_available(port: u16) -> bool {
 }
 
 pub fn generate_random_port() -> u16 {
-    let mut rng = rand::thread_rng();
-    
-    loop {
-        let port = rng.gen_range(49152..65535);
+    for port in 49152..65535 {
         if is_port_available(port) {
             return port;
         }
     }
+    panic!("No available ports found");
 }
