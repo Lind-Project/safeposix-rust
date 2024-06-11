@@ -93,16 +93,29 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
 }
 
-fn is_port_available(port: u16) -> bool {
-    TcpListener::bind(("127.0.0.1", port)).is_ok() &&
-    UdpSocket::bind(("127.0.0.1", port)).is_ok()
-}
+// fn is_port_available(port: u16) -> bool {
+//     TcpListener::bind(("127.0.0.1", port)).is_ok() &&
+//     UdpSocket::bind(("127.0.0.1", port)).is_ok()
+// }
 
-pub fn generate_random_port() -> u16 {
-    for port in 49152..65535 {
-        if is_port_available(port) {
-            return port;
-        }
+// pub fn generate_random_port() -> u16 {
+//     for port in 49152..65535 {
+//         if is_port_available(port) {
+//             return port;
+//         }
+//     }
+//     panic!("No available ports found");
+// }
+fn generate_random_port() -> u16 {
+    // Let the OS select an available TCP port
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to an available TCP port");
+    let port = listener.local_addr().unwrap().port();
+    
+    // Check if the same port is available for UDP
+    if UdpSocket::bind(("127.0.0.1", port)).is_ok() {
+        port
+    } else {
+        // If the UDP port is not available, recursively call the function to try again
+        generate_random_port()
     }
-    panic!("No available ports found");
 }
