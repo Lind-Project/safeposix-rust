@@ -1084,6 +1084,8 @@ pub mod net_tests {
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
 
         // allocate spaces for fd_set bitmaps
+        // `master_set`: Consits of all file descriptors.
+        // `working_set`: Consits of a copy of `master_set`. Modified by `select()` to contain only ready descriptors. 
         let master_set = &mut interface::FdSet::new();
         let working_set = &mut interface::FdSet::new();
         let outputs = &mut interface::FdSet::new();

@@ -65,7 +65,7 @@ mod main_tests {
         lindrustfinalize();
 
         println!("FS TESTS");
-        // test_fs();
+        test_fs();
 
         println!("NET TESTS");
         net_tests();
@@ -91,6 +91,8 @@ pub fn sizecbuf<'a>(size: usize) -> Box<[u8]> {
 pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
 }
+
+// The RustPOSIX test suite avoids conflicts caused by repeatedly binding to the same ports by generating a random port number within the valid range (49152-65535) for each test run. This eliminates the need for waiting between tests.
 
 pub fn generate_random_port() -> u16 {
     use rand::Rng;
