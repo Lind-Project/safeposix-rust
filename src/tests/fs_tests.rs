@@ -1103,11 +1103,11 @@ pub mod fs_tests {
             // Child waits for the semaphore
             println!("child1");
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            println!("child2");
+            println!("child2 {}",cage1.sem_getvalue_syscall(shmatret as u32));
             interface::sleep(interface::RustDuration::from_millis(100)); //a shorter sleep time ,child thread might not have released the semaphore yet due to the 40ms sleep.
             // Release the semaphore
             println!("child3");
-            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0); //fails 
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
@@ -1118,12 +1118,12 @@ pub mod fs_tests {
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             println!("parent 2");
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-            println!("parent 3");
+            println!("parent 3 {}",cage.sem_getvalue_syscall(shmatret as u32));
             interface::sleep(interface::RustDuration::from_millis(200)); //increse to 200 from 100
             // Parents release the semaphore
             println!("parent 4");
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
-            println!("parent 5");
+            println!("parent 5 {}",cage.sem_getvalue_syscall(shmatret as u32));
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1); //main issue  parent expects to be 1 but its 0
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);

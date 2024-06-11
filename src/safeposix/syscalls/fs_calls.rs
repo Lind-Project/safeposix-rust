@@ -3531,6 +3531,7 @@ impl Cage {
             let semaphore = sementry.clone();
             drop(sementry);
             if !semaphore.unlock() {
+                println!("unlock failed");
                 return syscall_error(
                     Errno::EOVERFLOW,
                     "sem_post",
