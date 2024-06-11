@@ -92,8 +92,15 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
 }
 
+fn is_port_available(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
 pub fn generate_random_port() -> u16 {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    rng.gen_range(49152..65535)
+    loop {
+        let port = generate_random_port();
+        if is_port_available(port) {
+            return port;
+        }
+    }
 }
