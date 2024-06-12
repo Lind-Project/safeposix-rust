@@ -10,6 +10,7 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 use crate::interface::RustSemaphore;
+use std::sync::Arc;
 impl Cage {
     //------------------------------------OPEN SYSCALL------------------------------------
 
