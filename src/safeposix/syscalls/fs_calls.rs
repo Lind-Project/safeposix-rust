@@ -9,7 +9,7 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
-
+use crate::interface::RustSemaphore;
 impl Cage {
     //------------------------------------OPEN SYSCALL------------------------------------
 
@@ -3591,7 +3591,7 @@ impl Cage {
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             let semaphore = sementry.clone();
             drop(sementry);
-            println!("semaphore: and pointer is {:?}" , semaphore as *const RustSemaphore);
+            println!("semaphore: and pointer is {:?}" , semaphore as *const interface::RustSemaphore);
             return semaphore.get_value();
         }
         return syscall_error(
