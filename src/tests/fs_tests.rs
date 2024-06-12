@@ -1095,7 +1095,6 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        println!("write_syscall: position is {:?} and pointer is {:?}", position, normalfile_filedesc_obj as *const FileDesc);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
