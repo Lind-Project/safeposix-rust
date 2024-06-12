@@ -1101,7 +1101,7 @@ pub mod fs_tests {
         let thread_child = interface::helper_thread(move || {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
-            println!("child1");
+            println!("child1",cage1.sem_getvalue_syscall(shmatret as u32));
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             println!("child2 {}",cage1.sem_getvalue_syscall(shmatret as u32));
             interface::sleep(interface::RustDuration::from_millis(40)); //a shorter sleep time ,child thread might not have released the semaphore yet due to the 40ms sleep.
