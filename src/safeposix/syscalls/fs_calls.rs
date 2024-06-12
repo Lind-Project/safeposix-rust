@@ -3591,7 +3591,7 @@ impl Cage {
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             let semaphore = sementry.clone();
             drop(sementry);
-            println!("semaphore: and pointer is {:?}" , semaphore as *const interface::RustSemaphore);
+            println!("semaphore: and pointer is {:?}" , semaphore as *const Arc<interface::RustSemaphore>);
             return semaphore.get_value();
         }
         return syscall_error(
