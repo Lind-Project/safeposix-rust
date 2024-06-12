@@ -1106,8 +1106,9 @@ pub mod fs_tests {
             println!("child2 {}",cage1.sem_getvalue_syscall(shmatret as u32));
             interface::sleep(interface::RustDuration::from_millis(40)); //a shorter sleep time ,child thread might not have released the semaphore yet due to the 40ms sleep.
             // Release the semaphore
-            println!("child3");
+            println!("child3{}",cage1.sem_getvalue_syscall(shmatret as u32));
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0); //fails 
+            println!("child4{}",cage1.sem_getvalue_syscall(shmatret as u32));
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
