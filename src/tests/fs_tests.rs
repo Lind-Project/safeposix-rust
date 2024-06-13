@@ -493,6 +493,11 @@ pub mod fs_tests {
         //valid file descriptors range from 0 to 1024 (excluded)
         //passing an invalid file descriptor outside of that range 
         //should produce a 'Bad file number' error
+        //However, because unwrap is used on get_filedescriptor(),
+        //the program panics instead
+        //This is a pattern that is present throughout the whole project,
+        //so instead of solving it in this particular instance,
+        //an issue titled 'Unwrapping on an Err() causes panic!' was raised
         assert_eq!(cage.fcntl_syscall(-10, F_GETFD, 0), -(Errno::EBADF as i32));
         assert_eq!(cage.fcntl_syscall(2048, F_GETFD, 0), -(Errno::EBADF as i32));
 
