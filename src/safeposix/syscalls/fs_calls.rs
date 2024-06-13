@@ -3599,20 +3599,20 @@ impl Cage {
     /*
      * Take only sem_t *sem as argument, and return int *sval
      */
-    pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = &self.sem_table;
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
-            println!("semaphore: and pointer is {:?}" , &semaphore as *const Arc<interface::RustSemaphore>);
-            return semaphore.get_value();
-        }
-        return syscall_error(
-            Errno::EINVAL,
-            "sem_getvalue",
-            "sem is not a valid semaphore",
-        );
-    }
+    // pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
+    //     let semtable = &self.sem_table;
+    //     if let Some(sementry) = semtable.get_mut(&sem_handle) {
+    //         let semaphore = sementry.clone();
+    //         drop(sementry);
+    //         println!("semaphore: and pointer is {:?}" , &semaphore as *const Arc<interface::RustSemaphore>);
+    //         return semaphore.get_value();
+    //     }
+    //     return syscall_error(
+    //         Errno::EINVAL,
+    //         "sem_getvalue",
+    //         "sem is not a valid semaphore",
+    //     );
+    // }
 
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
