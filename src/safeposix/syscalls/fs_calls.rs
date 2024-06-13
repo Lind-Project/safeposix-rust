@@ -11,6 +11,8 @@ use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 use crate::interface::RustSemaphore;
 use std::sync::Arc;
+use std::ptr;
+use core::ptr;
 impl Cage {
     //------------------------------------OPEN SYSCALL------------------------------------
 
