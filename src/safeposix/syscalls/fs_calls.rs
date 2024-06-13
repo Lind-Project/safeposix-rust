@@ -181,72 +181,102 @@ impl Cage {
     }
 
     //------------------MKDIR SYSCALL------------------
-
+    // Description
+    // The mkdir_syscall() creates a new directory named by the path name pointed to by a path as the input parameter in the function.
+    // The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
+    // The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
+    // On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
+    
+    // Function Arguments
+    // The mkdir_syscall() receives two arguments:
+    // 1. Path - This represents the path at which the new directory will be created.
+    //           For example: "/parentdir/dir" represents the new directory name as "dir", which will be created at this path (/parentdir/dir).
+    // 2. Mode - This represents the permission of the newly created directory. 
+    //           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new directory. 
+    
+    // Return Values
+    // Upon successful creation of the directory, 0 is returned.
+    // Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    //
+    // Tests
+    // All the different scenarios for mkdir_syscall() are covered and tested in the "fs_tests.rs" file under "mkdir_syscall_tests" section.
+    //
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
-        //Check that path is not empty
+
+        // Check that the given input path is not empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "mkdir", "given path was null");
         }
-        let truepath = normpath(convpath(path), self);
 
-        //pass the metadata to this helper. If passed table is none, then create new instance
+        // Store the FileMetadata into a helper variable which is used for fetching the metadata of a given inode from the Inode Table. 
         let metadata = &FS_METADATA;
 
+        // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
+        // while navigating through subdirectories and establishing new directory at the given location.
+        let truepath = normpath(convpath(path), self);
+
+        // Walk through the absolute path which returns a tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
-            //If neither the file nor parent exists
+            // Case 1: When neither the file directory nor the parent directory exists
             (None, None) => syscall_error(
                 Errno::ENOENT,
                 "mkdir",
                 "a directory component in pathname does not exist or is a dangling symbolic link",
             ),
 
-            //If the file doesn't exist but the parent does
+            // Case 2: When the file doesn't exist but the parent directory exists
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 let effective_mode = S_IFDIR as u32 | mode;
-
-                //assert sane mode bits
+                // Check for the condition if the mode bits are correct and have the required permissions to create a directory
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
+                // Fetch the next available inode number using the FileSystem MetaData table
+                // Create a new inode of type "Dir" representing a directory and set the required attributes
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                 let time = interface::timestamp(); //We do a real timestamp now
-
                 let newinode = Inode::Dir(DirectoryInode {
-                    size: 0,
+                    size: 0, //initial size of a directory is 0 as it is empty
                     uid: DEFAULT_UID,
                     gid: DEFAULT_GID,
                     mode: effective_mode,
-                    linkcount: 3,
-                    refcount: 0, //2 because ., and .., as well as reference in parent directory
+                    linkcount: 3, //because of the directory name(.), itself, and reference to the parent directory(..)
+                    refcount: 0, //because no file descriptors are pointing to it currently
                     atime: time,
                     ctime: time,
                     mtime: time,
-                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode),
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode), //Establish a mapping between the newly created inode and the parent directory inode for easy retrieval and linking
                 });
 
-                if let Inode::Dir(ref mut parentdir) =
-                    *(metadata.inodetable.get_mut(&pardirinode).unwrap())
+                // Insert a reference to the file in the parent directory and update the inode attributes
+                // Fetch the inode of the parent directory and only proceed when its type is directory.
+                if let Inode::Dir(ref mut parentdir) = *(metadata.inodetable.get_mut(&pardirinode).unwrap())
                 {
                     parentdir
                         .filename_to_inode_dict
                         .insert(filename, newinodenum);
-                    parentdir.linkcount += 1;
+                    parentdir.linkcount += 1; // Since the parent is now associated to the new directory, its linkcount will increment by 1
+                    parentdir.ctime = time; // Here, update the ctime and mtime for the parent directory as well
+                    parentdir.mtime = time;
                 }
-                //insert a reference to the file in the parent directory
                 else {
                     unreachable!();
                 }
+                // Update the inode table by inserting the newly formed inode mapped with its inode number.
                 metadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(&metadata, pardirinode);
                 log_metadata(&metadata, newinodenum);
-                0 //mkdir has succeeded
+
+                // Return 0 when mkdir has succeeded
+                0 
             }
 
+            // Case 3: When the file directory name already exists, then return the error.
             (Some(_), ..) => syscall_error(
                 Errno::EEXIST,
                 "mkdir",
@@ -1193,8 +1223,8 @@ impl Cage {
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             // we're only implementing this for INET/tcp sockets right now
             match filedesc_enum {
-                Socket(sockfdobj) => {
-                    let sock_tmp = sockfdobj.handle.clone();
+                Socket(socket_filedesc_obj) => {
+                    let sock_tmp = socket_filedesc_obj.handle.clone();
                     let sockhandle = sock_tmp.write();
 
                     match sockhandle.domain {
@@ -1206,7 +1236,7 @@ impl Cage {
                                 {
                                     return syscall_error(
                                         Errno::ENOTCONN,
-                                        "send",
+                                        "writev",
                                         "The descriptor is not connected",
                                     );
                                 }
@@ -1243,6 +1273,50 @@ impl Cage {
                                 );
                             }
                         },
+                        AF_UNIX => {
+                            match sockhandle.protocol {
+                                IPPROTO_TCP => {
+                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    if (sockhandle.state != ConnState::CONNECTED)
+                                        && (sockhandle.state != ConnState::CONNWRONLY)
+                                    {
+                                        return syscall_error(
+                                            Errno::ENOTCONN,
+                                            "writev",
+                                            "The descriptor is not connected",
+                                        );
+                                    }
+                                    // get the socket pipe, write to it, and return bytes written
+                                    let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    let mut nonblocking = false;
+                                    if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
+                                        nonblocking = true;
+                                    }
+                                    let retval = match sockinfo.sendpipe.as_ref() {
+                                        Some(sendpipe) => sendpipe.write_vectored_to_pipe(
+                                            iovec,
+                                            iovcnt,
+                                            nonblocking,
+                                        )
+                                            as i32,
+                                        None => {
+                                            return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
+                                        }
+                                    };
+                                    if retval == -(Errno::EPIPE as i32) {
+                                        interface::lind_kill_from_id(self.cageid, SIGPIPE);
+                                    } // Trigger SIGPIPE
+                                    retval
+                                }
+                                _ => {
+                                    return syscall_error(
+                                        Errno::EOPNOTSUPP,
+                                        "send",
+                                        "Unkown protocol in send",
+                                    );
+                                }
+                            }
+                        }
                         _ => {
                             return syscall_error(
                                 Errno::EOPNOTSUPP,
@@ -1252,7 +1326,32 @@ impl Cage {
                         }
                     }
                 }
+                Pipe(pipe_filedesc_obj) => {
+                    if is_rdonly(pipe_filedesc_obj.flags) {
+                        return syscall_error(
+                            Errno::EBADF,
+                            "write",
+                            "specified pipe not open for writing",
+                        );
+                    }
+
+                    let mut nonblocking = false;
+                    if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
+                        nonblocking = true;
+                    }
+
+                    let retval =
+                        pipe_filedesc_obj
+                            .pipe
+                            .write_vectored_to_pipe(iovec, iovcnt, nonblocking)
+                            as i32;
+                    if retval == -(Errno::EPIPE as i32) {
+                        interface::lind_kill_from_id(self.cageid, SIGPIPE);
+                    } // Trigger SIGPIPE
+                    retval
+                }
                 _ => {
+                    // we currently don't support writev for files/streams
                     return syscall_error(
                         Errno::EOPNOTSUPP,
                         "writev",
