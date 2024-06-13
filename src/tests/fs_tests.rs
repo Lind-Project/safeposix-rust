@@ -8,6 +8,7 @@ pub mod fs_tests {
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
     use std::ptr;
+    use std::sync::Arc;
 
     pub fn test_fs() {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
@@ -1152,7 +1153,7 @@ pub mod fs_tests {
         let shm_ptr = shmatret as *mut u8;
     
         // Initialize the semaphore in shared memory
-        let semaphore = interface::RustSemaphore::new(1, 1);
+        let semaphore = interface::RustSemaphore::new(1, true);
         let semaphore_ptr = shm_ptr as *mut interface::RustSemaphore;
         unsafe {
             ptr::write(semaphore_ptr, semaphore);
@@ -1178,7 +1179,7 @@ pub mod fs_tests {
             println!("child1");
             println!("semaphore: and pointer is {:?}", semaphore_ptr);
             assert_eq!(cage1.sem_wait_syscall(semaphore_handle), 0);
-            println!("child2 ");
+            println!("child2 0");
             interface::sleep(interface::RustDuration::from_millis(40));
             // Release the semaphore
             println!("child3");
@@ -1195,12 +1196,12 @@ pub mod fs_tests {
             println!("parent 2");
             println!("semaphore: and pointer is {:?}", semaphore_ptr);
             assert_eq!(cage.sem_getvalue_syscall(semaphore_handle), 0);
-            println!("parent 3 ");
+            println!("parent 3 0");
             interface::sleep(interface::RustDuration::from_millis(100));
             // Parent releases the semaphore
             println!("parent 4");
             assert_eq!(cage.sem_post_syscall(semaphore_handle), 0);
-            println!("parent 5 ");
+            println!("parent 5 1");
             assert_eq!(cage.sem_getvalue_syscall(semaphore_handle), 1);
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(semaphore_handle), 0);
