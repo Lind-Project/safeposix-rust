@@ -3551,7 +3551,7 @@ impl Cage {
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         if let Some(semaphore) = semtable.get(&sem_handle) {
-            println!("semaphore: and pointer is {:?}", semaphore as *const Arc<interface::RustSemaphore>);
+            // println!("semaphore: and pointer is {:?}", semaphore as *const Arc<interprintln!("semaphoreface::RustSemaphore>);
             return semaphore.get_value();
         }
         return syscall_error(
