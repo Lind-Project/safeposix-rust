@@ -3529,9 +3529,7 @@ impl Cage {
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         println!("unlock failed 1");
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
+        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
             println!("unlock failed 2 ");
             if !semaphore.unlock() {
                 println!("unlock failed 3 ");
@@ -3546,7 +3544,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
         }
         return 0;
-    }
+    }    
 
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
