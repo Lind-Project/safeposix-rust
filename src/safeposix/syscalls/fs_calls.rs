@@ -3666,7 +3666,7 @@ impl Cage {
                 );
             }
         } else {
-            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
+            return syscall_error(Errno::EINVAL, "sem_post", "sem is not a valid semaphore");
         }
         return 0;
     }
@@ -3714,8 +3714,11 @@ impl Cage {
         let semtable = &self.sem_table;
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             let semaphore = sementry.clone();
+            println!("semaphore: and pointer is {:?}", &**sementry as *const _);
             drop(sementry);
-            return semaphore.get_value();
+            let value = semaphore.get_value();
+            println!("sem_getvalue: {:?}", value);
+            return value;
         }
         return syscall_error(
             Errno::EINVAL,
