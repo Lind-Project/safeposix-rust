@@ -2083,7 +2083,6 @@ impl Cage {
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
-
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
                             let mut ioctlret = 0;
@@ -2102,7 +2101,7 @@ impl Cage {
                             } else {
                                 *flags |= O_NONBLOCK;
                                 //libc::fcntl is called under the hood with F_SETFL command ans O_NONBLOCK as an argument
-                                //to set nonblocking I/O, andd the result of the call is stored in ioctlret
+                                //to set nonblocking I/O, and the result of the call is stored in ioctlret
 
                                 //As of now, I don't understand why besides changing the emulated flags, we perform
                                 //a real libc::fcntl syscall
