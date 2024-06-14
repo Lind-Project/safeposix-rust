@@ -1154,6 +1154,11 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
+        // Initialize the "child done" semaphore
+        let child_done_sem = (shmatret as u32) + std::mem::size_of::<i32>() as u32; // Offset in shared memory
+        let ret_child_done_init = cage.sem_init_syscall(child_done_sem, 0, 1); 
+        assert_eq!(ret_child_done_init, 0);
+        assert_eq!(cage.sem_getvalue_syscall(child_done_sem), 0);
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1179,15 +1184,16 @@ pub mod fs_tests {
             println!("parent 2");
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
             println!("parent 3 {}",cage.sem_getvalue_syscall(shmatret as u32));
+            assert_eq!(cage.sem_wait_syscall(child_done_sem), 0); 
             interface::sleep(interface::RustDuration::from_millis(100)); //increse to 200 from 100
             // Parents release the semaphore
             println!("parent 4");
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
             println!("parent 5 {}",cage.sem_getvalue_syscall(shmatret as u32));
-            assert_eq!(cage.sem_wait_syscall(child_done_sem as u32), 0);
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);//main issue  parent expects to be 1 but its 0
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
+            assert_eq!(cage.sem_destroy_syscall(child_done_sem), 0);
             // mark the shared memory to be rmoved
             let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
             assert_eq!(shmctlret2, 0);
