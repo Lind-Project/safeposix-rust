@@ -1928,16 +1928,32 @@ impl Cage {
     }
 
     //------------------------------------FCNTL SYSCALL------------------------------------
+    
+    //fcntl performs operations, like returning or setting file status flags,
+    //duplicating a file descriptor, etc., on an open file descriptor 
+    //it accepts three parameters: fd - an open file descriptor, cmd - an operation to be performed on fd,
+    //and arg - an optional argument (whether or not arg is required is determined by cmd)
+    //for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
+    //value of file descriptor flags, value of status flags, etc.
+    //for more detailed description of all the commands and return values, see 
+    //https://linux.die.net/man/2/fcntl
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, get_filedescriptor returns Err(),
+        //unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {
+        if let Some(filedesc_enum) = &mut *unlocked_fd {                    
+            //'flags' consists of bitwise-or'd access mode, file creation, and file status flags
+            //to retrieve a particular flag, it can bitwise-and'd with 'flags'
             let flags = match filedesc_enum {
                 Epoll(obj) => &mut obj.flags,
                 Pipe(obj) => &mut obj.flags,
                 Stream(obj) => &mut obj.flags,
                 File(obj) => &mut obj.flags,
+                //not clear why running F_SETFL on Socket type requires special treatment
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
                         let sock_tmp = sockfdobj.handle.clone();
@@ -1946,10 +1962,10 @@ impl Cage {
                         if let Some(ins) = &mut sockhandle.innersocket {
                             let fcntlret;
                             if arg & O_NONBLOCK == O_NONBLOCK {
-                                //set for non-blocking I/O
+                                //set non-blocking I/O
                                 fcntlret = ins.set_nonblocking();
                             } else {
-                                //clear non-blocking I/O
+                                //set blocking I/O
                                 fcntlret = ins.set_blocking();
                             }
                             if fcntlret < 0 {
@@ -1974,41 +1990,54 @@ impl Cage {
             //matching the tuple
             match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
+                //F_GETFD returns file descriptor flags only, meaning that access mode flags 
+                //and file status flags are excluded
+                //F_SETFD is used to set file descriptor flags only, meaning that any changes to access mode flags
+                //or file status flags should be ignored
+                //currently, O_CLOEXEC is the only defined file descriptor flag, thus only this flag is
+                //masked when using F_GETFD or F_SETFD
                 (F_GETFD, ..) => *flags & O_CLOEXEC,
-                // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
                     if arg & O_CLOEXEC != 0 {
+                        //if O_CLOEXEC flag is set to 1 in 'arg', 'flags' is updated by setting its O_CLOEXEC bit to 1
                         *flags |= O_CLOEXEC;
                     } else {
+                        //if O_CLOEXEC flag is set to 0 in 'arg', 'flags' is updated by setting its O_CLOEXEC bit to 0
                         *flags &= !O_CLOEXEC;
                     }
                     0
                 }
+                //F_GETFL should return file access mode and file status flags, which means that
+                //file creation flags should be masked out
                 (F_GETFL, ..) => {
-                    //for get, we just need to return the flags
-                    *flags & !O_CLOEXEC
+                    *flags & !(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC)
                 }
+                //F_SETFL is used to set file status flags, thus any changes to file access mode and file
+                //creation flags should be ignored (see F_SETFL command in the man page for fcntl for the reference)
                 (F_SETFL, arg) if arg >= 0 => {
-                    *flags |= arg;
+                    //valid changes are extracted by ignoring changes to file access mode and file creation flags
+                    let valid_changes = arg & !(O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+                    //access mode and creation flags are extracted and other flags are set to 0 to update them
+                    let acc_and_creation_flags = *flags & (O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+                    //valid changes are combined with the old file access mode and file creation flags
+                    *flags = valid_changes | acc_and_creation_flags; 
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => self._dup2_helper(&filedesc_enum, arg, false),
-                //TO DO: implement. this one is saying get the signals
+                //TO DO: F_GETOWN and F_SETOWN commands are not implemented yet
                 (F_GETOWN, ..) => {
-                    0 //TO DO: traditional SIGIO behavior
+                    0 
                 }
                 (F_SETOWN, arg) if arg >= 0 => {
-                    0 //this would return the PID if positive and the process group if negative,
-                      //either way do nothing and return success
+                    0
                 }
-                _ => syscall_error(
-                    Errno::EINVAL,
-                    "fcntl",
-                    "Arguments provided do not match implemented parameters",
-                ),
+                _ => {
+                    let err_msg = format!("Arguments pair ({}, {}) does not match implemented parameters", cmd, arg);
+                    syscall_error(Errno::EINVAL, "fcntl", &err_msg)
+                },
             }
         } else {
-            syscall_error(Errno::EBADF, "fcntl", "Invalid file descriptor")
+            syscall_error(Errno::EBADF, "fcntl", "File descriptor is out of range")
         }
     }
 
