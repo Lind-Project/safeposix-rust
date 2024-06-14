@@ -1181,13 +1181,13 @@ pub mod fs_tests {
 
             println!("parent 1");
             // Parents waits for the semaphore
-            assert_eq!(cage.sem_wait_syscall(child_done_sem), 0); 
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             println!("parent 2");
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
             println!("parent 3 {}",cage.sem_getvalue_syscall(shmatret as u32));
-            assert_eq!(cage.sem_wait_syscall(child_done_sem), 0); 
+    
             interface::sleep(interface::RustDuration::from_millis(100)); //increse to 200 from 100
+            assert_eq!(cage.sem_wait_syscall(child_done_sem), 0); // Parent waits only once.
             // Parents release the semaphore
             println!("parent 4");
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
