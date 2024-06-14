@@ -1143,7 +1143,7 @@ pub mod fs_tests {
     // }
     pub fn ut_lind_fs_sem_fork() {
         lindrustinit(0);
-        let cage = interface::cagetable_getref(1);
+        let cage = interface::cagetable_getref(1);  
         let key = 31337;
         // Create a shared memory region
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
@@ -1153,12 +1153,12 @@ pub mod fs_tests {
         // Initialize the semaphore with shared between process
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
-        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1); 
         // Initialize the "child done" semaphore
         let child_done_sem = (shmatret as u32) + std::mem::size_of::<i32>() as u32; // Offset in shared memory
         let ret_child_done_init = cage.sem_init_syscall(child_done_sem, 0, 1); 
         assert_eq!(ret_child_done_init, 0);
-        assert_eq!(cage.sem_getvalue_syscall(child_done_sem), 0);
+        assert_eq!(cage.sem_getvalue_syscall(child_done_sem), 0);//error here
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
         // Child process
@@ -1173,6 +1173,7 @@ pub mod fs_tests {
             println!("child3");
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0); //fails 
             assert_eq!(cage1.sem_post_syscall(child_done_sem as u32), 0);
+            assert_eq!(cage1.sem_post_syscall(child_done_sem), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
@@ -1180,6 +1181,7 @@ pub mod fs_tests {
 
             println!("parent 1");
             // Parents waits for the semaphore
+            assert_eq!(cage.sem_wait_syscall(child_done_sem), 0); 
             assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
             println!("parent 2");
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
