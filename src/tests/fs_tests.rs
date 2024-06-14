@@ -1126,7 +1126,7 @@ pub mod fs_tests {
             println!("parent 4");
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
             println!("parent 5 {}",cage.sem_getvalue_syscall(shmatret as u32));
-            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1); //main issue  parent expects to be 1 but its 0
+            assert_eq!(cage.c(shmatret as u32), 1); //main issue  parent expects to be 1 but its 0
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
             // mark the shared memory to be rmoved
