@@ -1909,6 +1909,7 @@ impl Cage {
     //https://linux.die.net/man/2/fcntl
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
+        //BUG
         //if the provided file descriptor is out of bounds, get_filedescriptor returns Err(),
         //unwrapping on which  produces a 'panic!'
         //otherwise, file descriptor table entry is stored in 'checkedfd'
