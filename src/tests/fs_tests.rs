@@ -58,6 +58,11 @@ pub mod fs_tests {
         ut_lind_fs_mkdir_invalid_modebits();
         ut_lind_fs_mkdir_success();
         ut_lind_fs_mkdir_using_symlink();
+
+        //open_syscall_tests
+        ut_lind_fs_open_empty_directory();
+        ut_lind_fs_open_nonexisting_parentdirectory_and_file();
+        ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -1339,4 +1344,50 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
+    pub fn ut_lind_fs_open_empty_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "";
+        // Check for error when directory is empty
+        assert_eq!(cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/dir/file";
+        // Check for error when neither file nor parent exists and O_CREAT flag is not present
+        assert_eq!(cage.open_syscall(path, F_GETFD, S_IRWXA), -(Errno::ENOENT as i32));
+
+        // Check for error when neither file nor parent exists and O_CREAT flag is present
+        assert_eq!(cage.open_syscall(path, O_CREAT, S_IRWXA), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // Create a parent directory
+        assert_eq!(cage.mkdir_syscall("/dir", S_IRWXA), 0);
+        let path = "/dir/file";
+
+        // Check for error when parent directory exists but file doesn't exist and O_CREAT is not present
+        assert_eq!(cage.open_syscall(path, O_TRUNC, S_IRWXA), -(Errno::ENOENT as i32));
+
+        // Check for error when parent directory exists but file doesn't exist and Filetype Flags contain S_IFCHR flag
+        assert_eq!(cage.open_syscall(path, S_IFCHR | O_CREAT, S_IRWXA), -(Errno::EINVAL as i32));
+        
+        // Check for error when parent directory exists but file doesn't exist and mode bits are invalid
+        let invalid_mode = 0o77777;
+        assert_eq!(cage.open_syscall(path, O_CREAT, invalid_mode), -(Errno::EPERM as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
 }
