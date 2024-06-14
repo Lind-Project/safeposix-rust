@@ -3530,9 +3530,9 @@ impl Cage {
 
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        println!("unlock failed 1");
+        // println!("unlock failed 1");
         if let Some(semaphore) = semtable.get_mut(&sem_handle) {
-            println!("unlock failed 2");
+            // println!("unlock failed 2");
             if !semaphore.unlock() {
                 println!("unlock failed 3");
                 return syscall_error(
@@ -3601,7 +3601,7 @@ impl Cage {
     //         "sem is not a valid semaphore",
     //     );
     // }
-
+    // remove clone
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         if let Some(semaphore) = semtable.get(&sem_handle) {
