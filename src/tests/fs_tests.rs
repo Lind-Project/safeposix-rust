@@ -1163,63 +1163,51 @@ pub mod fs_tests {
     
         // Fork child process
         let pid = cage.fork_syscall(2);
-    
-        println!("Fork returned pid: {}", pid); // Debugging statement to check pid value
-    
+        println!("Pid: {}", pid);
         if pid == 0 {
-            // Child process
-            let cage1 = interface::cagetable_getref(2);
-            println!("Child: Starting semaphore wait");
-            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            println!("child2 {}", cage1.sem_getvalue_syscall(shmatret as u32));
-            interface::sleep(interface::RustDuration::from_millis(40));
-            println!("Child: Starting semaphore post");
-            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            println!("Child semaphore value after post: {:?}", cage1.sem_getvalue_syscall(shmatret as u32));
-            cage1.exit_syscall(EXIT_SUCCESS);
-        } else if pid > 0 {
-            // Parent process
-            println!("Parent process started with pid: {}", pid);
-            let cage2 = Arc::new(Mutex::new(interface::cagetable_getref(1)));
-            let barrier = Arc::new(Barrier::new(2));
-    
-            let cage2_clone_for_child = Arc::clone(&cage2);
-            let barrier_clone_for_child = Arc::clone(&barrier);
-            let thread_child = std::thread::spawn(move || {
-                let cage2 = cage2_clone_for_child.lock().unwrap();
-                println!("Parent Child Thread: Starting semaphore wait");
-                assert_eq!(cage2.sem_wait_syscall(shmatret as u32), 0);
-                println!("Parent Child semaphore value after wait: {}", cage2.sem_getvalue_syscall(shmatret as u32));
-                interface::sleep(interface::RustDuration::from_millis(100));
-                println!("Parent Child: Starting semaphore post");
-                assert_eq!(cage2.sem_post_syscall(shmatret as u32), 0);
-                println!("Parent Child semaphore value after post: {}", cage2.sem_getvalue_syscall(shmatret as u32));
-                barrier_clone_for_child.wait();  // Sync with parent
-                cage2.exit_syscall(EXIT_SUCCESS);
-            });
-    
-            let cage2_clone_for_parent = Arc::clone(&cage2);
-            let barrier_clone_for_parent = Arc::clone(&barrier);
-            let thread_parent = std::thread::spawn(move || {
-                let cage2 = cage2_clone_for_parent.lock().unwrap();
-                println!("Parent Thread: Starting semaphore wait");
-                assert_eq!(cage2.sem_wait_syscall(shmatret as u32), 0);
-                println!("Parent semaphore value after wait: {}", cage2.sem_getvalue_syscall(shmatret as u32));
-                interface::sleep(interface::RustDuration::from_millis(100));
-                println!("Parent: Starting semaphore post");
-                assert_eq!(cage2.sem_post_syscall(shmatret as u32), 0);
-                println!("Parent semaphore value after post: {}", cage2.sem_getvalue_syscall(shmatret as u32));
-                barrier_clone_for_parent.wait();  // Sync with child
-                assert_eq!(cage2.sem_destroy_syscall(shmatret as u32), 0);
-                let shmctlret2 = cage2.shmctl_syscall(shmid, IPC_RMID, None);
-                assert_eq!(shmctlret2, 0);
-                let shmdtret = cage2.shmdt_syscall(0xfffff000 as *mut u8);
-                assert_eq!(shmdtret, shmid);
-                cage2.exit_syscall(EXIT_SUCCESS);
-            });
-    
-            thread_child.join().unwrap();
-            thread_parent.join().unwrap();
+             // Parent process
+             println!("Parent process started with pid: {}", pid);
+             let cage2 = Arc::new(Mutex::new(interface::cagetable_getref(1)));
+             let barrier = Arc::new(Barrier::new(2));
+     
+             let cage2_clone_for_child = Arc::clone(&cage2);
+             let barrier_clone_for_child = Arc::clone(&barrier);
+             let thread_child = std::thread::spawn(move || {
+                 let cage2 = cage2_clone_for_child.lock().unwrap();
+                 println!("Parent Child Thread: Starting semaphore wait");
+                 assert_eq!(cage2.sem_wait_syscall(shmatret as u32), 0);
+                 println!("Parent Child semaphore value after wait: {}", cage2.sem_getvalue_syscall(shmatret as u32));
+                 interface::sleep(interface::RustDuration::from_millis(100));
+                 println!("Parent Child: Starting semaphore post");
+                 assert_eq!(cage2.sem_post_syscall(shmatret as u32), 0);
+                 println!("Parent Child semaphore value after post: {}", cage2.sem_getvalue_syscall(shmatret as u32));
+                 barrier_clone_for_child.wait();  // Sync with parent
+                 cage2.exit_syscall(EXIT_SUCCESS);
+             });
+     
+             let cage2_clone_for_parent = Arc::clone(&cage2);
+             let barrier_clone_for_parent = Arc::clone(&barrier);
+             let thread_parent = std::thread::spawn(move || {
+                 let cage2 = cage2_clone_for_parent.lock().unwrap();
+                 println!("Parent Thread: Starting semaphore wait");
+                 assert_eq!(cage2.sem_wait_syscall(shmatret as u32), 0);
+                 println!("Parent semaphore value after wait: {}", cage2.sem_getvalue_syscall(shmatret as u32));
+                 interface::sleep(interface::RustDuration::from_millis(100));
+                 println!("Parent: Starting semaphore post");
+                 assert_eq!(cage2.sem_post_syscall(shmatret as u32), 0);
+                 println!("Parent semaphore value after post: {}", cage2.sem_getvalue_syscall(shmatret as u32));
+                 barrier_clone_for_parent.wait();  // Sync with child
+                 assert_eq!(cage2.sem_destroy_syscall(shmatret as u32), 0);
+                 let shmctlret2 = cage2.shmctl_syscall(shmid, IPC_RMID, None);
+                 assert_eq!(shmctlret2, 0);
+                 let shmdtret = cage2.shmdt_syscall(0xfffff000 as *mut u8);
+                 assert_eq!(shmdtret, shmid);
+                 cage2.exit_syscall(EXIT_SUCCESS);
+             });
+     
+             thread_child.join().unwrap();
+             thread_parent.join().unwrap()
+
         } else {
             println!("Fork failed");
         }
