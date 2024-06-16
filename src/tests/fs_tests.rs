@@ -1163,7 +1163,7 @@ pub mod fs_tests {
     
         // Fork child process
         let pid = cage.fork_syscall(2);
-        println!("Pid: {:?}", pid);
+        println!("Pid: {}", pid);
         if pid == 0 {
             // Child process
             let cage1 = interface::cagetable_getref(2);
@@ -1175,8 +1175,9 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             println!("Child semaphore value after post: {:?}", cage1.sem_getvalue_syscall(shmatret as u32));
             cage1.exit_syscall(EXIT_SUCCESS);
-        } else {
+        } else if pid > 0 {
             // Parent process
+            println!("Parent process started with pid: {}", pid);
             let cage2 = Arc::new(Mutex::new(interface::cagetable_getref(1)));
             let barrier = Arc::new(Barrier::new(2));
     
@@ -1217,6 +1218,8 @@ pub mod fs_tests {
     
             thread_child.join().unwrap();
             thread_parent.join().unwrap();
+        } else {
+            println!("Fork failed");
         }
     
         lindrustfinalize();
