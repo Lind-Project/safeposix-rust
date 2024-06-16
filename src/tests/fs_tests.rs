@@ -1163,7 +1163,7 @@ pub mod fs_tests {
     
         // Fork child process
         let pid = cage.fork_syscall(2);
-    
+        println!("Pid: {:?}", pid);
         if pid == 0 {
             // Child process
             let cage1 = interface::cagetable_getref(2);
