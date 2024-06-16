@@ -1163,7 +1163,9 @@ pub mod fs_tests {
     
         // Fork child process
         let pid = cage.fork_syscall(2);
-        println!("Pid: {}", pid);
+    
+        println!("Fork returned pid: {}", pid); // Debugging statement to check pid value
+    
         if pid == 0 {
             // Child process
             let cage1 = interface::cagetable_getref(2);
