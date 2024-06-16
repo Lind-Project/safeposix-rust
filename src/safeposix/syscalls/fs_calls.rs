@@ -3530,19 +3530,19 @@ impl Cage {
 
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        // println!("unlock failed 1");
-        if let Some(semaphore) = semtable.get_mut(&sem_handle) {
-            // println!("unlock failed 2");
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            println!("Before unlock: {:?}", semaphore.get_value());
+            drop(sementry);
             if !semaphore.unlock() {
-                println!("unlock failed 3");
                 return syscall_error(
                     Errno::EOVERFLOW,
                     "sem_post",
                     "The maximum allowable value for a semaphore would be exceeded",
                 );
             }
+            println!("After unlock: {:?}", semaphore.get_value());
         } else {
-            println!("unlock failed 4");
             return syscall_error(Errno::EINVAL, "sem_post", "sem is not a valid semaphore");
         }
         return 0;
@@ -3587,12 +3587,12 @@ impl Cage {
     /*
      * Take only sem_t *sem as argument, and return int *sval
      */
+
+    // remove clone
     // pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
     //     let semtable = &self.sem_table;
-    //     if let Some(sementry) = semtable.get_mut(&sem_handle) {
-    //         let semaphore = sementry.clone();
-    //         drop(sementry);
-    //         println!("semaphore: and pointer is {:?}" , &semaphore as *const Arc<interface::RustSemaphore>);
+    //     if let Some(semaphore) = semtable.get(&sem_handle) {
+    //         println!("semaphore: and pointer is {:?}", &**semaphore as *const _);
     //         return semaphore.get_value();
     //     }
     //     return syscall_error(
@@ -3601,12 +3601,14 @@ impl Cage {
     //         "sem is not a valid semaphore",
     //     );
     // }
-    // remove clone
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        if let Some(semaphore) = semtable.get(&sem_handle) {
-            println!("semaphore: and pointer is {:?}", &**semaphore as *const _);
-            return semaphore.get_value();
+        if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            let semaphore = sementry.clone();
+            drop(sementry);
+            let value = semaphore.get_value();
+            println!("sem_getvalue: {:?}", value);  // Add this line
+            return value;
         }
         return syscall_error(
             Errno::EINVAL,
