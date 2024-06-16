@@ -1164,7 +1164,6 @@ pub mod fs_tests {
         // Fork child process
         let pid = cage.fork_syscall(2);
         println!("Pid: {}", pid);
-        if pid == 0 {
             // Child process
             let thread_child = interface::helper_thread(move || {
                 let cage1 = interface::cagetable_getref(2);
@@ -1197,7 +1196,7 @@ pub mod fs_tests {
             });
             thread_child.join().unwrap();
             thread_parent.join().unwrap();
-        } else if pid > 0 {
+        if pid > 0 {
             // Parent process
             println!("Parent process started with pid: {}", pid);
             let cage2 = Arc::new(Mutex::new(interface::cagetable_getref(1)));
