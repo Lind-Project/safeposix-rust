@@ -67,6 +67,7 @@ pub mod fs_tests {
         ut_lind_fs_open_existing_file_with_flags();
         ut_lind_fs_open_create_new_file_and_check_link_count();
         ut_lind_fs_open_existing_file_with_o_trunc_flag();
+        ut_lind_fs_open_new_file_with_s_ifchar_flag();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -1490,6 +1491,21 @@ pub mod fs_tests {
         // Validate the size of the file to be 0 as the file is truncated now
         assert_eq!(statdata.st_size, 0);
     
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_new_file_with_s_ifchar_flag() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        // Create a parent directory
+        assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
+        let path = "/testdir/file";
+
+        // Attempt to open a file with S_IFCHR flag, which should be invalid for regular files
+        assert_eq!(cage.open_syscall(path, O_CREAT | S_IFCHR, S_IRWXA), -(Errno::EINVAL as i32));
+        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }

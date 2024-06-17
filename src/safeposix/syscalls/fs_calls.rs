@@ -11,31 +11,34 @@ use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 
 impl Cage {
-    //------------------------------------OPEN SYSCALL------------------------------------
-    // Description
-    // The open_syscall() creates an open file description that refers to a file and a file descriptor that refers to that open file description.
-    // The file descriptor is used by other I/O functions to refer to that file.
-    // There are generally two cases which occur when this function is called. 
-    // Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
-    // Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
+    /// ## ------------------OPEN SYSCALL------------------
+    /// ### Description
+    /// The open_syscall() creates an open file description that refers to a file and a file descriptor that refers to that open file description.
+    /// The file descriptor is used by other I/O functions to refer to that file.
+    /// There are generally two cases which occur when this function is called. 
+    /// Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
+    /// Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
     
-    // Function Arguments
-    // The open_syscall() receives three arguments:
-    // 1. Path - This argument points to a pathname naming the file.
-    //           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
-    // 2. Flags - This argument contains the file status flags and file access modes which will be alloted to the open file description.
-    //            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
-    //            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
-    // 2. Mode - This represents the permission of the newly created file. 
-    //           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file. 
+    /// ### Function Arguments
+    /// The open_syscall() receives three arguments:
+    /// 1. Path - This argument points to a pathname naming the file.
+    ///           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
+    /// 2. Flags - This argument contains the file status flags and file access modes which will be alloted to the open file description.
+    ///            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
+    ///            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
+    /// 3. Mode - This represents the permission of the newly created file. 
+    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file. 
     
-    // Return Values
-    // Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
-    // Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
-    //
-    // Tests
-    // All the different scenarios for open_syscall() are covered and tested in the "fs_tests.rs" file under "open_syscall_tests" section.
-    //
+    /// ### Return Values
+    /// Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
+    /// Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    ///
+    /// ### Tests
+    /// All the different scenarios for open_syscall() are covered and tested in the "fs_tests.rs" file under "open_syscall_tests" section.
+    ///
+    /// for more detailed description of all the commands and return values, see 
+    /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
+    ///
 
     // This function is used to create a new File Descriptor Object and return it.
     // This file descriptor object is then inserted into the File Descriptor Table of the associated cage in the open_syscall() function
@@ -62,7 +65,8 @@ impl Cage {
 
         // Fetch the next file descriptor and its lock write guard to ensure the file can be associated with the file descriptor 
         let (fd, guardopt) = self.get_next_fd(None);
-        // Return an error when no file descriptor is available
+        // The above function returns a valid file descriptor, but incase there is any error related to the filedescriptor processing
+        // or if the file descriptor is invalid, the return value is always an error with value < 0, so we check the same in the code below.
         if fd < 0 {
             return syscall_error(
                 Errno::ENFILE,
