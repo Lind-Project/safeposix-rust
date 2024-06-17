@@ -1,3 +1,40 @@
+//! This module contains all networking-related system calls.
+//! 
+//! ## Networking System Calls
+//! 
+//! This module contains all networking system calls that are being emulated/faked in Lind.
+//! 
+//! - [socket_syscall](crate::safeposix::cage::Cage::socket_syscall)
+//! - [force_innersocket](crate::safeposix::cage::Cage::force_innersocket)
+//! - [bind_syscall](crate::safeposix::cage::Cage::bind_syscall)
+//! - [bind_inner](crate::safeposix::cage::Cage::bind_inner)
+//! - [connect_syscall](crate::safeposix::cage::Cage::connect_syscall)
+//! - [sendto_syscall](crate::safeposix::cage::Cage::sendto_syscall)
+//! - [send_syscall](crate::safeposix::cage::Cage::send_syscall)
+//! - [recv_common](crate::safeposix::cage::Cage::recv_common)
+//! - [recvfrom_syscall](crate::safeposix::cage::Cage::recvfrom_syscall)
+//! - [recv_syscall](crate::safeposix::cage::Cage::recv_syscall)
+//! - [listen_syscall](crate::safeposix::cage::Cage::listen_syscall)
+//! - [netshutdown_syscall](crate::safeposix::cage::Cage::netshutdown_syscall)
+//! - [_cleanup_socket_inner_helper](crate::safeposix::cage::Cage::_cleanup_socket_inner_helper)
+//! - [_cleanup_socket_inner](crate::safeposix::cage::Cage::_cleanup_socket_inner)
+//! - [_cleanup_socket](crate::safeposix::cage::Cage::_cleanup_socket)
+//! - [accept_syscall](crate::safeposix::cage::Cage::accept_syscall)
+//! - [select_syscall](crate::safeposix::cage::Cage::select_syscall)
+//! - [getsockopt_syscall](crate::safeposix::cage::Cage::getsockopt_syscall)
+//! - [setsockopt_syscall](crate::safeposix::cage::Cage::setsockopt_syscall)
+//! - [getpeername_syscall](crate::safeposix::cage::Cage::getpeername_syscall)
+//! - [getsockname_syscall](crate::safeposix::cage::Cage::getsockname_syscall)
+//! - [gethostname_syscall](crate::safeposix::cage::Cage::gethostname_syscall)
+//! - [poll_syscall](crate::safeposix::cage::Cage::poll_syscall)
+//! - [_epoll_object_allocator](crate::safeposix::cage::Cage::_epoll_object_allocator)
+//! - [epoll_create_syscall](crate::safeposix::cage::Cage::epoll_create_syscall)
+//! - [epoll_ctl_syscall](crate::safeposix::cage::Cage::epoll_ctl_syscall)
+//! - [epoll_wait_syscall](crate::safeposix::cage::Cage::epoll_wait_syscall)
+//! - [socketpair_syscall](crate::safeposix::cage::Cage::socketpair_syscall)
+//! - [getifaddrs_syscall](crate::safeposix::cage::Cage::getifaddrs_syscall)
+
+
 #![allow(dead_code)]
 // Network related system calls
 // outlines and implements all of the networking system calls that are being emulated/faked in Lind

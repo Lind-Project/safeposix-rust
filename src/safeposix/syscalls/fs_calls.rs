@@ -1,3 +1,84 @@
+//! This module contains all filesystem-related system calls.
+//! 
+//! ## File System Calls
+//! 
+//! Cages have methods for filesystem-related calls. They return a code or an error from the `errno` enum.
+//! 
+//! - [open_syscall](crate::safeposix::cage::Cage::open_syscall)
+//! - [mkdir_syscall](crate::safeposix::cage::Cage::mkdir_syscall)
+//! - [mknod_syscall](crate::safeposix::cage::Cage::mknod_syscall)
+//! - [link_syscall](crate::safeposix::cage::Cage::link_syscall)
+//! - [unlink_syscall](crate::safeposix::cage::Cage::unlink_syscall)
+//! - [creat_syscall](crate::safeposix::cage::Cage::creat_syscall)
+//! - [stat_syscall](crate::safeposix::cage::Cage::stat_syscall)
+//! - [fstat_syscall](crate::safeposix::cage::Cage::fstat_syscall)
+//! - [statfs_syscall](crate::safeposix::cage::Cage::statfs_syscall)
+//! - [fstatfs_syscall](crate::safeposix::cage::Cage::fstatfs_syscall)
+//! - [_istatfs_helper](crate::safeposix::cage::Cage::_istatfs_helper)
+//! - [read_syscall](crate::safeposix::cage::Cage::read_syscall)
+//! - [pread_syscall](crate::safeposix::cage::Cage::pread_syscall)
+//! - [write_syscall](crate::safeposix::cage::Cage::write_syscall)
+//! - [pwrite_syscall](crate::safeposix::cage::Cage::pwrite_syscall)
+//! - [writev_syscall](crate::safeposix::cage::Cage::writev_syscall)
+//! - [lseek_syscall](crate::safeposix::cage::Cage::lseek_syscall)
+//! - [access_syscall](crate::safeposix::cage::Cage::access_syscall)
+//! - [fchdir_syscall](crate::safeposix::cage::Cage::fchdir_syscall)
+//! - [chdir_syscall](crate::safeposix::cage::Cage::chdir_syscall)
+//! - [dup_syscall](crate::safeposix::cage::Cage::dup_syscall)
+//! - [dup2_syscall](crate::safeposix::cage::Cage::dup2_syscall)
+//! - [_dup2_helper](crate::safeposix::cage::Cage::_dup2_helper)
+//! - [close_syscall](crate::safeposix::cage::Cage::close_syscall)
+//! - [_close_helper_inner](crate::safeposix::cage::Cage::_close_helper_inner)
+//! - [_close_helper](crate::safeposix::cage::Cage::_close_helper)
+//! - [fcntl_syscall](crate::safeposix::cage::Cage::fcntl_syscall)
+//! - [ioctl_syscall](crate::safeposix::cage::Cage::ioctl_syscall)
+//! - [_chmod_helper](crate::safeposix::cage::Cage::_chmod_helper)
+//! - [chmod_syscall](crate::safeposix::cage::Cage::chmod_syscall)
+//! - [fchmod_syscall](crate::safeposix::cage::Cage::fchmod_syscall)
+//! - [mmap_syscall](crate::safeposix::cage::Cage::mmap_syscall)
+//! - [munmap_syscall](crate::safeposix::cage::Cage::munmap_syscall)
+//! - [flock_syscall](crate::safeposix::cage::Cage::flock_syscall)
+//! - [remove_from_parent_dir](crate::safeposix::cage::Cage::remove_from_parent_dir)
+//! - [rmdir_syscall](crate::safeposix::cage::Cage::rmdir_syscall)
+//! - [rename_syscall](crate::safeposix::cage::Cage::rename_syscall)
+//! - [fsync_syscall](crate::safeposix::cage::Cage::fsync_syscall)
+//! - [fdatasync_syscall](crate::safeposix::cage::Cage::fdatasync_syscall)
+//! - [sync_file_range_syscall](crate::safeposix::cage::Cage::sync_file_range_syscall)
+//! - [ftruncate_syscall](crate::safeposix::cage::Cage::ftruncate_syscall)
+//! - [truncate_syscall](crate::safeposix::cage::Cage::truncate_syscall)
+//! - [pipe_syscall](crate::safeposix::cage::Cage::pipe_syscall)
+//! - [pipe2_syscall](crate::safeposix::cage::Cage::pipe2_syscall)
+//! - [getdents_syscall](crate::safeposix::cage::Cage::getdents_syscall)
+//! - [getcwd_syscall](crate::safeposix::cage::Cage::getcwd_syscall)
+//! - [rev_shm_find_index_by_addr](crate::safeposix::cage::Cage::rev_shm_find_index_by_addr)
+//! - [rev_shm_find_addrs_by_shmid](crate::safeposix::cage::Cage::rev_shm_find_addrs_by_shmid)
+//! - [search_for_addr_in_region](crate::safeposix::cage::Cage::search_for_addr_in_region)
+//! - [shmget_syscall](crate::safeposix::cage::Cage::shmget_syscall)
+//! - [shmat_syscall](crate::safeposix::cage::Cage::shmat_syscall)
+//! - [shmdt_syscall](crate::safeposix::cage::Cage::shmdt_syscall)
+//! - [shmctl_syscall](crate::safeposix::cage::Cage::shmctl_syscall)
+//! - [mutex_create_syscall](crate::safeposix::cage::Cage::mutex_create_syscall)
+//! - [mutex_destroy_syscall](crate::safeposix::cage::Cage::mutex_destroy_syscall)
+//! - [mutex_lock_syscall](crate::safeposix::cage::Cage::mutex_lock_syscall)
+//! - [mutex_trylock_syscall](crate::safeposix::cage::Cage::mutex_trylock_syscall)
+//! - [mutex_unlock_syscall](crate::safeposix::cage::Cage::mutex_unlock_syscall)
+//! - [cond_create_syscall](crate::safeposix::cage::Cage::cond_create_syscall)
+//! - [cond_destroy_syscall](crate::safeposix::cage::Cage::cond_destroy_syscall)
+//! - [cond_signal_syscall](crate::safeposix::cage::Cage::cond_signal_syscall)
+//! - [cond_broadcast_syscall](crate::safeposix::cage::Cage::cond_broadcast_syscall)
+//! - [cond_wait_syscall](crate::safeposix::cage::Cage::cond_wait_syscall)
+//! - [cond_timedwait_syscall](crate::safeposix::cage::Cage::cond_timedwait_syscall)
+//! - [sem_init_syscall](crate::safeposix::cage::Cage::sem_init_syscall)
+//! - [sem_wait_syscall](crate::safeposix::cage::Cage::sem_wait_syscall)
+//! - [sem_post_syscall](crate::safeposix::cage::Cage::sem_post_syscall)
+//! - [sem_destroy_syscall](crate::safeposix::cage::Cage::sem_destroy_syscall)
+//! - [sem_getvalue_syscall](crate::safeposix::cage::Cage::sem_getvalue_syscall)
+//! - [sem_trywait_syscall](crate::safeposix::cage::Cage::sem_trywait_syscall)
+//! - [sem_timedwait_syscall](crate::safeposix::cage::Cage::sem_timedwait_syscall)
+//! 
+
+
+
 #![allow(dead_code)]
 
 // File system related system calls
@@ -180,27 +261,35 @@ impl Cage {
         fd //open returns the opened file descriptor
     }
 
-    //------------------MKDIR SYSCALL------------------
-    // Description
-    // The mkdir_syscall() creates a new directory named by the path name pointed to by a path as the input parameter in the function.
-    // The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
-    // The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
-    // On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
+    /// ## ------------------MKDIR SYSCALL------------------
+    /// 
+    /// ### Description
+    /// 
+    /// The mkdir_syscall() creates a new directory named by the path name pointed to by a path as the input parameter in the function.
+    /// The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
+    /// The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
+    /// On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
     
-    // Function Arguments
-    // The mkdir_syscall() receives two arguments:
-    // 1. Path - This represents the path at which the new directory will be created.
-    //           For example: "/parentdir/dir" represents the new directory name as "dir", which will be created at this path (/parentdir/dir).
-    // 2. Mode - This represents the permission of the newly created directory. 
-    //           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new directory. 
-    
-    // Return Values
-    // Upon successful creation of the directory, 0 is returned.
-    // Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
-    //
-    // Tests
-    // All the different scenarios for mkdir_syscall() are covered and tested in the "fs_tests.rs" file under "mkdir_syscall_tests" section.
-    //
+    /// ### Function Arguments
+    /// 
+    /// The mkdir_syscall() receives two arguments:
+    /// 1. Path - This represents the path at which the new directory will be created.
+    ///           For example: "/parentdir/dir" represents the new directory name as "dir", which will be created at this path (/parentdir/dir).
+    /// 2. Mode - This represents the permission of the newly created directory. 
+    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new directory. 
+    ///
+    /// ### Return Values
+    /// 
+    /// Upon successful creation of the directory, 0 is returned.
+    /// Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    ///
+    /// ### Tests
+    /// 
+    /// All the different scenarios for mkdir_syscall() are covered and tested in the "fs_tests.rs" file under "mkdir_syscall_tests" section.
+    /// 
+    /// for more detailed description of all the commands and return values, see 
+    /// [mkdir(2)](https://man7.org/linux/man-pages/man2/mkdir.2.html)
+    ///
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
 
         // Check that the given input path is not empty
@@ -1927,16 +2016,25 @@ impl Cage {
         0 //_close_helper has succeeded!
     }
 
-    //------------------------------------FCNTL SYSCALL------------------------------------
+    /// ## ------------------------------------FCNTL SYSCALL------------------------------------
     
-    //fcntl performs operations, like returning or setting file status flags,
-    //duplicating a file descriptor, etc., on an open file descriptor 
-    //it accepts three parameters: fd - an open file descriptor, cmd - an operation to be performed on fd,
-    //and arg - an optional argument (whether or not arg is required is determined by cmd)
-    //for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
-    //value of file descriptor flags, value of status flags, etc.
-    //for more detailed description of all the commands and return values, see 
-    //https://linux.die.net/man/2/fcntl
+    /// ### Description: 
+    /// fcntl performs operations, like returning or setting file status flags,
+    /// duplicating a file descriptor, etc., on an open file descriptor 
+    /// 
+    /// ### Function Arguments:
+    /// it accepts three parameters: 
+    /// 1. fd - an open file descriptor
+    /// 2. cmd - an operation to be performed on fd
+    /// 3. arg - an optional argument (whether or not arg is required is determined by cmd)
+    /// 
+    /// ### Return Value:
+    /// 
+    /// for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
+    /// value of file descriptor flags, value of status flags, etc.
+    /// 
+    /// for more detailed description of all the commands and return values, see 
+    /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         //BUG

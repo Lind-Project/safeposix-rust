@@ -1,3 +1,17 @@
+//! This module handles the FilesystemMetadata struct which manages inode numbers, device ID, and inode structures, stores in lind.metadata.
+//! 
+//!  ## FS Metadata
+//!
+//! `FilesystemMetadata` struct maintains:
+//! - `nextinode`: Next inode number
+//! - `dev_id`: Device ID
+//! - `inodetable`: Hash map of inode numbers to `InodeEnum`
+//!
+//! `InodeEnum` represents inode structures like `File`, `CharDev`, `Socket`, and `Directory`.
+//!
+//! Metadata is stored in `lind.metadata` and managed by `init_fs_metadata()` and `blank_fs_init()`.
+
+
 // Filesystem metadata struct
 #![allow(dead_code)]
 

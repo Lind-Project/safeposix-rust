@@ -1,3 +1,27 @@
+//! This module contains all system calls that are being emulated/faked in Lind.
+//! 
+//! ## System Calls
+//! 
+//! This module contains all system calls that are being emulated/faked in Lind.
+//! 
+//! - [fork_syscall](crate::safeposix::cage::Cage::fork_syscall)
+//! - [exec_syscall](crate::safeposix::cage::Cage::exec_syscall)
+//! - [exit_syscall](crate::safeposix::cage::Cage::exit_syscall)
+//! - [getpid_syscall](crate::safeposix::cage::Cage::getpid_syscall)
+//! - [getppid_syscall](crate::safeposix::cage::Cage::getppid_syscall)
+//! - [getgid_syscall](crate::safeposix::cage::Cage::getgid_syscall)
+//! - [getegid_syscall](crate::safeposix::cage::Cage::getegid_syscall)
+//! - [getuid_syscall](crate::safeposix::cage::Cage::getuid_syscall)
+//! - [geteuid_syscall](crate::safeposix::cage::Cage::geteuid_syscall)
+//! - [sigaction_syscall](crate::safeposix::cage::Cage::sigaction_syscall)
+//! - [kill_syscall](crate::safeposix::cage::Cage::kill_syscall)
+//! - [sigprocmask_syscall](crate::safeposix::cage::Cage::sigprocmask_syscall)
+//! - [setitimer_syscall](crate::safeposix::cage::Cage::setitimer_syscall)
+//! - [getrlimit](crate::safeposix::cage::Cage::getrlimit)
+//! - [setrlimit](crate::safeposix::cage::Cage::setrlimit)
+//! 
+//! 
+
 #![allow(dead_code)]
 
 // System related system calls
