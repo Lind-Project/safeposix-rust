@@ -22,7 +22,7 @@ impl Cage {
     // Function Arguments
     // The open_syscall() receives three arguments:
     // 1. Path - This argument points to a pathname naming the file.
-    //           For example: "/parentdir/file1" represents a file which will be either opened if existed or will be created at the given path.
+    //           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
     // 2. Flags - This argument contains the file status flags and file access modes which will be alloted to the open file description.
     //            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
     //            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
@@ -75,22 +75,7 @@ impl Cage {
 
         // Walk through the absolute path which returns a tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
-            // Case 1: When neither the file directory nor the parent directory exists
-            (None, None) => {
-                // O_CREAT flag is used to create a file if it doesn't exist.
-                // If this flag is not present, then a file can not be created and error is returned.
-                if 0 == (flags & O_CREAT) {
-                    return syscall_error(
-                        Errno::ENOENT,
-                        "open",
-                        "tried to open a file that did not exist, and O_CREAT was not specified",
-                    );
-                }
-                // O_CREAT flag is set but the path doesn't exist, so return an error with a different message string.
-                return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
-            }
-
-            // Case 2: When the file doesn't exist but the parent directory exists
+            // Case 1: When the file doesn't exist but the parent directory exists
             (None, Some(pardirinode)) => {
                 // Check if O_CREAT flag is not present, then a file can not be created and error is returned.
                 if 0 == (flags & O_CREAT) {
@@ -167,7 +152,7 @@ impl Cage {
                     fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
             }
 
-            // Case 3: When the file exists (we don't need to look at parent here)
+            // Case 2: When the file exists (we don't need to look at parent here)
             (Some(inodenum), ..) => {
                 //If O_CREAT and O_EXCL flags are set in the input parameters, open_syscall() fails if the file exists. 
                 //This is because the check for the existence of the file and the creation of the file if it does not exist is atomic, 
@@ -193,11 +178,9 @@ impl Cage {
                             // Close the existing file object and remove it from the FileObject Hashtable using the inodenumber
                             let entry = FILEOBJECTTABLE.entry(inodenum);
                             if let interface::RustHashEntry::Occupied(occ) = &entry {
-                                // Get the entry for the current file associated with the inodeNumber and close the opened it
                                 occ.get().close().unwrap();
                             }
 
-                            // Reset the size of the file to be 0
                             f.size = 0;
 
                             // Update the timestamps as well
@@ -250,6 +233,21 @@ impl Cage {
                 // The file object of size 0, associated with the existing inode number is inserted into the FileDescriptorTable associated with the cage using the guard lock.
                 let _insertval =
                     fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
+            }
+
+            // Case 3: When neither the file directory nor the parent directory exists
+            (None, None) => {
+                // O_CREAT flag is used to create a file if it doesn't exist.
+                // If this flag is not present, then a file can not be created and error is returned.
+                if 0 == (flags & O_CREAT) {
+                    return syscall_error(
+                        Errno::ENOENT,
+                        "open",
+                        "tried to open a file that did not exist, and O_CREAT was not specified",
+                    );
+                }
+                // O_CREAT flag is set but the path doesn't exist, so return an error with a different message string.
+                return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
             }
         }
 
