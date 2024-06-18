@@ -2,10 +2,6 @@
 //! 
 //!  ## Dispatcher Function
 //!
-//! ```rust
-//! fn dispatcher(cageid: i32, callnum: i32, arg1: Arg, arg2: Arg, arg3: Arg, arg4: Arg, arg5: Arg, arg6: Arg)
-//! ```
-//!
 //! - Receives system call requests with a cage ID, syscall number, and six arguments.
 //! - Validates cage existence, initializes if necessary, and calls the corresponding method using `match`.
 //! - Protected by a read-write lock for safe concurrent access.

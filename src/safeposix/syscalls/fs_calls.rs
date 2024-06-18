@@ -261,31 +261,31 @@ impl Cage {
         fd //open returns the opened file descriptor
     }
 
-    /// ## ------------------MKDIR SYSCALL------------------
-    /// 
     /// ### Description
     /// 
-    /// The mkdir_syscall() creates a new directory named by the path name pointed to by a path as the input parameter in the function.
+    /// The `mkdir_syscall()` creates a new directory named by the path name pointed to by a path as the input parameter in the function.
     /// The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
     /// The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
     /// On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
     
-    /// ### Function Arguments
+    /// ### Arguments
     /// 
-    /// The mkdir_syscall() receives two arguments:
-    /// 1. Path - This represents the path at which the new directory will be created.
-    ///           For example: "/parentdir/dir" represents the new directory name as "dir", which will be created at this path (/parentdir/dir).
-    /// 2. Mode - This represents the permission of the newly created directory. 
-    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new directory. 
+    /// * `path` - This represents the path at which the new directory will be created.
+    ///     For example: `/parentdir/dir` represents the new directory name as `dir`, which will be created at this path (`/parentdir/dir`).
+    /// * `mode` - This represents the permission of the newly created directory. 
+    ///     The general mode used is `S_IRWXA`: which represents the read, write, and search permissions on the new directory. 
     ///
-    /// ### Return Values
+    /// ### Returns
     /// 
     /// Upon successful creation of the directory, 0 is returned.
-    /// Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    /// 
+    /// ### Errors
+    /// 
+    /// An error with a proper errorNumber and errorMessage is returned based on the different scenarios.
     ///
     /// ### Tests
     /// 
-    /// All the different scenarios for mkdir_syscall() are covered and tested in the "fs_tests.rs" file under "mkdir_syscall_tests" section.
+    /// All the different scenarios for `mkdir_syscall()` are covered and tested in the `fs_tests.rs` file under `mkdir_syscall_tests` section.
     /// 
     /// for more detailed description of all the commands and return values, see 
     /// [mkdir(2)](https://man7.org/linux/man-pages/man2/mkdir.2.html)
@@ -2016,22 +2016,29 @@ impl Cage {
         0 //_close_helper has succeeded!
     }
 
-    /// ## ------------------------------------FCNTL SYSCALL------------------------------------
     
-    /// ### Description: 
-    /// fcntl performs operations, like returning or setting file status flags,
+    /// ### Description
+    /// 
+    /// `fcntl_syscall` performs operations, like returning or setting file status flags,
     /// duplicating a file descriptor, etc., on an open file descriptor 
     /// 
-    /// ### Function Arguments:
-    /// it accepts three parameters: 
-    /// 1. fd - an open file descriptor
-    /// 2. cmd - an operation to be performed on fd
-    /// 3. arg - an optional argument (whether or not arg is required is determined by cmd)
+    /// ### Arguments
     /// 
-    /// ### Return Value:
+    /// it accepts three parameters: 
+    /// * `fd` - an open file descriptor
+    /// * `cmd` - an operation to be performed on fd
+    /// * `arg` - an optional argument (whether or not arg is required is determined by cmd)
+    /// 
+    /// ### Returns
     /// 
     /// for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
     /// value of file descriptor flags, value of status flags, etc.
+    /// 
+    /// ### Errors
+    /// 
+    /// * EBADF - fd is not a valid file descriptor
+    /// * EINVAL - doesnt match implementation parameters
+    /// 
     /// 
     /// for more detailed description of all the commands and return values, see 
     /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
