@@ -1182,13 +1182,14 @@ pub mod fs_tests {
             interface::sleep(interface::RustDuration::from_millis(100));
             // Parents release the semaphore
             assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            interface::sleep(interface::RustDuration::from_millis(300)); //need to adjust the sleep time
             assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
             println!("Semaphore value (parent): {}", cage.sem_getvalue_syscall(shmatret as u32));
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
             // mark the shared memory to be rmoved
             let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
-            interface::sleep(interface::RustDuration::from_millis(30)); //need to adjust the sleep time
+
             assert_eq!(shmctlret2, 0);
             //detach from shared memory
             let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
