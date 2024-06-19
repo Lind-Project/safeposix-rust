@@ -1189,8 +1189,7 @@ pub mod fs_tests {
                 println!("Semaphore value (parent): {}", *semaphore);// After decrement
             }
     
-            // Wait for the child to post to the semaphore
-            // (We'll use the mutex to check the value)
+            // Wait for the child to post to the semaphore (We'll use the mutex to check the value)
             loop {
                 let semaphore = semaphore_mutex.lock().unwrap();
                 if *semaphore == 0 {
@@ -1199,7 +1198,7 @@ pub mod fs_tests {
                 }
                 // If the semaphore is not 0, release the lock and wait a bit
                 drop(semaphore);
-                interface::sleep(interface::RustDuration::from_millis(1));
+                interface::sleep(interface::RustDuration::from_millis(1)); //can be changes 
             }
     
             // Parent releases the semaphore
