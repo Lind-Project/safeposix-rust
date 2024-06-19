@@ -1142,12 +1142,98 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    // pub fn ut_lind_fs_sem_fork() {
+    //     lindrustinit(0);
+    //     let cage = interface::cagetable_getref(1);
+    //     let key = 31337;
+    //     // Create a shared mutex for the semaphore
+    //     let semaphore_mutex = Arc::new(Mutex::new(1));
+    //     // Create a shared memory region
+    //     let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
+    //     // Attach the shared memory region
+    //     let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+    //     assert_ne!(shmatret, -1);
+    //     // Initialize the semaphore with shared between process
+    //     let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
+    //     assert_eq!(ret_init, 0);
+    //     assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
+    //     println!("Semaphore value: 1"); // Initial value
+    //     // Fork child process
+    //     assert_eq!(cage.fork_syscall(2), 0);
+    //     // Clone the mutex for the child thread
+    //     let semaphore_mutex_child = semaphore_mutex.clone();
+    //     // Child process
+    //     let thread_child = interface::helper_thread(move || {
+    //         let cage1 = interface::cagetable_getref(2);
+    //         // Child waits for the semaphore
+    //         { // Use a scope for the mutex lock
+    //             let mut semaphore = semaphore_mutex_child.lock().unwrap();
+    //             *semaphore -= 1; // Decrement the semaphore
+    //             println!("Semaphore value (child):  {}", *semaphore); 
+    //         }
+    //         interface::sleep(interface::RustDuration::from_millis(40));
+    //         // Release the semaphore
+    //         { // Use a scope for the mutex lock
+    //             let mut semaphore = semaphore_mutex_child.lock().unwrap();
+    //             *semaphore += 1; // Increment the semaphore
+    //             println!("Semaphore value (child):  {}", *semaphore);  // After increment
+    //         }
+    //         cage1.exit_syscall(EXIT_SUCCESS);
+    //     });
+    //     //Parent processes
+    //     let thread_parent = interface::helper_thread(move || {
+    //         // Parent waits for the semaphore
+    //         { // Use a scope for the mutex lock
+    //             let mut semaphore = semaphore_mutex.lock().unwrap();
+    //             *semaphore -= 1; // Decrement the semaphore
+    //             println!("Semaphore value (parent): {}", *semaphore);// After decrement
+    //         }
+    
+    //         // Wait for the child to post to the semaphore (We'll use the mutex to check the value)
+    //         loop {
+    //             let semaphore = semaphore_mutex.lock().unwrap();
+    //             if *semaphore == 0 {
+    //                 println!("Semaphore value (parent): {}", *semaphore); // After checking
+    //                 break;
+    //             }
+    //             // If the semaphore is not 0, release the lock and wait a bit
+    //             drop(semaphore);
+    //             interface::sleep(interface::RustDuration::from_millis(1)); //can be changes 
+    //         }
+    
+    //         // Parent releases the semaphore
+    //         { // Use a scope for the mutex lock
+    //             let mut semaphore = semaphore_mutex.lock().unwrap();
+    //             *semaphore += 1; // Increment the semaphore
+    //             println!("Semaphore value (parent): {}", *semaphore); // After increment
+    //         }
+    
+    //         // Check semaphore value using the mutex
+    //         { // Use a scope for the mutex lock
+    //             let semaphore = semaphore_mutex.lock().unwrap();
+    //             assert_eq!(*semaphore, 1); // Check semaphore value   //here assertion fails assertion `left == right` failed left 0 right 1
+    //             println!("Semaphore value (parent): {}", *semaphore); // After checking
+    //         }
+    
+    //         // Destroy the semaphore
+    //         assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
+    //         // mark the shared memory to be removed
+    //         let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
+    //         assert_eq!(shmctlret2, 0);
+    //         //detach from shared memory
+    //         let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+    //         assert_eq!(shmdtret, shmid);
+    //         cage.exit_syscall(EXIT_SUCCESS);
+    //     });
+    //     thread_child.join().unwrap();
+    //     thread_parent.join().unwrap();
+    //     lindrustfinalize();
+    // }
     pub fn ut_lind_fs_sem_fork() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
-        // Create a shared mutex for the semaphore
-        let semaphore_mutex = Arc::new(Mutex::new(1));
+    
         // Create a shared memory region
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
         // Attach the shared memory region
@@ -1158,73 +1244,47 @@ pub mod fs_tests {
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
         println!("Semaphore value: 1"); // Initial value
+    
         // Fork child process
         assert_eq!(cage.fork_syscall(2), 0);
-        // Clone the mutex for the child thread
-        let semaphore_mutex_child = semaphore_mutex.clone();
+    
         // Child process
         let thread_child = interface::helper_thread(move || {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
-            { // Use a scope for the mutex lock
-                let mut semaphore = semaphore_mutex_child.lock().unwrap();
-                *semaphore -= 1; // Decrement the semaphore
-                println!("Semaphore value (child):  {}", *semaphore); 
-            }
+            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
+            println!("Semaphore value (child): {}", cage1.sem_getvalue_syscall(shmatret as u32));
             interface::sleep(interface::RustDuration::from_millis(40));
             // Release the semaphore
-            { // Use a scope for the mutex lock
-                let mut semaphore = semaphore_mutex_child.lock().unwrap();
-                *semaphore += 1; // Increment the semaphore
-                println!("Semaphore value (child):  {}", *semaphore);  // After increment
-            }
+            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
+            println!("Semaphore value (child): {}", cage1.sem_getvalue_syscall(shmatret as u32));
             cage1.exit_syscall(EXIT_SUCCESS);
         });
+    
         //Parent processes
         let thread_parent = interface::helper_thread(move || {
-            // Parent waits for the semaphore
-            { // Use a scope for the mutex lock
-                let mut semaphore = semaphore_mutex.lock().unwrap();
-                *semaphore -= 1; // Decrement the semaphore
-                println!("Semaphore value (parent): {}", *semaphore);// After decrement
-            }
-    
-            // Wait for the child to post to the semaphore (We'll use the mutex to check the value)
-            loop {
-                let semaphore = semaphore_mutex.lock().unwrap();
-                if *semaphore == 0 {
-                    println!("Semaphore value (parent): {}", *semaphore); // After checking
-                    break;
-                }
-                // If the semaphore is not 0, release the lock and wait a bit
-                drop(semaphore);
-                interface::sleep(interface::RustDuration::from_millis(1)); //can be changes 
-            }
-    
-            // Parent releases the semaphore
-            { // Use a scope for the mutex lock
-                let mut semaphore = semaphore_mutex.lock().unwrap();
-                *semaphore += 1; // Increment the semaphore
-                println!("Semaphore value (parent): {}", *semaphore); // After increment
-            }
-    
-            // Check semaphore value using the mutex
-            { // Use a scope for the mutex lock
-                let semaphore = semaphore_mutex.lock().unwrap();
-                assert_eq!(*semaphore, 1); // Check semaphore value   //here assertion fails assertion `left == right` failed left 0 right 1
-                println!("Semaphore value (parent): {}", *semaphore); // After checking
-            }
-    
+            // Parents waits for the semaphore
+            assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
+            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
+            println!("Semaphore value (parent): {}", cage.sem_getvalue_syscall(shmatret as u32));
+            interface::sleep(interface::RustDuration::from_millis(100));
+            // Parents release the semaphore
+            assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+            interface::sleep(interface::RustDuration::from_millis(300)); //need to adjust the sleep time
+            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
+            println!("Semaphore value (parent): {}", cage.sem_getvalue_syscall(shmatret as u32));
             // Destroy the semaphore
             assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-            // mark the shared memory to be removed
+            // mark the shared memory to be rmoved
             let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
+
             assert_eq!(shmctlret2, 0);
             //detach from shared memory
             let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
             assert_eq!(shmdtret, shmid);
             cage.exit_syscall(EXIT_SUCCESS);
         });
+    
         thread_child.join().unwrap();
         thread_parent.join().unwrap();
         lindrustfinalize();
