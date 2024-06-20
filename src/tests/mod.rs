@@ -76,8 +76,8 @@ mod main_tests {
     }
 
     fn set_panic_hook() {
-        let orig_hook = panic::take_hook();
-        panic::set_hook(Box::new(move |panic_info| {
+        let orig_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
             // this hook would be triggered whenever a panic occurs
             // good for test cases that panicked inside the non-main thread
             // so the trace information could be printed immediately
