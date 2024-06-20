@@ -6,83 +6,57 @@ pub mod fs_tests {
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use libc::c_void;
+    use crate::tests::main_tests::TESTMUTEX;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
-    pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
+    // pub fn test_fs() {
+    //     ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
-        ut_lind_fs_broken_close();
-        ut_lind_fs_chmod_valid_args();
-        ut_lind_fs_chmod_invalid_args();
-        ut_lind_fs_fchmod();
-        ut_lind_fs_dir_chdir();
-        ut_lind_fs_dir_mode();
-        ut_lind_fs_dir_multiple();
-        ut_lind_fs_dup();
-        ut_lind_fs_dup2();
-        ut_lind_fs_fcntl_valid_args();
-        ut_lind_fs_fcntl_invalid_args();
-        ut_lind_fs_fcntl_dup();
-        ut_lind_fs_ioctl_valid_args();
-        ut_lind_fs_ioctl_invalid_args();
-        ut_lind_fs_fdflags();
-        ut_lind_fs_file_link_unlink();
-        ut_lind_fs_file_lseek_past_end();
-        ut_lind_fs_fstat_complex();
-        ut_lind_fs_getuid();
-        ut_lind_fs_load_fs();
+    //     ut_lind_fs_broken_close();
+    //     ut_lind_fs_chmod();
+    //     ut_lind_fs_fchmod();
+    //     ut_lind_fs_dir_chdir();
+    //     ut_lind_fs_dir_mode();
+    //     ut_lind_fs_dir_multiple();
+    //     ut_lind_fs_dup();
+    //     ut_lind_fs_dup2();
+    //     ut_lind_fs_fcntl();
+    //     ut_lind_fs_ioctl();
+    //     ut_lind_fs_fdflags();
+    //     ut_lind_fs_file_link_unlink();
+    //     ut_lind_fs_file_lseek_past_end();
+    //     ut_lind_fs_fstat_complex();
+    //     ut_lind_fs_getuid();
+    //     ut_lind_fs_load_fs();
+    //     ut_lind_fs_mknod();
+    //     ut_lind_fs_multiple_open();
+    //     ut_lind_fs_rename();
+    //     ut_lind_fs_rmdir();
+    //     ut_lind_fs_stat_file_complex();
+    //     ut_lind_fs_stat_file_mode();
+    //     ut_lind_fs_statfs();
+    //     ut_lind_fs_fstatfs();
+    //     ut_lind_fs_ftruncate();
+    //     ut_lind_fs_truncate();
+    //     ut_lind_fs_getdents();
+    //     ut_lind_fs_dir_chdir_getcwd();
+    //     rdwrtest();
+    //     prdwrtest();
+    //     chardevtest();
+    //     ut_lind_fs_exec_cloexec();
+    //     ut_lind_fs_shm();
+    //     ut_lind_fs_getpid_getppid();
+    //     ut_lind_fs_sem_fork();
+    //     ut_lind_fs_sem_trytimed();
+    //     ut_lind_fs_sem_test();
+    //     ut_lind_fs_tmp_file_test();
+    // }
 
-        // mknod_syscall_tests
-        ut_lind_fs_mknod_empty_path();
-        ut_lind_fs_mknod_nonexisting_parent_directory();
-        ut_lind_fs_mknod_existing_file();
-        ut_lind_fs_mknod_invalid_modebits();
-        ut_lind_fs_mknod_invalid_filetypes();
-        ut_lind_fs_mknod_success();
-
-        ut_lind_fs_multiple_open();
-        ut_lind_fs_rename();
-        ut_lind_fs_rmdir();
-        ut_lind_fs_stat_file_complex();
-        ut_lind_fs_stat_file_mode();
-        ut_lind_fs_statfs();
-        ut_lind_fs_fstatfs();
-        ut_lind_fs_ftruncate();
-        ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
-        ut_lind_fs_dir_chdir_getcwd();
-        rdwrtest();
-        prdwrtest();
-        chardevtest();
-        ut_lind_fs_exec_cloexec();
-        ut_lind_fs_shm();
-        ut_lind_fs_getpid_getppid();
-        ut_lind_fs_sem_fork();
-        ut_lind_fs_sem_trytimed();
-        ut_lind_fs_sem_test();
-        ut_lind_fs_tmp_file_test();
-
-        //mkdir_syscall_tests
-        ut_lind_fs_mkdir_empty_directory();
-        ut_lind_fs_mkdir_nonexisting_directory();
-        ut_lind_fs_mkdir_existing_directory();
-        ut_lind_fs_mkdir_invalid_modebits();
-        ut_lind_fs_mkdir_success();
-        ut_lind_fs_mkdir_using_symlink();
-
-        //open_syscall_tests
-        ut_lind_fs_open_empty_directory();
-        ut_lind_fs_open_nonexisting_parentdirectory_and_file();
-        ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file();
-        ut_lind_fs_open_existing_file_without_flags();
-        ut_lind_fs_open_existing_file_with_flags();
-        ut_lind_fs_open_create_new_file_and_check_link_count();
-        ut_lind_fs_open_existing_file_with_o_trunc_flag();
-        ut_lind_fs_open_new_file_with_s_ifchar_flag();
-    }
-
+    #[test]
     pub fn ut_lind_fs_simple() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -102,7 +76,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn rdwrtest() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -128,7 +105,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn prdwrtest() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -151,7 +131,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn chardevtest() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -196,7 +179,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_broken_close() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         //testing a muck up with the inode table where the regular close does not work as intended
 
         lindrustinit(0);
@@ -318,6 +304,8 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_fchmod() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -356,7 +344,10 @@ pub mod fs_tests {
         lindrustfinalize();        
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_chdir() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -380,7 +371,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_mode() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -401,7 +395,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_multiple() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -437,7 +434,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -494,7 +494,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup2() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -693,7 +696,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fdflags() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -735,7 +741,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_file_link_unlink() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -775,7 +784,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_file_lseek_past_end() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -798,7 +810,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fstat_complex() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
 
         let cage = interface::cagetable_getref(1);
@@ -818,7 +833,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_getuid() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -838,7 +856,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_load_fs() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1011,7 +1032,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_multiple_open() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1043,7 +1067,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_rmdir() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1056,7 +1083,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_stat_file_complex() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let fd = cage.open_syscall("/fooComplex", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
@@ -1082,7 +1112,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_stat_file_mode() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
@@ -1105,7 +1138,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_statfs() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
@@ -1118,7 +1154,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fstatfs() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
@@ -1138,7 +1177,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_rename() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1150,7 +1192,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ftruncate() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1176,7 +1221,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_truncate() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1209,7 +1257,10 @@ pub mod fs_tests {
     #[cfg(not(target_os = "macos"))]
     type CharPtr = *const i8;
 
+    #[test]
     pub fn ut_lind_fs_getdents() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1243,7 +1294,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let needed = "/subdir1\0".as_bytes().to_vec().len();
@@ -1275,7 +1329,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_exec_cloexec() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut uselessstatdata = StatData::default();
@@ -1308,7 +1365,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    use libc::c_void;
+    #[test]
     pub fn ut_lind_fs_shm() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
@@ -1342,7 +1403,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_getpid_getppid() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
 
         let cage1 = interface::cagetable_getref(1);
@@ -1366,7 +1430,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_fork() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
@@ -1417,7 +1484,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_trytimed() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
@@ -1475,7 +1545,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_test() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
@@ -1499,7 +1572,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_tmp_file_test() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 

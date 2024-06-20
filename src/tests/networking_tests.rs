@@ -6,33 +6,14 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
+    use lazy_static::lazy_static;
+    use std::sync::Mutex;
+    use main_tests::TESTMUTEX;
 
-    pub fn net_tests() {
-        ut_lind_net_bind();
-        ut_lind_net_bind_multiple();
-        ut_lind_net_bind_on_zero();
-        ut_lind_net_connect_basic_udp();
-        ut_lind_net_getpeername();
-        ut_lind_net_getsockname();
-        ut_lind_net_listen();
-        ut_lind_net_poll();
-        ut_lind_net_recvfrom();
-        ut_lind_net_select();
-        ut_lind_net_shutdown();
-        ut_lind_net_socket();
-        ut_lind_net_socketoptions();
-        ut_lind_net_socketpair();
-        ut_lind_net_udp_bad_bind();
-        ut_lind_net_udp_simple();
-        ut_lind_net_udp_connect();
-        ut_lind_net_gethostname();
-        ut_lind_net_dns_rootserver_ping();
-        ut_lind_net_domain_socket();
-        ut_lind_net_epoll();
-        ut_lind_net_writev();
-    }
-
+    #[test]
     pub fn ut_lind_net_bind() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -65,7 +46,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_bind_on_zero() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -465,7 +449,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_bind_multiple() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -507,7 +494,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_connect_basic_udp() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -539,7 +529,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_getpeername() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -577,7 +570,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_getsockname() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -613,7 +609,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_listen() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -663,7 +662,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_poll() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -850,7 +852,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_recvfrom() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1059,7 +1064,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_select() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1239,7 +1247,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_shutdown() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1304,7 +1315,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_socket() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1332,7 +1346,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_socketoptions() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1502,7 +1519,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_socketpair() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1555,7 +1575,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_udp_bad_bind() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1593,7 +1616,11 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
+    #[test]
     pub fn ut_lind_net_udp_simple() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1676,7 +1703,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_udp_connect() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -1733,7 +1763,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_gethostname() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
@@ -1771,7 +1804,11 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_dns_rootserver_ping() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
+
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
         struct DnsHeader {
@@ -1890,7 +1927,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_domain_socket() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
@@ -2119,7 +2159,10 @@ pub mod net_tests {
     /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using
     epoll_wait_syscall(). It handles the events based on their types (EPOLLIN or EPOLLOUT) and performs the necessary operations
     like accepting new connections, sending/receiving data, and modifying the event flags */
+    #[test]
     pub fn ut_lind_net_epoll() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
@@ -2289,7 +2332,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_net_writev() {
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        main_tests::test_setup();
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
