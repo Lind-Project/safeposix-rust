@@ -1495,6 +1495,10 @@ pub mod net_tests {
     }
 
     pub fn ut_lind_net_socketpair() {
+        // this test is used for testing a generic use case of socketpair
+        // test involves creating a TCP socketpair let two threads communicate
+        // with the socketpair
+
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1536,18 +1540,8 @@ pub mod net_tests {
             assert_eq!(str2, "Socketpair Test");
         });
 
-        loop {
-            if thread_2.is_finished() {
-                thread_2.join().unwrap();
-                thread.join().unwrap();
-                break;
-            }
-            if thread.is_finished() {
-                thread.join().unwrap();
-                thread_2.join().unwrap();
-                break;
-            }
-        }
+        thread.join().unwrap();
+        thread_2.join().unwrap();
 
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
@@ -1597,6 +1591,8 @@ pub mod net_tests {
     }
 
     pub fn ut_lind_net_socketpair_cloexec() {
+        // this test is used for testing socketpair when cloexec flag is set
+
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1630,6 +1626,7 @@ pub mod net_tests {
     }
 
     pub fn ut_lind_net_socketpair_nonblocking() {
+        // this test is used for testing socketpair when nonblocking flag is set
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1688,18 +1685,8 @@ pub mod net_tests {
             assert_ne!(counter, 0);
         });
 
-        loop {
-            if thread_2.is_finished() {
-                thread_2.join().unwrap();
-                thread.join().unwrap();
-                break;
-            }
-            if thread.is_finished() {
-                thread.join().unwrap();
-                thread_2.join().unwrap();
-                break;
-            }
-        }
+        thread.join().unwrap();
+        thread_2.join().unwrap();
 
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
