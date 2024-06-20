@@ -12,6 +12,7 @@ pub mod net_tests {
         ut_lind_net_bind_multiple();
         ut_lind_net_bind_on_zero();
         ut_lind_net_connect_basic_udp();
+        ut_lind_net_connect_basic_tcp();
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
