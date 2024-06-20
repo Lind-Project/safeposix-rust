@@ -2042,19 +2042,27 @@ impl Cage {
     }
 
     //------------------------------------IOCTL SYSCALL------------------------------------
+    //Description
     //ioctl manipulates the underlying device parameters of special files. In particular, it is used as a way
-    //for user-space applications to interface with device drivers. The function accepts three parameters:
-    //fd - an open file descriptor that refers to a device, request - the control function to be performed
-    //(the set of valid request values depends entirely on the device being addressed), 
-    //and ptrunion - additional information needed by the addressed device to perform the selected control function
-    //upon successful completion, a value other than -1 that depends on the selected control function is returned
-    //in case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
-    //to learn more about the syscall, control functions applicable to all the devices, and possible error values,
-    //see https://man.openbsd.org/ioctl
+    //for user-space applications to interface with device drivers. 
     
-    //this is a question of semantics, but the standard mentions that the third argument can be either an int or a pointer
-    //to a device-specific data structure. Isn't it confusing to call this parameter 'ptrunion', which marks it solely as a pointer
-    //and eliminates the int option? In the standard, they just call it arg.
+    //Function arguments
+    //The function accepts three arguments:
+    //1. fd       - an open file descriptor that refers to a device.
+    //2. request  - the control function to be performed. The set of valid request values depends entirely on the device
+    //              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
+    //              information that all media devices must support.
+    //3. ptrunion - additional information needed by the addressed device to perform the selected control function.
+    //              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
+    //              media_device_info, from which the device information is obtained.
+    
+    //Return values
+    //Upon successful completion, a value other than -1 that depends on the selected control function is returned.
+    //In case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
+
+    //To learn more about the syscall, control functions applicable to all the devices, and possible error values,
+    //see https://man.openbsd.org/ioctl
+
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
         //BUG
         //if the provided file descriptor is out of bounds, 'get_filedescriptor' returns Err(),
@@ -2091,9 +2099,6 @@ impl Cage {
                                 *flags &= !O_NONBLOCK;
                                 //libc::fcntl is called under the hood with F_SETFL command and 0 as an argument
                                 //to set blocking I/O, and the result of the call is stored in ioctlret
-
-                                //As of now, I don't understand why besides changing the emulated flags, we perform
-                                //a real libc::fcntl syscall
                                 if let Some(ins) = &mut sockhandle.innersocket {
 
                                     ioctlret = ins.set_blocking();
@@ -2102,9 +2107,6 @@ impl Cage {
                                 *flags |= O_NONBLOCK;
                                 //libc::fcntl is called under the hood with F_SETFL command ans O_NONBLOCK as an argument
                                 //to set nonblocking I/O, and the result of the call is stored in ioctlret
-
-                                //As of now, I don't understand why besides changing the emulated flags, we perform
-                                //a real libc::fcntl syscall
                                 if let Some(ins) = &mut sockhandle.innersocket {
                                     ioctlret = ins.set_nonblocking();
                                 }
