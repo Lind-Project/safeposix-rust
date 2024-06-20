@@ -12,7 +12,7 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
 
 impl Cage {
-    //Initializes a socket description and sets the necessary flags
+    //Initializes a socket file descriptor and sets the necessary flags
     fn _socket_initializer(
         &self,
         domain: i32,
@@ -55,9 +55,7 @@ impl Cage {
             return fd;
         }
         let fdoption = &mut *guardopt.unwrap();
-        //Insert the sockfd as the FileDescriptor inside fdoption
-        //This specifies that the fd entry in the fd table points to a Socket
-        //with properties outlined in SocketDesc within the FileDescriptor enum
+        //Insert the sockfd into the FileDescriptor option inside the fd table
         let _insertval = fdoption.insert(sockfd); 
         return fd;
     }
@@ -196,7 +194,7 @@ impl Cage {
             //Create a new socket, as no sockhandle exists
             //Socket creation rarely fails except for invalid parameters or extremely low-resources conditions
             //Upon failure, process will panic
-            // ** What domains does lind satisfy???? ** //
+            //Lind handles IPv4, IPv6, and Unix for domains
             let thissock =
                 interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
 
@@ -216,7 +214,7 @@ impl Cage {
                 //Failure occured upon setting a socket option
                 //Possible failures can be read at the man page linked above
                 //
-                // **Possibly add errors instead of having a single panick for all errors ??? ** //
+                // TODO: Possibly add errors instead of having a single panic for all errors ??? ** //
                 if sockret < 0 {
                     panic!("Cannot handle failure in setsockopt on socket creation");
                 }
@@ -227,15 +225,70 @@ impl Cage {
         };
     }
 
-    //we assume we've converted into a RustSockAddr in the dispatcher
-    //bind a name to a socket - assign the address specified by localaddr to the 
-    //socket referred to by the file descriptor fd
+    //TODO: bind_syscall can be merged with bind_inner to be one function as this is a remnant 
+    //from a previous refactor
+
+    /// ### Description
+    /// 
+    /// `bind_syscall` - when a socket is created with socket_syscall, it exists in a name
+    ///  space (address family) but has no address assigned to it. bind_syscall
+    ///  assigns the address specified by localaddr to the socket referred to
+    ///  by the file descriptor fd. 
+    /// 
+    /// ### Arguments
+    /// 
+    /// it accepts two parameters: 
+    /// * `fd` - an open file descriptor
+    /// * `localaddr` - the address to bind to the socket referred to by fd
+    /// 
+    /// ### Returns
+    /// 
+    /// On success, zero is returned.  On error, -errno is returned, and
+    /// errno is set to indicate the error.
+    /// 
+    /// ### Errors
+    /// 
+    /// * EACCES - The address is protected, and the user is not the
+    ///            superuser.
+    /// * EADDRINUSE - The given address is already in use.
+    /// * EADDRINUSE - (Internet domain sockets) The port number was specified as
+    ///                zero in the socket address structure, but, upon attempting
+    ///                to bind to an ephemeral port, it was determined that all
+    ///                port numbers in the ephemeral port range are currently in
+    ///                use.  See the discussion of
+    ///                /proc/sys/net/ipv4/ip_local_port_range ip(7).
+    /// * EBADF - sockfd is not a valid file descriptor.
+    /// * EINVAL - The socket is already bound to an address.
+    /// * EINVAL - addrlen is wrong, or addr is not a valid address for this
+    ///            socket's domain.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// The following errors are specific to UNIX domain (AF_UNIX)
+    /// sockets:
+    ///
+    /// * EACCES - Search permission is denied on a component of the path
+    ///            prefix.  (See also path_resolution(7).)
+    /// * EADDRNOTAVAIL - A nonexistent interface was requested or the requested
+    ///                   address was not local.
+    /// * EFAULT - addr points outside the user's accessible address space.
+    /// * ELOOP - Too many symbolic links were encountered in resolving
+    ///           addr.
+    /// * ENAMETOOLONG - addr is too long.
+    /// * ENOENT - A component in the directory prefix of the socket pathname
+    ///        does not exist.
+    /// * ENOMEM - Insufficient kernel memory was available.
+    /// * ENOTDIR - A component of the path prefix is not a directory.
+    /// * EROFS - The socket inode would reside on a read-only filesystem.
+    /// 
+    // ** should this comment be left ?? : we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
 
-    //Based on the domain of the socket, bind the socket with a local address and 
-    //insert a cloned local address in the socket handle
+    //Direct to appropriate helper function based on the domain of the socket
+    //to bind socket with local address
+    //For INET sockets, create and bind the inner socket which is a kernel socket noted by raw_sys_fd
+    //For Unix sockets, setup unix info field and bind to local address
     //On success, zero is returned.  On error, -errno is returned, and
     //errno is set to indicate the error.
     fn bind_inner_socket(
@@ -314,13 +367,9 @@ impl Cage {
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed); 
-                    //fetch_add returns the previous value, which is the inode number we want,
-                    //while incrementing the nextinode value as well
-                    //Specifically, the order argument Relaxed allows reordering and allows 
-                    //operations to appear out of order when viewed by other threads. 
-                    //It provides no synchronization or guarantees about the visibility of other concurrent operations.
-                    //To learn more about atomic variables and operations, access the following link,
-                    //https://medium.com/@teamcode20233/understanding-the-atomicusize-in-std-sync-atomic-rust-tutorial-b3b43c77a2b
+                    //fetch_add returns the previous value, which is the inode number we want, while incrementing the nextinode value as well
+                    //The ordering argument Relaxed guarantees the memory location is atomic, which is all that is neccessary for a counter
+                    //Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
 
                 let newinode;
 
