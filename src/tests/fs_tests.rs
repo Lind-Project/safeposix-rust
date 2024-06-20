@@ -61,6 +61,16 @@ pub mod fs_tests {
         ut_lind_fs_mkdir_invalid_modebits();
         ut_lind_fs_mkdir_success();
         ut_lind_fs_mkdir_using_symlink();
+
+        //open_syscall_tests
+        ut_lind_fs_open_empty_directory();
+        ut_lind_fs_open_nonexisting_parentdirectory_and_file();
+        ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file();
+        ut_lind_fs_open_existing_file_without_flags();
+        ut_lind_fs_open_existing_file_with_flags();
+        ut_lind_fs_open_create_new_file_and_check_link_count();
+        ut_lind_fs_open_existing_file_with_o_trunc_flag();
+        ut_lind_fs_open_new_file_with_s_ifchar_flag();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -1418,6 +1428,166 @@ pub mod fs_tests {
 
         // Check for error while creating the symlinkFile again as it would already be created while linking the two files above.
         assert_eq!(cage.mkdir_syscall("/symlinkFile", S_IRWXA), -(Errno::EEXIST as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_empty_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "";
+        // Check for error when directory is empty
+        assert_eq!(cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/dir/file";
+        // Check for error when neither file nor parent exists and O_CREAT flag is not present
+        assert_eq!(cage.open_syscall(path, F_GETFD, S_IRWXA), -(Errno::ENOENT as i32));
+
+        // Check for error when neither file nor parent exists and O_CREAT flag is present
+        assert_eq!(cage.open_syscall(path, O_CREAT, S_IRWXA), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // Create a parent directory
+        assert_eq!(cage.mkdir_syscall("/dir", S_IRWXA), 0);
+        let path = "/dir/file";
+
+        // Check for error when parent directory exists but file doesn't exist and O_CREAT is not present
+        assert_eq!(cage.open_syscall(path, O_TRUNC, S_IRWXA), -(Errno::ENOENT as i32));
+
+        // Check for error when parent directory exists but file doesn't exist and Filetype Flags contain S_IFCHR flag
+        assert_eq!(cage.open_syscall(path, S_IFCHR | O_CREAT, S_IRWXA), -(Errno::EINVAL as i32));
+        
+        // Check for error when parent directory exists but file doesn't exist and mode bits are invalid
+        let invalid_mode = 0o77777;
+        assert_eq!(cage.open_syscall(path, O_CREAT, invalid_mode), -(Errno::EPERM as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_file_without_flags() {
+        // This test is used for validating two scenarios:
+        // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
+        // 2. When the same existing file is being opened without O_CREAT flag, it should open successfully.
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a non-existing file with O_CREAT flag
+        // This should create a new file with a valid file descriptor
+        let path = "/test";
+        let fd = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd > 0);
+    
+        // Open the existing file without O_CREAT and O_EXCL
+        // The file should open successfully as the two flags are not set while re-opening the file
+        let fd2 = cage.open_syscall(path, O_RDONLY, 0);
+        assert!(fd2 > 0);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_file_with_flags() {
+        // This test is used for validating two scenarios:
+        // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
+        // 2. When the same existing file is opened using O_CREAT and O_EXCL flags, it should return an error for file already existing.
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a non-existing file with O_CREAT flag
+        // This should create a new file with a valid file descriptor
+        let path = "/test";
+        let fd = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd > 0);
+    
+        // Open the existing file with O_CREAT and O_EXCL flags
+        // The file should not open successfully as the two flags are set while re-opening the file
+        // It should return an error for "File already exists"
+        assert_eq!(cage.open_syscall(path, O_CREAT | O_EXCL | O_RDONLY, S_IRWXA), -(Errno::EEXIST as i32));
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_create_new_file_and_check_link_count() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a new file
+        let path = "/newfile.txt";
+        let fd = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd > 0);
+
+        // Write a string to the newly opened file of size 12
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Get the stat data for the file and check for file attributes
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+
+        // Validate the link count for the new file to be 1
+        assert_eq!(statdata.st_nlink, 1);
+
+        // Validate the size of the file to be 12
+        assert_eq!(statdata.st_size, 12);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_file_with_o_trunc_flag() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a new file
+        let path = "/file.txt";
+        let fd = cage.open_syscall(path, O_CREAT | O_WRONLY, S_IRWXA);
+        assert!(fd > 0);
+        // Write a string to the newly opened file of size 12
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+        // Get the stat data for the file and check for file attributes
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        // Validate the size of the file to be 12
+        assert_eq!(statdata.st_size, 12);
+    
+
+        // Open the same file with O_TRUNC flag
+        // Since the file is truncated, the size of the file should be truncated to 0.
+        let fd2 = cage.open_syscall(path, O_WRONLY | O_TRUNC, S_IRWXA);
+        assert!(fd2 > 0);
+        // Get the stat data for the same file and check for file attributes
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        // Validate the size of the file to be 0 as the file is truncated now
+        assert_eq!(statdata.st_size, 0);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_new_file_with_s_ifchar_flag() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        // Create a parent directory
+        assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
+        let path = "/testdir/file";
+
+        // Attempt to open a file with S_IFCHR flag, which should be invalid for regular files
+        assert_eq!(cage.open_syscall(path, O_CREAT | S_IFCHR, S_IRWXA), -(Errno::EINVAL as i32));
+        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
