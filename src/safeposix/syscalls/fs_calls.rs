@@ -13,26 +13,37 @@ use crate::safeposix::shm::*;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
-    /// The opensyscall() creates an open file description that refers to a file and a file descriptor that refers to that open file description.
+    /// The `open_syscall()` creates an open file description that refers to a file and a file descriptor that refers to that open file description.
     /// The file descriptor is used by other I/O functions to refer to that file.
     /// There are generally two cases which occur when this function is called. 
     /// Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
     /// Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
     
     /// ### Function Arguments
-    /// The opensyscall() receives three arguments:
-    /// 1. Path - This argument points to a pathname naming the file.
+    /// The `open_syscall()` receives three arguments:
+    /// * `path` - This argument points to a pathname naming the file.
     ///           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
-    /// 2. Flags - This argument contains the file status flags and file access modes which will be alloted to the open file description.
+    /// * `flags` - This argument contains the file status flags and file access modes which will be alloted to the open file description.
     ///            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
     ///            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
-    /// 3. Mode - This represents the permission of the newly created file. 
+    /// * `mode` - This represents the permission of the newly created file. 
     ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file. 
     
-    /// ### Return Values
+    /// ### Returns
     /// Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
-    /// Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    /// Otherwise, errors or panics are returned for different scenarios.
     ///
+    /// ### Errors and Panics
+    /// * ENFILE - no available file descriptor number could be found
+    /// * ENOENT - tried to open a file that did not exist
+    /// * EINVAL - the input flags contain S_IFCHR flag representing a special character file
+    /// * EPERM - the mode bits for a file are not sane
+    /// * ENOTDIR - tried to create a file as a child of something that isn't a directory
+    /// * EEXIST - the file already exists and O_CREAT and O_EXCL flags were passed
+    /// * ENXIO - the file is of type UNIX domain socket
+    /// 
+    /// A panic occurs when there is some issue fetching the file descriptor.
+    /// 
     /// for more detailed description of all the commands and return values, see 
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
     ///
