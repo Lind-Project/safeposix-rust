@@ -35,7 +35,7 @@ pub mod fs_tests {
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        println!("ut_lind_fs_simple passed");
+
         lindrustfinalize();
     }
 
@@ -705,7 +705,7 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
+        }
 
     #[test]
     pub fn ut_lind_fs_fdflags() {

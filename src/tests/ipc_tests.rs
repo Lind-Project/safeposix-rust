@@ -309,25 +309,23 @@ pub mod ipc_tests {
         lindrustfinalize();
     }
 
-    
+    #[test]
     pub fn ut_lind_ipc_socketpair() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let mut _thelock = TESTMUTEX.lock().unwrap();
         //creates the file system if it doesnt exist yet.
         setup::test_setup();
-
+        
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
-        let socketpairsafe = Arc::new(Mutex::new(interface::SockPair::default()));
+        let mut socketpair = interface::SockPair::default();
         assert_eq!(
-            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut *socketpairsafe.lock().unwrap()),
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
             0
         );
         let cage2 = cage.clone();
-        let socketpair_clone = Arc::clone(&socketpairsafe);
 
         let thread = interface::helper_thread(move || {
-            let socketpair = socketpair_clone.lock().unwrap();
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
@@ -338,8 +336,7 @@ pub mod ipc_tests {
                 15
             );
         });
-        
-        let socketpair = socketpairsafe.lock().unwrap();
+
         assert_eq!(
             cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
             4
@@ -358,7 +355,13 @@ pub mod ipc_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_ipc_writev() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
+        let mut _thelock = TESTMUTEX.lock().unwrap();
+        //creates the file system if it doesnt exist yet.
+        setup::test_setup();
+        
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
