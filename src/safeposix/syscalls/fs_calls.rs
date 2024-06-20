@@ -13,14 +13,14 @@ use crate::safeposix::shm::*;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
-    /// The open_syscall() creates an open file description that refers to a file and a file descriptor that refers to that open file description.
+    /// The opensyscall() creates an open file description that refers to a file and a file descriptor that refers to that open file description.
     /// The file descriptor is used by other I/O functions to refer to that file.
     /// There are generally two cases which occur when this function is called. 
     /// Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
     /// Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
     
     /// ### Function Arguments
-    /// The open_syscall() receives three arguments:
+    /// The opensyscall() receives three arguments:
     /// 1. Path - This argument points to a pathname naming the file.
     ///           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
     /// 2. Flags - This argument contains the file status flags and file access modes which will be alloted to the open file description.
@@ -33,9 +33,6 @@ impl Cage {
     /// Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
     /// Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
     ///
-    /// ### Tests
-    /// All the different scenarios for open_syscall() are covered and tested in the "fs_tests.rs" file under "open_syscall_tests" section.
-    ///
     /// for more detailed description of all the commands and return values, see 
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
     ///
@@ -46,7 +43,7 @@ impl Cage {
         let position = if 0 != flags & O_APPEND { size } else { 0 };
 
         // While creating a new FileDescriptor, there are two important things that need to be present:
-        // O_RDWRFLAGS:- This flag determine whether the file is opened for reading, writing, or both.
+        // O_RDWRFLAGS:- This flag determines whether the file is opened for reading, writing, or both.
         // O_CLOEXEC - This flag indicates that the file descriptor should be automatically closed during an exec family function. 
         // It’s needed for managing file descriptors across different processes, ensuring that they do not unintentionally remain open.
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
@@ -225,8 +222,8 @@ impl Cage {
                                 size = f.size;
                                 f.refcount += 1;
 
-                                // Doubt: Why are we removing the previous entry from the FileObjectTable and then inserting a new file with size 0. 
-                                // Instead, we could have simply updated the entry in the table with the size being updated to 0. Might have to look in detail in future.
+                                // Current Implementation for File Truncate: The previous entry of the file is removed from the FileObjectTable, with a new file of size 0 inserted back into the table.
+                                // Possible Bug: Why are we not simply adjusting the file size and pointer of the existing file?
                             }
 
                             // When the existing file type is of Directory or Character Device, only the file size and the reference count is updated.
