@@ -9,7 +9,9 @@ use std::net::{TcpListener, UdpSocket};
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
-mod main_tests {
+#[allow(unused_parens)]
+#[cfg(test)]
+mod setup {
 
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
@@ -18,6 +20,13 @@ mod main_tests {
     use lazy_static::lazy_static;
     use std::sync::Mutex;
 
+    // Tests in rust as parallel by default and to make them share resources we are using a global static lock.
+    // The following lines prevent other tests from running concurrently and allows them to use the same file system, cages for testing. 
+    // ```no_run
+    // acquiring a lock on TESTMUTEX prevents other tests from running concurrently
+    // let mut _thelock = TESTMUTEX.lock().unwrap();
+    // setup::test_setup();
+    // ```
     lazy_static! {
         // This has a junk value (a bool).  Could be anything...
         #[derive(Debug)]

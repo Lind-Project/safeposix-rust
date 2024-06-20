@@ -9,19 +9,15 @@ pub mod ipc_tests {
     use std::time::Instant;
     use lazy_static::lazy_static;
     use std::sync::{Arc, Mutex};
-    use main_tests::TESTMUTEX;
-
-    // //#[test]
-    // pub fn test_ipc() {
-    //     ut_lind_ipc_pipe();
-    //     ut_lind_ipc_domain_socket();
-    //     ut_lind_ipc_socketpair();
-    // }
+    use setup::TESTMUTEX;
 
     #[test]
     pub fn ut_lind_ipc_pipe() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let mut _thelock = TESTMUTEX.lock().unwrap();
-        main_tests::test_setup();
+        //creates the file system if it doesnt exist yet.
+        setup::test_setup();
+
         let byte_chunk: usize = 131072; // 128 KB
         let num_writes: usize = 8192; // 8 KB
 
@@ -84,8 +80,11 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_domain_socket() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let mut _thelock = TESTMUTEX.lock().unwrap();
-        main_tests::test_setup();
+        //creates the file system if it doesnt exist yet.
+        setup::test_setup();
+
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
@@ -312,8 +311,11 @@ pub mod ipc_tests {
 
     
     pub fn ut_lind_ipc_socketpair() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let mut _thelock = TESTMUTEX.lock().unwrap();
-        main_tests::test_setup();
+        //creates the file system if it doesnt exist yet.
+        setup::test_setup();
+
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let socketpairsafe = Arc::new(Mutex::new(interface::SockPair::default()));
