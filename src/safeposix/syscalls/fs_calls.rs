@@ -2041,27 +2041,42 @@ impl Cage {
         }
     }
 
-    //------------------------------------IOCTL SYSCALL------------------------------------
-    //Description
-    //ioctl manipulates the underlying device parameters of special files. In particular, it is used as a way
-    //for user-space applications to interface with device drivers. 
-    
-    //Function arguments
-    //The function accepts three arguments:
-    //1. fd       - an open file descriptor that refers to a device.
-    //2. request  - the control function to be performed. The set of valid request values depends entirely on the device
+    /// ### Description
+    ///
+    /// The `ioctl_syscall()` manipulates the underlying device parameters of special files. In particular, it is used as a way
+    /// for user-space applications to interface with device drivers. 
+    ///
+    /// ### Arguments
+    ///
+    /// The `ioctl_syscall()` accepts three arguments:
+    /// * `fd` - an open file descriptor that refers to a device.
+    /// * `request` - the control function to be performed. The set of valid request values depends entirely on the device
     //              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
     //              information that all media devices must support.
-    //3. ptrunion - additional information needed by the addressed device to perform the selected control function.
+    /// * `ptrunion` - additional information needed by the addressed device to perform the selected control function.
     //              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
     //              media_device_info, from which the device information is obtained.
-    
-    //Return values
-    //Upon successful completion, a value other than -1 that depends on the selected control function is returned.
-    //In case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
-
-    //To learn more about the syscall, control functions applicable to all the devices, and possible error values,
-    //see https://man.openbsd.org/ioctl
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, a value other than -1 that depends on the selected control function is returned.
+    /// In case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
+    ///
+    /// ### Errors and Panics
+    ///
+    /// * `EBADF` - fd is not a valid file descriptor
+    /// * `EFAULT` - ptrunion references an inaccessible memory area
+    /// * `EINVAL` - request or ptrunion is not valid
+    /// * `ENOTTY` - fd is not associated with a character special device
+    /// When `ioctl_syscall() is called on a Socket with `FIONBIO` control function, an underlying call to `libc::fcntl()` is made,
+    /// which can return with an error. For a complete list of possible erorrs, see 
+    /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
+    ///
+    /// A panic occurs either when a provided file descriptor is out of bounds or when
+    /// an underlying call to `libc::fcntl()` for Socket type is returned with an unknown error.
+    ///
+    /// To learn more about the syscall, control functions applicable to all the devices, and possible error values, see
+    /// [ioctl(2)](https://man.openbsd.org/ioctl)
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
         //BUG
