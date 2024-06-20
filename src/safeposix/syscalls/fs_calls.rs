@@ -2051,11 +2051,11 @@ impl Cage {
     /// The `ioctl_syscall()` accepts three arguments:
     /// * `fd` - an open file descriptor that refers to a device.
     /// * `request` - the control function to be performed. The set of valid request values depends entirely on the device
-    //              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
-    //              information that all media devices must support.
+    ///              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
+    ///              information that all media devices must support.
     /// * `ptrunion` - additional information needed by the addressed device to perform the selected control function.
-    //              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
-    //              media_device_info, from which the device information is obtained.
+    ///              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
+    ///              media_device_info, from which the device information is obtained.
     ///
     /// ### Returns
     ///
