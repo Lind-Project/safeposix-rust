@@ -71,6 +71,14 @@ impl Cage {
         // Fetch the next file descriptor and its lock write guard to ensure the file can be associated with the file descriptor 
         let (fd, guardopt) = self.get_next_fd(None);
         match fd {
+            // If the file descriptor is invalid, the return value is always an error with value (ENFILE).
+            fd if fd == (Errno::ENFILE as i32) => {
+                return syscall_error(
+                    Errno::ENFILE,
+                    "open_helper",
+                    "no available file descriptor number could be found",
+                );
+            },
             // When the file descriptor is valid, we proceed with performing the remaining checks for open_syscall.
             fd if fd > 0 => {
                 // File Descriptor Write Lock Guard
@@ -261,21 +269,9 @@ impl Cage {
                 // Once all the updates are done, the file descriptor value is returned
                 fd 
             },
-            // If the file descriptor is invalid, the return value is always an error with value -23 (ENFILE).
-            -23 => {
-                return syscall_error(
-                    Errno::ENFILE,
-                    "open_helper",
-                    "no available file descriptor number could be found",
-                );
-            },
-            // Return a generic error when there is some other issue fetching the file descriptor.
+            // Panic when there is some other issue fetching the file descriptor.
             _ => {
-                return syscall_error(
-                    Errno::ESRCH,
-                    "open_fd_error",
-                    "there was some issue fetching the file descriptor",
-                );
+                panic!("File descriptor couldn't be fetched!");
             }
         }
     }
