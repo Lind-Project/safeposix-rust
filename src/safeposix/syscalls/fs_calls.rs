@@ -2041,39 +2041,92 @@ impl Cage {
         }
     }
 
-    //------------------------------------IOCTL SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `ioctl_syscall()` manipulates the underlying device parameters of special files. In particular, it is used as a way
+    /// for user-space applications to interface with device drivers. 
+    ///
+    /// ### Arguments
+    ///
+    /// The `ioctl_syscall()` accepts three arguments:
+    /// * `fd` - an open file descriptor that refers to a device.
+    /// * `request` - the control function to be performed. The set of valid request values depends entirely on the device
+    ///              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
+    ///              information that all media devices must support.
+    /// * `ptrunion` - additional information needed by the addressed device to perform the selected control function.
+    ///              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
+    ///              media_device_info, from which the device information is obtained.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, a value other than -1 that depends on the selected control function is returned.
+    /// In case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
+    ///
+    /// ### Errors and Panics
+    ///
+    /// * `EBADF` - fd is not a valid file descriptor
+    /// * `EFAULT` - ptrunion references an inaccessible memory area
+    /// * `EINVAL` - request or ptrunion is not valid
+    /// * `ENOTTY` - fd is not associated with a character special device
+    /// When `ioctl_syscall() is called on a Socket with `FIONBIO` control function, an underlying call to `libc::fcntl()` is made,
+    /// which can return with an error. For a complete list of possible erorrs, see 
+    /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
+    ///
+    /// A panic occurs either when a provided file descriptor is out of bounds or when
+    /// an underlying call to `libc::fcntl()` for Socket type is returned with an unknown error.
+    ///
+    /// To learn more about the syscall, control functions applicable to all the devices, and possible error values, see
+    /// [ioctl(2)](https://man.openbsd.org/ioctl)
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, 'get_filedescriptor' returns Err(),
+        //unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            //For now, the only implemented control function is FIONBIO command used with sockets 
             match request {
+                //for FIONBIO, 'ptrunion' stores a pointer to an integer. If the integer is 0, the socket's
+                //nonblocking I/O is cleared. Otherwise, the socket is set for nonblocking I/O
                 FIONBIO => {
+                    //if 'ptrunion' stores a Null pointer, a 'Bad address' error is returned
+                    //otheriwse, the integer value stored in that address is returned and saved into 'arg_result'
                     let arg_result = interface::get_ioctl_int(ptrunion);
-                    //matching the tuple and passing in filedesc_enum
                     match (arg_result, filedesc_enum) {
                         (Err(arg_result), ..)=> {
-                            return arg_result; //syscall_error
+                            return arg_result;
                         }
+                        //since FIONBIO command is used with sockets, we need to make sure that the provided
+                        //file descriptor addresses a socket
+                        //otherwise, a 'Not a typewriter' error designating that the specified command
+                        //is only applicable to sockets is returned 
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
-
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
                             let mut ioctlret = 0;
-
-                            if arg == 0 { //clear non-blocking I/O
+                            //clearing nonblocking I/O on the socket if the integer is 0
+                            if arg == 0 { 
                                 *flags &= !O_NONBLOCK;
+                                //libc::fcntl is called under the hood with F_SETFL command and 0 as an argument
+                                //to set blocking I/O, and the result of the call is stored in ioctlret
                                 if let Some(ins) = &mut sockhandle.innersocket {
+
                                     ioctlret = ins.set_blocking();
                                 }
-                            } else { //set for non-blocking I/O
+                            } else {
                                 *flags |= O_NONBLOCK;
+                                //libc::fcntl is called under the hood with F_SETFL command ans O_NONBLOCK as an argument
+                                //to set nonblocking I/O, and the result of the call is stored in ioctlret
                                 if let Some(ins) = &mut sockhandle.innersocket {
                                     ioctlret = ins.set_nonblocking();
                                 }
                             }
+                            //if ioctlret is negative, it means that the call to fcntl returned with an error
                             if ioctlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "ioctl", "The libc call to ioctl failed!");},
