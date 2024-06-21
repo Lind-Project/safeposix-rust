@@ -2261,7 +2261,27 @@ impl Cage {
         }
     }
 
-    //------------------------------------CHMOD HELPER FUNCTION------------------------------------
+    /// ### Description
+    ///
+    /// The `chmod_syscall()` changes a file's mode bits that consist of file permission bits (read, write, execute)
+    /// plus set-user-ID, set-group-ID, and sticky bits.
+    ///
+    /// ### Arguments
+    ///
+    /// The `chmod_syscall()` accepts two arguments:
+    /// * `path` - pathname of the file whose mode bits we are willing to change (symbolic links are currently not supported).
+    /// If the pathname is relative, then it is interpreted relative to the current working directory of the calling process.
+    /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
+    /// Some of the examples of such bits are S_IRUSR (read by owner), S_IWUSR (write by owner), S_ISUID (set-user-ID), etc.
+    ///
+    /// ### Returns
+    /// 
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, -1 is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors and Panics
+    ///
+    /// 
 
     pub fn _chmod_helper(inodenum: usize, mode: u32) {
         let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
@@ -2292,10 +2312,19 @@ impl Cage {
     //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+        //Convert the provided pathname into an absolute path without `.` or `..` components.
         let truepath = normpath(convpath(path), self);
 
-        //check if there is a valid path or not there to an inode
+        //Perfrom a walk down the file tree starting from the root directory to obtain an inode number 
+        //of the file whose pathname was specified.
+        //`None` is returned if one of the following occurs while moving down the tree: accessing a child 
+        //of a non-directory inode, accessing a child of a nonexistent parent directory, accessing 
+        //a nonexistent child, accessing an unexpected component, like `.` or `..` directory reference. 
+        //In this case, `The file does not exist` error is returned.
+        //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(truepath.as_path()) {
+            //S_IRWXA is a bit mask created by bitwise-or'ing read, write, execute/search permissions for 
+            //the owner of the file, group owner of the file, and other users. 
             if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
                 Self::_chmod_helper(inodenum, mode);
             } else {
