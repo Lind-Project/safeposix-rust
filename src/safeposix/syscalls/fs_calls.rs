@@ -10,6 +10,9 @@ use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 
+use std::io::Write;
+use std::io;
+
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
@@ -2021,6 +2024,8 @@ impl Cage {
         if inner_result < 0 {
             return inner_result;
         }
+        println!("[CLOSE] - fd: {:?}", fd);
+        io::stdout().flush().unwrap();
 
         //removing inode from fd table
         let checkedfd = self.get_filedescriptor(fd).unwrap();
