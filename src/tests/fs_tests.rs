@@ -20,8 +20,11 @@ pub mod fs_tests {
         ut_lind_fs_dir_multiple();
         ut_lind_fs_dup();
         ut_lind_fs_dup2();
-        ut_lind_fs_fcntl();
-        ut_lind_fs_ioctl();
+        ut_lind_fs_fcntl_valid_args();
+        ut_lind_fs_fcntl_invalid_args();
+        ut_lind_fs_fcntl_dup();
+        ut_lind_fs_ioctl_valid_args();
+        ut_lind_fs_ioctl_invalid_args();
         ut_lind_fs_fdflags();
         ut_lind_fs_file_link_unlink();
         ut_lind_fs_file_lseek_past_end();
@@ -50,6 +53,24 @@ pub mod fs_tests {
         ut_lind_fs_sem_trytimed();
         ut_lind_fs_sem_test();
         ut_lind_fs_tmp_file_test();
+
+        //mkdir_syscall_tests
+        ut_lind_fs_mkdir_empty_directory();
+        ut_lind_fs_mkdir_nonexisting_directory();
+        ut_lind_fs_mkdir_existing_directory();
+        ut_lind_fs_mkdir_invalid_modebits();
+        ut_lind_fs_mkdir_success();
+        ut_lind_fs_mkdir_using_symlink();
+
+        //open_syscall_tests
+        ut_lind_fs_open_empty_directory();
+        ut_lind_fs_open_nonexisting_parentdirectory_and_file();
+        ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file();
+        ut_lind_fs_open_existing_file_without_flags();
+        ut_lind_fs_open_existing_file_with_flags();
+        ut_lind_fs_open_create_new_file_and_check_link_count();
+        ut_lind_fs_open_existing_file_with_o_trunc_flag();
+        ut_lind_fs_open_new_file_with_s_ifchar_flag();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -117,6 +138,7 @@ pub mod fs_tests {
         assert_eq!(cage.pread_syscall(fd, read_buf2.as_mut_ptr(), 12, 0), 12);
         assert_eq!(cbuf2str(&read_buf2), "hello world!");
 
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -437,27 +459,26 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_fcntl() {
+    pub fn ut_lind_fs_fcntl_valid_args() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        let filefd = cage.open_syscall("/fcntl_file", O_CREAT | O_EXCL, S_IRWXA);
+        let filefd = cage.open_syscall("/fcntl_file_1", O_CREAT | O_EXCL, S_IRWXA);
 
-        //set the setfd flag
+        //changing O_CLOEXEC file descriptor flag and checking if it was correctly set
         assert_eq!(cage.fcntl_syscall(sockfd, F_SETFD, O_CLOEXEC), 0);
-
-        //checking to see if the wrong flag was set or not
         assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, 0), O_CLOEXEC);
 
-        //let's get some more flags on the filefd
-        assert_eq!(
-            cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY | O_NONBLOCK),
-            0
-        );
-
-        //checking if the flags are updated...
+        //changing the file access mode to read-only, enabling the 
+        //O_NONBLOCK file status flag, and checking if they were correctly set
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, O_RDONLY | O_NONBLOCK), 0);
         assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, 0), 2048);
+
+        //when provided with 'F_GETFD' or 'F_GETFL' command, 'arg' should be ignored, thus even
+        //negative arg values should produce nomal behavior
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFD, -132), O_CLOEXEC);
+        assert_eq!(cage.fcntl_syscall(filefd, F_GETFL, -1998), 2048);
 
         assert_eq!(cage.close_syscall(filefd), 0);
         assert_eq!(cage.close_syscall(sockfd), 0);
@@ -466,48 +487,124 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_ioctl() {
+    pub fn ut_lind_fs_fcntl_invalid_args(){
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let filefd = cage.open_syscall("/fcntl_file_2", O_CREAT | O_EXCL, S_IRWXA);
+        //when presented with a nonexistent command, 'Invalid Argument' error should be thrown
+        //29 is an arbitrary number that does not correspond to any of the defined 'fcntl' commands
+        assert_eq!(cage.fcntl_syscall(filefd, 29, 0), -(Errno::EINVAL as i32));
+        //when a negative arg is provided with F_SETFD, F_SETFL, or F_DUPFD,
+        //Invalid Argument' error should be thrown as well
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFD, -5), -(Errno::EINVAL as i32));
+        assert_eq!(cage.fcntl_syscall(filefd, F_SETFL, -5), -(Errno::EINVAL as i32));
+        assert_eq!(cage.fcntl_syscall(filefd, F_DUPFD, -5), -(Errno::EINVAL as i32));
+
+        assert_eq!(cage.close_syscall(filefd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_fcntl_dup(){
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
+        let filefd1 = cage.open_syscall("/fcntl_file_4", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        //on success, returning the new file descriptor greater than or equal to 100
+        //and different from the original file descriptor
+        let filefd2 = cage.fcntl_syscall(filefd1, F_DUPFD, 100);
+        assert!(filefd2 >= 100 && filefd2 != filefd1);
+
+        //to check if both file descriptors refer to the same fie, we can write into a file
+        //using one file descriptor, read from the file using another file descriptor,
+        //and make sure that the contents are the same
+        let mut temp_buffer = sizecbuf(9);
+        assert_eq!(cage.write_syscall(filefd1, str2cbuf("Test text"), 9), 9);
+        assert_eq!(cage.read_syscall(filefd2, temp_buffer.as_mut_ptr(), 9), 9);
+        assert_eq!(cbuf2str(&temp_buffer), "Test text");
+
+        //file status flags are shared by duplicated file descriptors resulting from
+        //a single opening of the file
+        assert_eq!(cage.fcntl_syscall(filefd1, F_GETFL, 0), cage.fcntl_syscall(filefd2, F_GETFL, 0));
+
+        assert_eq!(cage.close_syscall(filefd1), 0);
+        assert_eq!(cage.close_syscall(filefd2), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+
+    pub fn ut_lind_fs_ioctl_valid_args() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        //setting up two integer values (a zero value to test clearing nonblocking I/O behavior
+        //and a non-zero value to test setting nonblocking I/O behavior)
         let mut arg0: i32 = 0;
         let mut arg1: i32 = 1;
 
+        //ioctl requires a pointer to an integer to be passed with FIONBIO command
+        let union0: IoctlPtrUnion = IoctlPtrUnion { int_ptr: &mut arg0 };
+        let union1: IoctlPtrUnion = IoctlPtrUnion { int_ptr: &mut arg1 };
+
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        //calling ioctl with FIONBIO command and a pointer to a zero-valued integer
+        //to clear the socket's nonblocking I/O, and checking if the flag was correctly set 
+        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0) & O_NONBLOCK, 0);
+
+        //calling ioctl with FIONBIO command and a pointer to a non-zero-valued integer
+        //to set the socket's nonblocking I/O, and checking if the flag was correctly set
+        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union1), 0);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0) & O_NONBLOCK, O_NONBLOCK);
+
+        assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_ioctl_invalid_args() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
+        //non-socket type and a non-zero value to test setting nonblocking I/O behavior 
+        //on non-socket type)
+        let mut arg0: i32 = 0;
+        let mut arg1: i32 = 1;
+
+        //ioctl requires a pointer to an integer to be passed with FIONBIO command
         let union0: IoctlPtrUnion = IoctlPtrUnion { int_ptr: &mut arg0 };
         let union1: IoctlPtrUnion = IoctlPtrUnion { int_ptr: &mut arg1 };
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let filefd = cage.open_syscall("/ioctl_file", O_CREAT | O_EXCL, S_IRWXA);
 
-        //try to use FIONBIO for a non-socket
-        assert_eq!(
-            cage.ioctl_syscall(filefd, FIONBIO, union0),
-            -(Errno::ENOTTY as i32)
-        );
-
-        //clear the O_NONBLOCK flag
-        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
-
-        //checking to see if the flag was updated
-        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0) & O_NONBLOCK, 0);
-
-        //set the O_NONBLOCK flag
-        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union1), 0);
-
-        //checking to see if the flag was updated
-        assert_eq!(
-            cage.fcntl_syscall(sockfd, F_GETFL, 0) & O_NONBLOCK,
-            O_NONBLOCK
-        );
-
-        //clear the O_NONBLOCK flag
-        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union0), 0);
-
-        //checking to see if the flag was updated
-        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0) & O_NONBLOCK, 0);
-
+        //trying to use FIONBIO command on a non-socket type (the file type in this case) 
+        //for any 'ptrunion' value should throw a 'Not a typewriter' error
+        assert_eq!(cage.ioctl_syscall(filefd, FIONBIO, union0), -(Errno::ENOTTY as i32));
+        assert_eq!(cage.ioctl_syscall(filefd, FIONBIO, union1), -(Errno::ENOTTY as i32));
         assert_eq!(cage.close_syscall(filefd), 0);
+
+        //calling 'ioctl' with a control function that is not implemented yet should
+        //return an 'Invalid argument' error
+        //21600 is an arbitrary integer that does not correspond to any implemented
+        //control functions for ioctl syscall
+        assert_eq!(cage.ioctl_syscall(sockfd, 21600, union0), -(Errno::EINVAL as i32));
+
+        //calling ioctl with FIONBIO command and a null pointer 
+        //should return a 'Bad address' error
+        let null_ptr: *mut i32 = std::ptr::null_mut();
+        let union_null: IoctlPtrUnion = IoctlPtrUnion { int_ptr: null_ptr };
+        assert_eq!(cage.ioctl_syscall(sockfd, FIONBIO, union_null),-(Errno::EFAULT as i32));
+
+        //calling ioctl on a closed file descriptor should throw a 'Bad file number' error
         assert_eq!(cage.close_syscall(sockfd), 0);
+        assert_eq!(cage.fcntl_syscall(sockfd, F_GETFL, 0), -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -1107,27 +1204,29 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
+
         //Parent processes
-        let thread_parent = interface::helper_thread(move || {
-            // Parents waits for the semaphore
-            assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
-            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-            interface::sleep(interface::RustDuration::from_millis(100));
-            // Parents release the semaphore
-            assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
-            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-            // Destroy the semaphore
-            assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-            // mark the shared memory to be rmoved
-            let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
-            assert_eq!(shmctlret2, 0);
-            //detach from shared memory
-            let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
-            assert_eq!(shmdtret, shmid);
-            cage.exit_syscall(EXIT_SUCCESS);
-        });
+        // Parents waits for the semaphore
+        assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        // Parents release the semaphore
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+
+        // wait for the child process to exit before destroying the semaphore.
         thread_child.join().unwrap();
-        thread_parent.join().unwrap();
+
+        // Destroy the semaphore
+        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
+        // mark the shared memory to be rmoved
+        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
+        assert_eq!(shmctlret2, 0);
+        //detach from shared memory
+        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+        assert_eq!(shmdtret, shmid);
+        cage.exit_syscall(EXIT_SUCCESS);
+
         lindrustfinalize();
     }
 
@@ -1151,7 +1250,7 @@ pub mod fs_tests {
         let thread_child = interface::helper_thread(move || {
             let cage1 = interface::cagetable_getref(2);
             // Child waits for the semaphore
-            assert_eq!(cage1.sem_trywait_syscall(shmatret as u32), 0);
+            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             // Wait
             interface::sleep(interface::RustDuration::from_millis(20));
             // Release the semaphore
@@ -1159,32 +1258,33 @@ pub mod fs_tests {
             cage1.exit_syscall(EXIT_SUCCESS);
         });
         //Parent processes
-        let thread_parent = interface::helper_thread(move || {
-            // Parents waits for the semaphore
-            assert_eq!(
-                cage.sem_timedwait_syscall(
-                    shmatret as u32,
-                    interface::RustDuration::from_millis(100)
-                ),
-                0
-            );
-            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-            interface::sleep(interface::RustDuration::from_millis(10));
-            // Parents release the semaphore
-            assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
-            assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-            // Destroy the semaphore
-            assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-            // mark the shared memory to be rmoved
-            let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
-            assert_eq!(shmctlret2, 0);
-            //detach from shared memory
-            let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
-            assert_eq!(shmdtret, shmid);
-            cage.exit_syscall(EXIT_SUCCESS);
-        });
+        // Parents waits for the semaphore
+        assert_eq!(
+            cage.sem_timedwait_syscall(
+                shmatret as u32,
+                interface::RustDuration::from_millis(100)
+            ),
+            0
+        );
+        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
+        interface::sleep(interface::RustDuration::from_millis(10));
+        // Parents release the semaphore
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
+        
+        // wait for the child to exit before destroying the semaphore.
         thread_child.join().unwrap();
-        thread_parent.join().unwrap();
+
+        // Destroy the semaphore
+        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
+        // mark the shared memory to be rmoved
+        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
+        assert_eq!(shmctlret2, 0);
+        //detach from shared memory
+        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
+        assert_eq!(shmdtret, shmid);
+
+        cage.exit_syscall(EXIT_SUCCESS);
+
         lindrustfinalize();
     }
 
@@ -1237,6 +1337,258 @@ pub mod fs_tests {
         // Check if file is still there (it shouldn't be, assert no)
         assert_eq!(cage.access_syscall(file_path, F_OK), -2);
 
+        lindrustfinalize();
+    }   
+
+    pub fn ut_lind_fs_mkdir_empty_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "";
+        // Check for error when directory is empty
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_nonexisting_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir/dir";
+        // Check for error when both parent and child directories don't exist 
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_existing_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir";
+        // Create a parent directory
+        cage.mkdir_syscall(path, S_IRWXA);
+        // Check for error when the same directory is created again
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::EEXIST as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_invalid_modebits() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir";
+        let invalid_mode = 0o77777; // Invalid mode bits
+        // Create a parent directory
+        cage.mkdir_syscall(path, S_IRWXA);
+        // Check for error when a directory is being created with invalid mode
+        assert_eq!(cage.mkdir_syscall("/parentdir/dir", invalid_mode), -(Errno::EPERM as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_success() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/parentdir";
+        // Create a parent directory
+        cage.mkdir_syscall(path, S_IRWXA);
+
+        // Get the stat data for the parent directory and check for inode link count to be 3 initially
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(statdata.st_nlink, 3);
+
+        // Create a child directory inside parent directory with valid mode bits
+        assert_eq!(cage.mkdir_syscall("/parentdir/dir", S_IRWXA), 0);
+        
+        // Get the stat data for the child directory and check for inode link count to be 3 initially
+        let mut statdata2 = StatData::default();
+        assert_eq!(cage.stat_syscall("/parentdir/dir", &mut statdata2), 0);
+        assert_eq!(statdata2.st_nlink, 3);
+
+        // Get the stat data for the parent directory and check for inode link count to be 4 now as a new child directory has been created.
+        let mut statdata3 = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata3), 0);
+        assert_eq!(statdata3.st_nlink, 4);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_mkdir_using_symlink() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        // Create a file which will be referred to as originalFile 
+        let fd = cage.open_syscall("/originalFile", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
+        
+        // Create a link between two files where the symlinkFile is originally not present
+        // But while linking, symlinkFile will get created
+        assert_eq!(cage.link_syscall("/originalFile", "/symlinkFile"), 0);
+
+        // Check for error while creating the symlinkFile again as it would already be created while linking the two files above.
+        assert_eq!(cage.mkdir_syscall("/symlinkFile", S_IRWXA), -(Errno::EEXIST as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_empty_directory() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "";
+        // Check for error when directory is empty
+        assert_eq!(cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        let path = "/dir/file";
+        // Check for error when neither file nor parent exists and O_CREAT flag is not present
+        assert_eq!(cage.open_syscall(path, F_GETFD, S_IRWXA), -(Errno::ENOENT as i32));
+
+        // Check for error when neither file nor parent exists and O_CREAT flag is present
+        assert_eq!(cage.open_syscall(path, O_CREAT, S_IRWXA), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // Create a parent directory
+        assert_eq!(cage.mkdir_syscall("/dir", S_IRWXA), 0);
+        let path = "/dir/file";
+
+        // Check for error when parent directory exists but file doesn't exist and O_CREAT is not present
+        assert_eq!(cage.open_syscall(path, O_TRUNC, S_IRWXA), -(Errno::ENOENT as i32));
+
+        // Check for error when parent directory exists but file doesn't exist and Filetype Flags contain S_IFCHR flag
+        assert_eq!(cage.open_syscall(path, S_IFCHR | O_CREAT, S_IRWXA), -(Errno::EINVAL as i32));
+        
+        // Check for error when parent directory exists but file doesn't exist and mode bits are invalid
+        let invalid_mode = 0o77777;
+        assert_eq!(cage.open_syscall(path, O_CREAT, invalid_mode), -(Errno::EPERM as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_file_without_flags() {
+        // This test is used for validating two scenarios:
+        // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
+        // 2. When the same existing file is being opened without O_CREAT flag, it should open successfully.
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a non-existing file with O_CREAT flag
+        // This should create a new file with a valid file descriptor
+        let path = "/test";
+        let fd = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd > 0);
+    
+        // Open the existing file without O_CREAT and O_EXCL
+        // The file should open successfully as the two flags are not set while re-opening the file
+        let fd2 = cage.open_syscall(path, O_RDONLY, 0);
+        assert!(fd2 > 0);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_file_with_flags() {
+        // This test is used for validating two scenarios:
+        // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
+        // 2. When the same existing file is opened using O_CREAT and O_EXCL flags, it should return an error for file already existing.
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a non-existing file with O_CREAT flag
+        // This should create a new file with a valid file descriptor
+        let path = "/test";
+        let fd = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd > 0);
+    
+        // Open the existing file with O_CREAT and O_EXCL flags
+        // The file should not open successfully as the two flags are set while re-opening the file
+        // It should return an error for "File already exists"
+        assert_eq!(cage.open_syscall(path, O_CREAT | O_EXCL | O_RDONLY, S_IRWXA), -(Errno::EEXIST as i32));
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_create_new_file_and_check_link_count() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a new file
+        let path = "/newfile.txt";
+        let fd = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd > 0);
+
+        // Write a string to the newly opened file of size 12
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Get the stat data for the file and check for file attributes
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+
+        // Validate the link count for the new file to be 1
+        assert_eq!(statdata.st_nlink, 1);
+
+        // Validate the size of the file to be 12
+        assert_eq!(statdata.st_size, 12);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_existing_file_with_o_trunc_flag() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a new file
+        let path = "/file.txt";
+        let fd = cage.open_syscall(path, O_CREAT | O_WRONLY, S_IRWXA);
+        assert!(fd > 0);
+        // Write a string to the newly opened file of size 12
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+        // Get the stat data for the file and check for file attributes
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        // Validate the size of the file to be 12
+        assert_eq!(statdata.st_size, 12);
+    
+
+        // Open the same file with O_TRUNC flag
+        // Since the file is truncated, the size of the file should be truncated to 0.
+        let fd2 = cage.open_syscall(path, O_WRONLY | O_TRUNC, S_IRWXA);
+        assert!(fd2 > 0);
+        // Get the stat data for the same file and check for file attributes
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        // Validate the size of the file to be 0 as the file is truncated now
+        assert_eq!(statdata.st_size, 0);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_open_new_file_with_s_ifchar_flag() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        // Create a parent directory
+        assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
+        let path = "/testdir/file";
+
+        // Attempt to open a file with S_IFCHR flag, which should be invalid for regular files
+        assert_eq!(cage.open_syscall(path, O_CREAT | S_IFCHR, S_IRWXA), -(Errno::EINVAL as i32));
+        
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 }

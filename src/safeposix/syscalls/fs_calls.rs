@@ -11,11 +11,52 @@ use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 
 impl Cage {
-    //------------------------------------OPEN SYSCALL------------------------------------
+    /// ## ------------------OPEN SYSCALL------------------
+    /// ### Description
+    /// The `open_syscall()` creates an open file description that refers to a file and a file descriptor that refers to that open file description.
+    /// The file descriptor is used by other I/O functions to refer to that file.
+    /// There are generally two cases which occur when this function is called. 
+    /// Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
+    /// Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
+    
+    /// ### Function Arguments
+    /// The `open_syscall()` receives three arguments:
+    /// * `path` - This argument points to a pathname naming the file.
+    ///           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
+    /// * `flags` - This argument contains the file status flags and file access modes which will be alloted to the open file description.
+    ///            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
+    ///            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
+    /// * `mode` - This represents the permission of the newly created file. 
+    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file. 
+    
+    /// ### Returns
+    /// Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
+    /// Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors and Panics
+    /// * ENFILE - no available file descriptor number could be found
+    /// * ENOENT - tried to open a file that did not exist
+    /// * EINVAL - the input flags contain S_IFCHR flag representing a special character file
+    /// * EPERM - the mode bits for a file are not sane
+    /// * ENOTDIR - tried to create a file as a child of something that isn't a directory
+    /// * EEXIST - the file already exists and O_CREAT and O_EXCL flags were passed
+    /// * ENXIO - the file is of type UNIX domain socket
+    /// 
+    /// A panic occurs when there is some issue fetching the file descriptor.
+    /// 
+    /// for more detailed description of all the commands and return values, see 
+    /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
+    ///
 
+    // This function is used to create a new File Descriptor Object and return it.
+    // This file descriptor object is then inserted into the File Descriptor Table of the associated cage in the open_syscall() function
     fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc {
-        //insert file descriptor into self.filedescriptortableable of the cage
         let position = if 0 != flags & O_APPEND { size } else { 0 };
+
+        // While creating a new FileDescriptor, there are two important things that need to be present:
+        // O_RDWRFLAGS:- This flag determines whether the file is opened for reading, writing, or both.
+        // O_CLOEXEC - This flag indicates that the file descriptor should be automatically closed during an exec family function. 
+        // It’s needed for managing file descriptors across different processes, ensuring that they do not unintentionally remain open.
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
         FileDesc {
             position: position,
@@ -26,227 +67,320 @@ impl Cage {
     }
 
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
-        //Check that path is not empty
+        // Check that the given input path is not empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "open", "given path was null");
         }
+        
+        // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
+        // while navigating through subdirectories and creating a new file or open existing file at the given location.
         let truepath = normpath(convpath(path), self);
 
+        // Fetch the next file descriptor and its lock write guard to ensure the file can be associated with the file descriptor 
         let (fd, guardopt) = self.get_next_fd(None);
-        if fd < 0 {
-            return fd;
-        }
-        let fdoption = &mut *guardopt.unwrap();
+        match fd {
+            // If the file descriptor is invalid, the return value is always an error with value (ENFILE).
+            fd if fd == (Errno::ENFILE as i32) => {
+                return syscall_error(
+                    Errno::ENFILE,
+                    "open_helper",
+                    "no available file descriptor number could be found",
+                );
+            },
+            // When the file descriptor is valid, we proceed with performing the remaining checks for open_syscall.
+            fd if fd > 0 => {
+                // File Descriptor Write Lock Guard
+                let fdoption = &mut *guardopt.unwrap();
 
-        match metawalkandparent(truepath.as_path()) {
-            //If neither the file nor parent exists
-            (None, None) => {
-                if 0 == (flags & O_CREAT) {
-                    return syscall_error(
-                        Errno::ENOENT,
-                        "open",
-                        "tried to open a file that did not exist, and O_CREAT was not specified",
-                    );
-                }
-                return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
-            }
-
-            //If the file doesn't exist but the parent does
-            (None, Some(pardirinode)) => {
-                if 0 == (flags & O_CREAT) {
-                    return syscall_error(
-                        Errno::ENOENT,
-                        "open",
-                        "tried to open a file that did not exist, and O_CREAT was not specified",
-                    );
-                }
-
-                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
-
-                if S_IFCHR == (S_IFCHR & flags) {
-                    return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
-                }
-
-                let effective_mode = S_IFREG as u32 | mode;
-
-                if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
-                    return syscall_error(Errno::EPERM, "open", "Mode bits were not sane");
-                } //assert sane mode bits
-
-                let time = interface::timestamp(); //We do a real timestamp now
-                let newinode = Inode::File(GenericInode {
-                    size: 0,
-                    uid: DEFAULT_UID,
-                    gid: DEFAULT_GID,
-                    mode: effective_mode,
-                    linkcount: 1,
-                    refcount: 1,
-                    atime: time,
-                    ctime: time,
-                    mtime: time,
-                });
-
-                let newinodenum = FS_METADATA
-                    .nextinode
-                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-                if let Inode::Dir(ref mut ind) =
-                    *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
-                {
-                    ind.filename_to_inode_dict.insert(filename, newinodenum);
-                    ind.linkcount += 1;
-                    //insert a reference to the file in the parent directory
-                } else {
-                    return syscall_error(
-                        Errno::ENOTDIR,
-                        "open",
-                        "tried to create a file as a child of something that isn't a directory",
-                    );
-                }
-                FS_METADATA.inodetable.insert(newinodenum, newinode);
-                log_metadata(&FS_METADATA, pardirinode);
-                log_metadata(&FS_METADATA, newinodenum);
-
-                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum) {
-                    let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
-                    vac.insert(interface::openfile(sysfilename, 0).unwrap()); // new file of size 0
-                }
-
-                let _insertval =
-                    fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
-            }
-
-            //If the file exists (we don't need to look at parent here)
-            (Some(inodenum), ..) => {
-                if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
-                    return syscall_error(
-                        Errno::EEXIST,
-                        "open",
-                        "file already exists and O_CREAT and O_EXCL were used",
-                    );
-                }
-                let size;
-
-                let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-                match *inodeobj {
-                    Inode::File(ref mut f) => {
-                        if O_TRUNC == (flags & O_TRUNC) {
-                            // We only do this to regular files, otherwise O_TRUNC is undefined
-                            //close the file object if another cage has it open
-                            let entry = FILEOBJECTTABLE.entry(inodenum);
-                            if let interface::RustHashEntry::Occupied(occ) = &entry {
-                                occ.get().close().unwrap();
-                            }
-                            // resize it to 0
-                            f.size = 0;
-
-                            //remove the previous file and add a new one of 0 length
-                            if let interface::RustHashEntry::Occupied(occ) = entry {
-                                occ.remove_entry();
-                            }
-
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            interface::removefile(sysfilename.clone()).unwrap();
+                // Walk through the absolute path which returns a tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
+                match metawalkandparent(truepath.as_path()) {
+                    // Case 1: When the file doesn't exist but the parent directory exists
+                    (None, Some(pardirinode)) => {
+                        // Check if O_CREAT flag is not present, then a file can not be created and error is returned.
+                        if 0 == (flags & O_CREAT) {
+                            return syscall_error(
+                                Errno::ENOENT,
+                                "open",
+                                "tried to open a file that did not exist, and O_CREAT was not specified",
+                            );
                         }
 
-                        if let interface::RustHashEntry::Vacant(vac) =
-                            FILEOBJECTTABLE.entry(inodenum)
+                        // Error is thrown when the input flags contain S_IFCHR flag representing a special character file.
+                        if S_IFCHR == (S_IFCHR & flags) {
+                            return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
+                        }
+
+                        // S_FILETYPEFLAGS represents a bitmask that can be used to extract the file type information from a file's mode.
+                        // This code is referenced from Lind-Repy codebase.
+                        // Here, we are checking whether the mode bits are sane by ensuring that only valid file permission bits (S_IRWXA) and file type bits (S_FILETYPEFLAGS) are set. Else, we return the error.
+                        if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
+                            return syscall_error(Errno::EPERM, "open", "Mode bits were not sane");
+                        }
+
+                        let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+                        let time = interface::timestamp(); //We do a real timestamp now
+
+                        // S_IFREG is the flag for a regular file, so it's added to the mode to indicate that the new file being created is a regular file.
+                        let effective_mode = S_IFREG as u32 | mode;
+                        
+                        // Create a new inode of type "File" representing a file and set the required attributes
+                        let newinode = Inode::File(GenericInode {
+                            size: 0, 
+                            uid: DEFAULT_UID,
+                            gid: DEFAULT_GID,
+                            mode: effective_mode,
+                            linkcount: 1, // because when a new file is created, it has a single hard link, which is the directory entry that points to this file's inode.
+                            refcount: 1, // Because a new file descriptor will open and refer to this file
+                            atime: time,
+                            ctime: time,
+                            mtime: time,
+                        });
+
+                        // Fetch the next available inode number using the FileSystem MetaData table
+                        let newinodenum = FS_METADATA
+                            .nextinode
+                            .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                        
+                        // Fetch the inode of the parent directory and only proceed when its type is directory.
+                        if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                         {
-                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                            vac.insert(interface::openfile(sysfilename, f.size).unwrap());
-                            // use existing file size
+                            ind.filename_to_inode_dict.insert(filename, newinodenum);
+                            ind.linkcount += 1; // Since the parent is now associated to the new file, its linkcount will increment by 1
+                            ind.ctime = time; // Here, update the ctime and mtime for the parent directory as well
+                            ind.mtime = time;
+                        } else {
+                            return syscall_error(
+                                Errno::ENOTDIR,
+                                "open",
+                                "tried to create a file as a child of something that isn't a directory",
+                            );
+                        }
+                        // Update the inode table by inserting the newly formed inode mapped with its inode number.
+                        FS_METADATA.inodetable.insert(newinodenum, newinode);
+                        log_metadata(&FS_METADATA, pardirinode);
+                        log_metadata(&FS_METADATA, newinodenum);
+
+                        // FileObjectTable stores the entries of the currently opened files in the system
+                        // Since, a new file is being opened here, an entry corresponding to that newinode is made in the FileObjectTable
+                        // An entry in the table has the following representation:
+                        // Key - inode number
+                        // Value - Opened file with its size as 0
+                        if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum) {
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
+                            vac.insert(interface::openfile(sysfilename, 0).unwrap()); // new file of size 0
                         }
 
-                        size = f.size;
-                        f.refcount += 1;
+                        // The file object of size 0, associated with the newinode number is inserted into the FileDescriptorTable associated with the cage using the guard lock.
+                        let _insertval =
+                            fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
                     }
-                    Inode::Dir(ref mut f) => {
-                        size = f.size;
-                        f.refcount += 1;
+
+                    // Case 2: When the file exists (we don't need to look at parent here)
+                    (Some(inodenum), ..) => {
+                        //If O_CREAT and O_EXCL flags are set in the input parameters, open_syscall() fails if the file exists. 
+                        //This is because the check for the existence of the file and the creation of the file if it does not exist is atomic, 
+                        //with respect to other threads executing open() naming the same filename in the same directory with O_EXCL and O_CREAT set.
+                        if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
+                            return syscall_error(
+                                Errno::EEXIST,
+                                "open",
+                                "file already exists and O_CREAT and O_EXCL were used",
+                            );
+                        }
+                        let size;
+
+                        // Fetch the Inode Object associated with the inode number of the existing file.
+                        // There are different Inode types supported by the open_syscall (i.e., File, Directory, Socket, CharDev).
+                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                        match *inodeobj {
+                            Inode::File(ref mut f) => {
+                                //This is a special case when the input flags contain "O_TRUNC" flag, 
+                                //This flag truncates the file size to 0, and the mode and owner are unchanged
+                                // and is only used when the file exists and is a regular file
+                                if O_TRUNC == (flags & O_TRUNC) {
+                                    // Close the existing file object and remove it from the FileObject Hashtable using the inodenumber
+                                    let entry = FILEOBJECTTABLE.entry(inodenum);
+                                    if let interface::RustHashEntry::Occupied(occ) = &entry {
+                                        occ.get().close().unwrap();
+                                    }
+
+                                    f.size = 0;
+
+                                    // Update the timestamps as well
+                                    let latest_time = interface::timestamp(); 
+                                    f.ctime = latest_time;
+                                    f.mtime = latest_time; 
+
+                                    // Remove the previous file and add a new one of 0 length
+                                    if let interface::RustHashEntry::Occupied(occ) = entry {
+                                        occ.remove_entry();
+                                    }
+
+                                    // The current file is removed from the filesystem
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    interface::removefile(sysfilename.clone()).unwrap();
+                                }
+
+                                // Once the metadata for the file is reset, a new file is inserted in file system.
+                                // Also, it is inserted back to the FileObjectTable and associated with same inodeNumber representing that the file is currently in open state.
+                                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum)
+                                {
+                                    let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                                    vac.insert(interface::openfile(sysfilename, f.size).unwrap());
+                                }
+
+                                // Update the final size and reference count for the file 
+                                size = f.size;
+                                f.refcount += 1;
+
+                                // Current Implementation for File Truncate: The previous entry of the file is removed from the FileObjectTable, with a new file of size 0 inserted back into the table.
+                                // Possible Bug: Why are we not simply adjusting the file size and pointer of the existing file?
+                            }
+
+                            // When the existing file type is of Directory or Character Device, only the file size and the reference count is updated.
+                            Inode::Dir(ref mut f) => {
+                                size = f.size;
+                                f.refcount += 1;
+                            }
+                            Inode::CharDev(ref mut f) => {
+                                size = f.size;
+                                f.refcount += 1;
+                            }
+
+                            // If the existing file type is a socket, error is thrown as socket type files are not supported by open_syscall
+                            Inode::Socket(_) => {
+                                return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket");
+                            }
+                        }
+
+                        // The file object of size 0, associated with the existing inode number is inserted into the FileDescriptorTable associated with the cage using the guard lock.
+                        let _insertval =
+                            fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
                     }
-                    Inode::CharDev(ref mut f) => {
-                        size = f.size;
-                        f.refcount += 1;
-                    }
-                    Inode::Socket(_) => {
-                        return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket");
+
+                    // Case 3: When neither the file directory nor the parent directory exists
+                    (None, None) => {
+                        // O_CREAT flag is used to create a file if it doesn't exist.
+                        // If this flag is not present, then a file can not be created and error is returned.
+                        if 0 == (flags & O_CREAT) {
+                            return syscall_error(
+                                Errno::ENOENT,
+                                "open",
+                                "tried to open a file that did not exist, and O_CREAT was not specified",
+                            );
+                        }
+                        // O_CREAT flag is set but the path doesn't exist, so return an error with a different message string.
+                        return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
                     }
                 }
 
-                let _insertval =
-                    fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
+                // Once all the updates are done, the file descriptor value is returned
+                fd 
+            },
+            // Panic when there is some other issue fetching the file descriptor.
+            _ => {
+                panic!("File descriptor couldn't be fetched!");
             }
         }
-
-        fd //open returns the opened file descriptor
     }
 
     //------------------MKDIR SYSCALL------------------
-
+    // Description
+    // The mkdir_syscall() creates a new directory named by the path name pointed to by a path as the input parameter in the function.
+    // The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
+    // The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
+    // On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
+    
+    // Function Arguments
+    // The mkdir_syscall() receives two arguments:
+    // 1. Path - This represents the path at which the new directory will be created.
+    //           For example: "/parentdir/dir" represents the new directory name as "dir", which will be created at this path (/parentdir/dir).
+    // 2. Mode - This represents the permission of the newly created directory. 
+    //           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new directory. 
+    
+    // Return Values
+    // Upon successful creation of the directory, 0 is returned.
+    // Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    //
+    // Tests
+    // All the different scenarios for mkdir_syscall() are covered and tested in the "fs_tests.rs" file under "mkdir_syscall_tests" section.
+    //
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
-        //Check that path is not empty
+
+        // Check that the given input path is not empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "mkdir", "given path was null");
         }
-        let truepath = normpath(convpath(path), self);
 
-        //pass the metadata to this helper. If passed table is none, then create new instance
+        // Store the FileMetadata into a helper variable which is used for fetching the metadata of a given inode from the Inode Table. 
         let metadata = &FS_METADATA;
 
+        // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
+        // while navigating through subdirectories and establishing new directory at the given location.
+        let truepath = normpath(convpath(path), self);
+
+        // Walk through the absolute path which returns a tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
-            //If neither the file nor parent exists
+            // Case 1: When neither the file directory nor the parent directory exists
             (None, None) => syscall_error(
                 Errno::ENOENT,
                 "mkdir",
                 "a directory component in pathname does not exist or is a dangling symbolic link",
             ),
 
-            //If the file doesn't exist but the parent does
+            // Case 2: When the file doesn't exist but the parent directory exists
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 let effective_mode = S_IFDIR as u32 | mode;
-
-                //assert sane mode bits
+                // Check for the condition if the mode bits are correct and have the required permissions to create a directory
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
+                // Fetch the next available inode number using the FileSystem MetaData table
+                // Create a new inode of type "Dir" representing a directory and set the required attributes
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                 let time = interface::timestamp(); //We do a real timestamp now
-
                 let newinode = Inode::Dir(DirectoryInode {
-                    size: 0,
+                    size: 0, //initial size of a directory is 0 as it is empty
                     uid: DEFAULT_UID,
                     gid: DEFAULT_GID,
                     mode: effective_mode,
-                    linkcount: 3,
-                    refcount: 0, //2 because ., and .., as well as reference in parent directory
+                    linkcount: 3, //because of the directory name(.), itself, and reference to the parent directory(..)
+                    refcount: 0, //because no file descriptors are pointing to it currently
                     atime: time,
                     ctime: time,
                     mtime: time,
-                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode),
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode), //Establish a mapping between the newly created inode and the parent directory inode for easy retrieval and linking
                 });
 
-                if let Inode::Dir(ref mut parentdir) =
-                    *(metadata.inodetable.get_mut(&pardirinode).unwrap())
+                // Insert a reference to the file in the parent directory and update the inode attributes
+                // Fetch the inode of the parent directory and only proceed when its type is directory.
+                if let Inode::Dir(ref mut parentdir) = *(metadata.inodetable.get_mut(&pardirinode).unwrap())
                 {
                     parentdir
                         .filename_to_inode_dict
                         .insert(filename, newinodenum);
-                    parentdir.linkcount += 1;
+                    parentdir.linkcount += 1; // Since the parent is now associated to the new directory, its linkcount will increment by 1
+                    parentdir.ctime = time; // Here, update the ctime and mtime for the parent directory as well
+                    parentdir.mtime = time;
                 }
-                //insert a reference to the file in the parent directory
                 else {
                     unreachable!();
                 }
+                // Update the inode table by inserting the newly formed inode mapped with its inode number.
                 metadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(&metadata, pardirinode);
                 log_metadata(&metadata, newinodenum);
-                0 //mkdir has succeeded
+
+                // Return 0 when mkdir has succeeded
+                0 
             }
 
+            // Case 3: When the file directory name already exists, then return the error.
             (Some(_), ..) => syscall_error(
                 Errno::EEXIST,
                 "mkdir",
@@ -1898,16 +2032,32 @@ impl Cage {
     }
 
     //------------------------------------FCNTL SYSCALL------------------------------------
+    
+    //fcntl performs operations, like returning or setting file status flags,
+    //duplicating a file descriptor, etc., on an open file descriptor 
+    //it accepts three parameters: fd - an open file descriptor, cmd - an operation to be performed on fd,
+    //and arg - an optional argument (whether or not arg is required is determined by cmd)
+    //for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
+    //value of file descriptor flags, value of status flags, etc.
+    //for more detailed description of all the commands and return values, see 
+    //https://linux.die.net/man/2/fcntl
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, get_filedescriptor returns Err(),
+        //unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {
+        if let Some(filedesc_enum) = &mut *unlocked_fd {                    
+            //'flags' consists of bitwise-or'd access mode, file creation, and file status flags
+            //to retrieve a particular flag, it can bitwise-and'd with 'flags'
             let flags = match filedesc_enum {
                 Epoll(obj) => &mut obj.flags,
                 Pipe(obj) => &mut obj.flags,
                 Stream(obj) => &mut obj.flags,
                 File(obj) => &mut obj.flags,
+                //not clear why running F_SETFL on Socket type requires special treatment
                 Socket(ref mut sockfdobj) => {
                     if cmd == F_SETFL && arg >= 0 {
                         let sock_tmp = sockfdobj.handle.clone();
@@ -1916,10 +2066,10 @@ impl Cage {
                         if let Some(ins) = &mut sockhandle.innersocket {
                             let fcntlret;
                             if arg & O_NONBLOCK == O_NONBLOCK {
-                                //set for non-blocking I/O
+                                //set non-blocking I/O
                                 fcntlret = ins.set_nonblocking();
                             } else {
-                                //clear non-blocking I/O
+                                //set blocking I/O
                                 fcntlret = ins.set_blocking();
                             }
                             if fcntlret < 0 {
@@ -1944,77 +2094,143 @@ impl Cage {
             //matching the tuple
             match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
+                //F_GETFD returns file descriptor flags only, meaning that access mode flags 
+                //and file status flags are excluded
+                //F_SETFD is used to set file descriptor flags only, meaning that any changes to access mode flags
+                //or file status flags should be ignored
+                //currently, O_CLOEXEC is the only defined file descriptor flag, thus only this flag is
+                //masked when using F_GETFD or F_SETFD
                 (F_GETFD, ..) => *flags & O_CLOEXEC,
-                // set the flags but make sure that the flags are valid
                 (F_SETFD, arg) if arg >= 0 => {
                     if arg & O_CLOEXEC != 0 {
+                        //if O_CLOEXEC flag is set to 1 in 'arg', 'flags' is updated by setting its O_CLOEXEC bit to 1
                         *flags |= O_CLOEXEC;
                     } else {
+                        //if O_CLOEXEC flag is set to 0 in 'arg', 'flags' is updated by setting its O_CLOEXEC bit to 0
                         *flags &= !O_CLOEXEC;
                     }
                     0
                 }
+                //F_GETFL should return file access mode and file status flags, which means that
+                //file creation flags should be masked out
                 (F_GETFL, ..) => {
-                    //for get, we just need to return the flags
-                    *flags & !O_CLOEXEC
+                    *flags & !(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC)
                 }
+                //F_SETFL is used to set file status flags, thus any changes to file access mode and file
+                //creation flags should be ignored (see F_SETFL command in the man page for fcntl for the reference)
                 (F_SETFL, arg) if arg >= 0 => {
-                    *flags |= arg;
+                    //valid changes are extracted by ignoring changes to file access mode and file creation flags
+                    let valid_changes = arg & !(O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+                    //access mode and creation flags are extracted and other flags are set to 0 to update them
+                    let acc_and_creation_flags = *flags & (O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+                    //valid changes are combined with the old file access mode and file creation flags
+                    *flags = valid_changes | acc_and_creation_flags; 
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => self._dup2_helper(&filedesc_enum, arg, false),
-                //TO DO: implement. this one is saying get the signals
+                //TO DO: F_GETOWN and F_SETOWN commands are not implemented yet
                 (F_GETOWN, ..) => {
-                    0 //TO DO: traditional SIGIO behavior
+                    0 
                 }
                 (F_SETOWN, arg) if arg >= 0 => {
-                    0 //this would return the PID if positive and the process group if negative,
-                      //either way do nothing and return success
+                    0
                 }
-                _ => syscall_error(
-                    Errno::EINVAL,
-                    "fcntl",
-                    "Arguments provided do not match implemented parameters",
-                ),
+                _ => {
+                    let err_msg = format!("Arguments pair ({}, {}) does not match implemented parameters", cmd, arg);
+                    syscall_error(Errno::EINVAL, "fcntl", &err_msg)
+                },
             }
         } else {
-            syscall_error(Errno::EBADF, "fcntl", "Invalid file descriptor")
+            syscall_error(Errno::EBADF, "fcntl", "File descriptor is out of range")
         }
     }
 
-    //------------------------------------IOCTL SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `ioctl_syscall()` manipulates the underlying device parameters of special files. In particular, it is used as a way
+    /// for user-space applications to interface with device drivers. 
+    ///
+    /// ### Arguments
+    ///
+    /// The `ioctl_syscall()` accepts three arguments:
+    /// * `fd` - an open file descriptor that refers to a device.
+    /// * `request` - the control function to be performed. The set of valid request values depends entirely on the device
+    ///              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
+    ///              information that all media devices must support.
+    /// * `ptrunion` - additional information needed by the addressed device to perform the selected control function.
+    ///              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
+    ///              media_device_info, from which the device information is obtained.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, a value other than -1 that depends on the selected control function is returned.
+    /// In case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
+    ///
+    /// ### Errors and Panics
+    ///
+    /// * `EBADF` - fd is not a valid file descriptor
+    /// * `EFAULT` - ptrunion references an inaccessible memory area
+    /// * `EINVAL` - request or ptrunion is not valid
+    /// * `ENOTTY` - fd is not associated with a character special device
+    /// When `ioctl_syscall() is called on a Socket with `FIONBIO` control function, an underlying call to `libc::fcntl()` is made,
+    /// which can return with an error. For a complete list of possible erorrs, see 
+    /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
+    ///
+    /// A panic occurs either when a provided file descriptor is out of bounds or when
+    /// an underlying call to `libc::fcntl()` for Socket type is returned with an unknown error.
+    ///
+    /// To learn more about the syscall, control functions applicable to all the devices, and possible error values, see
+    /// [ioctl(2)](https://man.openbsd.org/ioctl)
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, 'get_filedescriptor' returns Err(),
+        //unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            //For now, the only implemented control function is FIONBIO command used with sockets 
             match request {
+                //for FIONBIO, 'ptrunion' stores a pointer to an integer. If the integer is 0, the socket's
+                //nonblocking I/O is cleared. Otherwise, the socket is set for nonblocking I/O
                 FIONBIO => {
+                    //if 'ptrunion' stores a Null pointer, a 'Bad address' error is returned
+                    //otheriwse, the integer value stored in that address is returned and saved into 'arg_result'
                     let arg_result = interface::get_ioctl_int(ptrunion);
-                    //matching the tuple and passing in filedesc_enum
                     match (arg_result, filedesc_enum) {
                         (Err(arg_result), ..)=> {
-                            return arg_result; //syscall_error
+                            return arg_result;
                         }
+                        //since FIONBIO command is used with sockets, we need to make sure that the provided
+                        //file descriptor addresses a socket
+                        //otherwise, a 'Not a typewriter' error designating that the specified command
+                        //is only applicable to sockets is returned 
                         (Ok(arg_result), Socket(ref mut sockfdobj)) => {
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
-
                             let flags = &mut sockfdobj.flags;
                             let arg: i32 = arg_result;
                             let mut ioctlret = 0;
-
-                            if arg == 0 { //clear non-blocking I/O
+                            //clearing nonblocking I/O on the socket if the integer is 0
+                            if arg == 0 { 
                                 *flags &= !O_NONBLOCK;
+                                //libc::fcntl is called under the hood with F_SETFL command and 0 as an argument
+                                //to set blocking I/O, and the result of the call is stored in ioctlret
                                 if let Some(ins) = &mut sockhandle.innersocket {
+
                                     ioctlret = ins.set_blocking();
                                 }
-                            } else { //set for non-blocking I/O
+                            } else {
                                 *flags |= O_NONBLOCK;
+                                //libc::fcntl is called under the hood with F_SETFL command ans O_NONBLOCK as an argument
+                                //to set nonblocking I/O, and the result of the call is stored in ioctlret
                                 if let Some(ins) = &mut sockhandle.innersocket {
                                     ioctlret = ins.set_nonblocking();
                                 }
                             }
+                            //if ioctlret is negative, it means that the call to fcntl returned with an error
                             if ioctlret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {return syscall_error(i, "ioctl", "The libc call to ioctl failed!");},

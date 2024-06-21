@@ -3,6 +3,8 @@
 mod fs_tests;
 mod ipc_tests;
 mod networking_tests;
+use rand::Rng;
+use std::net::{TcpListener, UdpSocket};
 
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
@@ -89,4 +91,20 @@ pub fn sizecbuf<'a>(size: usize) -> Box<[u8]> {
 
 pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
+}
+
+// The RustPOSIX test suite avoids conflicts caused by repeatedly binding to the same ports by generating a random port number within the valid range (49152-65535) for each test run. This eliminates the need for waiting between tests.
+
+fn is_port_available(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok() &&
+    UdpSocket::bind(("127.0.0.1", port)).is_ok()
+}
+
+pub fn generate_random_port() -> u16 {
+    for port in 49152..65535 {
+        if is_port_available(port) {
+            return port;
+        }
+    }
+    panic!("No available ports found");
 }
