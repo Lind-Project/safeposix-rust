@@ -22,6 +22,8 @@ mod main_tests {
 
     #[test]
     pub fn tests() {
+        set_panic_hook();
+
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 
         lindrustinit(0);
@@ -73,6 +75,18 @@ mod main_tests {
 
         println!("IPC TESTS");
         test_ipc();
+    }
+
+    fn set_panic_hook() {
+        let orig_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            // this hook would be triggered whenever a panic occurs
+            // good for test cases that panicked inside the non-main thread
+            // so the trace information could be printed immediately
+            // instead of raising the error when the thread is joined, which might
+            // never happen and left the test blocking forever in some test cases
+            orig_hook(panic_info);
+        }));
     }
 }
 

@@ -1859,6 +1859,38 @@ impl Cage {
         }
     }
 
+    //------------------------------------SELECT SYSCALL------------------------------------
+    // Description
+    // select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready"
+    // for some class of I/O operation (e.g., input possible).  A file descriptor is considered ready if it is possible to perform a
+    // corresponding I/O operation (e.g., read(), or a sufficiently small write()) without blocking.
+    
+    // Function Arguments
+    // The open_syscall() receives three arguments:
+    // 1. nfds - This argument should be set to the highest-numbered file descriptor in any of the three sets, plus 1.  The
+    //           indicated file descriptors in each set are checked, up to this limit.
+    // 2. readfds -  The file descriptors in this set are watched to see if they are ready for reading.  A file descriptor is ready
+    //               for reading if a read operation will not block; in particular, a file descriptor is also ready on end-of-file.
+    //               After select() has returned, readfds will be cleared of all file descriptors except for those that are ready for reading.
+    // 3. writefds - The file descriptors in this set are watched to see if they are ready for writing.  A file descriptor is ready
+    //               for writing if a write operation will not block.  However, even if a file descriptor indicates as writable, a large
+    //               write may still block.
+    //               After select() has returned, writefds will be cleared of all file descriptors except for those that are ready for writing.
+    // 4. exceptfds - currently not supported, only the validity of the fds will be checked
+    // 5. timeout - The timeout argument is a RustDuration structure that specifies the interval that select() should block
+    //              waiting for a file descriptor to become ready.  The call will block until either:
+    //              •  a file descriptor becomes ready;
+    //              •  the call is interrupted by a signal handler; or
+    //              •  the timeout expires.
+
+    // Return Values
+    // On success, select() and return the number of file descriptors contained in the two returned descriptor sets (that
+    // is, the total number of bits that are set in readfds, writefds). The return value may be zero if the timeout expired
+    // before any file descriptors became ready.
+    // Negative number will be returned on error.
+    //
+    // Tests
+    // All the different scenarios for select_syscall() are covered and tested in the "networking_tests.rs" file.
     pub fn select_syscall(
         &self,
         nfds: i32,
@@ -1867,6 +1899,7 @@ impl Cage {
         exceptfds: Option<&mut interface::FdSet>,
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
+        // nfds should be in the range
         if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
         }
@@ -1901,7 +1934,7 @@ impl Cage {
             }
 
             // 3. iterate thru exceptfds
-            // currently we don't really do select on execptfds, we just check if those fds are valid
+            // TODO: we currently don't implement exceptfds and possibly could if necessary
             if let Some(exceptfds_ref) = exceptfds.as_ref() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
@@ -1916,6 +1949,7 @@ impl Cage {
                 }
             }
 
+            // check for timeout
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
@@ -1939,6 +1973,8 @@ impl Cage {
         return retval;
     }
 
+    // This function is used to select on readfds specifically
+    // It monitors every readfds to check if it is ready to read
     fn select_readfds(
         &self,
         nfds: i32,
@@ -1966,6 +2002,8 @@ impl Cage {
                                 let sock_tmp = sockfdobj.handle.clone();
                                 let sockhandle = sock_tmp.read();
                                 if sockhandle.state == ConnState::INPROGRESS {
+                                    // if connection state is INPROGRESS
+                                    // then check if the new connection
                                     let remotepathbuf = normpath(
                                         convpath(sockhandle.remoteaddr.unwrap().path()),
                                         self,
@@ -1978,6 +2016,8 @@ impl Cage {
                                 }
 
                                 if sockhandle.state == ConnState::LISTEN {
+                                    // if connection state is LISTEN
+                                    // then check if there are any pending connections
                                     let localpathbuf = normpath(
                                         convpath(sockhandle.localaddr.unwrap().path()),
                                         self,
@@ -1991,6 +2031,8 @@ impl Cage {
                                     }
                                 } else if sockhandle.state == ConnState::CONNECTED || newconnection
                                 {
+                                    // otherwise, the connection is already established
+                                    // check if the pipe has any thing
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                     let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                                     if receivepipe.check_select_read() {
@@ -2033,6 +2075,7 @@ impl Cage {
                     }
 
                     Pipe(pipefdobj) => {
+                        // check if the pipe has anything to read
                         if pipefdobj.pipe.check_select_read() {
                             new_readfds.set(fd);
                             *retval += 1;
@@ -2062,6 +2105,8 @@ impl Cage {
         return 0;
     }
 
+    // This function is used to select on writefds specifically
+    // It monitors every writefds to check if it is ready to write
     fn select_writefds(
         &self,
         nfds: i32,
@@ -2087,6 +2132,8 @@ impl Cage {
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::INPROGRESS {
+                                    // if connection state is INPROGRESS
+                                    // then check if the new connection
                                     let remotepathbuf =
                                         convpath(sockhandle.remoteaddr.unwrap().path());
                                     let dsconnobj =
@@ -2095,6 +2142,7 @@ impl Cage {
                                         newconnection = true;
                                     }
                                 }
+                                // BUG: need to check if send_pipe is ready to write
                             }
                             AF_INET => {
                                 if sockhandle.state == ConnState::INPROGRESS
@@ -2117,7 +2165,8 @@ impl Cage {
                             newconnhandle.state = ConnState::CONNECTED;
                         }
 
-                        //we always say sockets are writable? Even though this is not true
+                        // BUG: socket are not always writable, it could block in cases
+                        // like the kernel send buffer is full
                         new_writefds.set(fd);
                         *retval += 1;
                     }
@@ -2129,6 +2178,7 @@ impl Cage {
                     }
 
                     Pipe(pipefdobj) => {
+                        // check if the pipe has any space to write
                         if pipefdobj.pipe.check_select_write() {
                             new_writefds.set(fd);
                             *retval += 1;
