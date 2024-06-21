@@ -2834,47 +2834,39 @@ impl Cage {
         }
     }
 
-    //------------------------------------socketpair syscall------------------------------------
-    // Description
-    // The socketpair() call creates an unnamed pair of connected
-    // sockets in the specified domain, of the specified type, and using
-    // the optionally specified protocol.  For further details of these
-    // arguments, see socket(2).
-
-    // The file descriptors used in referencing the new sockets are
-    // returned in sv[0] and sv[1].  The two sockets are
-    // indistinguishable.
+    /// ## ------------------SOCKETPAIR SYSCALL------------------
+    /// ### Description
+    /// The `socketpair_syscall()` call creates an unnamed pair of connected sockets in the specified domain, of the specified type, and using
+    /// the optionally specified protocol.
+    /// The file descriptors used in referencing the new sockets are returned in sv[0] and sv[1]. The two sockets are
+    /// indistinguishable.
     
-    // Function Arguments
-    // The socketpair_syscall() receives four arguments:
-    // 1. domain -  The domain argument specifies a communication domain; this
-    //              selects the protocol family which will be used for communication. Currently supported domains are AF_UNIX, AF_INET and AF_INET6.
-    // 2. socktype - specifies the communication semantics.  Currently defined types are:
-    //                  SOCK_STREAM
-    //                       Provides sequenced, reliable, two-way, connection-based
-    //                       byte streams.  An out-of-band data transmission mechanism
-    //                       may be supported.
-    //                  SOCK_DGRAM
-    //                      Supports datagrams (connectionless, unreliable messages of
-    //                      a fixed maximum length).
-    //              the type argument serves a second purpose: in addition to specifying a socket type, it may include the bitwise
-    //              OR of any of the following values, to modify the behavior of socket():
-    //                  SOCK_NONBLOCK
-    //                      Set the O_NONBLOCK file status flag on the open file
-    //                      description (see open(2)) referred to by the new file
-    //                      descriptor.  Using this flag saves extra calls to fcntl(2)
-    //                      to achieve the same result.
-    //                  SOCK_CLOEXEC
-    //                      Set the close-on-exec (FD_CLOEXEC) flag on the new file
-    //                      descriptor.
-    // 3. protocol - The protocol specifies a particular protocol to be used with the socket. Currently only support the default protocol.
-    // 4. sv -  The file descriptors used in referencing the new sockets are returned in sv[0] and sv[1]. The two sockets are indistinguishable.
+    /// ### Function Arguments
+    /// The `socketpair_syscall()` receives four arguments:
+    /// * `domain` -  The domain argument specifies a communication domain; this
+    ///               selects the protocol family which will be used for communication. Currently supported domains are AF_UNIX, AF_INET and AF_INET6.
+    /// * `socktype` - specifies the communication semantics.  Currently defined types are:
+    ///                1. SOCK_STREAM
+    ///                       Provides sequenced, reliable, two-way, connection-based byte streams.  An out-of-band data transmission mechanism
+    ///                       may be supported.
+    ///                2. SOCK_DGRAM
+    ///                      Supports datagrams (connectionless, unreliable messages of a fixed maximum length).
+    ///                The type argument serves a second purpose: in addition to specifying a socket type, it may include the bitwise
+    ///                OR of any of the following values, to modify the behavior of the socket:
+    ///                1. SOCK_NONBLOCK
+    ///                      Set the O_NONBLOCK file status flag on the open file description referred to by the new file
+    ///                      descriptor.
+    ///                2. SOCK_CLOEXEC
+    ///                      Set the close-on-exec flag on the new file descriptor.
+    /// * `protocol` - The protocol specifies a particular protocol to be used with the socket. Currently only support the default protocol.
+    /// * `sv` -  The file descriptors used in referencing the new sockets are returned in sv[0] and sv[1]. The two sockets are indistinguishable.
     
-    // Return Values
-    // On success, zero is returned.  On error, -1 is returned, errno is set to indicate the error, and sv is left unchanged/
-    //
-    // Tests
-    // All the different scenarios for socketpair_syscall() are covered and tested in the "networking_tests.rs" file.
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors and Panics
+    /// * EAFNOSUPPORT - The specified address family is not supported on this machine.
+    /// * EOPNOTSUPP - The specified protocol does not support creation of socket pairs.
     
     // Because socketpair needs to spawn off a helper thread to connect the two ends of the socket pair, and because that helper thread,
     // along with the main thread, need to access the cage to call methods (syscalls) of it, and because rust's threading model states that

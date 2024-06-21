@@ -1509,6 +1509,7 @@ pub mod net_tests {
         let cage2 = cage.clone();
 
         let thread = interface::helper_thread(move || {
+            // this thread first receives the message, then send the message
             let mut buf = sizecbuf(10);
             loop {
                 let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
@@ -1516,6 +1517,7 @@ pub mod net_tests {
                     break; // if the error was EINTR, retry the syscall
                 }
             }
+            // check if received message is correct
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
             interface::sleep(interface::RustDuration::from_millis(30));
@@ -1527,6 +1529,7 @@ pub mod net_tests {
 
         let cage3 = cage.clone();
         let thread_2 = interface::helper_thread(move || {
+            // this thread first send the message, then receive the message
             assert_eq!(cage3.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
 
             let mut buf2 = sizecbuf(15);
@@ -1537,6 +1540,7 @@ pub mod net_tests {
                 }
             }
             let str2 = cbuf2str(&buf2);
+            // check if received message is correct
             assert_eq!(str2, "Socketpair Test");
         });
 
@@ -1642,9 +1646,14 @@ pub mod net_tests {
         let thread = interface::helper_thread(move || {
             let mut buf = sizecbuf(10);
             let mut counter = 0;
+
+            // receive the message
+            // since peer will sleep for 30ms before send the message
+            // some nonblocing returns are expected
             loop {
                 let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
                 if result == -(Errno::EAGAIN as i32) {
+                    // return due to nonblocking flag
                     counter += 1;
                     continue;
                 }
@@ -1652,10 +1661,14 @@ pub mod net_tests {
                     break; // if the error was EINTR, retry the syscall
                 }
             }
+            // check if the received message is correct
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+            // check if there is any nonblocking return
             assert_ne!(counter, 0);
 
+            // sleep for 30ms so receiver could have some nonblocking return 
             interface::sleep(interface::RustDuration::from_millis(30));
+            // send the message
             assert_eq!(
                 cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0),
                 15
@@ -1665,14 +1678,21 @@ pub mod net_tests {
         let cage3 = cage.clone();
 
         let thread_2 = interface::helper_thread(move || {
+            // sleep for 30ms so receiver could have some nonblocking return
             interface::sleep(interface::RustDuration::from_millis(30));
+            
+            // send message
             assert_eq!(cage3.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0), 4);
     
+            // receive the message
+            // since peer will sleep for 30ms before send the message
+            // some nonblocing returns are expected
             let mut buf2 = sizecbuf(15);
             let mut counter = 0;
             loop {
                 let result = cage3.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
                 if result == -(Errno::EAGAIN as i32) {
+                    // return due to nonblocking flag
                     counter += 1;
                     continue;
                 }
@@ -1680,8 +1700,10 @@ pub mod net_tests {
                     break; // if the error was EINTR, retry the syscall
                 }
             }
+            // check if the received message is correct
             let str2 = cbuf2str(&buf2);
             assert_eq!(str2, "Socketpair Test");
+            // check if there is any nonblocking return
             assert_ne!(counter, 0);
         });
 
