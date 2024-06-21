@@ -1859,38 +1859,40 @@ impl Cage {
         }
     }
 
-    //------------------------------------SELECT SYSCALL------------------------------------
-    // Description
-    // select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready"
-    // for some class of I/O operation (e.g., input possible).  A file descriptor is considered ready if it is possible to perform a
-    // corresponding I/O operation (e.g., read(), or a sufficiently small write()) without blocking.
+    /// ## ------------------SELECT SYSCALL------------------
+    /// ### Description
+    /// The `select_syscall()` allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready"
+    /// for some class of I/O operation (e.g., input possible).  A file descriptor is considered ready if it is possible to perform a
+    /// corresponding I/O operation (e.g., `read_syscall()`) without blocking.
     
-    // Function Arguments
-    // The open_syscall() receives three arguments:
-    // 1. nfds - This argument should be set to the highest-numbered file descriptor in any of the three sets, plus 1.  The
-    //           indicated file descriptors in each set are checked, up to this limit.
-    // 2. readfds -  The file descriptors in this set are watched to see if they are ready for reading.  A file descriptor is ready
-    //               for reading if a read operation will not block; in particular, a file descriptor is also ready on end-of-file.
-    //               After select() has returned, readfds will be cleared of all file descriptors except for those that are ready for reading.
-    // 3. writefds - The file descriptors in this set are watched to see if they are ready for writing.  A file descriptor is ready
-    //               for writing if a write operation will not block.  However, even if a file descriptor indicates as writable, a large
-    //               write may still block.
-    //               After select() has returned, writefds will be cleared of all file descriptors except for those that are ready for writing.
-    // 4. exceptfds - currently not supported, only the validity of the fds will be checked
-    // 5. timeout - The timeout argument is a RustDuration structure that specifies the interval that select() should block
-    //              waiting for a file descriptor to become ready.  The call will block until either:
-    //              •  a file descriptor becomes ready;
-    //              •  the call is interrupted by a signal handler; or
-    //              •  the timeout expires.
+    /// ### Function Arguments
+    /// The `select_syscall()` receives five arguments:
+    /// * `nfds` - This argument should be set to the highest-numbered file descriptor in any of the three sets, plus 1.  The
+    ///           indicated file descriptors in each set are checked, up to this limit.
+    /// * `readfds` -  The file descriptors in this set are watched to see if they are ready for reading.  A file descriptor is ready
+    ///               for reading if a read operation will not block; in particular, a file descriptor is also ready on end-of-file.
+    ///               After select() has returned, readfds will be cleared of all file descriptors except for those that are ready for reading.
+    /// * `writefds` - The file descriptors in this set are watched to see if they are ready for writing.  A file descriptor is ready
+    ///               for writing if a write operation will not block.  However, even if a file descriptor indicates as writable, a large
+    ///               write may still block.
+    ///               After select() has returned, writefds will be cleared of all file descriptors except for those that are ready for writing.
+    /// * `exceptfds` - currently not supported, only the validity of the fds will be checked
+    /// * `timeout` - The timeout argument is a RustDuration structure that specifies the interval that select() should block
+    ///              waiting for a file descriptor to become ready.  The call will block until either:
+    ///              •  a file descriptor becomes ready;
+    ///              •  the call is interrupted by a signal handler; or
+    ///              •  the timeout expires.
 
-    // Return Values
-    // On success, select() and return the number of file descriptors contained in the two returned descriptor sets (that
-    // is, the total number of bits that are set in readfds, writefds). The return value may be zero if the timeout expired
-    // before any file descriptors became ready.
-    // Negative number will be returned on error.
-    //
-    // Tests
-    // All the different scenarios for select_syscall() are covered and tested in the "networking_tests.rs" file.
+    /// ### Returns
+    /// On success, select() and return the number of file descriptors contained in the two returned descriptor sets (that
+    /// is, the total number of bits that are set in readfds, writefds). The return value may be zero if the timeout expired
+    /// before any file descriptors became ready.
+    /// Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors and Panics
+    /// * EBADF - An invalid file descriptor was given in one of the sets. (e.g. a file descriptor that was already closed.)
+    /// * EINTR - A signal was caught.
+    /// * EINVAL -  nfds is negative or exceeds the FD_SET_MAX_FD.
     pub fn select_syscall(
         &self,
         nfds: i32,
@@ -1991,6 +1993,7 @@ impl Cage {
                 continue;
             }
 
+            // get the FileDescriptor Object from fd
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
