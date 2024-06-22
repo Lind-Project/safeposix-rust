@@ -2263,8 +2263,8 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `chmod_syscall()` changes a file's mode bits that consist of file permission bits (read, write, execute)
-    /// plus set-user-ID, set-group-ID, and sticky bits.
+    /// The `chmod_syscall()` changes a file's mode bits that consist of read, write, and execute file permission bits.
+    /// Changing set-user-ID, set-group-ID, and sticky bits is currently not supported.
     ///
     /// ### Arguments
     ///
@@ -2272,7 +2272,7 @@ impl Cage {
     /// * `path` - pathname of the file whose mode bits we are willing to change (symbolic links are currently not supported).
     /// If the pathname is relative, then it is interpreted relative to the current working directory of the calling process.
     /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
-    /// Some of the examples of such bits are S_IRUSR (read by owner), S_IWUSR (write by owner), S_ISUID (set-user-ID), etc.
+    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), `S_ISUID` (set-user-ID), etc.
     ///
     /// ### Returns
     /// 
@@ -2281,12 +2281,26 @@ impl Cage {
     ///
     /// ### Errors and Panics
     ///
-    /// 
+    /// Currently, only two errors are supposrted:
+    /// * `EACCES` - search permission is denied on a component of the path prefix 
+    /// * `ENOENT` - the file does not exist
+    /// Other errors, like `EFAULT  , `ENOTDIR`, etc. are not supported.
+    ///
+    /// There are no cases where this syscall panics.
+    ///
+    /// To learn more about the syscall, valid mode bits, and error values, see
+    ///[chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
 
     pub fn _chmod_helper(inodenum: usize, mode: u32) {
+        //getting a mutable reference to an inode struct that corresponds to the file whose mode bits we want to change
         let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
         let mut log = true;
+        //This sanity check of the `mode` argument has already been done in `chmod_syscall()` before this helper funciton is called.
+        //Isn't it redundant to check the same thing here again?
         if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
+            //We obtain the mode bits that should remain intact by bitwise-and'ing the inode's mode bits with 
+            //the set of bits that can be changed via `chmod_syscall`. The changes are applied by bitwise-or'ing 
+            //the intact mode bits with the changed mode bits.
             match *thisinode {
                 Inode::File(ref mut general_inode) => {
                     general_inode.mode = (general_inode.mode & !S_IRWXA) | mode
@@ -2323,8 +2337,14 @@ impl Cage {
         //In this case, `The file does not exist` error is returned.
         //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            //S_IRWXA is a bit mask created by bitwise-or'ing read, write, execute/search permissions for 
-            //the owner of the file, group owner of the file, and other users. 
+            //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions for the file owner, group owner, 
+            //and other users. It encompasses all the mode bits that can be changed via `chmod_syscall()` and is used as a bitmask
+            //to make sure that no other invalid bit change is being made. 
+            //S_FILETYPEFLAGS is a result of bitwise-or'ing S_IFREG, S_IFSOCK, S_IFDIR, S_IFCHR, and S_IFIFO, which correspond to the flags
+            //designating regular file, socket, directory, character device, and named pipe file types. It is used as a sanity check to make
+            //sure that chmod_syscall() is only called on the supported file types.
+            //BUG: S_IFIFO is included in S_FILETYPEFLAGS implying that calling chmod_syscall() on named papes is supported even though named pipes
+            //are currently not supported. 
             if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
                 Self::_chmod_helper(inodenum, mode);
             } else {
