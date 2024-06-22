@@ -791,7 +791,10 @@ pub mod fs_tests {
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "";
         // Check for error when directory is empty
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev), -(Errno::ENOENT as i32));
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev),
+            -(Errno::ENOENT as i32)
+        );
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -801,8 +804,11 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/parentdir/file";
-        // Check for error when both parent and file don't exist 
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev), -(Errno::ENOENT as i32));
+        // Check for error when both parent and file don't exist
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev),
+            -(Errno::ENOENT as i32)
+        );
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -816,7 +822,10 @@ pub mod fs_tests {
         assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev), 0);
 
         // Check for error when the same file is created again
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev), -(Errno::EEXIST as i32));
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev),
+            -(Errno::EEXIST as i32)
+        );
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -827,8 +836,11 @@ pub mod fs_tests {
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/testfile";
         let invalid_mode = 0o77777; // Invalid mode bits for testing
-        // Check for error when the file is being created with invalid mode
-        assert_eq!(cage.mknod_syscall(path, invalid_mode, dev), -(Errno::EPERM as i32));
+                                    // Check for error when the file is being created with invalid mode
+        assert_eq!(
+            cage.mknod_syscall(path, invalid_mode, dev),
+            -(Errno::EPERM as i32)
+        );
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -841,17 +853,29 @@ pub mod fs_tests {
         let path = "/invalidfile";
 
         // When file type is S_IFDIR (Directory), error is expected
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFDIR as u32, dev), -(Errno::EINVAL as i32));
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFDIR as u32, dev),
+            -(Errno::EINVAL as i32)
+        );
 
         // When file type is S_IFIFO (FIFO), error is expected
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFIFO as u32, dev), -(Errno::EINVAL as i32));
-        
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFIFO as u32, dev),
+            -(Errno::EINVAL as i32)
+        );
+
         // When file type is S_IFREG (Regular File), error is expected
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFREG as u32, dev), -(Errno::EINVAL as i32));
-        
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFREG as u32, dev),
+            -(Errno::EINVAL as i32)
+        );
+
         // When file type is S_IFSOCK (Socket), error is expected
-        assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFSOCK as u32, dev), -(Errno::EINVAL as i32));
-        
+        assert_eq!(
+            cage.mknod_syscall(path, S_IRWXA | S_IFSOCK as u32, dev),
+            -(Errno::EINVAL as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
