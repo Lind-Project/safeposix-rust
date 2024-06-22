@@ -38,7 +38,6 @@ impl Cage {
         }
     }
 
-
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         //construct a new mutex in the child cage where each initialized mutex is in the parent cage
         let mutextable = self.mutex_table.read();
@@ -222,7 +221,6 @@ impl Cage {
             new_semtable.insert((*pair.key()).clone(), pair.value().clone());
         }
 
-        // Create a new cage object for the child process 
         let cageobj = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -377,7 +375,7 @@ impl Cage {
     ///  
     /// The `getpid_syscall()` system call returns the id of the calling process. The uid is 
     /// guaranteed to be unique and can be used for naming temporary files. 
-    /// The call is always successful.  
+    /// The call is always successful.
     /// 
     /// ### Arguments
     /// 
@@ -411,6 +409,8 @@ impl Cage {
     /// This function returns the real group id of the calling process. The real group id is specified at 
     /// login time. The group id is the group of the user who invoked the program. 
     /// Lind is only run in one group - and hence a default value is expected from this function.  
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// gid to be the default value.
     /// 
     /// ### Arguments 
     /// 
@@ -421,7 +421,7 @@ impl Cage {
     /// Depending on whether the gid has been initialized or not this function returns either -1 
     /// or the default gid as a 32 bit integer. 
     pub fn getgid_syscall(&self) -> i32 {
-        // This call returns -1 when the gid has not yet been initialized and set the gid to be the default value. 
+        // The call returns -1 to indicate that the call happened during the loading stage
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -434,6 +434,8 @@ impl Cage {
     /// 
     /// The `getegid_syscall` returns the effective group id of the user who invoked the process.
     /// Since Lind is only run in one group a default value (or -1) is returned. 
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// egid to be the default value.
     /// 
     /// ### Arguments 
     /// 
@@ -441,9 +443,9 @@ impl Cage {
     /// 
     /// ### Returns
     /// 
-    /// Returns a 32 bit integer value which represents the effective group
+    /// Returns a 32 bit integer value (or -1) which represents the effective group
     pub fn getegid_syscall(&self) -> i32 {
-        // If the egid has not been initialized yet - we return -1 and store the default value as the egid 
+        // The call returns -1 to indicate that the call happened during the loading stage
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -458,6 +460,8 @@ impl Cage {
     /// The `getuid_syscall` returns the real user id of the calling process. 
     /// The real user id is the user who invoked the calling process. 
     /// As Lind only allows one user, a default value is returned. 
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// uid to be the default value.
     /// 
     /// ### Arguments
     ///  
@@ -467,7 +471,7 @@ impl Cage {
     /// 
     /// Returns a 32 bit default integer (or -1) representing the user
     pub fn getuid_syscall(&self) -> i32 {
-        // If the user has not been set yet, we return -1 and then set the user to be the default user. 
+        // The call returns -1 to indicate that the call happened during the loading stage
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -480,16 +484,17 @@ impl Cage {
     /// 
     /// The `geteuid_syscall` returns the effective user id of the calling process. 
     /// As Lind only allows one user, a default value (or -1) is returned. 
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// euid to be the default value.
     /// 
     /// ### Function Arguments 
     /// The geteuid syscall does not take any arguments
-    /// 
     /// 
     /// ### Returns
     /// 
     /// Returns a 32 bit default integer value (or -1) representing the effective user
     pub fn geteuid_syscall(&self) -> i32 {
-        // If the euid has not been initialized yet, we return -1 and set the default value as the euid. 
+        // The call returns -1 to indicate that the call happened during the loading stage
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);

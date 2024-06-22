@@ -2,12 +2,12 @@
 
 #[allow(unused_parens)]
 #[cfg(test)] 
-pub mod sys_tests {
+pub mod test_sys {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::syscalls::sys_calls::*;
 
-    pub fn tests_sys() {
+    pub fn test_sys() {
         ut_lind_getpid(); 
         ut_lind_getppid(); 
     } 
