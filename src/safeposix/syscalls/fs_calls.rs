@@ -2269,10 +2269,12 @@ impl Cage {
     /// ### Arguments
     ///
     /// The `chmod_syscall()` accepts two arguments:
-    /// * `path` - pathname of the file whose mode bits we are willing to change (symbolic links are currently not supported).
-    /// If the pathname is relative, then it is interpreted relative to the current working directory of the calling process.
+    /// * `path` - pathname of the file whose mode bits we are willing to change (symbolic links are currently 
+    /// not supported). If the pathname is relative, then it is interpreted relative to the current working directory 
+    /// of the calling process.
     /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
-    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), `S_ISUID` (set-user-ID), etc.
+    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), 
+    /// `S_ISUID` (set-user-ID), etc.
     ///
     /// ### Returns
     /// 
@@ -2282,18 +2284,21 @@ impl Cage {
     /// ### Errors and Panics
     ///
     /// Currently, only two errors are supposrted:
-    /// * `EACCES` - search permission is denied on a component of the path prefix 
-    /// * `ENOENT` - the file does not exist
+    /// * `EINVAL` - the value of the mode argument is invalid 
+    /// * `ENOENT` - a component of path does not name an existing file
     /// Other errors, like `EFAULT  , `ENOTDIR`, etc. are not supported.
     ///
     /// There are no cases where this syscall panics.
     ///
     /// To learn more about the syscall, valid mode bits, and error values, see
-    ///[chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
+    /// [chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
 
     pub fn _chmod_helper(inodenum: usize, mode: u32) {
         //getting a mutable reference to an inode struct that corresponds to the file whose mode bits we want to change
         let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+        //log is used to store all the changes made to the filesystem. After the cage is closed, all the collected
+        //changes are serialized and the state of the underlying filsystem is persisted. This allows us to avoid
+        //serializing and persisting filesystem state after every chmod_syscall().
         let mut log = true;
         //This sanity check of the `mode` argument has already been done in `chmod_syscall()` before this helper funciton is called.
         //Isn't it redundant to check the same thing here again?
@@ -2310,6 +2315,8 @@ impl Cage {
                 }
                 Inode::Socket(ref mut sock_inode) => {
                     sock_inode.mode = (sock_inode.mode & !S_IRWXA) | mode;
+                    //Sockets only exist as long as the cages using them are running. After these cages are closed, no changes
+                    //to sockets' inodes need to be persisted, thus using log is unnecessary.
                     log = false;
                 }
                 Inode::Dir(ref mut dir_inode) => {
@@ -2317,6 +2324,7 @@ impl Cage {
                 }
             }
             drop(thisinode);
+            //changes to an inode are saved into the log for all file types except for Sockets
             if log {
                 log_metadata(&FS_METADATA, inodenum)
             };
@@ -2349,10 +2357,10 @@ impl Cage {
                 Self::_chmod_helper(inodenum, mode);
             } else {
                 //there doesn't seem to be a good syscall error errno for this
-                return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+                return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
             }
         } else {
-            return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
+            return syscall_error(Errno::ENOENT, "chmod", "A component of path does not name an existing file");
         }
         0 //success!
     }
