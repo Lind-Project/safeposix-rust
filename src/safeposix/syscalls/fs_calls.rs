@@ -2345,7 +2345,7 @@ impl Cage {
         //In this case, `The file does not exist` error is returned.
         //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions for the file owner, group owner, 
+            //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions for the file owner, group owners, 
             //and other users. It encompasses all the mode bits that can be changed via `chmod_syscall()` and is used as a bitmask
             //to make sure that no other invalid bit change is being made. 
             //S_FILETYPEFLAGS is a result of bitwise-or'ing S_IFREG, S_IFSOCK, S_IFDIR, S_IFCHR, and S_IFIFO, which correspond to the flags
