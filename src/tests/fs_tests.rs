@@ -1179,19 +1179,23 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    // This test verifies the functionality of semaphores in a fork scenario. 
-    // The test involves a parent process and a child process that synchronize their execution using a shared semaphore. The test aims to ensure:
+    // This test verifies the functionality of semaphores in a fork scenario.
+    // The test involves a parent process and a child process that synchronize
+    //their execution using a shared semaphore. The test aims to ensure:
     //   1. The semaphore is initialized correctly.
     //   2. The child process can acquire and release the semaphore.
-    //   3. The parent process can acquire and release the semaphore after the child process exits.
+    //   3. The parent process can acquire and release the
+    //      semaphore after the child process exits.
     //   4. The semaphore can be destroyed safely.
     pub fn ut_lind_fs_sem_fork() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
 
-        // Create a shared memory region of 1024 bytes. This region will be shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared memory and 0666 sets the access permissions of the memory segment.
+        // Create a shared memory region of 1024 bytes. This region will be
+        // shared between the parent and child process.
+        // IPC_CREAT tells the system to create a new memory segment for the shared memory
+        // and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
         
         // Attach shared memory for semaphore access.
@@ -1203,7 +1207,7 @@ pub mod fs_tests {
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
         // Fork process to create child (new cagetable ID 2) for semaphore testing.
         assert_eq!(cage.fork_syscall(2), 0);
-        // Create thread to simulate child process behavior after forking. 
+        // Create thread to simulate child process behavior after forking.
         let thread_child = interface::helper_thread(move || {
             // Set reference to child process's cagetable (ID 2) for independent operation.
             let cage1 = interface::cagetable_getref(2);
@@ -1211,7 +1215,8 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);            
             // Simulate processing time with 40ms delay.
             interface::sleep(interface::RustDuration::from_millis(40));
-            // Child process releases semaphore, signaling its availability to parent (value increases from 0 to 1).
+            // Child process releases semaphore, signaling its availability to parent
+            //(value increases from 0 to 1).
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
@@ -1221,7 +1226,8 @@ pub mod fs_tests {
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
         // Simulate parent process processing time with 100ms delay to ensure synchronization.
         interface::sleep(interface::RustDuration::from_millis(100));
-        // Wait for child process to finish to prevent race conditions before destroying semaphore. Release semaphore, making it available again (value increases to 1).
+        // Wait for child process to finish to prevent race conditions before destroying semaphore.
+        //Release semaphore, making it available again (value increases to 1).
         assert_eq!(cage.sem_post_syscall(shmatret as u32), 0); 
         thread_child.join().unwrap();
 
@@ -1239,20 +1245,25 @@ pub mod fs_tests {
     }
 
     // This test verifies the functionality of timed semaphores in a fork scenario.
-    // It involves a parent process and a child process that synchronize their execution using a shared semaphore with a timeout. The test aims to ensure:
+    // It involves a parent process and a child process that synchronize their execution using a
+    //shared semaphore with a timeout. The test aims to ensure:
     //  1. The semaphore is initialized correctly.
     //  2. The child process can acquire and release the semaphore.
-    //  3. The parent process can acquire the semaphore using a timed wait operation with a timeout, and the semaphore is acquired successfully.
+    //  3. The parent process can acquire the semaphore using a timed wait operation with a
+    //  timeout, and the semaphore is acquired successfully.
     //  4. The parent process can release the semaphore.
     //  5. The semaphore can be destroyed safely.
     pub fn ut_lind_fs_sem_trytimed() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
-        // Create a shared memory region of 1024 bytes. This region will be shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared memory and 0666 sets the access permissions of the memory segment.
+        // Create a shared memory region of 1024 bytes.
+        //This region will be shared between the parent and child process.
+        // IPC_CREAT tells the system to create a new memory segment for the shared memory
+        // and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        // Attach the shared memory region to the address space of the process to make sure for both processes to access the shared semaphore.
+        // Attach the shared memory region to the address space of the process
+        // to make sure for both processes to access the shared semaphore.
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
         // Initialize semaphore in shared memory (initial value: 1, available).
@@ -1261,19 +1272,22 @@ pub mod fs_tests {
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
         // Fork process, creating a child process with its own independent cagetable (ID 2).
         assert_eq!(cage.fork_syscall(2), 0);
-        // Define the child process behavior in a separate thread to simulate the behavior of the child process post-fork.
+        // Define the child process behavior in a separate thread
         let thread_child = interface::helper_thread(move || {
             // Get reference to child's cagetable (ID 2) for independent operations.
             let cage1 = interface::cagetable_getref(2);
-            // Child process blocks on semaphore, waiting until it becomes available (semaphore decremented to 0).
+            // Child process blocks on semaphore, waiting until it becomes available
+            //(semaphore decremented to 0).
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             // Simulate some work by sleeping for 20 milliseconds.
             interface::sleep(interface::RustDuration::from_millis(20));
-            // Child process releases semaphore, signaling its availability to the parent process (value increases from 0 to 1).
+            // Child process releases semaphore, signaling its availability to the parent process
+            //(value increases from 0 to 1).
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
-        // Parent process waits (with 100ms timeout) for semaphore release by child; returns 0 if acquired successfully before timeout.
+        // Parent process waits (with 100ms timeout) for semaphore release by child
+        //returns 0 if acquired successfully before timeout.
         assert_eq!(
             cage.sem_timedwait_syscall(
                 shmatret as u32,
@@ -1284,7 +1298,8 @@ pub mod fs_tests {
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
         // Simulate some work by sleeping for 10 milliseconds.
         interface::sleep(interface::RustDuration::from_millis(10));
-        // Release semaphore, signaling its availability for parent (value increases from 0 to 1).
+        // Release semaphore, signaling its availability for parent
+        //(value increases from 0 to 1).
         assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
 
         // wait for the child process to exit before destroying the semaphore.
