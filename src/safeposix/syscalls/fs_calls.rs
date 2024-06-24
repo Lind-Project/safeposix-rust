@@ -2396,21 +2396,7 @@ impl Cage {
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions 
-                    //for the file owner, group owners, and other users. It encompasses all the mode bits 
-                    //that can be changed via `chmod_syscall()` and is used as a bitmask to make sure that 
-                    //no other invalid bit change is being made. 
-                    //S_FILETYPEFLAGS is a result of bitwise-or'ing S_IFREG, S_IFSOCK, S_IFDIR, S_IFCHR, 
-                    //and S_IFIFO, which correspond to the flags designating regular file, socket, directory,
-                    //character device, and named pipe file types. It is used as a sanity check to make
-                    //sure that chmod_syscall() is only called on the supported file types.
-                    //BUG: S_IFIFO is included in S_FILETYPEFLAGS implying that calling chmod_syscall() on 
-                    //named papes is supported even though named pipes are currently not supported. 
-                    if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
-                        Self::_chmod_helper(inodenum, mode);
-                    } else {
-                        return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
-                    }
+                    Self::_chmod_helper(inodenum, mode)                    
                 }
                 Socket(_) => {
                     return syscall_error(
@@ -2444,7 +2430,6 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor");
         }
-        0 //success!
     }
 
     //------------------------------------MMAP SYSCALL------------------------------------
