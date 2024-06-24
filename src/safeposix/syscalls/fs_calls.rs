@@ -2323,6 +2323,8 @@ impl Cage {
                     dir_inode.mode = (dir_inode.mode & !S_IRWXA) | mode;
                 }
             }
+            //the mutable reference to the inode has to be dropped because log_metadata will need to acquire an immutable 
+            //reference to the same inode
             drop(thisinode);
             //changes to an inode are saved into the log for all file types except for Sockets
             if log {
