@@ -2263,34 +2263,29 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `chmod_syscall()` changes a file's mode bits that consist of read, write, and execute file permission bits.
-    /// Changing set-user-ID, set-group-ID, and sticky bits is currently not supported.
+    /// The `_chmod_helper()` is a helper function used by both `chmod_syscall()` and `fchmod_syscall()` 
+    /// to change mode bits that consist of read, write, and execute file permission bits of a file
+    /// specified by an inode obtained from the corresponding caller syscall.
     ///
     /// ### Arguments
     ///
-    /// The `chmod_syscall()` accepts two arguments:
-    /// * `path` - pathname of the file whose mode bits we are willing to change (symbolic links are currently 
-    /// not supported). If the pathname is relative, then it is interpreted relative to the current working directory 
-    /// of the calling process.
+    /// The `_chmod_helper()` accepts two arguments:
+    /// * `inodenum` - an inode of a file whose mode bits we are willing to change obtained from the caller syscall.
     /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
     /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
     ///
     /// ### Returns
     /// 
     /// Upon successful completion, zero is returned.
-    /// In case of a failure, -1 is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
+    /// In case of a failure, an error is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
     ///
     /// ### Errors and Panics
     ///
-    /// Currently, only two errors are supposrted:
-    /// * `EINVAL` - the value of the mode argument is invalid 
-    /// * `ENOENT` - a component of path does not name an existing file
+    /// Currently, only one error is supported:
+    /// * `EINVAL` - the value of the mode argument is invalid.
     /// Other errors, like `EFAULT  , `ENOTDIR`, etc. are not supported.
     ///
-    /// There are no cases where this syscall panics.
-    ///
-    /// To learn more about the syscall, valid mode bits, and error values, see
-    /// [chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
+    /// There are no cases where this helper function panics.
 
     pub fn _chmod_helper(inodenum: usize, mode: u32) -> i32 {
         //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions for the file owner, group owners, 
@@ -2337,6 +2332,37 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    /// The `chmod_syscall()` changes a file's mode bits that consist of read, write, and execute file permission bits.
+    /// Changing set-user-ID, set-group-ID, and sticky bits is currently not supported.
+    ///
+    /// ### Arguments
+    ///
+    /// The `chmod_syscall()` accepts two arguments:
+    /// * `path` - pathname of the file whose mode bits we are willing to change (symbolic links are currently 
+    /// not supported). If the pathname is relative, then it is interpreted relative to the current working directory 
+    /// of the calling process.
+    /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
+    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
+    ///
+    /// ### Returns
+    /// 
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors and Panics
+    ///
+    /// Currently, only two errors are supposrted:
+    /// * `EINVAL` - the value of the mode argument is invalid 
+    /// * `ENOENT` - a component of path does not name an existing file
+    /// Other errors, like `EFAULT  , `ENOTDIR`, etc. are not supported.
+    ///
+    /// There are no cases where this syscall panics.
+    ///
+    /// To learn more about the syscall, valid mode bits, and error values, see
+    /// [chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
+
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
         //Convert the provided pathname into an absolute path without `.` or `..` components.
         let truepath = normpath(convpath(path), self);
@@ -2372,7 +2398,7 @@ impl Cage {
     /// ### Returns
     /// 
     /// Upon successful completion, zero is returned.
-    /// In case of a failure, -1 is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
+    /// In case of a failure, an error is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
     ///
     /// ### Errors and Panics
     ///
