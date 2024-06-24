@@ -2273,8 +2273,7 @@ impl Cage {
     /// not supported). If the pathname is relative, then it is interpreted relative to the current working directory 
     /// of the calling process.
     /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
-    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), 
-    /// `S_ISUID` (set-user-ID), etc.
+    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
     ///
     /// ### Returns
     /// 
@@ -2308,19 +2307,19 @@ impl Cage {
             //the intact mode bits with the changed mode bits.
             match *thisinode {
                 Inode::File(ref mut general_inode) => {
-                    general_inode.mode = (general_inode.mode & !S_IRWXA) | mode
+                    general_inode.mode = (general_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
                 }
                 Inode::CharDev(ref mut dev_inode) => {
-                    dev_inode.mode = (dev_inode.mode & !S_IRWXA) | mode;
+                    dev_inode.mode = (dev_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
                 }
                 Inode::Socket(ref mut sock_inode) => {
-                    sock_inode.mode = (sock_inode.mode & !S_IRWXA) | mode;
+                    sock_inode.mode = (sock_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
                     //Sockets only exist as long as the cages using them are running. After these cages are closed, no changes
                     //to sockets' inodes need to be persisted, thus using log is unnecessary.
                     log = false;
                 }
                 Inode::Dir(ref mut dir_inode) => {
-                    dir_inode.mode = (dir_inode.mode & !S_IRWXA) | mode;
+                    dir_inode.mode = (dir_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
                 }
             }
             drop(thisinode);
