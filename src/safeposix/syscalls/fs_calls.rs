@@ -2331,8 +2331,6 @@ impl Cage {
         }
     }
 
-    //------------------------------------CHMOD SYSCALL------------------------------------
-
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
         //Convert the provided pathname into an absolute path without `.` or `..` components.
         let truepath = normpath(convpath(path), self);
@@ -2365,23 +2363,55 @@ impl Cage {
         0 //success!
     }
 
-    //------------------------------------FCHMOD SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `fchmod_syscall()` is equivalent to chmod() in that it is used to change a file's mode bits 
+    /// that consist of read, write, and execute file permission bits except that the file
+    /// is specified by the file descriptor.
+    /// Changing set-user-ID, set-group-ID, and sticky bits is currently not supported.
+    ///
+    /// ### Arguments
+    ///
+    /// The `fchmod_syscall()` accepts two arguments:
+    /// * `fd` - an open file descriptor.
+    /// * `mode` - the new file mode, which is a bit mask created by bitwise-or'ing zero or more valid mode bits.
+    /// Some of the examples of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), 
+    /// `S_ISUID` (set-user-ID), etc.
+    ///
+    /// ### Returns
+    /// 
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, -1 is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors and Panics
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, 'get_filedescriptor' returns Err(),
+        //unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
+        //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &*unlocked_fd {
+            //Regular file type is the only type that supports `fchmod_syscall()`
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
+                    //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions 
+                    //for the file owner, group owners, and other users. It encompasses all the mode bits 
+                    //that can be changed via `chmod_syscall()` and is used as a bitmask to make sure that 
+                    //no other invalid bit change is being made. 
+                    //S_FILETYPEFLAGS is a result of bitwise-or'ing S_IFREG, S_IFSOCK, S_IFDIR, S_IFCHR, 
+                    //and S_IFIFO, which correspond to the flags designating regular file, socket, directory,
+                    //character device, and named pipe file types. It is used as a sanity check to make
+                    //sure that chmod_syscall() is only called on the supported file types.
+                    //BUG: S_IFIFO is included in S_FILETYPEFLAGS implying that calling chmod_syscall() on 
+                    //named papes is supported even though named pipes are currently not supported. 
                     if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
                         Self::_chmod_helper(inodenum, mode);
                     } else {
-                        return syscall_error(
-                            Errno::EACCES,
-                            "fchmod",
-                            "provided file mode is not valid",
-                        );
+                        return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
                     }
                 }
                 Socket(_) => {
@@ -2414,11 +2444,7 @@ impl Cage {
                 }
             }
         } else {
-            return syscall_error(
-                Errno::ENOENT,
-                "fchmod",
-                "the provided file descriptor  does not exist",
-            );
+            return syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor");
         }
         0 //success!
     }

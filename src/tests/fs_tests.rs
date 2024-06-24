@@ -315,25 +315,38 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = "/fchmodTestFile";
+        //checking if `fchmod_syscall()` works with a valid file descriptor
+        let filepath = "/fchmodTestFile1";
 
         let mut statdata = StatData::default();
 
-        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //checking if the file was successfully created with the specified initial flags
+        //set all mode bits to 0 to change them later
+        let fd = cage.open_syscall(filepath, flags, 0);
         assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+        assert_eq!(statdata.st_mode, S_IFREG as u32);
 
-        assert_eq!(cage.fchmod_syscall(fd, S_IRUSR | S_IRGRP), 0);
-        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
-
+        //checking if owner, group owners, and other users read, write, and execute or search
+        //mode bits are correctly set
         assert_eq!(cage.fchmod_syscall(fd, S_IRWXA), 0);
         assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
+        //checking if passing an invalid set of mod bits to `fchmod_syscall()`
+        //correctly results in `The value of the mode argument is invalid` error
+        //0o7777 is an arbitrary value that does not correspond to any combination of valid mode 
+        //bits or supported file types
+        assert_eq!(cage.fchmod_syscall(fd, 0o7777 as u32), -(Errno::EINVAL as i32));
+
+        //checking if passing an invalid file descriptor to `fchmod_syscall` correctly
+        //results in `Invalid file descriptor` error.
+        //closing a previously opened file would make its file descriptor unused, and 
+        //thus, invalid as `fchmod_syscall()` fd argument
         assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.fchmod_syscall(fd, S_IRWXA), -(Errno::EBADF as i32));
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize();        
     }
 
     pub fn ut_lind_fs_dir_chdir() {
