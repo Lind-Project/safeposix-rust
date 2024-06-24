@@ -2384,6 +2384,15 @@ impl Cage {
     /// In case of a failure, -1 is returned, and `errno` is set depending on the error, e.g. EACCES, ENOENT, etc.
     ///
     /// ### Errors and Panics
+    ///
+    /// * `EBADF` - the file descriptor fd is not valid. 
+    /// * `EINVAL` - the value of the `mode` argument is invalid or mode bits cannot be changed on this file type
+    /// Other errors, like `EFAULT  , `ENOTDIR`, etc. are not supported.
+    ///
+    /// A panic occurs when a provided file descriptor is out of bounds
+    ///
+    /// To learn more about the syscall, valid mode bits, and error values, see
+    /// [fchmod(2)](https://linux.die.net/man/2/fchmod)
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
         //BUG
@@ -2416,30 +2425,30 @@ impl Cage {
                 }
                 Socket(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
                 Stream(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
                 Pipe(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
                 Epoll(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
             }
