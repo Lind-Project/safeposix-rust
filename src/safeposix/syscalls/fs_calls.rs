@@ -2297,43 +2297,38 @@ impl Cage {
         let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
         //log is used to store all the changes made to the filesystem. After the cage is closed, all the collected
         //changes are serialized and the state of the underlying filsystem is persisted. This allows us to avoid
-        //serializing and persisting filesystem state after every chmod_syscall().
+        //serializing and persisting filesystem state after every `chmod_syscall()`.
         let mut log = true;
-        //This sanity check of the `mode` argument has already been done in `chmod_syscall()` before this helper funciton is called.
-        //Isn't it redundant to check the same thing here again?
-        if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
-            //We obtain the mode bits that should remain intact by bitwise-and'ing the inode's mode bits with 
-            //the set of bits that can be changed via `chmod_syscall`. The changes are applied by bitwise-or'ing 
-            //the intact mode bits with the changed mode bits.
-            match *thisinode {
-                Inode::File(ref mut general_inode) => {
-                    general_inode.mode = (general_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
-                }
-                Inode::CharDev(ref mut dev_inode) => {
-                    dev_inode.mode = (dev_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
-                }
-                Inode::Socket(ref mut sock_inode) => {
-                    sock_inode.mode = (sock_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
-                    //Sockets only exist as long as the cages using them are running. After these cages are closed, no changes
-                    //to sockets' inodes need to be persisted, thus using log is unnecessary.
-                    log = false;
-                }
-                Inode::Dir(ref mut dir_inode) => {
-                    dir_inode.mode = (dir_inode.mode & !S_IRWXA) | (mode & S_IRWXA);
-                }
+        //We obtain the mode bits that should remain intact by bitwise-and'ing the inode's mode bits with 
+        //the set of bits that can be changed via `chmod_syscall`. The changes are applied by bitwise-or'ing 
+        //the intact mode bits with the changed mode bits.
+        match *thisinode {
+            Inode::File(ref mut general_inode) => {
+                general_inode.mode = (general_inode.mode & !S_IRWXA) | mode;
             }
-            drop(thisinode);
-            //changes to an inode are saved into the log for all file types except for Sockets
-            if log {
-                log_metadata(&FS_METADATA, inodenum)
-            };
+            Inode::CharDev(ref mut dev_inode) => {
+                dev_inode.mode = (dev_inode.mode & !S_IRWXA) | mode;
+            }
+            Inode::Socket(ref mut sock_inode) => {
+                sock_inode.mode = (sock_inode.mode & !S_IRWXA) | mode;
+                //Sockets only exist as long as the cages using them are running. After these cages are closed, no changes
+                //to sockets' inodes need to be persisted, thus using log is unnecessary.
+                log = false;
+            }
+            Inode::Dir(ref mut dir_inode) => {
+                dir_inode.mode = (dir_inode.mode & !S_IRWXA) | mode;
+            }
         }
+        drop(thisinode);
+        //changes to an inode are saved into the log for all file types except for Sockets
+        if log {
+            log_metadata(&FS_METADATA, inodenum)
+        };
     }
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
         //Convert the provided pathname into an absolute path without `.` or `..` components.
         let truepath = normpath(convpath(path), self);
-
         //Perfrom a walk down the file tree starting from the root directory to obtain an inode number 
         //of the file whose pathname was specified.
         //`None` is returned if one of the following occurs while moving down the tree: accessing a child 
@@ -2345,15 +2340,9 @@ impl Cage {
             //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search permissions for the file owner, group owners, 
             //and other users. It encompasses all the mode bits that can be changed via `chmod_syscall()` and is used as a bitmask
             //to make sure that no other invalid bit change is being made. 
-            //S_FILETYPEFLAGS is a result of bitwise-or'ing S_IFREG, S_IFSOCK, S_IFDIR, S_IFCHR, and S_IFIFO, which correspond to the flags
-            //designating regular file, socket, directory, character device, and named pipe file types. It is used as a sanity check to make
-            //sure that chmod_syscall() is only called on the supported file types.
-            //BUG: S_IFIFO is included in S_FILETYPEFLAGS implying that calling chmod_syscall() on named papes is supported even though named pipes
-            //are currently not supported. 
-            if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
+            if (mode & S_IRWXA) == mode {
                 Self::_chmod_helper(inodenum, mode);
             } else {
-                //there doesn't seem to be a good syscall error errno for this
                 return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
             }
         } else {

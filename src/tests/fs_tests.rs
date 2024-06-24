@@ -301,8 +301,7 @@ pub mod fs_tests {
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
-        //0o7777 is an arbitrary value that does not correspond to any combination of valid mode 
-        //bits or supported file types
+        //0o7777 is an arbitrary value that does not correspond to any combination of valid mode bits
         assert_eq!(cage.chmod_syscall(filepath, 0o7777 as u32), -(Errno::EINVAL as i32));
 
         assert_eq!(cage.close_syscall(fd), 0);
