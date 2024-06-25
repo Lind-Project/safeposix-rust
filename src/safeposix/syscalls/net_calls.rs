@@ -603,6 +603,66 @@ impl Cage {
     //If the connection or binding succeeds, zero is returned.  On
     //error, -errno is returned, and errno is set to indicate the error.
 
+    /// ### Description
+    /// 
+    /// `connect_syscall` connects the socket referred to by the
+    /// file descriptor fd to the address specified by remoteaddr. 
+    /// 
+    /// ### Arguments
+    /// 
+    /// it accepts two parameters: 
+    /// * `fd` - an open file descriptor
+    /// * `remoteaddr` - the address to request a connection to
+    /// 
+    /// ### Returns
+    /// 
+    /// for a successful call, zero is returned. On
+    /// error, -errno is returned, and errno is set to indicate the error.
+    /// 
+    /// ### Errors
+    /// 
+    /// * EADDRNOTAVAIL - The specified address is not available from the local machine.
+    /// * EAFNOSUPPORT - The specified address is not a valid address for the address family of the specified socket.
+    /// * EALREADY - A connection request is already in progress for the specified socket.
+    /// * EBADF - The socket argument is not a valid file descriptor.
+    /// * ECONNREFUSED - The target address was not listening for connections or refused the connection request.
+    /// * EINPROGRESS - O_NONBLOCK is set for the file descriptor for the socket and the connection cannot be immediately established; the connection shall be established asynchronously.
+    /// * EINTR - The attempt to establish a connection was interrupted by delivery of a signal that was caught; the connection shall be established asynchronously.
+    /// * EISCONN - The specified socket is connection-mode and is already connected.
+    /// * ENETUNREACH - No route to the network is present.
+    /// * ENOTSOCK - The socket argument does not refer to a socket.
+    /// * EPROTOTYPE - The specified address has a different type than the socket bound to the specified peer address.
+    /// * ETIMEDOUT - The attempt to connect timed out before a connection was made.
+    /// 
+    /// If the address family of the socket is AF_UNIX, then connect() shall fail if:
+    ///
+    /// * EIO - An I/O error occurred while reading from or writing to the file system.
+    /// * ELOOP - A loop exists in symbolic links encountered during resolution of the pathname in address.
+    /// * ENAMETOOLONG - A component of a pathname exceeded {NAME_MAX} characters, or an entire pathname exceeded {PATH_MAX} characters.
+    /// * ENOENT - A component of the pathname does not name an existing file or the pathname is an empty string.
+    /// * ENOTDIR - A component of the path prefix of the pathname in address is not a directory.
+    ///
+    /// The connect() function may fail if:
+    /// 
+    /// * EACCES - Search permission is denied for a component of the path prefix; or write access to the named socket is denied.
+    /// * EADDRINUSE - Attempt to establish a connection that uses addresses that are already in use.
+    /// * ECONNRESET - Remote host reset the connection request.
+    /// * EHOSTUNREACH - The destination host cannot be reached (probably because the host is down or a remote router cannot reach it).
+    /// * EINVAL - The address_len argument is not a valid length for the address family; or invalid address family in the sockaddr structure.
+    /// * ELOOP - More than {SYMLOOP_MAX} symbolic links were encountered during resolution of the pathname in address.
+    /// * ENAMETOOLONG - Pathname resolution of a symbolic link produced an intermediate result whose length exceeds {PATH_MAX}.
+    /// * ENETDOWN - The local network interface used to reach the destination is down.
+    /// * ENOBUFS- No buffer space is available.
+    /// * EOPNOTSUPP - The socket is listening and cannot be connected.
+    /// 
+    /// ### Panics
+    /// 
+    /// * Unknown errno value from bind libc call, will cause panic
+    /// * Unknown errno value from connect libc call, will cause panic.
+    /// 
+    /// for more detailed description of all the commands and return values, see 
+    /// [connect(3)](https://linux.die.net/man/3/connect)
+
     // ** I think we are missing some implementation details mentioned on the man page
     // under the Description section ** //
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
@@ -869,7 +929,9 @@ impl Cage {
                 sockhandle.protocol & (1 << SO_REUSEPORT) != 0,
             ) {
                 Ok(a) => a,
-                Err(e) => return e,
+                Err(e) => {
+                    return e;
+                }
             };
 
             //Performs libc bind call to assign the local address to the fd in 
@@ -927,7 +989,7 @@ impl Cage {
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         sockhandle.errno = 0;
         // set the rawfd for select
-        // ** What does the above line mean ?? ** //
+        // ** What does the above comment mean ?? ** //
         //The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
         // ** Will this ever cause issues of indexing into an fd that is already set by lind ?? ** //
         sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
