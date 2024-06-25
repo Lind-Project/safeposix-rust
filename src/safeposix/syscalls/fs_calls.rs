@@ -1454,6 +1454,43 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
+                File(file_filedesc_obj) => {
+                    // Convert iovec to IoSlice
+                    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
+                    let io_slices: Vec<IoSlice> = iovecs.iter().map(|iov| {
+                        unsafe { IoSlice::new(slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len)) }
+                    }).collect();
+    
+                    // Write to file using write_vectored
+                    let retval = file_filedesc_obj.file.write_vectored(&io_slices).unwrap_or_else(|_| {
+                        return syscall_error(Errno::EIO, "writev", "Failed to write to file");
+                    }) as i32;
+    
+                    return retval;
+                }
+                Stream(stream_filedesc_obj) => {
+                    // Convert iovec to slices and concatenate them
+                    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
+                    let mut data = Vec::new();
+                    for iov in iovecs {
+                        let slice = unsafe { slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) };
+                        data.extend_from_slice(slice);
+                    }
+    
+                    // Call log_to_stdout (assuming it's a function that writes to stdout)
+                    log_to_stdout(&data);
+    
+                    return data.len() as i32;
+                }
+                _ => {
+                    return syscall_error(
+                        Errno::EOPNOTSUPP,
+                        "writev",
+                        "System call not implemented for this fd type",
+                    );
+                }
+            }
+       
                 _ => {
                     // we currently don't support writev for files/streams
                     return syscall_error(
