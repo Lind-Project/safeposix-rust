@@ -2261,109 +2261,233 @@ impl Cage {
         }
     }
 
-    //------------------------------------CHMOD HELPER FUNCTION------------------------------------
+    /// ### Description
+    ///
+    /// The `_chmod_helper()` is a helper function used by both `chmod_syscall()` 
+    /// and `fchmod_syscall()` to change mode bits that consist of read, write, 
+    /// and execute file permission bits of a file specified by an inode 
+    /// obtained from the corresponding caller syscall.
+    ///
+    /// ### Arguments
+    ///
+    /// The `_chmod_helper()` accepts two arguments:
+    /// * `inodenum` - an inode of a file whose mode bits we are willing to 
+    /// change obtained from the caller syscall.
+    /// * `mode` - the new file mode, which is a bit mask created by 
+    /// bitwise-or'ing zero or more valid mode bits. Some of the examples of 
+    /// such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
+    ///
+    /// ### Returns
+    /// 
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, only one error is supported:
+    /// * `EINVAL` - the value of the mode argument is invalid.
+    /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this helper function panics.
 
-    pub fn _chmod_helper(inodenum: usize, mode: u32) {
-        let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-        let mut log = true;
-        if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
+    pub fn _chmod_helper(inodenum: usize, mode: u32) -> i32 {
+        //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search 
+        //permissions for the file owner, group owners, 
+        //and other users. It encompasses all the mode bits that can be changed 
+        //via `chmod_syscall()` and is used as a bitmask to make sure that no 
+        //other invalid bit change is being made. 
+        if (mode & S_IRWXA) == mode {
+            //getting a mutable reference to an inode struct that corresponds to 
+            //the file whose mode bits we want to change
+            let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+            //log is used to store all the changes made to the filesystem. After 
+            //the cage is closed, all the collected changes are serialized and 
+            //the state of the underlying filsystem is persisted. This allows us
+            //to avoid serializing and persisting filesystem state after every 
+            //`chmod_syscall()`.
+            let mut log = true;
+            //We obtain the mode bits that should remain intact by bitwise-and'ing 
+            //the inode's mode bits with the set of bits that can be changed via 
+            //`chmod_syscall`. The changes are applied by bitwise-or'ing 
+            //the intact mode bits with the changed mode bits.
             match *thisinode {
                 Inode::File(ref mut general_inode) => {
-                    general_inode.mode = (general_inode.mode & !S_IRWXA) | mode
+                    general_inode.mode = (general_inode.mode & !S_IRWXA) | mode;
                 }
                 Inode::CharDev(ref mut dev_inode) => {
                     dev_inode.mode = (dev_inode.mode & !S_IRWXA) | mode;
                 }
                 Inode::Socket(ref mut sock_inode) => {
                     sock_inode.mode = (sock_inode.mode & !S_IRWXA) | mode;
+                    //Sockets only exist as long as the cages using them are running.
+                    //After these cages are closed, no changes to sockets' inodes 
+                    //need to be persisted, thus using log is unnecessary.
                     log = false;
                 }
                 Inode::Dir(ref mut dir_inode) => {
                     dir_inode.mode = (dir_inode.mode & !S_IRWXA) | mode;
                 }
             }
+            //the mutable reference to the inode has to be dropped because 
+            //`log_metadata` will need to acquire an immutable reference to 
+            //the same inode
             drop(thisinode);
+            //changes to an inode are saved into the log for all file types 
+            //except for Sockets
             if log {
-                log_metadata(&FS_METADATA, inodenum)
+                log_metadata(&FS_METADATA, inodenum);
             };
+            //return 0 on success
+            0
+        } else {
+            return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
         }
     }
 
-    //------------------------------------CHMOD SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `chmod_syscall()` changes a file's mode bits that consist of read, 
+    /// write, and execute file permission bits.
+    /// Changing `set-user-ID`, `set-group-ID`, and sticky bits is currently 
+    /// not supported.
+    ///
+    /// ### Arguments
+    ///
+    /// The `chmod_syscall()` accepts two arguments:
+    /// * `path` - pathname of the file whose mode bits we are willing to 
+    /// change (symbolic links are currently not supported). If the 
+    /// pathname is relative, then it is interpreted relative to the 
+    /// current working directory of the calling process.
+    /// * `mode` - the new file mode, which is a bit mask created by 
+    /// bitwise-or'ing zero or more valid mode bits. Some of the examples 
+    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
+    ///
+    /// ### Returns
+    /// 
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `EACCES`, `ENOENT`, etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, only two errors are supposrted:
+    /// * `EINVAL` - the value of the mode argument is invalid 
+    /// * `ENOENT` - a component of path does not name an existing file
+    /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this syscall panics.
+    ///
+    /// To learn more about the syscall, valid mode bits, and error values, see
+    /// [chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
+        //Convert the provided pathname into an absolute path without `.` or `..` 
+        //components.
         let truepath = normpath(convpath(path), self);
-
-        //check if there is a valid path or not there to an inode
+        //Perfrom a walk down the file tree starting from the root directory to 
+        //obtain an inode number of the file whose pathname was specified.
+        //`None` is returned if one of the following occurs while moving down
+        //the tree: accessing a child of a non-directory inode, accessing a 
+        //child of a nonexistent parent directory, accessing a nonexistent child,
+        //accessing an unexpected component, like `.` or `..` directory reference. 
+        //In this case, `The file does not exist` error is returned.
+        //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
-                Self::_chmod_helper(inodenum, mode);
-            } else {
-                //there doesn't seem to be a good syscall error errno for this
-                return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
-            }
+            Self::_chmod_helper(inodenum, mode)
         } else {
-            return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
+            return syscall_error(Errno::ENOENT, "chmod", "A component of path does not name an existing file");
         }
-        0 //success!
     }
 
-    //------------------------------------FCHMOD SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `fchmod_syscall()` is equivalent to `chmod_syscall()` in that
+    /// it is used to change a file's mode bits that consist of read, 
+    /// write, and execute file permission bits except that the file
+    /// is specified by the file descriptor. Changing `set-user-ID`, 
+    /// `set-group-ID`, and sticky bits is currently not supported.
+    ///
+    /// ### Arguments
+    ///
+    /// The `fchmod_syscall()` accepts two arguments:
+    /// * `fd` - an open file descriptor.
+    /// * `mode` - the new file mode, which is a bit mask created by 
+    /// bitwise-or'ing zero or more valid mode bits. Some of the examples 
+    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` 
+    /// (write by owner), etc.
+    ///
+    /// ### Returns
+    /// 
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set 
+    /// depending on the error, e.g. `EACCES`, `ENOENT`, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - the file descriptor `fd` is not valid. 
+    /// * `EINVAL` - the value of the `mode` argument is invalid or 
+    /// mode bits cannot be changed on this file type
+    /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// A panic occurs when a provided file descriptor is out of bounds
+    ///
+    /// To learn more about the syscall, valid mode bits, and error values, see
+    /// [fchmod(2)](https://linux.die.net/man/2/fchmod)
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, 'get_filedescriptor'
+        //returns `Err()`, unwrapping on which  produces a `panic!`
+        //otherwise, file descriptor table entry is stored in `checkedfd`
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
+        //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &*unlocked_fd {
+            //Regular file type is the only type that supports `fchmod_syscall()`
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
-                        Self::_chmod_helper(inodenum, mode);
-                    } else {
-                        return syscall_error(
-                            Errno::EACCES,
-                            "fchmod",
-                            "provided file mode is not valid",
-                        );
-                    }
+                    Self::_chmod_helper(inodenum, mode)                    
                 }
                 Socket(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
                 Stream(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
                 Pipe(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
                 Epoll(_) => {
                     return syscall_error(
-                        Errno::EACCES,
+                        Errno::EINVAL,
                         "fchmod",
-                        "cannot change mode on this file descriptor",
+                        "Mode bits cannot be changed on this file type",
                     );
                 }
             }
         } else {
-            return syscall_error(
-                Errno::ENOENT,
-                "fchmod",
-                "the provided file descriptor  does not exist",
-            );
+            return syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor");
         }
-        0 //success!
     }
 
     //------------------------------------MMAP SYSCALL------------------------------------

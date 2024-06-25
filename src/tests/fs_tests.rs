@@ -13,7 +13,8 @@ pub mod fs_tests {
         ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
 
         ut_lind_fs_broken_close();
-        ut_lind_fs_chmod();
+        ut_lind_fs_chmod_valid_args();
+        ut_lind_fs_chmod_invalid_args();
         ut_lind_fs_fchmod();
         ut_lind_fs_dir_chdir();
         ut_lind_fs_dir_mode();
@@ -221,26 +222,87 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_chmod() {
+    pub fn ut_lind_fs_chmod_valid_args() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = "/chmodTestFile";
+        //checking if `chmod_syscall()` works with a relative path that includes only normal components, 
+        //e.g. without `.` or `..` references
+        let filepath = "/chmodTestFile1";
 
         let mut statdata = StatData::default();
 
-        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //checking if the file was successfully created with the specified initial flags
+        //set all mode bits to 0 to change them later
+        let fd = cage.open_syscall(filepath, flags, 0);
         assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+        assert_eq!(statdata.st_mode, S_IFREG as u32);
 
-        assert_eq!(cage.chmod_syscall(filepath, S_IRUSR | S_IRGRP), 0);
+        //checking if owner read, write, and execute or search mode bits are correctly set
+        assert_eq!(cage.chmod_syscall(filepath, S_IRUSR | S_IWUSR | S_IXUSR), 0);
         assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
+        assert_eq!(statdata.st_mode, S_IRUSR | S_IWUSR | S_IXUSR | S_IFREG as u32);
 
+        //resetting access mode bits 
+        assert_eq!(cage.chmod_syscall(filepath, 0), 0);
+
+        //checking if group owners read, write, and execute or search mode bits are correctly set
+        assert_eq!(cage.chmod_syscall(filepath, S_IRGRP | S_IWGRP | S_IXGRP), 0);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IRGRP | S_IWGRP | S_IXGRP | S_IFREG as u32);
+
+        //resetting access mode bits 
+        assert_eq!(cage.chmod_syscall(filepath, 0), 0);
+
+        //checking if other users read, write, and execute or search mode bits are correctly set
+        assert_eq!(cage.chmod_syscall(filepath, S_IROTH | S_IWOTH | S_IXOTH), 0);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IROTH | S_IWOTH | S_IXOTH | S_IFREG as u32);
+
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        //checking if `chmod_syscall()` works with relative path that include parent directory reference
+        let newdir = "../testFolder";
+        assert_eq!(cage.mkdir_syscall(newdir, S_IRWXA), 0);
+        let filepath = "../testFolder/chmodTestFile";
+
+        //checking if the file was successfully created with the specified initial flags
+        //set all mode bits to 0 to set them later
+        let fd = cage.open_syscall(filepath, flags, 0);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IFREG as u32);
+
+        //checking if owner, group owners, and other users read, write, and execute or search
+        //mode bits are correctly set
         assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0);
         assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_chmod_invalid_args() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        //checking if passing a nonexistent pathname to `chmod_syscall()` 
+        //correctly results in `A component of path does not name an existing file` error
+        let invalidpath = "/someInvalidPath/testFile";
+        assert_eq!(cage.chmod_syscall(invalidpath, S_IRUSR | S_IWUSR | S_IXUSR), -(Errno::ENOENT as i32));
+
+        //checking if passing an invalid set of mod bits to `chmod_syscall()`
+        //correctly results in `The value of the mode argument is invalid` error
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/chmodTestFile2";
+        let mut statdata = StatData::default();
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert_eq!(cage.stat_syscall(filepath, &mut statdata), 0);
+        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+        //0o7777 is an arbitrary value that does not correspond to any combination of valid mode bits
+        assert_eq!(cage.chmod_syscall(filepath, 0o7777 as u32), -(Errno::EINVAL as i32));
 
         assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
@@ -252,25 +314,38 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = "/fchmodTestFile";
+        //checking if `fchmod_syscall()` works with a valid file descriptor
+        let filepath = "/fchmodTestFile1";
 
         let mut statdata = StatData::default();
 
-        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //checking if the file was successfully created with the specified initial flags
+        //set all mode bits to 0 to change them later
+        let fd = cage.open_syscall(filepath, flags, 0);
         assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+        assert_eq!(statdata.st_mode, S_IFREG as u32);
 
-        assert_eq!(cage.fchmod_syscall(fd, S_IRUSR | S_IRGRP), 0);
-        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRUSR | S_IRGRP | S_IFREG as u32);
-
+        //checking if owner, group owners, and other users read, write, and execute or search
+        //mode bits are correctly set
         assert_eq!(cage.fchmod_syscall(fd, S_IRWXA), 0);
         assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
 
+        //checking if passing an invalid set of mod bits to `fchmod_syscall()`
+        //correctly results in `The value of the mode argument is invalid` error
+        //0o7777 is an arbitrary value that does not correspond to any combination of valid mode 
+        //bits or supported file types
+        assert_eq!(cage.fchmod_syscall(fd, 0o7777 as u32), -(Errno::EINVAL as i32));
+
+        //checking if passing an invalid file descriptor to `fchmod_syscall` correctly
+        //results in `Invalid file descriptor` error.
+        //closing a previously opened file would make its file descriptor unused, and 
+        //thus, invalid as `fchmod_syscall()` fd argument
         assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.fchmod_syscall(fd, S_IRWXA), -(Errno::EBADF as i32));
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
+        lindrustfinalize();        
     }
 
     pub fn ut_lind_fs_dir_chdir() {
