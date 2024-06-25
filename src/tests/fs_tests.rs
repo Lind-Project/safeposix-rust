@@ -885,10 +885,19 @@ pub mod fs_tests {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
-        let path = "/null";
 
-        //now we are going to mknod /dev/null with create, read and write flags and permissions
-        //and then makr sure that it exists
+        //making the node with read only permission (S_IRUSR) and check if it gets created successfully
+        assert_eq!(cage.mknod_syscall("/readOnlyFile", S_IRUSR | S_IFCHR as u32, dev), 0);
+
+        //making the node with write only permission (S_IWUSR) and check if it gets created successfully
+        assert_eq!(cage.mknod_syscall("/writeOnlyFile", S_IWUSR | S_IFCHR as u32, dev), 0);
+
+        //making the node with execute only permission (S_IXUSR) and check if it gets created successfully
+        assert_eq!(cage.mknod_syscall("/executeOnlyFile", S_IXUSR | S_IFCHR as u32, dev), 0);
+
+        //now we are going to mknod /dev/null with read, write, and execute flags and permissions
+        //and then make sure that it exists
+        let path = "/null";
         assert_eq!(cage.mknod_syscall(path, S_IRWXA | S_IFCHR as u32, dev), 0);
         let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
 
