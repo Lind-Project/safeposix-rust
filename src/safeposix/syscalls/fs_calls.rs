@@ -2283,11 +2283,13 @@ impl Cage {
     /// In case of a failure, an error is returned, and `errno` is set depending
     /// on the error, e.g. EACCES, ENOENT, etc.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
     ///
     /// Currently, only one error is supported:
     /// * `EINVAL` - the value of the mode argument is invalid.
     /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
+    ///
+    /// ### Panics
     ///
     /// There are no cases where this helper function panics.
 
@@ -2369,12 +2371,14 @@ impl Cage {
     /// In case of a failure, an error is returned, and `errno` is set depending
     /// on the error, e.g. `EACCES`, `ENOENT`, etc.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
     ///
     /// Currently, only two errors are supposrted:
     /// * `EINVAL` - the value of the mode argument is invalid 
     /// * `ENOENT` - a component of path does not name an existing file
     /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
+    ///
+    /// ### Panics
     ///
     /// There are no cases where this syscall panics.
     ///
@@ -2423,12 +2427,14 @@ impl Cage {
     /// In case of a failure, an error is returned, and `errno` is set 
     /// depending on the error, e.g. `EACCES`, `ENOENT`, etc.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
     ///
     /// * `EBADF` - the file descriptor `fd` is not valid. 
     /// * `EINVAL` - the value of the `mode` argument is invalid or 
     /// mode bits cannot be changed on this file type
     /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
+    ///
+    /// ### Panics
     ///
     /// A panic occurs when a provided file descriptor is out of bounds
     ///
