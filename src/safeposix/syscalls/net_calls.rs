@@ -1,5 +1,12 @@
 //! This module contains all networking-related system calls.
 //! 
+//! ## Notes:
+//! 
+//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
+//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
+//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
+//! 
+//! 
 //! ## Networking System Calls
 //! 
 //! This module contains all networking system calls that are being emulated/faked in Lind.
