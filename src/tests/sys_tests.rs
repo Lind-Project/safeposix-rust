@@ -29,5 +29,44 @@ pub mod test_sys {
         
     } 
 
+    pub fn ut_lind_getuid() {
+        lindrustinit(0);
+        // The first call to geteuid always returns -1
+        assert_eq!(cage.getuid_syscall(),-1);
+        // Subsequent calls return the default value
+        assert_eq!(cage.getuid_syscall(),DEFAULT_UID);
+        lindrustfinalize()
+    }
+
+    pub fn ut_lind_geteuid() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // The first call to geteuid always returns -1
+        assert_eq!(cage.geteuid_syscall(),-1);
+        // Subsequent calls return the default value
+        assert_eq!(cage.geteuid_syscall(),DEFAULT_UID);
+        lindrustfinalize()
+    }
+
+    pub fn ut_lind_getgid() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // The first call to geteuid always returns -1
+        assert_eq!(cage.getgid_syscall(),-1);
+        // Subsequent calls return the default value
+        assert_eq!(cage.getgid_syscall(),DEFAULT_GID);
+        lindrustfinalize()
+    } 
+
+    pub fn ut_lind_getegid() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // The first call to geteuid always returns -1
+        assert_eq!(cage.getegid_syscall(),-1);
+        // Subsequent calls return the default value
+        assert_eq!(cage.getegid_syscall(),DEFAULT_GID);
+        lindrustfinalize()
+    } 
+
 } 
 

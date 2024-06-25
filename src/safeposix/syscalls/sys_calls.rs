@@ -421,7 +421,7 @@ impl Cage {
     /// Depending on whether the gid has been initialized or not this function returns either -1 
     /// or the default gid as a 32 bit integer. 
     pub fn getgid_syscall(&self) -> i32 {
-        // The call returns -1 to indicate that the call happened during the loading stage
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -445,7 +445,7 @@ impl Cage {
     /// 
     /// Returns a 32 bit integer value (or -1) which represents the effective group
     pub fn getegid_syscall(&self) -> i32 {
-        // The call returns -1 to indicate that the call happened during the loading stage
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -471,7 +471,7 @@ impl Cage {
     /// 
     /// Returns a 32 bit default integer (or -1) representing the user
     pub fn getuid_syscall(&self) -> i32 {
-        // The call returns -1 to indicate that the call happened during the loading stage
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -494,7 +494,7 @@ impl Cage {
     /// 
     /// Returns a 32 bit default integer value (or -1) representing the effective user
     pub fn geteuid_syscall(&self) -> i32 {
-        // The call returns -1 to indicate that the call happened during the loading stage
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
