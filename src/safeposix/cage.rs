@@ -23,12 +23,6 @@
 //! System Calls: 
 //! - Cage objects provide public methods for various system calls, categorized into filesystem-related, system-related, or network-related calls. Each system call method returns either a return code or an error code from the errno enum.
 //!
-//! Public Methods: 
-//! - get_next_fd: Retrieves the next available file descriptor number.
-//! - load_lower_handle_stubs: Initializes standard input/output/error descriptors.
-//! - insert_next_pipe: Inserts a given pipe into the pipe table.
-//! 
-//! Note: add_to_fd_table, rm_from_fd_table, and changedir methods are currently unused.
 
 
 #![allow(dead_code)]

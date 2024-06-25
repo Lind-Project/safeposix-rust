@@ -4,7 +4,6 @@
 //!
 //! - Receives system call requests with a cage ID, syscall number, and six arguments.
 //! - Validates cage existence, initializes if necessary, and calls the corresponding method using `match`.
-//! - Protected by a read-write lock for safe concurrent access.
 
 
 #![allow(dead_code)]

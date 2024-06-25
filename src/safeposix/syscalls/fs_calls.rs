@@ -281,12 +281,16 @@ impl Cage {
     /// 
     /// ### Errors
     /// 
-    /// An error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    /// * ENOENT - if given path was null or the parent directory does not exist in the inode table.
+    /// * EPERM - if mode bits were not set.
+    /// * EEXIST - if a directory with the same name already exists at the given path.
+    /// 
+    /// ### Panics
+    /// 
+    /// * If truepath.file_name() returns None or if to_str() fails, causing unwrap() to panic.
+    /// * If the parent inode does not exist in the inode table, causing unwrap() to panic.
+    /// * If the code execution reaches the unreachable!() macro, indicating a logical inconsistency in the program.
     ///
-    /// ### Tests
-    /// 
-    /// All the different scenarios for `mkdir_syscall()` are covered and tested in the `fs_tests.rs` file under `mkdir_syscall_tests` section.
-    /// 
     /// for more detailed description of all the commands and return values, see 
     /// [mkdir(2)](https://man7.org/linux/man-pages/man2/mkdir.2.html)
     ///
@@ -2039,6 +2043,10 @@ impl Cage {
     /// * EBADF - fd is not a valid file descriptor
     /// * EINVAL - doesnt match implementation parameters
     /// 
+    /// ### Panics
+    /// 
+    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
+    /// * Unknown errno value from fcntl returned, will cause panic.
     /// 
     /// for more detailed description of all the commands and return values, see 
     /// [fcntl(2)](https://linux.die.net/man/2/fcntl)

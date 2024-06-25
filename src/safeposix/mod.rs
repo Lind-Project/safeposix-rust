@@ -16,7 +16,7 @@
 //!     - Each cage object has public methods corresponding to each system call. These calls are implemented either as filesystem related calls, system related calls, or network related calls in their respective files.
 //!
 //! - ### FS Metadata: 
-//!     - Our metadata table is similar to how the metadatatable from SafePOSIX-Repy operated. The table is represented by a struct with fields: nextinode, dev_ud, inodetable. The Inode Enum can describe a variety of Inode structs which include: File(generic), CharDev, Socket, Directory.
+//!     - The table is represented by a struct with fields: nextinode, dev_ud, inodetable. The Inode Enum can describe a variety of Inode structs which include: File(generic), CharDev, Socket, Directory.
 //!
 //! - ### Public Methods: 
 //!     - The module provides several public methods for interacting with the file descriptor table and the cage objects. Some of them are get_next_fd, load_lower_handle_stubs, insert_next_pipe. There are also some unused methods like add_to_fd_table, rm_from_fd_table, and changedir.
