@@ -4127,4 +4127,4 @@ impl Cage {
         // If the semaphore was successfully acquired, return 0.
         return 0;
     }
-}
+
