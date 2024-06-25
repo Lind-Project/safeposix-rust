@@ -3769,8 +3769,9 @@ impl Cage {
 ///
 /// ### Returns
 /// * 0 on success.
-/// * `EBADF`: If the semaphore handle is invalid or the semaphore is already initialized.
-/// * `EINVAL`: If the initial value exceeds the maximum allowable value for a semaphore (SEM_VALUE_MAX)
+/// ### Errors and Panics
+/// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is already initialized.
+/// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value for a semaphore (SEM_VALUE_MAX).
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
         if value > SEM_VALUE_MAX {
@@ -3837,8 +3838,8 @@ impl Cage {
 ///
 /// ### Returns
 /// * 0 on success.
-/// * `EINVAL`: If the semaphore handle is invalid.
-
+/// ### Errors and Panics
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
@@ -3869,12 +3870,10 @@ impl Cage {
 ///
 /// ### Returns
 /// * 0 on success.
-/// * `EINVAL`: If the semaphore handle is invalid.
-/// * `EOVERFLOW`: If incrementing the semaphore would exceed the maximum allowable value.
 ///
 /// ### Errors and Panics
-/// * `EINVAL`: If the semaphore handle is invalid.
-/// * `EOVERFLOW`: If incrementing the semaphore would exceed the maximum allowable value.
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * `EOVERFLOW(75)`: If incrementing the semaphore would exceed the maximum allowable value.
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
@@ -3911,10 +3910,9 @@ impl Cage {
 ///
 /// ### Returns
 /// * 0 on success.
-/// * `EINVAL`: If the semaphore handle is invalid.
 ///
 /// ### Errors and Panics
-/// * `EINVAL`: If the semaphore handle is invalid.
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
 
@@ -3975,10 +3973,9 @@ impl Cage {
 ///
 /// ### Returns
 /// * The current value of the semaphore on success.
-/// * `EINVAL`: If the semaphore handle is invalid.
 ///
 /// ### Errors and Panics
-/// * `EINVAL`: If the semaphore handle is invalid.
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether the semaphore exists in the semaphore table.
@@ -4008,11 +4005,11 @@ impl Cage {
 ///
 /// ### Returns
 /// * 0 on success (semaphore acquired).
-/// * `EAGAIN`: If the semaphore is unavailable (its value is 0).
-/// * `EINVAL`: If the semaphore handle is invalid.
+/// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
 ///
 /// ### Errors and Panics
-/// * `EINVAL`: If the semaphore handle is invalid.
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
@@ -4052,11 +4049,11 @@ impl Cage {
 ///
 /// ### Returns
 /// * 0 on success (semaphore acquired).
-/// * `ETIMEDOUT`: If the timeout expires before the semaphore becomes available.
-/// * `EINVAL`: If the semaphore handle is invalid or the timeout value is invalid.
+/// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes available.
+/// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
 ///
 /// ### Errors and Panics
-/// * `EINVAL`: If the semaphore handle is invalid or the timeout value is invalid.
+/// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
     pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
         let abstime = libc::timespec {
             tv_sec: time.as_secs() as i64,
