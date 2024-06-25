@@ -3760,7 +3760,7 @@ impl Cage {
 /// 1. Boundary Check: The function first checks if the initial value is within the allowed range.
 /// 2. Check for Existing Semaphore: The function then checks if a semaphore with the given handle already exists.
 /// 3. Initialize New Semaphore: If the semaphore does not exist, the function creates a new semaphore object and inserts it into the semaphore table.
-/// 4. Add to Shared Memory Attachments (if shared):** If the semaphore is shared between processes, the function adds it to the shared memory attachments of other processes that have already attached to the shared memory segment.
+/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared between processes, the function adds it to the shared memory attachments of other processes that have already attached to the shared memory segment.
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
@@ -3903,7 +3903,7 @@ impl Cage {
 /// This function destroys a semaphore, freeing its associated resources.
 ///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle exists in the semaphore table.
 ///   2. Remove from Semaphore Table: If the semaphore exists, the function removes it from the semaphore table.
-///   3. Remove from Shared Memory Attachments (if shared):** If the semaphore is shared, the function also removes it from the shared memory attachments of other processes.
+///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the function also removes it from the shared memory attachments of other processes.
 ///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
 ///
 /// ### Function Arguments
