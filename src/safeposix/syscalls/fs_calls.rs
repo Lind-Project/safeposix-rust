@@ -3747,12 +3747,30 @@ impl Cage {
         }
     }
 
-    //------------------SEMAPHORE SYSCALLS------------------
-    /*
-     *  Initialize semaphore object SEM to value
-     *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
-     *  or shared between processes (when nonzero)
-     */
+        //##------------------SEMAPHORE SYSCALLS------------------
+/*
+ *  Initialize semaphore object SEM to value
+ *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
+ *  or shared between processes (when nonzero)
+ */
+/// ## `sem_init_syscall`
+///
+/// ### Description
+/// This function initializes a semaphore object, setting its initial value and specifying whether it's shared between threads or processes.
+/// 1. Boundary Check: The function first checks if the initial value is within the allowed range.
+/// 2. Check for Existing Semaphore: The function then checks if a semaphore with the given handle already exists.
+/// 3. Initialize New Semaphore: If the semaphore does not exist, the function creates a new semaphore object and inserts it into the semaphore table.
+/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared between processes, the function adds it to the shared memory attachments of other processes that have already attached to the shared memory segment.
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+/// * `pshared`:  Indicates whether the semaphore is shared between threads (0) or processes (non-zero).
+/// * `value`: The initial value of the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// * `EBADF`: If the semaphore handle is invalid or the semaphore is already initialized.
+/// * `EINVAL`: If the initial value exceeds the maximum allowable value for a semaphore (SEM_VALUE_MAX)
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
         if value > SEM_VALUE_MAX {
@@ -3762,15 +3780,18 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let is_shared = pshared != 0;
 
-        // Iterate semaphore table, if semaphore is already initialzed return error
+        // Iterate semaphore table, if semaphore is already initialized return error
         let semtable = &self.sem_table;
 
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
+            // Create a new semaphore object.
             let new_semaphore =
                 interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
+            // Insert the new semaphore into the semaphore table.
             semtable.insert(sem_handle, new_semaphore.clone());
 
+            // If the semaphore is shared, add it to the shared memory attachments of other processes.
             if is_shared {
                 let rev_shm = self.rev_shm.lock();
                 // if its shared and exists in an existing mapping we need to add it to other cages
@@ -3778,44 +3799,92 @@ impl Cage {
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
                     let offset = mapaddr - sem_handle;
+                    // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
+                            // iterate through all cages containing segment
                             let cage = interface::cagetable_getref(*cageid);
+                            // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            // Iterate through all addresses and add the semaphore to the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.insert(addr + offset, new_semaphore.clone());
                             }
                         }
+                        // Add the offset to the semaphore offsets list.
                         segment.semaphor_offsets.insert(offset);
                     }
                 }
             }
             return 0;
         }
-
+        // Return an error indicating that the semaphore is already initialized.
         return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
     }
+
+/// ## `sem_wait_syscall`
+///
+/// ### Description
+///  1. Check for Semaphore Existence:The function first checks if the provided semaphore handle exists in the semaphore table.
+///  2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire it using `lock`. This operation will block the calling process until the semaphore becomes available.
+///  3. Error Handling:If the semaphore handle is invalid, the function returns an error
+/// This function allows a process to wait for a semaphore to become available. If the semaphore is
+/// currently available (its value is greater than 0), the function will acquire the semaphore and return 0.
+/// If the semaphore is unavailable (its value is 0), the function will block the calling process until the semaphore becomes available.
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// * `EINVAL`: If the semaphore handle is invalid.
 
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Acquire the semaphore. This operation will block the calling process until the semaphore becomes available.
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
 
+/// ## `sem_post_syscall`
+///
+/// ### Description
+/// This function increments the value of a semaphore.
+///   1. Check for Semaphore Existence:The function first checks if the provided semaphore handle exists in the semaphore table.
+///   2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
+///   3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore would exceed the maximum value, the function returns an appropriate error code.
+/// 
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// * `EINVAL`: If the semaphore handle is invalid.
+/// * `EOVERFLOW`: If incrementing the semaphore would exceed the maximum allowable value.
+///
+/// ### Errors and Panics
+/// * `EINVAL`: If the semaphore handle is invalid.
+/// * `EOVERFLOW`: If incrementing the semaphore would exceed the maximum allowable value.
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
+        // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Increment the semaphore value.
             if !semaphore.unlock() {
+                // Return an error indicating that the maximum allowable value for a semaphore would be exceeded.
                 return syscall_error(
                     Errno::EOVERFLOW,
                     "sem_post",
@@ -3828,12 +3897,31 @@ impl Cage {
         return 0;
     }
 
+/// ## `sem_destroy_syscall`
+///
+/// ### Description
+/// This function destroys a semaphore, freeing its associated resources.
+///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle exists in the semaphore table.
+///   2. Remove from Semaphore Table: If the semaphore exists, the function removes it from the semaphore table.
+///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the function also removes it from the shared memory attachments of other processes.
+///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// * `EINVAL`: If the semaphore handle is invalid.
+///
+/// ### Errors and Panics
+/// * `EINVAL`: If the semaphore handle is invalid.
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
 
         let semtable = &self.sem_table;
         // remove entry from semaphore table
         if let Some(sementry) = semtable.remove(&sem_handle) {
+            // If the semaphore is shared, remove it from other process attachments.
             if sementry
                 .1
                 .is_shared
@@ -3841,16 +3929,21 @@ impl Cage {
             {
                 // if its shared we'll need to remove it from other attachments
                 let rev_shm = self.rev_shm.lock();
+                // Search for the semaphore address in the shared memory region.
                 if let Some((mapaddr, shmid)) =
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
                     // find all segments that contain semaphore
                     let offset = mapaddr - sem_handle;
+                    // Iterate through all segments containing the semaphore.
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        // Iterate through all cages containing the segment.
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages containing segment
+                            // Get a reference to the cagetable for the current cage.
                             let cage = interface::cagetable_getref(*cageid);
+                            // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            // Iterate through all addresses and remove the semaphore from the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
                             }
@@ -3858,6 +3951,7 @@ impl Cage {
                     }
                 }
             }
+            // Return 0 to indicate successful semaphore destruction.
             return 0;
         } else {
             return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
@@ -3867,9 +3961,29 @@ impl Cage {
     /*
      * Take only sem_t *sem as argument, and return int *sval
      */
+
+/// ## `sem_getvalue_syscall`
+///
+/// ### Description
+/// This function implements the `sem_getvalue` system call, which retrieves the current value of a semaphore.
+///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle exists in the semaphore table.
+///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves its current value and returns it.
+///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * The current value of the semaphore on success.
+/// * `EINVAL`: If the semaphore handle is invalid.
+///
+/// ### Errors and Panics
+/// * `EINVAL`: If the semaphore handle is invalid.
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
+        // Check whether the semaphore exists in the semaphore table.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
             return semaphore.get_value();
@@ -3881,13 +3995,35 @@ impl Cage {
         );
     }
 
+/// ## `sem_trywait_syscall`
+///
+/// ### Description
+/// This function implements the `sem_trywait` system call, which attempts to acquire a semaphore without blocking.
+///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle is valid.
+///   2. Attempt to Acquire: If the semaphore exists, the function attempts to acquire it using `trylock`.
+///   3. Error Handling: If the semaphore is unavailable or the handle is invalid, the function returns an appropriate error code.
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success (semaphore acquired).
+/// * `EAGAIN`: If the semaphore is unavailable (its value is 0).
+/// * `EINVAL`: If the semaphore handle is invalid.
+///
+/// ### Errors and Panics
+/// * `EINVAL`: If the semaphore handle is invalid.
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Attempt to acquire the semaphore without blocking.
+            // If the semaphore is currently unavailable (value is 0), this operation will fail.
             if !semaphore.trylock() {
+                // Return an error indicating that the operation could not be performed without blocking.
                 return syscall_error(
                     Errno::EAGAIN,
                     "sem_trywait",
@@ -3897,9 +4033,30 @@ impl Cage {
         } else {
             return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
-
+    
+/// ## `sem_timedwait_syscall`
+///
+/// ### Description
+/// This function implements the `sem_timedwait` system call, which attempts to acquire a semaphore with a timeout.
+///   1. Convert Timeout to Timespec: The function first converts the provided timeout duration into a `timespec` structure, which is used by the underlying `timedlock` function.
+///   2. Check for Semaphore Existence: The function then checks if the provided semaphore handle exists in the semaphore table.
+///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts to acquire it using `timedlock`, which will block for the specified duration.
+///   4. Error Handling: If the semaphore is unavailable, the timeout expires, or the handle is invalid, the function returns an appropriate error code.
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+/// * `time`: The maximum time to wait for the semaphore to become available, expressed as a `RustDuration`.
+///
+/// ### Returns
+/// * 0 on success (semaphore acquired).
+/// * `ETIMEDOUT`: If the timeout expires before the semaphore becomes available.
+/// * `EINVAL`: If the semaphore handle is invalid or the timeout value is invalid.
+///
+/// ### Errors and Panics
+/// * `EINVAL`: If the semaphore handle is invalid or the timeout value is invalid.
     pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
         let abstime = libc::timespec {
             tv_sec: time.as_secs() as i64,
@@ -3911,9 +4068,12 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Attempt to acquire the semaphore with a timeout.
             if !semaphore.timedlock(time) {
+                // Return an error indicating that the call timed out before the semaphore could be locked.
                 return syscall_error(
                     Errno::ETIMEDOUT,
                     "sem_timedwait",
@@ -3927,6 +4087,7 @@ impl Cage {
                 "sem is not a valid semaphore",
             );
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
 }
