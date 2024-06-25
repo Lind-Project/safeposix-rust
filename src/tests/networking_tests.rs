@@ -12,6 +12,7 @@ pub mod net_tests {
         ut_lind_net_bind_multiple();
         ut_lind_net_bind_on_zero();
         ut_lind_net_connect_basic_udp();
+        // ut_lind_net_connect_basic_udp_ipv6(); 
         ut_lind_net_getpeername();
         ut_lind_net_getsockname();
         ut_lind_net_listen();
@@ -538,6 +539,43 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
+    //Test connect sys call using AF_INET6/IPv6 address family and UDP socket type
+    //Currently, failing
+    pub fn ut_lind_net_connect_basic_udp_ipv6() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+
+        //Initialize initial socket fd and remote socket to connect to
+        let sockfd = cage.socket_syscall(AF_INET6, SOCK_DGRAM, 0);
+        let port: u16 = generate_random_port();
+        let mut socket = interface::GenSockaddr::V6(interface::SockaddrV6 {
+            sin6_family: AF_INET6 as u16,
+            sin6_port: port.to_be(),
+            sin6_addr: interface::V6Addr {
+                s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]},
+            sin6_flowinfo: 0,
+            sin6_scope_id: 0,
+        }); //::1 LOCALHOST
+        assert_eq!(cage.connect_syscall(sockfd, &socket), 0);
+
+        //Change the port and retarget the socket
+        let port: u16 = generate_random_port();
+        socket = interface::GenSockaddr::V6(interface::SockaddrV6 {
+            sin6_family: AF_INET6 as u16,
+            sin6_port: port.to_be(),
+            sin6_addr: interface::V6Addr {
+                s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]},
+            sin6_flowinfo: 0,
+            sin6_scope_id: 0,
+        }); //::1 LOCALHOST
+        assert_eq!(cage.connect_syscall(sockfd, &socket), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+
+    }
+
 
     pub fn ut_lind_net_getpeername() {
         lindrustinit(0);
