@@ -402,7 +402,7 @@ impl Cage {
     /// The newly created file is empty with size 0.
     /// On successful completion, the timestamps for both the newly created file
     /// and its parent are updated along with their linkcounts.
-    /// 
+    ///
     /// ### Function Arguments
     ///
     /// The `mknod_syscall()` receives three arguments:
@@ -426,7 +426,7 @@ impl Cage {
     /// Since "CharDev" is the only supported type, 'dev' is represented using
     /// makedev() function; that returns a formatted device number   
     /// For example: "makedev(&DevNo { major: majorId, minor: minorId })" accepts a
-    /// Device Number that consists of a MajorID, identifying the class of the device, 
+    /// Device Number that consists of a MajorID, identifying the class of the device,
     /// and a minor ID, identifying a specific instance of a device in that class.
     ///
     /// ### Returns
@@ -442,14 +442,22 @@ impl Cage {
     /// * `EINVAL` - when any other file type (regular, socket, block, fifo) instead
     /// of character file type is passed
     /// * `EEXIST` - when the file to be created already exists
-    /// 
-    /// For more detailed description of all the commands and return values, see 
+    ///
+    /// ### Panics
+    ///
+    /// We don't have panics for mknod_syscall() as of now.
+    ///
+    /// For more detailed description of all the commands and return values, see
     /// [mknod(2)](https://man7.org/linux/man-pages/man2/mknod.2.html)
     ///
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
         // Return an error if the provided path is empty
         if path.len() == 0 {
-            return syscall_error(Errno::ENOENT, "mknod", "given path was null");
+            return syscall_error(
+                Errno::ENOENT, 
+                "mknod", 
+                "given path was null"
+            );
         }
         // Retrieve the absolute path from the root directory. The absolute path is
         // then used to validate directory paths while navigating through
@@ -457,7 +465,7 @@ impl Cage {
         let truepath = normpath(convpath(path), self);
 
         // Store the FileMetadata into a helper variable which is used for fetching
-        // the metadata of a given inode from the Inode Table. 
+        // the metadata of a given inode from the Inode Table.
         let metadata = &FS_METADATA;
 
         // Walk through the absolute path which returns a tuple consisting of inode
@@ -466,7 +474,7 @@ impl Cage {
             // Case: When the file doesn't exist but the parent directory exists
             (None, Some(pardirinode)) => {
                 // for now we assume this is sane, but maybe this should be checked later
-                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); 
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string();
 
                 // S_FILETYPEFLAGS represents a bitmask that can be used to extract
                 // the file type information from a file's mode.
@@ -475,13 +483,18 @@ impl Cage {
                 // that only valid file permission bits (S_IRWXA) and file type bits
                 // (S_FILETYPEFLAGS) are set. Else, we return the error.
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
-                    return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
+                    return syscall_error(
+                        Errno::EPERM, 
+                        "mknod", 
+                        "Mode bits were not sane"
+                    );
                 }
 
-                // As of now, the only file type in LIND supported by mknod syscall
-                // is "Char Device".
-                // In order to check for Char file type, a bitwise-AND operation is
-                // performed with the "mode".
+                // As of now, the only file type in LIND supported by mknod_syscall
+                // is "Char Device" represented by S_IFCHR flag.
+                // In order to check for Char file type, a bitwise-AND operation for
+                // S_IFCHR flag is performed with the "mode" bits and an error is returned
+                // when the result is 0 denoting the support for only character files.
                 if mode as i32 & S_IFCHR == 0 {
                     return syscall_error(
                         Errno::EINVAL,
@@ -507,7 +520,7 @@ impl Cage {
                 // fetch_add returns the previous value, which is the inode number we want
                 let newinodenum = FS_METADATA
                     .nextinode
-                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed); 
+                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed);
 
                 // Insert a reference to the file in the parent directory and update
                 // the inode attributes.
@@ -522,7 +535,7 @@ impl Cage {
                     parentdir.linkcount += 1;
                     // Update the ctime and mtime for the parent directory as well
                     // since the new file is linked with it.
-                    parentdir.ctime = time; 
+                    parentdir.ctime = time;
                     parentdir.mtime = time;
                 }
 
