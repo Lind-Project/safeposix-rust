@@ -370,24 +370,82 @@ impl Cage {
         status
     }
 
+
+    /// ### Description
+    ///  
+    /// The `getpid_syscall()` system call returns the id of the calling process. The uid is 
+    /// guaranteed to be unique and can be used for naming temporary files. 
+    /// The call is always successful.
+    /// 
+    /// ### Arguments
+    /// 
+    /// This system call does not take any arguments.
+    /// 
+    /// ### Returns
+    /// 
+    /// Returns the 32 bit integer uid of the calling Cage object
     pub fn getpid_syscall(&self) -> i32 {
-        self.cageid as i32 //not sure if this is quite what we want but it's easy enough to change later
-    }
+        self.cageid as i32 
+    } 
+
+    /// ### Description 
+    /// 
+    /// The `getppid_syscall()` returns the id of the parent process of the calling process. 
+    /// The uid is guaranteed to be unique, and like the getpid call, this call is also always successful.  
+    /// This call is always successfull
+    /// 
+    /// ### Arguments
+    /// The getppid syscall does not take any arguments
+    /// 
+    /// ### Returns
+    /// Returns a 32 bit integer value that represents the unique id of the parent process. 
     pub fn getppid_syscall(&self) -> i32 {
         self.parent as i32 // mimicing the call above -- easy to change later if necessary
     }
 
-    /*if its negative 1
-    return -1, but also set the values in the cage struct to the DEFAULTs for future calls*/
+
+    /// ### Description 
+    /// 
+    /// This function returns the real group id of the calling process. The real group id is specified at 
+    /// login time. The group id is the group of the user who invoked the program. 
+    /// Lind is only run in one group - and hence a default value is expected from this function.  
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// gid to be the default value.
+    /// 
+    /// ### Arguments 
+    /// 
+    /// The `getgid_syscall` does not take any argument.
+    ///
+    /// ### Returns
+    /// 
+    /// Depending on whether the gid has been initialized or not this function returns either -1 
+    /// or the default gid as a 32 bit integer. 
     pub fn getgid_syscall(&self) -> i32 {
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
-    }
+    } 
+
+    /// ### Description 
+    /// 
+    /// The `getegid_syscall` returns the effective group id of the user who invoked the process.
+    /// Since Lind is only run in one group a default value (or -1) is returned. 
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// egid to be the default value.
+    /// 
+    /// ### Arguments 
+    /// 
+    /// This syscall does not take any arguments
+    /// 
+    /// ### Returns
+    /// 
+    /// Returns a 32 bit integer value (or -1) which represents the effective group
     pub fn getegid_syscall(&self) -> i32 {
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -395,8 +453,25 @@ impl Cage {
         }
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
+ 
 
+    /// ### Description
+    /// 
+    /// The `getuid_syscall` returns the real user id of the calling process. 
+    /// The real user id is the user who invoked the calling process. 
+    /// As Lind only allows one user, a default value is returned. 
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// uid to be the default value.
+    /// 
+    /// ### Arguments
+    ///  
+    /// The `getuid_syscall` does not take any arguments
+    /// 
+    /// ### Returns
+    /// 
+    /// Returns a 32 bit default integer (or -1) representing the user
     pub fn getuid_syscall(&self) -> i32 {
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
@@ -404,7 +479,22 @@ impl Cage {
         }
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
+
+    /// ### Description 
+    /// 
+    /// The `geteuid_syscall` returns the effective user id of the calling process. 
+    /// As Lind only allows one user, a default value (or -1) is returned. 
+    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the 
+    /// euid to be the default value.
+    /// 
+    /// ### Function Arguments 
+    /// The geteuid syscall does not take any arguments
+    /// 
+    /// ### Returns
+    /// 
+    /// Returns a 32 bit default integer value (or -1) representing the effective user
     pub fn geteuid_syscall(&self) -> i32 {
+        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
