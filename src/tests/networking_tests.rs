@@ -1262,7 +1262,7 @@ pub mod net_tests {
         let barrier = Arc::new(Barrier::new(2));
         let barrier_clone = barrier.clone();
 
-        let receiver = std::thread::helper_thread(move || {
+        let receiver = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
 
             // receiver end: close writefd, dup readfd
