@@ -1,10 +1,9 @@
 //! The dispatcher function handles system call requests, validates cage existence, and ensures safe concurrent access with a lock.
-//! 
+//!
 //!  ## Dispatcher Function
 //!
 //! - Receives system call requests with a cage ID, syscall number, and six arguments.
 //! - Validates cage existence, initializes if necessary, and calls the corresponding method using `match`.
-
 
 #![allow(dead_code)]
 #![allow(unused_variables)]

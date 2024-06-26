@@ -1,15 +1,14 @@
-
 //! This module handles the `Cage` struct which represents an isolated execution context. manages isolated environments with IDs, directories, and file descriptors, handling filesystem, system, and network calls.
-//! 
+//!
 //!  ## Cage Objects
-//! 
+//!
 //! Cage objects represent isolated execution contexts and contain the following components:
 //!
 //! - Cage ID: An integer uniquely identifying the cage.
 //! - Current Working Directory: A string representing the current working directory of the cage.
 //! - Parent ID: An integer representing the ID of the parent cage.
 //! - File Descriptor Table: A locked hash map mapping integers to descriptor enums.
-//! 
+//!
 //! File Descriptor Table:
 //! The file descriptor table maps file descriptor integers to their respective representations. These descriptors are implemented as an enum with the following types:
 //! - File
@@ -17,13 +16,12 @@
 //! - Socket
 //! - Pipe
 //! - Epoll
-//! 
+//!
 //! Each descriptor type is a struct with specific fields, detailed in cage.rs.
 //!
-//! System Calls: 
+//! System Calls:
 //! - Cage objects provide public methods for various system calls, categorized into filesystem-related, system-related, or network-related calls. Each system call method returns either a return code or an error code from the errno enum.
 //!
-
 
 #![allow(dead_code)]
 use crate::interface;
@@ -92,7 +90,6 @@ pub struct EpollDesc {
 }
 
 pub type FdTable = Vec<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>>;
-
 
 #[derive(Debug)]
 pub struct Cage {

@@ -1,16 +1,16 @@
 //! This module contains all networking-related system calls.
-//! 
+//!
 //! ## Notes:
-//! 
+//!
 //! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
 //! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
 //! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
-//! 
-//! 
+//!
+//!
 //! ## Networking System Calls
-//! 
+//!
 //! This module contains all networking system calls that are being emulated/faked in Lind.
-//! 
+//!
 //! - [socket_syscall](crate::safeposix::cage::Cage::socket_syscall)
 //! - [force_innersocket](crate::safeposix::cage::Cage::force_innersocket)
 //! - [bind_syscall](crate::safeposix::cage::Cage::bind_syscall)
@@ -40,7 +40,6 @@
 //! - [epoll_wait_syscall](crate::safeposix::cage::Cage::epoll_wait_syscall)
 //! - [socketpair_syscall](crate::safeposix::cage::Cage::socketpair_syscall)
 //! - [getifaddrs_syscall](crate::safeposix::cage::Cage::getifaddrs_syscall)
-
 
 #![allow(dead_code)]
 // Network related system calls
@@ -89,7 +88,7 @@ impl Cage {
     }
 
     //Find an available file descriptor index in the File Descriptor Table
-    //If available, insert the socket fd into the File Descriptor Table at the 
+    //If available, insert the socket fd into the File Descriptor Table at the
     //available index
     fn _socket_inserter(&self, sockfd: FileDescriptor) -> i32 {
         let (fd, guardopt) = self.get_next_fd(None);
@@ -100,13 +99,13 @@ impl Cage {
         }
         let fdoption = &mut *guardopt.unwrap();
         //Insert the sockfd into the FileDescriptor option inside the fd table
-        let _insertval = fdoption.insert(sockfd); 
+        let _insertval = fdoption.insert(sockfd);
         return fd;
     }
 
-    //An implicit bind refers to the automatic binding of a socket to an address 
+    //An implicit bind refers to the automatic binding of a socket to an address
     //and port by the system, without an explicit call to the bind() function by the
-    //programmer. This typically happens when the socket is used for client-side 
+    //programmer. This typically happens when the socket is used for client-side
     //operations, such as when it initiates a connection to a server.
     fn _implicit_bind(&self, sockhandle: &mut SocketHandle, domain: i32) -> i32 {
         if sockhandle.localaddr.is_none() {
@@ -115,10 +114,10 @@ impl Cage {
                 sockhandle,
                 domain,
                 //The SO_RESUEPORT bit placement within the protocol int encodes rebind ability
-                //The rebind ability of a socket refers to whether a socket can be 
-                //re-bound to an address and port that it was previously bound to, 
-                //especially after it has been closed or if the binding has been reset. 
-                //To learn more about the importance of SO_REUSEPORT, check out https://lwn.net/Articles/542629/ 
+                //The rebind ability of a socket refers to whether a socket can be
+                //re-bound to an address and port that it was previously bound to,
+                //especially after it has been closed or if the binding has been reset.
+                //To learn more about the importance of SO_REUSEPORT, check out https://lwn.net/Articles/542629/
                 sockhandle.protocol & (1 << SO_REUSEPORT) != 0,
             ) {
                 Ok(a) => a,
@@ -269,29 +268,29 @@ impl Cage {
         };
     }
 
-    //TODO: bind_syscall can be merged with bind_inner to be one function as this is a remnant 
+    //TODO: bind_syscall can be merged with bind_inner to be one function as this is a remnant
     //from a previous refactor
 
     /// ### Description
-    /// 
+    ///
     /// `bind_syscall` - when a socket is created with socket_syscall, it exists in a name
     ///  space (address family) but has no address assigned to it. bind_syscall
     ///  assigns the address specified by localaddr to the socket referred to
-    ///  by the file descriptor fd. 
-    /// 
+    ///  by the file descriptor fd.
+    ///
     /// ### Arguments
-    /// 
-    /// it accepts two parameters: 
+    ///
+    /// it accepts two parameters:
     /// * `fd` - an open file descriptor
     /// * `localaddr` - the address to bind to the socket referred to by fd
-    /// 
+    ///
     /// ### Returns
-    /// 
+    ///
     /// On success, zero is returned.  On error, -errno is returned, and
     /// errno is set to indicate the error.
-    /// 
+    ///
     /// ### Errors
-    /// 
+    ///
     /// * EACCES - The address is protected, and the user is not the
     ///            superuser.
     /// * EADDRINUSE - The given address is already in use.
@@ -323,7 +322,7 @@ impl Cage {
     /// * ENOMEM - Insufficient kernel memory was available.
     /// * ENOTDIR - A component of the path prefix is not a directory.
     /// * EROFS - The socket inode would reside on a read-only filesystem.
-    /// 
+    ///
     // ** should this comment be left ?? : we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
@@ -361,7 +360,7 @@ impl Cage {
 
         let mut newsockaddr = localaddr.clone();
 
-        //Bind socket based on domain type 
+        //Bind socket based on domain type
         //The rules used in name binding vary between address families.
         //To learn more, read under the description section at https://man7.org/linux/man-pages/man2/bind.2.html
         let res = match sockhandle.domain {
@@ -395,7 +394,7 @@ impl Cage {
         //true path is normalized path of the path to a unix socket
         let truepath = normpath(convpath(path), self);
 
-        //returns tuple consisting of inode number of file (if it exists), and 
+        //returns tuple consisting of inode number of file (if it exists), and
         //inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
             //If neither the file nor parent exists
@@ -410,10 +409,10 @@ impl Cage {
                 //FS_METADATA contains information about the file system
                 let newinodenum = FS_METADATA
                     .nextinode
-                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed); 
-                    //fetch_add returns the previous value, which is the inode number we want, while incrementing the nextinode value as well
-                    //The ordering argument Relaxed guarantees the memory location is atomic, which is all that is neccessary for a counter
-                    //Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
+                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed);
+                //fetch_add returns the previous value, which is the inode number we want, while incrementing the nextinode value as well
+                //The ordering argument Relaxed guarantees the memory location is atomic, which is all that is neccessary for a counter
+                //Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
 
                 let newinode;
 
@@ -427,7 +426,7 @@ impl Cage {
                     let effective_mode = S_IFSOCK as u32 | mode;
 
                     let time = interface::timestamp(); //We do a real timestamp now
-                    //Create a new inode for the file of the socket
+                                                       //Create a new inode for the file of the socket
                     newinode = Inode::Socket(SocketInode {
                         size: 0,
                         uid: DEFAULT_UID,
@@ -473,7 +472,7 @@ impl Cage {
                 //file system inode table
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
             }
-            //File already exists, meaning the given address argument to the bind_syscall 
+            //File already exists, meaning the given address argument to the bind_syscall
             //is not available for the socket
             (Some(_inodenum), ..) => {
                 return syscall_error(Errno::EADDRINUSE, "bind", "Address already in use");
@@ -492,7 +491,7 @@ impl Cage {
         prereserved: bool,
     ) -> i32 {
         //INET Sockets
-        //rebind ability is set to true if the SO_REUSEPORT bit is set in 
+        //rebind ability is set to true if the SO_REUSEPORT bit is set in
         //the socket handle options
         let intent_to_rebind = sockhandle.socket_options & (1 << SO_REUSEPORT) != 0;
         //Create a socket and insert it into the innersocket in sockhandle
@@ -511,19 +510,19 @@ impl Cage {
                 sockhandle.domain,
                 intent_to_rebind,
             );
-            
+
             match localout {
                 Err(errnum) => return errnum,
                 Ok(local_port) => local_port,
             }
         };
 
-        //Set the port of the socket address 
+        //Set the port of the socket address
         newsockaddr.set_port(newlocalport);
         //Bind the address to the socket handle
         let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&newsockaddr);
 
-        //If an error occurs during binding, 
+        //If an error occurs during binding,
         if bindret < 0 {
             match Errno::from_discriminant(interface::get_errno()) {
                 Ok(i) => {
@@ -540,7 +539,7 @@ impl Cage {
     //Checks if fd refers to a valid socket file descriptor
     //fd: the file descriptor associated with the socket
     //localaddr: reference to the GenSockaddr enum that hold the address
-    //prereserved: bool that describes whether the address and port have 
+    //prereserved: bool that describes whether the address and port have
     //             been set aside or designated for specific purposes
     pub fn bind_inner(
         &self,
