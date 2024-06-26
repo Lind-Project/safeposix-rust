@@ -4196,6 +4196,15 @@ impl Cage {
                     // find all segments that contain semaphore
                     let offset = mapaddr - sem_handle;
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        // Check if any cages are blocked on the semaphore.
+                        if segment.attached_cages.len() > 0 {
+                            // If any cages are blocked, return an error.
+                            return syscall_error(
+                                Errno::EBUSY,
+                                "sem_destroy",
+                                "Semaphore is currently in use by other processes",
+                            );
+                        }
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
                             // iterate through all cages containing segment
                             let cage = interface::cagetable_getref(*cageid);
@@ -4212,7 +4221,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
         }
     }
-
+    
     /*
      * Take only sem_t *sem as argument, and return int *sval
      */
