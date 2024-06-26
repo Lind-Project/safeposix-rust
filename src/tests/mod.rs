@@ -110,8 +110,7 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
 // The RustPOSIX test suite avoids conflicts caused by repeatedly binding to the same ports by generating a random port number within the valid range (49152-65535) for each test run. This eliminates the need for waiting between tests.
 
 fn is_port_available(port: u16) -> bool {
-    TcpListener::bind(("127.0.0.1", port)).is_ok() &&
-    UdpSocket::bind(("127.0.0.1", port)).is_ok()
+    TcpListener::bind(("127.0.0.1", port)).is_ok() && UdpSocket::bind(("127.0.0.1", port)).is_ok()
 }
 
 pub fn generate_random_port() -> u16 {

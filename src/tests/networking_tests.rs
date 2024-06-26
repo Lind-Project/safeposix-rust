@@ -861,7 +861,6 @@ pub mod net_tests {
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-
         //making sure that the assigned fd's are valid
         assert!(serversockfd > 0);
         assert!(clientsockfd > 0);
@@ -1693,7 +1692,8 @@ pub mod net_tests {
                 }
                 //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
                 if sock == serversockfd {
-                    let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                    let mut sockgarbage =
+                        interface::GenSockaddr::V4(interface::SockaddrV4::default());
                     let sockfd = cage.accept_syscall(sock as i32, &mut sockgarbage);
                     assert!(sockfd > 0);
                     // new connection is estalished, add it to readfds and writefds
@@ -2847,7 +2847,6 @@ pub mod net_tests {
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-
 
         //making sure that the assigned fd's are valid
         assert!(serversockfd > 0);
