@@ -1797,7 +1797,7 @@ impl Cage {
 /// This helper function performs the actual file descriptor duplication process for both `dup` and `dup2` system calls.
 /// It handles the allocation of a new file descriptor, updates the file descriptor table, and increments the reference count of the 
 /// associated file object.
-/// * Duplication from `dup2_syscall`: If `fromdup2` is true, the function first closes the existing file descriptor 
+/// * Duplication from `dup2_syscall`: If `j` is true, the function first closes the existing file descriptor 
 ///   at `newfd` (if any) before allocating a new file descriptor and updating the file descriptor table. 
 /// * Duplication from `dup_syscall`: If `fromdup2` is false, the function allocates a new file descriptor, finds the 
 ///   first available file descriptor number starting from `newfd`, and updates the file descriptor table.
@@ -3854,7 +3854,7 @@ impl Cage {
 /// 5. The function ensures thread safety by using a unique semaphore handle and checking for existing entries in the semaphore table 
 /// before attempting to create a new one.  The code also avoids inserting a semaphore into the same cage twice during the shared 
 /// memory attachment process by excluding the initial cage from the iteration loop.
-///(https://man7.org/linux/man-pages/man3/sem_init.3.html)
+///[sem_init(3)](https://man7.org/linux/man-pages/man3/sem_init.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 /// * `pshared`:  Indicates whether the semaphore is shared between 
@@ -3930,7 +3930,7 @@ impl Cage {
 /// currently available (its value is greater than 0), the function will acquire the semaphore and return 0.
 /// 5. If the semaphore is unavailable (its value is 0), the function will block the 
 /// calling process until the semaphore becomes available(its value becomes 1).
-///(https://man7.org/linux/man-pages/man3/sem_wait.3.html)
+///[sem_wait(3)](https://man7.org/linux/man-pages/man3/sem_wait.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
@@ -4008,7 +4008,7 @@ impl Cage {
 ///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the 
 /// function also removes it from the shared memory attachments of other processes.
 ///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///(https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
+///[sem_destroy(3)](https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
@@ -4074,7 +4074,7 @@ impl Cage {
 ///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves
 ///  its current value and returns it.
 ///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///(https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
+///[sem_getvalue(3)](https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
@@ -4111,7 +4111,7 @@ impl Cage {
 ///  to acquire it using `trylock`.
 ///   3. Error Handling: If the semaphore is unavailable or the handle is invalid,
 ///  the function returns an appropriate error code.
-///(https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
+///[sem_trywait(3)](https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
@@ -4159,7 +4159,7 @@ impl Cage {
 /// to acquire it using `timedlock`, which will block for the specified duration.
 ///   4. Error Handling: If the semaphore is unavailable, the timeout expires, 
 /// or the handle is invalid, the function returns an appropriate error code.
-///(https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
+///[sem_timedwait(3)](https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 /// * `time`: The maximum time to wait for the semaphore to become available, expressed as a `RustDuration`.
