@@ -2080,7 +2080,7 @@ impl Cage {
     /// The `select_syscall()` allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready"
     /// for some class of I/O operation (e.g., input possible).  A file descriptor is considered ready if it is possible to perform a
     /// corresponding I/O operation (e.g., `read_syscall()`) without blocking.
-    
+
     /// ### Function Arguments
     /// The `select_syscall()` receives five arguments:
     /// * `nfds` - This argument should be set to the highest-numbered file descriptor in any of the three sets, plus 1.  The
@@ -2305,7 +2305,7 @@ impl Cage {
                         }
                     }
 
-                    //we don't support selecting streams
+                    // we don't support selecting streams
                     Stream(_) => {
                         continue;
                     }
@@ -2318,7 +2318,7 @@ impl Cage {
                         }
                     }
 
-                    //these file reads never block
+                    // these file reads never block
                     _ => {
                         new_readfds.set(fd);
                         *retval += 1;
@@ -2342,8 +2342,8 @@ impl Cage {
         return 0;
     }
 
-    // This function is used to select on writefds specifically
-    // It monitors every writefds to check if it is ready to write
+    /// This function is used to select on writefds specifically
+    /// It monitors every writefds to check if it is ready to write
     fn select_writefds(
         &self,
         nfds: i32,
@@ -2377,7 +2377,7 @@ impl Cage {
 
                                     // BUG: current implementation of AF_UNIX socket nonblocking connection
                                     // is not working correctly, according to standards, when the connection
-                                    // is ready, select should report writability, but current implementation
+                                    // is ready, select should report for writability, but current implementation
                                     // does not make much sense
                                     let remotepathbuf =
                                         convpath(sockhandle.remoteaddr.unwrap().path());
@@ -2421,7 +2421,7 @@ impl Cage {
                         *retval += 1;
                     }
 
-                    //we always say streams are writable?
+                    // we always say streams are writable?
                     Stream(_) => {
                         new_writefds.set(fd);
                         *retval += 1;
@@ -2435,7 +2435,7 @@ impl Cage {
                         }
                     }
 
-                    //these file writes never block
+                    // these file writes never block
                     _ => {
                         new_writefds.set(fd);
                         *retval += 1;
