@@ -1975,8 +1975,8 @@ impl Cage {
         return retval;
     }
 
-    // This function is used to select on readfds specifically
-    // It monitors every readfds to check if it is ready to read
+    /// This function is used to select on readfds specifically
+    /// It monitors every readfds to check if it is ready to read
     fn select_readfds(
         &self,
         nfds: i32,
@@ -1988,12 +1988,14 @@ impl Cage {
         let mut inet_info = SelectInetInfo::new();
 
         for fd in 0..nfds {
-            // check if current i is in readfd
+            // ignore file descriptors that is not in the set
             if !readfds.is_set(fd) {
                 continue;
             }
 
-            // get the FileDescriptor Object from fd
+            // try to get the FileDescriptor Object from fd number
+            // if the fd exists, do further process based on the file descriptor type
+            // otherwise, raise an error
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
@@ -2002,11 +2004,19 @@ impl Cage {
                         let mut newconnection = false;
                         match sockfdobj.domain {
                             AF_UNIX => {
+                                // acquire the read access of the sockethandle
                                 let sock_tmp = sockfdobj.handle.clone();
                                 let sockhandle = sock_tmp.read();
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    // if connection state is INPROGRESS
-                                    // then check if the new connection
+                                    // if connection state is INPROGRESS, in case of AF_UNIX socket,
+                                    // that would mean the socket connects in nonblocking mode
+
+                                    // BUG: current implementation of AF_UNIX socket nonblocking connection
+                                    // is not working correctly, according to standards, when the connection
+                                    // is ready, select should report writability instead of readability
+                                    // so the code here should be removed. Interestingly, since connect_tcp_unix
+                                    // hasn't changed the state to INPROGRESS, so this piece of code inside the
+                                    // if statement is a dead code that would never be executed currently
                                     let remotepathbuf = normpath(
                                         convpath(sockhandle.remoteaddr.unwrap().path()),
                                         self,
@@ -2021,10 +2031,13 @@ impl Cage {
                                 if sockhandle.state == ConnState::LISTEN {
                                     // if connection state is LISTEN
                                     // then check if there are any pending connections
+
+                                    // get the path of the socket
                                     let localpathbuf = normpath(
                                         convpath(sockhandle.localaddr.unwrap().path()),
                                         self,
                                     );
+                                    // check if there is any connections associated with the path
                                     let dsconnobj =
                                         NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() {
@@ -2045,7 +2058,9 @@ impl Cage {
                                 }
                             }
                             AF_INET | AF_INET6 => {
-                                // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
+                                // For AF_INET or AF_INET6 socket, currently we still rely on kernel implementation,
+                                // so here we simply prepare the kernel fd set by translating fd into kernel fd
+                                // and will pass it to kernel_select later
                                 if sockfdobj.rawfd < 0 {
                                     continue;
                                 }
@@ -2065,6 +2080,8 @@ impl Cage {
                             }
                         }
 
+                        // newconnection seems to be used for AF_UNIX socket with INPROGRESS state
+                        // (nonblocking AF_UNIX socket connection), which is a broken feature currently
                         if newconnection {
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
@@ -2096,7 +2113,8 @@ impl Cage {
             }
         }
 
-        // do the kernel_select for inet sockets
+        // if kernel_fds is not empty, that would mean we will need to call the kernel_select
+        // (which is calling real select syscall under the hood) for these fds for AF_INET/AF_INET6 sockets
         if !inet_info.kernel_fds.is_empty() {
             let kernel_ret = update_readfds_from_kernel_select(new_readfds, &mut inet_info, retval);
             // NOTE: we ignore the kernel_select error if some domsocks are ready
@@ -2118,25 +2136,33 @@ impl Cage {
         retval: &mut i32,
     ) -> i32 {
         for fd in 0..nfds {
-            // check if current i is in writefds
+            // ignore file descriptors that is not in the set
             if !writefds.is_set(fd) {
                 continue;
             }
 
+            // try to get the FileDescriptor Object from fd number
+            // if the fd exists, do further process based on the file descriptor type
+            // otherwise, raise an error
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
                     Socket(ref sockfdobj) => {
-                        // check if we've made an in progress connection first
+                        // acquire the read access of the sockethandle
                         let sock_tmp = sockfdobj.handle.clone();
                         let sockhandle = sock_tmp.read();
                         let mut newconnection = false;
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::INPROGRESS {
-                                    // if connection state is INPROGRESS
-                                    // then check if the new connection
+                                    // if connection state is INPROGRESS, in case of AF_UNIX socket,
+                                    // that would mean the socket connects in nonblocking mode
+
+                                    // BUG: current implementation of AF_UNIX socket nonblocking connection
+                                    // is not working correctly, according to standards, when the connection
+                                    // is ready, select should report writability, but current implementation
+                                    // does not make much sense
                                     let remotepathbuf =
                                         convpath(sockhandle.remoteaddr.unwrap().path());
                                     let dsconnobj =
@@ -2147,7 +2173,10 @@ impl Cage {
                                 }
                                 // BUG: need to check if send_pipe is ready to write
                             }
-                            AF_INET => {
+                            AF_INET | AF_INET6 => {
+                                // For AF_INET or AF_INET6 socket, currently we still rely on kernel implementation,
+                                // so here we simply call check_rawconnection with innersocket if connection state
+                                // is INPROGRESS (nonblocking AF_INET/AF_INET6 socket connection)
                                 if sockhandle.state == ConnState::INPROGRESS
                                     && sockhandle
                                         .innersocket
@@ -2163,6 +2192,8 @@ impl Cage {
                             }
                         }
 
+                        // nonblocing AF_INET/AF_INET6 socket connection now established
+                        // change the state to connected
                         if newconnection {
                             let mut newconnhandle = sock_tmp.write();
                             newconnhandle.state = ConnState::CONNECTED;
