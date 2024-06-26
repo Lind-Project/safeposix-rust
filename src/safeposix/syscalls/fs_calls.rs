@@ -1,92 +1,3 @@
-//! This module contains all filesystem-related system calls.
-//! 
-//! ## Notes:
-//! 
-//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
-//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
-//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
-//! 
-//! 
-//! ## File System Calls
-//! 
-//! Cages have methods for filesystem-related calls. They return a code or an error from the `errno` enum.
-//! 
-//! 
-//! - [open_syscall](crate::safeposix::cage::Cage::open_syscall)
-//! - [mkdir_syscall](crate::safeposix::cage::Cage::mkdir_syscall)
-//! - [mknod_syscall](crate::safeposix::cage::Cage::mknod_syscall)
-//! - [link_syscall](crate::safeposix::cage::Cage::link_syscall)
-//! - [unlink_syscall](crate::safeposix::cage::Cage::unlink_syscall)
-//! - [creat_syscall](crate::safeposix::cage::Cage::creat_syscall)
-//! - [stat_syscall](crate::safeposix::cage::Cage::stat_syscall)
-//! - [fstat_syscall](crate::safeposix::cage::Cage::fstat_syscall)
-//! - [statfs_syscall](crate::safeposix::cage::Cage::statfs_syscall)
-//! - [fstatfs_syscall](crate::safeposix::cage::Cage::fstatfs_syscall)
-//! - [_istatfs_helper](crate::safeposix::cage::Cage::_istatfs_helper)
-//! - [read_syscall](crate::safeposix::cage::Cage::read_syscall)
-//! - [pread_syscall](crate::safeposix::cage::Cage::pread_syscall)
-//! - [write_syscall](crate::safeposix::cage::Cage::write_syscall)
-//! - [pwrite_syscall](crate::safeposix::cage::Cage::pwrite_syscall)
-//! - [writev_syscall](crate::safeposix::cage::Cage::writev_syscall)
-//! - [lseek_syscall](crate::safeposix::cage::Cage::lseek_syscall)
-//! - [access_syscall](crate::safeposix::cage::Cage::access_syscall)
-//! - [fchdir_syscall](crate::safeposix::cage::Cage::fchdir_syscall)
-//! - [chdir_syscall](crate::safeposix::cage::Cage::chdir_syscall)
-//! - [dup_syscall](crate::safeposix::cage::Cage::dup_syscall)
-//! - [dup2_syscall](crate::safeposix::cage::Cage::dup2_syscall)
-//! - [_dup2_helper](crate::safeposix::cage::Cage::_dup2_helper)
-//! - [close_syscall](crate::safeposix::cage::Cage::close_syscall)
-//! - [_close_helper_inner](crate::safeposix::cage::Cage::_close_helper_inner)
-//! - [_close_helper](crate::safeposix::cage::Cage::_close_helper)
-//! - [fcntl_syscall](crate::safeposix::cage::Cage::fcntl_syscall)
-//! - [ioctl_syscall](crate::safeposix::cage::Cage::ioctl_syscall)
-//! - [_chmod_helper](crate::safeposix::cage::Cage::_chmod_helper)
-//! - [chmod_syscall](crate::safeposix::cage::Cage::chmod_syscall)
-//! - [fchmod_syscall](crate::safeposix::cage::Cage::fchmod_syscall)
-//! - [mmap_syscall](crate::safeposix::cage::Cage::mmap_syscall)
-//! - [munmap_syscall](crate::safeposix::cage::Cage::munmap_syscall)
-//! - [flock_syscall](crate::safeposix::cage::Cage::flock_syscall)
-//! - [remove_from_parent_dir](crate::safeposix::cage::Cage::remove_from_parent_dir)
-//! - [rmdir_syscall](crate::safeposix::cage::Cage::rmdir_syscall)
-//! - [rename_syscall](crate::safeposix::cage::Cage::rename_syscall)
-//! - [fsync_syscall](crate::safeposix::cage::Cage::fsync_syscall)
-//! - [fdatasync_syscall](crate::safeposix::cage::Cage::fdatasync_syscall)
-//! - [sync_file_range_syscall](crate::safeposix::cage::Cage::sync_file_range_syscall)
-//! - [ftruncate_syscall](crate::safeposix::cage::Cage::ftruncate_syscall)
-//! - [truncate_syscall](crate::safeposix::cage::Cage::truncate_syscall)
-//! - [pipe_syscall](crate::safeposix::cage::Cage::pipe_syscall)
-//! - [pipe2_syscall](crate::safeposix::cage::Cage::pipe2_syscall)
-//! - [getdents_syscall](crate::safeposix::cage::Cage::getdents_syscall)
-//! - [getcwd_syscall](crate::safeposix::cage::Cage::getcwd_syscall)
-//! - [rev_shm_find_index_by_addr](crate::safeposix::cage::Cage::rev_shm_find_index_by_addr)
-//! - [rev_shm_find_addrs_by_shmid](crate::safeposix::cage::Cage::rev_shm_find_addrs_by_shmid)
-//! - [search_for_addr_in_region](crate::safeposix::cage::Cage::search_for_addr_in_region)
-//! - [shmget_syscall](crate::safeposix::cage::Cage::shmget_syscall)
-//! - [shmat_syscall](crate::safeposix::cage::Cage::shmat_syscall)
-//! - [shmdt_syscall](crate::safeposix::cage::Cage::shmdt_syscall)
-//! - [shmctl_syscall](crate::safeposix::cage::Cage::shmctl_syscall)
-//! - [mutex_create_syscall](crate::safeposix::cage::Cage::mutex_create_syscall)
-//! - [mutex_destroy_syscall](crate::safeposix::cage::Cage::mutex_destroy_syscall)
-//! - [mutex_lock_syscall](crate::safeposix::cage::Cage::mutex_lock_syscall)
-//! - [mutex_trylock_syscall](crate::safeposix::cage::Cage::mutex_trylock_syscall)
-//! - [mutex_unlock_syscall](crate::safeposix::cage::Cage::mutex_unlock_syscall)
-//! - [cond_create_syscall](crate::safeposix::cage::Cage::cond_create_syscall)
-//! - [cond_destroy_syscall](crate::safeposix::cage::Cage::cond_destroy_syscall)
-//! - [cond_signal_syscall](crate::safeposix::cage::Cage::cond_signal_syscall)
-//! - [cond_broadcast_syscall](crate::safeposix::cage::Cage::cond_broadcast_syscall)
-//! - [cond_wait_syscall](crate::safeposix::cage::Cage::cond_wait_syscall)
-//! - [cond_timedwait_syscall](crate::safeposix::cage::Cage::cond_timedwait_syscall)
-//! - [sem_init_syscall](crate::safeposix::cage::Cage::sem_init_syscall)
-//! - [sem_wait_syscall](crate::safeposix::cage::Cage::sem_wait_syscall)
-//! - [sem_post_syscall](crate::safeposix::cage::Cage::sem_post_syscall)
-//! - [sem_destroy_syscall](crate::safeposix::cage::Cage::sem_destroy_syscall)
-//! - [sem_getvalue_syscall](crate::safeposix::cage::Cage::sem_getvalue_syscall)
-//! - [sem_trywait_syscall](crate::safeposix::cage::Cage::sem_trywait_syscall)
-//! - [sem_timedwait_syscall](crate::safeposix::cage::Cage::sem_timedwait_syscall)
-//! 
-
-
-
 #![allow(dead_code)]
 
 // File system related system calls
@@ -373,39 +284,27 @@ impl Cage {
         }
     }
 
-    /// ### Description
-    /// 
-    /// The `mkdir_syscall()` creates a new directory named by the path name pointed to by a path as the input parameter in the function.
-    /// The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
-    /// The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
-    /// On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
+    //------------------MKDIR SYSCALL------------------
+    // Description
+    // The mkdir_syscall() creates a new directory named by the path name pointed to by a path as the input parameter in the function.
+    // The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
+    // The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
+    // On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
     
-    /// ### Arguments
-    /// 
-    /// * `path` - This represents the path at which the new directory will be created.
-    ///     For example: `/parentdir/dir` represents the new directory name as `dir`, which will be created at this path (`/parentdir/dir`).
-    /// * `mode` - This represents the permission of the newly created directory. 
-    ///     The general mode used is `S_IRWXA`: which represents the read, write, and search permissions on the new directory. 
-    ///
-    /// ### Returns
-    /// 
-    /// Upon successful creation of the directory, 0 is returned.
-    /// 
-    /// ### Errors
-    /// 
-    /// * ENOENT - if given path was null or the parent directory does not exist in the inode table.
-    /// * EPERM - if mode bits were not set.
-    /// * EEXIST - if a directory with the same name already exists at the given path.
-    /// 
-    /// ### Panics
-    /// 
-    /// * If truepath.file_name() returns None or if to_str() fails, causing unwrap() to panic.
-    /// * If the parent inode does not exist in the inode table, causing unwrap() to panic.
-    /// * If the code execution reaches the unreachable!() macro, indicating a logical inconsistency in the program.
-    ///
-    /// for more detailed description of all the commands and return values, see 
-    /// [mkdir(2)](https://man7.org/linux/man-pages/man2/mkdir.2.html)
-    ///
+    // Function Arguments
+    // The mkdir_syscall() receives two arguments:
+    // 1. Path - This represents the path at which the new directory will be created.
+    //           For example: "/parentdir/dir" represents the new directory name as "dir", which will be created at this path (/parentdir/dir).
+    // 2. Mode - This represents the permission of the newly created directory. 
+    //           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new directory. 
+    
+    // Return Values
+    // Upon successful creation of the directory, 0 is returned.
+    // Otherwise, an error with a proper errorNumber and errorMessage is returned based on the different scenarios.
+    //
+    // Tests
+    // All the different scenarios for mkdir_syscall() are covered and tested in the "fs_tests.rs" file under "mkdir_syscall_tests" section.
+    //
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
 
         // Check that the given input path is not empty
@@ -490,112 +389,34 @@ impl Cage {
         }
     }
 
-    /// ## ------------------MKNOD SYSCALL------------------
-    /// ### Description
-    ///
-    /// The `mknod_syscall()` creates a filesystem node (file, device special file
-    /// or pipe) named by a path as the input parameter.
-    /// The file type and the permissions of the new file are initialized from the
-    /// "mode" provided as the input parameter.
-    /// There are 5 different file types: S_IFREG, S_IFCHR, S_IFBLK, S_IFIFO, or
-    /// S_IFSOCK representing a regular file, character special file, block special
-    /// file, FIFO (named pipe), or UNIX domain socket, respectively.
-    /// The newly created file is empty with size 0.
-    /// On successful completion, the timestamps for both the newly created file
-    /// and its parent are updated along with their linkcounts.
-    ///
-    /// ### Function Arguments
-    ///
-    /// The `mknod_syscall()` receives three arguments:
-    /// * `path` - This argument points to a pathname naming the file.
-    /// For example: "/parentdir/file" represents the new file name as "file",
-    /// which will be created at this path (/parentdir/file).
-    ///
-    /// * `mode` - The mode argument specifies both the permissions to use and the
-    /// type of node to be created. It is a combination (using bitwise OR) of one
-    /// of the file types and the permissions for the new node.
-    /// FileType - In LIND, we have only implemented the file type of "Character
-    /// Device" represented by S_IFCHR flag.
-    /// FilePermission - The general permission mode used is "S_IRWXA": which
-    /// represents the read, write, and search permissions on the new file.
-    /// The final file mode is represented by the bitwise-OR of FileType and
-    /// FilePermission Flags.
-    ///
-    /// * `dev` - It is a configuration-dependent specification of a character or
-    /// block I/O device. If mode does not indicate a block special or character
-    /// special device, dev is ignored.
-    /// Since "CharDev" is the only supported type, 'dev' is represented using
-    /// makedev() function; that returns a formatted device number   
-    /// For example: "makedev(&DevNo { major: majorId, minor: minorId })" accepts a
-    /// Device Number that consists of a MajorID, identifying the class of the device,
-    /// and a minor ID, identifying a specific instance of a device in that class.
-    ///
-    /// ### Returns
-    ///
-    /// Upon successful creation of the file, 0 is returned.
-    /// Otherwise, errors or panics are returned for different scenarios.
-    ///
-    /// ### Errors
-    ///
-    /// * `ENOENT` - occurs when a directory component in the absolute path does
-    /// not exist
-    /// * `EPERM` - the mode bits for the new file are not sane
-    /// * `EINVAL` - when any other file type (regular, socket, block, fifo) instead
-    /// of character file type is passed
-    /// * `EEXIST` - when the file to be created already exists
-    ///
-    /// ### Panics
-    ///
-    /// We don't have panics for mknod_syscall() as of now.
-    ///
-    /// For more detailed description of all the commands and return values, see
-    /// [mknod(2)](https://man7.org/linux/man-pages/man2/mknod.2.html)
-    ///
+    //------------------MKNOD SYSCALL------------------
+
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
-        // Return an error if the provided path is empty
+        //Check that path is not empty
         if path.len() == 0 {
-            return syscall_error(
-                Errno::ENOENT, 
-                "mknod", 
-                "given path was null"
-            );
+            return syscall_error(Errno::ENOENT, "mknod", "given path was null");
         }
-        // Retrieve the absolute path from the root directory. The absolute path is
-        // then used to validate directory paths while navigating through
-        // subdirectories and establishing new directory at the given location.
         let truepath = normpath(convpath(path), self);
 
-        // Store the FileMetadata into a helper variable which is used for fetching
-        // the metadata of a given inode from the Inode Table.
+        //pass the metadata to this helper. If passed table is none, then create new instance
         let metadata = &FS_METADATA;
 
-        // Walk through the absolute path which returns a tuple consisting of inode
-        // number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
-            // Case: When the file doesn't exist but the parent directory exists
+            //If neither the file nor parent exists
+            (None, None) => syscall_error(
+                Errno::ENOENT,
+                "mknod",
+                "a directory component in pathname does not exist or is a dangling symbolic link",
+            ),
+
+            //If the file doesn't exist but the parent does
             (None, Some(pardirinode)) => {
-                // for now we assume this is sane, but maybe this should be checked later
-                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string();
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                // S_FILETYPEFLAGS represents a bitmask that can be used to extract
-                // the file type information from a file's mode.
-                // This code is referenced from Lind-Repy codebase.
-                // Here, we are checking whether the mode bits are sane by ensuring
-                // that only valid file permission bits (S_IRWXA) and file type bits
-                // (S_FILETYPEFLAGS) are set. Else, we return the error.
+                //assert sane mode bits (asserting that the mode bits make sense)
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
-                    return syscall_error(
-                        Errno::EPERM, 
-                        "mknod", 
-                        "Mode bits were not sane"
-                    );
+                    return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
                 }
-
-                // As of now, the only file type in LIND supported by mknod_syscall
-                // is "Char Device" represented by S_IFCHR flag.
-                // In order to check for Char file type, a bitwise-AND operation for
-                // S_IFCHR flag is performed with the "mode" bits and an error is returned
-                // when the result is 0 denoting the support for only character files.
                 if mode as i32 & S_IFCHR == 0 {
                     return syscall_error(
                         Errno::EINVAL,
@@ -603,8 +424,7 @@ impl Cage {
                         "only character files are supported",
                     );
                 }
-                // New Inode of type CharDev is created with file size 0
-                let time = interface::timestamp(); // We do a real timestamp now
+                let time = interface::timestamp(); //We do a real timestamp now
                 let newinode = Inode::CharDev(DeviceInode {
                     size: 0,
                     uid: DEFAULT_UID,
@@ -618,15 +438,9 @@ impl Cage {
                     dev: devtuple(dev),
                 });
 
-                // fetch_add returns the previous value, which is the inode number we want
                 let newinodenum = FS_METADATA
                     .nextinode
-                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed);
-
-                // Insert a reference to the file in the parent directory and update
-                // the inode attributes.
-                // Fetch the inode of the parent directory and only proceed when its
-                // type is directory.
+                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
                 if let Inode::Dir(ref mut parentdir) =
                     *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                 {
@@ -634,32 +448,17 @@ impl Cage {
                         .filename_to_inode_dict
                         .insert(filename, newinodenum);
                     parentdir.linkcount += 1;
-                    // Update the ctime and mtime for the parent directory as well
-                    // since the new file is linked with it.
-                    parentdir.ctime = time;
-                    parentdir.mtime = time;
-                }
-
-                // Update the inode table by inserting the newly formed inode mapped
-                // with its inode number.
+                } //insert a reference to the file in the parent directory
                 metadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(metadata, pardirinode);
                 log_metadata(metadata, newinodenum);
-                0 // mknod has succeeded
+                0 //mknod has succeeded
             }
 
-            // Case: When the file directory name already exists, then return the error.
             (Some(_), ..) => syscall_error(
                 Errno::EEXIST,
                 "mknod",
                 "pathname already exists, cannot create device file",
-            ),
-
-            // Case: When neither the file directory nor the parent directory exists
-            (None, None) => syscall_error(
-                Errno::ENOENT,
-                "mknod",
-                "a directory component in pathname does not exist or is a dangling symbolic link",
             ),
         }
     }
@@ -1900,7 +1699,47 @@ impl Cage {
     }
 
     //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
-
+/// ## `dup_syscall`
+///
+/// ### Description
+/// This function duplicates a file descriptor. It creates a new file
+/// descriptor that refers to the same open file description as the original file descriptor.
+/// * **Finding the Next Available File Descriptor:** If `start_desc` is provided and it is already in use, the function 
+///   will continue searching for the next available file descriptor starting from `start_desc`. If no file 
+///   descriptors are available, it will return an error (`ENFILE`).
+/// * **File Descriptor Equality:** If `fd` is equal to `start_fd`, the function returns `start_fd` as the new file 
+///   descriptor. This is because in this scenario, the original and new file descriptors would point to the same 
+///   file description.
+/// * **File Descriptor Duplication:** The function utilizes the helper function `_dup2_helper` to perform the actual 
+///   duplication process, which involves increasing the reference count of the original file descriptor's 
+///   associated file object. 
+/// * **Side Effects:** The function modifies the global `filedescriptortable` array, adding a new entry for the 
+///   duplicated file descriptor. It also increments the reference count of the file object associated with the 
+///   original file descriptor.
+///(https://man7.org/linux/man-pages/man2/dup.2.html)
+/// ### Function Arguments
+/// * `fd`: The original file descriptor to duplicate.
+/// * `start_desc`:  An optional starting file descriptor number. If provided, the new file descriptor will be 
+///  assigned the first available file descriptor number starting from this value. If not provided, it defaults to 
+///  `STARTINGFD`,which is the minimum designated file descriptor value for new file descriptors.
+///
+/// ### Returns
+/// * The new file descriptor on success.
+/// * `EBADF`: If the original file descriptor is invalid.
+/// * `ENFILE`: If there are no available file descriptors.
+/// 
+/// ### Errors
+/// * `EBADF(9)`: If the original file descriptor is invalid.
+/// * `ENFILE(23)`: If there are no available file descriptors.
+///
+/// ### Internal Logic
+/// * The function retrieves the file descriptor object (`filedesc_enum`) associated with the original file 
+/// descriptor.
+/// * The `_dup2_helper` function is called to perform the actual file descriptor duplication, handling the 
+///  allocation of a new file descriptor, updating the file descriptor table, and incrementing the reference count 
+///  of the file object.
+/// * The `false` argument passed to `_dup2_helper` indicates that this call is from the `dup_syscall` function, 
+///  not the `dup2_syscall` function.
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
         //if a starting fd was passed, then use that as the starting point, but otherwise, use the designated minimum of STARTINGFD
         let start_fd = match start_desc {
@@ -1952,6 +1791,49 @@ impl Cage {
         return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
     }
 
+/// ## `_dup2_helper`
+///
+/// ### Description
+/// This helper function performs the actual file descriptor duplication process for both `dup` and `dup2` system calls.
+/// It handles the allocation of a new file descriptor, updates the file descriptor table, and increments the reference count of the 
+/// associated file object.
+/// * Duplication from `dup2_syscall`: If `fromdup2` is true, the function first closes the existing file descriptor 
+///   at `newfd` (if any) before allocating a new file descriptor and updating the file descriptor table. 
+/// * Duplication from `dup_syscall`: If `fromdup2` is false, the function allocates a new file descriptor, finds the 
+///   first available file descriptor number starting from `newfd`, and updates the file descriptor table.
+/// * Reference Counting: The function increments the reference count of the file object associated with the original file 
+///   descriptor. This ensures that the file object is not deleted until all its associated file descriptors are closed.
+/// * Socket Handling:** For domain sockets, the function increments the reference count of both the send and receive pipes 
+///   associated with the socket.
+/// * tream Handling:** Streams are not currently supported for duplication; an error (`EACCES`) is returned.
+/// * Unhandled File Types: If the file descriptor is associated with a file type that is not handled by the function (i.e., 
+///   not a File, Pipe, Socket, or Stream), the function returns an error (`EACCES`).
+///
+/// ### Function Arguments
+/// * `self`:  A reference to the `FsCalls` struct, which contains the file descriptor table and other system-related data.
+/// * `filedesc_enum`: A reference to the `FileDescriptor` object representing the file descriptor to be duplicated.
+/// * `newfd`: The new file descriptor number to assign to the duplicated file descriptor.
+/// * `fromdup2`: A boolean flag indicating whether the call is from `dup2_syscall` (true) or `dup_syscall` (false).
+///
+/// ### Returns
+/// * The new file descriptor on success.
+/// * `ENFILE`: If there are no available file descriptors.
+/// * `EACCES`: If the file descriptor cannot be duplicated.
+///
+/// ### Errors
+/// * `ENFILE`: If there are no available file descriptors.
+/// * `EACCES`: If the file descriptor cannot be duplicated.
+/// * Panic: If the file descriptor is associated with a socket, and the inode does not match the file descriptor.
+///
+/// ### Internal Logic
+/// * **File Descriptor Allocation:** The function allocates a new file descriptor and updates the file descriptor table, 
+///   handling the potential for file descriptor table overflow (resulting in an `ENFILE` error).
+/// * **File Object Reference Counting:** The function increments the reference count of the file object associated with the 
+///   original file descriptor to ensure that the file object is not deleted until all its associated file descriptors are closed.
+/// * **Socket Handling:** If the file descriptor is associated with a socket, the function handles domain sockets differently 
+///   by incrementing the reference count of both the send and receive pipes.
+/// * **Stream Handling:** The function does not handle streams and returns an error if a stream file descriptor is provided. 
+/// * **Unhandled File Types:** If the file descriptor is associated with an unsupported file type, the function returns an error.
     pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
         let (dupfd, mut dupfdguard) = if fromdup2 {
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
@@ -2232,36 +2114,16 @@ impl Cage {
         0 //_close_helper has succeeded!
     }
 
+    //------------------------------------FCNTL SYSCALL------------------------------------
     
-    /// ### Description
-    /// 
-    /// `fcntl_syscall` performs operations, like returning or setting file status flags,
-    /// duplicating a file descriptor, etc., on an open file descriptor 
-    /// 
-    /// ### Arguments
-    /// 
-    /// it accepts three parameters: 
-    /// * `fd` - an open file descriptor
-    /// * `cmd` - an operation to be performed on fd
-    /// * `arg` - an optional argument (whether or not arg is required is determined by cmd)
-    /// 
-    /// ### Returns
-    /// 
-    /// for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
-    /// value of file descriptor flags, value of status flags, etc.
-    /// 
-    /// ### Errors
-    /// 
-    /// * EBADF - fd is not a valid file descriptor
-    /// * EINVAL - doesnt match implementation parameters
-    /// 
-    /// ### Panics
-    /// 
-    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
-    /// * Unknown errno value from fcntl returned, will cause panic.
-    /// 
-    /// for more detailed description of all the commands and return values, see 
-    /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
+    //fcntl performs operations, like returning or setting file status flags,
+    //duplicating a file descriptor, etc., on an open file descriptor 
+    //it accepts three parameters: fd - an open file descriptor, cmd - an operation to be performed on fd,
+    //and arg - an optional argument (whether or not arg is required is determined by cmd)
+    //for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
+    //value of file descriptor flags, value of status flags, etc.
+    //for more detailed description of all the commands and return values, see 
+    //https://linux.die.net/man/2/fcntl
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         //BUG
@@ -2482,233 +2344,109 @@ impl Cage {
         }
     }
 
-    /// ### Description
-    ///
-    /// The `_chmod_helper()` is a helper function used by both `chmod_syscall()` 
-    /// and `fchmod_syscall()` to change mode bits that consist of read, write, 
-    /// and execute file permission bits of a file specified by an inode 
-    /// obtained from the corresponding caller syscall.
-    ///
-    /// ### Arguments
-    ///
-    /// The `_chmod_helper()` accepts two arguments:
-    /// * `inodenum` - an inode of a file whose mode bits we are willing to 
-    /// change obtained from the caller syscall.
-    /// * `mode` - the new file mode, which is a bit mask created by 
-    /// bitwise-or'ing zero or more valid mode bits. Some of the examples of 
-    /// such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
-    ///
-    /// ### Returns
-    /// 
-    /// Upon successful completion, zero is returned.
-    /// In case of a failure, an error is returned, and `errno` is set depending
-    /// on the error, e.g. EACCES, ENOENT, etc.
-    ///
-    /// ### Errors
-    ///
-    /// Currently, only one error is supported:
-    /// * `EINVAL` - the value of the mode argument is invalid.
-    /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
-    ///
-    /// ### Panics
-    ///
-    /// There are no cases where this helper function panics.
+    //------------------------------------CHMOD HELPER FUNCTION------------------------------------
 
-    pub fn _chmod_helper(inodenum: usize, mode: u32) -> i32 {
-        //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search 
-        //permissions for the file owner, group owners, 
-        //and other users. It encompasses all the mode bits that can be changed 
-        //via `chmod_syscall()` and is used as a bitmask to make sure that no 
-        //other invalid bit change is being made. 
-        if (mode & S_IRWXA) == mode {
-            //getting a mutable reference to an inode struct that corresponds to 
-            //the file whose mode bits we want to change
-            let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            //log is used to store all the changes made to the filesystem. After 
-            //the cage is closed, all the collected changes are serialized and 
-            //the state of the underlying filsystem is persisted. This allows us
-            //to avoid serializing and persisting filesystem state after every 
-            //`chmod_syscall()`.
-            let mut log = true;
-            //We obtain the mode bits that should remain intact by bitwise-and'ing 
-            //the inode's mode bits with the set of bits that can be changed via 
-            //`chmod_syscall`. The changes are applied by bitwise-or'ing 
-            //the intact mode bits with the changed mode bits.
+    pub fn _chmod_helper(inodenum: usize, mode: u32) {
+        let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+        let mut log = true;
+        if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
             match *thisinode {
                 Inode::File(ref mut general_inode) => {
-                    general_inode.mode = (general_inode.mode & !S_IRWXA) | mode;
+                    general_inode.mode = (general_inode.mode & !S_IRWXA) | mode
                 }
                 Inode::CharDev(ref mut dev_inode) => {
                     dev_inode.mode = (dev_inode.mode & !S_IRWXA) | mode;
                 }
                 Inode::Socket(ref mut sock_inode) => {
                     sock_inode.mode = (sock_inode.mode & !S_IRWXA) | mode;
-                    //Sockets only exist as long as the cages using them are running.
-                    //After these cages are closed, no changes to sockets' inodes 
-                    //need to be persisted, thus using log is unnecessary.
                     log = false;
                 }
                 Inode::Dir(ref mut dir_inode) => {
                     dir_inode.mode = (dir_inode.mode & !S_IRWXA) | mode;
                 }
             }
-            //the mutable reference to the inode has to be dropped because 
-            //`log_metadata` will need to acquire an immutable reference to 
-            //the same inode
             drop(thisinode);
-            //changes to an inode are saved into the log for all file types 
-            //except for Sockets
             if log {
-                log_metadata(&FS_METADATA, inodenum);
+                log_metadata(&FS_METADATA, inodenum)
             };
-            //return 0 on success
-            0
-        } else {
-            return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
         }
     }
 
-    /// ### Description
-    ///
-    /// The `chmod_syscall()` changes a file's mode bits that consist of read, 
-    /// write, and execute file permission bits.
-    /// Changing `set-user-ID`, `set-group-ID`, and sticky bits is currently 
-    /// not supported.
-    ///
-    /// ### Arguments
-    ///
-    /// The `chmod_syscall()` accepts two arguments:
-    /// * `path` - pathname of the file whose mode bits we are willing to 
-    /// change (symbolic links are currently not supported). If the 
-    /// pathname is relative, then it is interpreted relative to the 
-    /// current working directory of the calling process.
-    /// * `mode` - the new file mode, which is a bit mask created by 
-    /// bitwise-or'ing zero or more valid mode bits. Some of the examples 
-    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
-    ///
-    /// ### Returns
-    /// 
-    /// Upon successful completion, zero is returned.
-    /// In case of a failure, an error is returned, and `errno` is set depending
-    /// on the error, e.g. `EACCES`, `ENOENT`, etc.
-    ///
-    /// ### Errors
-    ///
-    /// Currently, only two errors are supposrted:
-    /// * `EINVAL` - the value of the mode argument is invalid 
-    /// * `ENOENT` - a component of path does not name an existing file
-    /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
-    ///
-    /// ### Panics
-    ///
-    /// There are no cases where this syscall panics.
-    ///
-    /// To learn more about the syscall, valid mode bits, and error values, see
-    /// [chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
+    //------------------------------------CHMOD SYSCALL------------------------------------
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
-        //Convert the provided pathname into an absolute path without `.` or `..` 
-        //components.
         let truepath = normpath(convpath(path), self);
-        //Perfrom a walk down the file tree starting from the root directory to 
-        //obtain an inode number of the file whose pathname was specified.
-        //`None` is returned if one of the following occurs while moving down
-        //the tree: accessing a child of a non-directory inode, accessing a 
-        //child of a nonexistent parent directory, accessing a nonexistent child,
-        //accessing an unexpected component, like `.` or `..` directory reference. 
-        //In this case, `The file does not exist` error is returned.
-        //Otherwise, a `Some()` option containing the inode number is returned.
+
+        //check if there is a valid path or not there to an inode
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            Self::_chmod_helper(inodenum, mode)
+            if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
+                Self::_chmod_helper(inodenum, mode);
+            } else {
+                //there doesn't seem to be a good syscall error errno for this
+                return syscall_error(Errno::EACCES, "chmod", "provided file mode is not valid");
+            }
         } else {
-            return syscall_error(Errno::ENOENT, "chmod", "A component of path does not name an existing file");
+            return syscall_error(Errno::ENOENT, "chmod", "the provided path does not exist");
         }
+        0 //success!
     }
 
-    /// ### Description
-    ///
-    /// The `fchmod_syscall()` is equivalent to `chmod_syscall()` in that
-    /// it is used to change a file's mode bits that consist of read, 
-    /// write, and execute file permission bits except that the file
-    /// is specified by the file descriptor. Changing `set-user-ID`, 
-    /// `set-group-ID`, and sticky bits is currently not supported.
-    ///
-    /// ### Arguments
-    ///
-    /// The `fchmod_syscall()` accepts two arguments:
-    /// * `fd` - an open file descriptor.
-    /// * `mode` - the new file mode, which is a bit mask created by 
-    /// bitwise-or'ing zero or more valid mode bits. Some of the examples 
-    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` 
-    /// (write by owner), etc.
-    ///
-    /// ### Returns
-    /// 
-    /// Upon successful completion, zero is returned.
-    /// In case of a failure, an error is returned, and `errno` is set 
-    /// depending on the error, e.g. `EACCES`, `ENOENT`, etc.
-    ///
-    /// ### Errors
-    ///
-    /// * `EBADF` - the file descriptor `fd` is not valid. 
-    /// * `EINVAL` - the value of the `mode` argument is invalid or 
-    /// mode bits cannot be changed on this file type
-    /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
-    ///
-    /// ### Panics
-    ///
-    /// A panic occurs when a provided file descriptor is out of bounds
-    ///
-    /// To learn more about the syscall, valid mode bits, and error values, see
-    /// [fchmod(2)](https://linux.die.net/man/2/fchmod)
+    //------------------------------------FCHMOD SYSCALL------------------------------------
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
-        //BUG
-        //if the provided file descriptor is out of bounds, 'get_filedescriptor'
-        //returns `Err()`, unwrapping on which  produces a `panic!`
-        //otherwise, file descriptor table entry is stored in `checkedfd`
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
-        //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &*unlocked_fd {
-            //Regular file type is the only type that supports `fchmod_syscall()`
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    Self::_chmod_helper(inodenum, mode)                    
+                    if mode & (S_IRWXA | (S_FILETYPEFLAGS as u32)) == mode {
+                        Self::_chmod_helper(inodenum, mode);
+                    } else {
+                        return syscall_error(
+                            Errno::EACCES,
+                            "fchmod",
+                            "provided file mode is not valid",
+                        );
+                    }
                 }
                 Socket(_) => {
                     return syscall_error(
-                        Errno::EINVAL,
+                        Errno::EACCES,
                         "fchmod",
-                        "Mode bits cannot be changed on this file type",
+                        "cannot change mode on this file descriptor",
                     );
                 }
                 Stream(_) => {
                     return syscall_error(
-                        Errno::EINVAL,
+                        Errno::EACCES,
                         "fchmod",
-                        "Mode bits cannot be changed on this file type",
+                        "cannot change mode on this file descriptor",
                     );
                 }
                 Pipe(_) => {
                     return syscall_error(
-                        Errno::EINVAL,
+                        Errno::EACCES,
                         "fchmod",
-                        "Mode bits cannot be changed on this file type",
+                        "cannot change mode on this file descriptor",
                     );
                 }
                 Epoll(_) => {
                     return syscall_error(
-                        Errno::EINVAL,
+                        Errno::EACCES,
                         "fchmod",
-                        "Mode bits cannot be changed on this file type",
+                        "cannot change mode on this file descriptor",
                     );
                 }
             }
         } else {
-            return syscall_error(Errno::EBADF, "ioctl", "Invalid file descriptor");
+            return syscall_error(
+                Errno::ENOENT,
+                "fchmod",
+                "the provided file descriptor  does not exist",
+            );
         }
+        0 //success!
     }
 
     //------------------------------------MMAP SYSCALL------------------------------------
@@ -4092,12 +3830,43 @@ impl Cage {
         }
     }
 
-    //------------------SEMAPHORE SYSCALLS------------------
-    /*
-     *  Initialize semaphore object SEM to value
-     *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
-     *  or shared between processes (when nonzero)
-     */
+        //##------------------SEMAPHORE SYSCALLS------------------
+/*
+ *  Initialize semaphore object SEM to value
+ *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
+ *  or shared between processes (when nonzero)
+ */
+/// ## `sem_init_syscall`
+///
+/// ### Description
+/// This function initializes a semaphore object, setting its initial value and 
+///specifying whether it's shared between threads or processes.
+/// 1. Boundary Check: The function first checks if the initial value is 
+/// within the allowed range.
+/// 2. Check for Existing Semaphore: The function then checks if a semaphore 
+/// with the given handle already exists.
+/// 3. Initialize New Semaphore: If the semaphore does not exist, the function 
+/// creates a new semaphore object and inserts it into the semaphore table.
+/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared 
+//// between processes, 
+/// the function adds it to the shared memory attachments of other processes 
+/// that have already attached to the shared memory segment.
+/// 5. The function ensures thread safety by using a unique semaphore handle and checking for existing entries in the semaphore table 
+/// before attempting to create a new one.  The code also avoids inserting a semaphore into the same cage twice during the shared 
+/// memory attachment process by excluding the initial cage from the iteration loop.
+///(https://man7.org/linux/man-pages/man3/sem_init.3.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+/// * `pshared`:  Indicates whether the semaphore is shared between 
+/// threads (0) or processes (non-zero).
+/// * `value`: The initial value of the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// ### Errors
+/// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is already initialized.
+/// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value 
+/// for a semaphore (SEM_VALUE_MAX).
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
         if value > SEM_VALUE_MAX {
@@ -4107,15 +3876,18 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let is_shared = pshared != 0;
 
-        // Iterate semaphore table, if semaphore is already initialzed return error
+        // Iterate semaphore table, if semaphore is already initialized return error
         let semtable = &self.sem_table;
 
         // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
+            // Create a new semaphore object.
             let new_semaphore =
                 interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
+            // Insert the new semaphore into the semaphore table.
             semtable.insert(sem_handle, new_semaphore.clone());
 
+            // If the semaphore is shared, add it to the shared memory attachments of other processes.
             if is_shared {
                 let rev_shm = self.rev_shm.lock();
                 // if its shared and exists in an existing mapping we need to add it to other cages
@@ -4123,44 +3895,96 @@ impl Cage {
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
                     let offset = mapaddr - sem_handle;
+                    // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
+                            // iterate through all cages containing segment
                             let cage = interface::cagetable_getref(*cageid);
+                            // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            // Iterate through all addresses and add the semaphore to the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.insert(addr + offset, new_semaphore.clone());
                             }
                         }
+                        // Add the offset to the semaphore offsets list.
                         segment.semaphor_offsets.insert(offset);
                     }
                 }
             }
             return 0;
         }
-
+        // Return an error indicating that the semaphore is already initialized.
         return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
     }
 
+/// ## `sem_wait_syscall`
+///
+/// ### Description
+/// 1. Check for Semaphore Existence:The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+/// 2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire 
+/// it using `lock`. This operation will block the calling process until the semaphore becomes available.
+/// 3. Error Handling:If the semaphore handle is invalid, the function returns an error
+/// 4. This function allows a process to wait for a semaphore to become available. If the semaphore is
+/// currently available (its value is greater than 0), the function will acquire the semaphore and return 0.
+/// 5. If the semaphore is unavailable (its value is 0), the function will block the 
+/// calling process until the semaphore becomes available(its value becomes 1).
+///(https://man7.org/linux/man-pages/man3/sem_wait.3.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Acquire the semaphore. This operation will block the calling process until the semaphore becomes available.
+            // The `lock` method internally decrements the semaphore value.
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
 
+/// ## `sem_post_syscall`
+///
+/// ### Description
+/// This function increments the value of a semaphore.
+///  1. Check for Semaphore Existence:The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///  2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
+///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
+///  would exceed the maximum value, the function returns an appropriate error code.
+/// (https://man7.org/linux/man-pages/man3/sem_post.3.html)
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * `EOVERFLOW(75)`: If incrementing the semaphore would exceed the maximum allowable value.
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
+        // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Increment the semaphore value.
             if !semaphore.unlock() {
+                // Return an error indicating that the maximum allowable value for a semaphore would be exceeded.
                 return syscall_error(
                     Errno::EOVERFLOW,
                     "sem_post",
@@ -4173,12 +3997,33 @@ impl Cage {
         return 0;
     }
 
+/// ## `sem_destroy_syscall`
+///
+/// ### Description
+/// This function destroys a semaphore, freeing its associated resources.
+///   1. Check for Semaphore Existence: The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   2. Remove from Semaphore Table: If the semaphore exists, the function removes 
+/// it from the semaphore table.
+///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the 
+/// function also removes it from the shared memory attachments of other processes.
+///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///(https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
 
         let semtable = &self.sem_table;
         // remove entry from semaphore table
         if let Some(sementry) = semtable.remove(&sem_handle) {
+            // If the semaphore is shared, remove it from other process attachments.
             if sementry
                 .1
                 .is_shared
@@ -4186,16 +4031,21 @@ impl Cage {
             {
                 // if its shared we'll need to remove it from other attachments
                 let rev_shm = self.rev_shm.lock();
+                // Search for the semaphore address in the shared memory region.
                 if let Some((mapaddr, shmid)) =
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
                     // find all segments that contain semaphore
                     let offset = mapaddr - sem_handle;
+                    // Iterate through all segments containing the semaphore.
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        // Iterate through all cages containing the segment.
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages containing segment
+                            // Get a reference to the cagetable for the current cage.
                             let cage = interface::cagetable_getref(*cageid);
+                            // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            // Iterate through all addresses and remove the semaphore from the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
                             }
@@ -4203,6 +4053,7 @@ impl Cage {
                     }
                 }
             }
+            // Return 0 to indicate successful semaphore destruction.
             return 0;
         } else {
             return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
@@ -4212,9 +4063,32 @@ impl Cage {
     /*
      * Take only sem_t *sem as argument, and return int *sval
      */
+
+/// ## `sem_getvalue_syscall`
+///
+/// ### Description
+/// This function implements the `sem_getvalue` system call, which retrieves the 
+/// current value of a semaphore.
+///   1. Check for Semaphore Existence: The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves
+///  its current value and returns it.
+///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///(https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * The current value of the semaphore on success.
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
+        // Check whether the semaphore exists in the semaphore table.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
             return semaphore.get_value();
@@ -4226,13 +4100,39 @@ impl Cage {
         );
     }
 
+/// ## `sem_trywait_syscall`
+///
+/// ### Description
+/// This function implements the `sem_trywait` system call, which attempts 
+/// to acquire a semaphore without blocking.
+///   1. Check for Semaphore Existence: The function first checks if the 
+/// provided semaphore handle is valid.
+///   2. Attempt to Acquire: If the semaphore exists, the function attempts
+///  to acquire it using `trylock`.
+///   3. Error Handling: If the semaphore is unavailable or the handle is invalid,
+///  the function returns an appropriate error code.
+///(https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success (semaphore acquired).
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
+
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Attempt to acquire the semaphore without blocking.
+            // If the semaphore is currently unavailable (value is 0), this operation will fail.
             if !semaphore.trylock() {
+                // Return an error indicating that the operation could not be performed without blocking.
                 return syscall_error(
                     Errno::EAGAIN,
                     "sem_trywait",
@@ -4242,9 +4142,34 @@ impl Cage {
         } else {
             return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
-
+    
+/// ## `sem_timedwait_syscall`
+///
+/// ### Description
+/// This function implements the `sem_timedwait` system call, which attempts to 
+//// acquire a semaphore with a timeout.
+///   1. Convert Timeout to Timespec: The function first converts the provided 
+/// timeout duration into a `timespec` structure, which is used by the underlying `timedlock` function.
+///   2. Check for Semaphore Existence: The function then checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts 
+/// to acquire it using `timedlock`, which will block for the specified duration.
+///   4. Error Handling: If the semaphore is unavailable, the timeout expires, 
+/// or the handle is invalid, the function returns an appropriate error code.
+///(https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+/// * `time`: The maximum time to wait for the semaphore to become available, expressed as a `RustDuration`.
+///
+/// ### Returns
+/// * 0 on success (semaphore acquired).
+///
+/// ### Errors
+/// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes available.
+/// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
     pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
         let abstime = libc::timespec {
             tv_sec: time.as_secs() as i64,
@@ -4256,9 +4181,12 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
+            // Attempt to acquire the semaphore with a timeout.
             if !semaphore.timedlock(time) {
+                // Return an error indicating that the call timed out before the semaphore could be locked.
                 return syscall_error(
                     Errno::ETIMEDOUT,
                     "sem_timedwait",
@@ -4272,6 +4200,7 @@ impl Cage {
                 "sem is not a valid semaphore",
             );
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
 }
