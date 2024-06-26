@@ -1,17 +1,17 @@
 //! This module contains all filesystem-related system calls.
-//! 
+//!
 //! ## Notes:
-//! 
+//!
 //! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
 //! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
 //! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
-//! 
-//! 
+//!
+//!
 //! ## File System Calls
-//! 
+//!
 //! Cages have methods for filesystem-related calls. They return a code or an error from the `errno` enum.
-//! 
-//! 
+//!
+//!
 //! - [open_syscall](crate::safeposix::cage::Cage::open_syscall)
 //! - [mkdir_syscall](crate::safeposix::cage::Cage::mkdir_syscall)
 //! - [mknod_syscall](crate::safeposix::cage::Cage::mknod_syscall)
@@ -83,9 +83,7 @@
 //! - [sem_getvalue_syscall](crate::safeposix::cage::Cage::sem_getvalue_syscall)
 //! - [sem_trywait_syscall](crate::safeposix::cage::Cage::sem_trywait_syscall)
 //! - [sem_timedwait_syscall](crate::safeposix::cage::Cage::sem_timedwait_syscall)
-//! 
-
-
+//!
 
 #![allow(dead_code)]
 
@@ -104,10 +102,10 @@ impl Cage {
     /// ### Description
     /// The `open_syscall()` creates an open file description that refers to a file and a file descriptor that refers to that open file description.
     /// The file descriptor is used by other I/O functions to refer to that file.
-    /// There are generally two cases which occur when this function is called. 
+    /// There are generally two cases which occur when this function is called.
     /// Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
     /// Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
-    
+
     /// ### Function Arguments
     /// The `open_syscall()` receives three arguments:
     /// * `path` - This argument points to a pathname naming the file.
@@ -115,9 +113,9 @@ impl Cage {
     /// * `flags` - This argument contains the file status flags and file access modes which will be alloted to the open file description.
     ///            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
     ///            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
-    /// * `mode` - This represents the permission of the newly created file. 
-    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file. 
-    
+    /// * `mode` - This represents the permission of the newly created file.
+    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file.
+
     /// ### Returns
     /// Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
     /// Otherwise, errors or panics are returned for different scenarios.
@@ -130,10 +128,10 @@ impl Cage {
     /// * ENOTDIR - tried to create a file as a child of something that isn't a directory
     /// * EEXIST - the file already exists and O_CREAT and O_EXCL flags were passed
     /// * ENXIO - the file is of type UNIX domain socket
-    /// 
+    ///
     /// A panic occurs when there is some issue fetching the file descriptor.
-    /// 
-    /// for more detailed description of all the commands and return values, see 
+    ///
+    /// for more detailed description of all the commands and return values, see
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
     ///
 
@@ -144,7 +142,7 @@ impl Cage {
 
         // While creating a new FileDescriptor, there are two important things that need to be present:
         // O_RDWRFLAGS:- This flag determines whether the file is opened for reading, writing, or both.
-        // O_CLOEXEC - This flag indicates that the file descriptor should be automatically closed during an exec family function. 
+        // O_CLOEXEC - This flag indicates that the file descriptor should be automatically closed during an exec family function.
         // It’s needed for managing file descriptors across different processes, ensuring that they do not unintentionally remain open.
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
         FileDesc {
@@ -160,12 +158,12 @@ impl Cage {
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "open", "given path was null");
         }
-        
+
         // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
         // while navigating through subdirectories and creating a new file or open existing file at the given location.
         let truepath = normpath(convpath(path), self);
 
-        // Fetch the next file descriptor and its lock write guard to ensure the file can be associated with the file descriptor 
+        // Fetch the next file descriptor and its lock write guard to ensure the file can be associated with the file descriptor
         let (fd, guardopt) = self.get_next_fd(None);
         match fd {
             // If the file descriptor is invalid, the return value is always an error with value (ENFILE).
@@ -175,7 +173,7 @@ impl Cage {
                     "open_helper",
                     "no available file descriptor number could be found",
                 );
-            },
+            }
             // When the file descriptor is valid, we proceed with performing the remaining checks for open_syscall.
             fd if fd > 0 => {
                 // File Descriptor Write Lock Guard
@@ -211,10 +209,10 @@ impl Cage {
 
                         // S_IFREG is the flag for a regular file, so it's added to the mode to indicate that the new file being created is a regular file.
                         let effective_mode = S_IFREG as u32 | mode;
-                        
+
                         // Create a new inode of type "File" representing a file and set the required attributes
                         let newinode = Inode::File(GenericInode {
-                            size: 0, 
+                            size: 0,
                             uid: DEFAULT_UID,
                             gid: DEFAULT_GID,
                             mode: effective_mode,
@@ -229,9 +227,10 @@ impl Cage {
                         let newinodenum = FS_METADATA
                             .nextinode
                             .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-                        
+
                         // Fetch the inode of the parent directory and only proceed when its type is directory.
-                        if let Inode::Dir(ref mut ind) = *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
+                        if let Inode::Dir(ref mut ind) =
+                            *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                         {
                             ind.filename_to_inode_dict.insert(filename, newinodenum);
                             ind.linkcount += 1; // Since the parent is now associated to the new file, its linkcount will increment by 1
@@ -254,9 +253,12 @@ impl Cage {
                         // An entry in the table has the following representation:
                         // Key - inode number
                         // Value - Opened file with its size as 0
-                        if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(newinodenum) {
+                        if let interface::RustHashEntry::Vacant(vac) =
+                            FILEOBJECTTABLE.entry(newinodenum)
+                        {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, newinodenum);
-                            vac.insert(interface::openfile(sysfilename, 0).unwrap()); // new file of size 0
+                            vac.insert(interface::openfile(sysfilename, 0).unwrap());
+                            // new file of size 0
                         }
 
                         // The file object of size 0, associated with the newinode number is inserted into the FileDescriptorTable associated with the cage using the guard lock.
@@ -266,8 +268,8 @@ impl Cage {
 
                     // Case 2: When the file exists (we don't need to look at parent here)
                     (Some(inodenum), ..) => {
-                        //If O_CREAT and O_EXCL flags are set in the input parameters, open_syscall() fails if the file exists. 
-                        //This is because the check for the existence of the file and the creation of the file if it does not exist is atomic, 
+                        //If O_CREAT and O_EXCL flags are set in the input parameters, open_syscall() fails if the file exists.
+                        //This is because the check for the existence of the file and the creation of the file if it does not exist is atomic,
                         //with respect to other threads executing open() naming the same filename in the same directory with O_EXCL and O_CREAT set.
                         if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
                             return syscall_error(
@@ -283,7 +285,7 @@ impl Cage {
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                         match *inodeobj {
                             Inode::File(ref mut f) => {
-                                //This is a special case when the input flags contain "O_TRUNC" flag, 
+                                //This is a special case when the input flags contain "O_TRUNC" flag,
                                 //This flag truncates the file size to 0, and the mode and owner are unchanged
                                 // and is only used when the file exists and is a regular file
                                 if O_TRUNC == (flags & O_TRUNC) {
@@ -296,9 +298,9 @@ impl Cage {
                                     f.size = 0;
 
                                     // Update the timestamps as well
-                                    let latest_time = interface::timestamp(); 
+                                    let latest_time = interface::timestamp();
                                     f.ctime = latest_time;
-                                    f.mtime = latest_time; 
+                                    f.mtime = latest_time;
 
                                     // Remove the previous file and add a new one of 0 length
                                     if let interface::RustHashEntry::Occupied(occ) = entry {
@@ -312,13 +314,14 @@ impl Cage {
 
                                 // Once the metadata for the file is reset, a new file is inserted in file system.
                                 // Also, it is inserted back to the FileObjectTable and associated with same inodeNumber representing that the file is currently in open state.
-                                if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum)
+                                if let interface::RustHashEntry::Vacant(vac) =
+                                    FILEOBJECTTABLE.entry(inodenum)
                                 {
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     vac.insert(interface::openfile(sysfilename, f.size).unwrap());
                                 }
 
-                                // Update the final size and reference count for the file 
+                                // Update the final size and reference count for the file
                                 size = f.size;
                                 f.refcount += 1;
 
@@ -338,7 +341,11 @@ impl Cage {
 
                             // If the existing file type is a socket, error is thrown as socket type files are not supported by open_syscall
                             Inode::Socket(_) => {
-                                return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket");
+                                return syscall_error(
+                                    Errno::ENXIO,
+                                    "open",
+                                    "file is a UNIX domain socket",
+                                );
                             }
                         }
 
@@ -364,8 +371,8 @@ impl Cage {
                 }
 
                 // Once all the updates are done, the file descriptor value is returned
-                fd 
-            },
+                fd
+            }
             // Panic when there is some other issue fetching the file descriptor.
             _ => {
                 panic!("File descriptor couldn't be fetched!");
@@ -374,46 +381,45 @@ impl Cage {
     }
 
     /// ### Description
-    /// 
+    ///
     /// The `mkdir_syscall()` creates a new directory named by the path name pointed to by a path as the input parameter in the function.
     /// The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
     /// The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
     /// On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
-    
+
     /// ### Arguments
-    /// 
+    ///
     /// * `path` - This represents the path at which the new directory will be created.
     ///     For example: `/parentdir/dir` represents the new directory name as `dir`, which will be created at this path (`/parentdir/dir`).
-    /// * `mode` - This represents the permission of the newly created directory. 
-    ///     The general mode used is `S_IRWXA`: which represents the read, write, and search permissions on the new directory. 
+    /// * `mode` - This represents the permission of the newly created directory.
+    ///     The general mode used is `S_IRWXA`: which represents the read, write, and search permissions on the new directory.
     ///
     /// ### Returns
-    /// 
+    ///
     /// Upon successful creation of the directory, 0 is returned.
-    /// 
+    ///
     /// ### Errors
-    /// 
+    ///
     /// * ENOENT - if given path was null or the parent directory does not exist in the inode table.
     /// * EPERM - if mode bits were not set.
     /// * EEXIST - if a directory with the same name already exists at the given path.
-    /// 
+    ///
     /// ### Panics
-    /// 
+    ///
     /// * If truepath.file_name() returns None or if to_str() fails, causing unwrap() to panic.
     /// * If the parent inode does not exist in the inode table, causing unwrap() to panic.
     /// * If the code execution reaches the unreachable!() macro, indicating a logical inconsistency in the program.
     ///
-    /// for more detailed description of all the commands and return values, see 
+    /// for more detailed description of all the commands and return values, see
     /// [mkdir(2)](https://man7.org/linux/man-pages/man2/mkdir.2.html)
     ///
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
-
         // Check that the given input path is not empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "mkdir", "given path was null");
         }
 
-        // Store the FileMetadata into a helper variable which is used for fetching the metadata of a given inode from the Inode Table. 
+        // Store the FileMetadata into a helper variable which is used for fetching the metadata of a given inode from the Inode Table.
         let metadata = &FS_METADATA;
 
         // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
@@ -451,7 +457,7 @@ impl Cage {
                     gid: DEFAULT_GID,
                     mode: effective_mode,
                     linkcount: 3, //because of the directory name(.), itself, and reference to the parent directory(..)
-                    refcount: 0, //because no file descriptors are pointing to it currently
+                    refcount: 0,  //because no file descriptors are pointing to it currently
                     atime: time,
                     ctime: time,
                     mtime: time,
@@ -460,7 +466,8 @@ impl Cage {
 
                 // Insert a reference to the file in the parent directory and update the inode attributes
                 // Fetch the inode of the parent directory and only proceed when its type is directory.
-                if let Inode::Dir(ref mut parentdir) = *(metadata.inodetable.get_mut(&pardirinode).unwrap())
+                if let Inode::Dir(ref mut parentdir) =
+                    *(metadata.inodetable.get_mut(&pardirinode).unwrap())
                 {
                     parentdir
                         .filename_to_inode_dict
@@ -468,8 +475,7 @@ impl Cage {
                     parentdir.linkcount += 1; // Since the parent is now associated to the new directory, its linkcount will increment by 1
                     parentdir.ctime = time; // Here, update the ctime and mtime for the parent directory as well
                     parentdir.mtime = time;
-                }
-                else {
+                } else {
                     unreachable!();
                 }
                 // Update the inode table by inserting the newly formed inode mapped with its inode number.
@@ -478,7 +484,7 @@ impl Cage {
                 log_metadata(&metadata, newinodenum);
 
                 // Return 0 when mkdir has succeeded
-                0 
+                0
             }
 
             // Case 3: When the file directory name already exists, then return the error.
@@ -2132,35 +2138,34 @@ impl Cage {
         0 //_close_helper has succeeded!
     }
 
-    
     /// ### Description
-    /// 
+    ///
     /// `fcntl_syscall` performs operations, like returning or setting file status flags,
-    /// duplicating a file descriptor, etc., on an open file descriptor 
-    /// 
+    /// duplicating a file descriptor, etc., on an open file descriptor
+    ///
     /// ### Arguments
-    /// 
-    /// it accepts three parameters: 
+    ///
+    /// it accepts three parameters:
     /// * `fd` - an open file descriptor
     /// * `cmd` - an operation to be performed on fd
     /// * `arg` - an optional argument (whether or not arg is required is determined by cmd)
-    /// 
+    ///
     /// ### Returns
-    /// 
-    /// for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor, 
+    ///
+    /// for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor,
     /// value of file descriptor flags, value of status flags, etc.
-    /// 
+    ///
     /// ### Errors
-    /// 
+    ///
     /// * EBADF - fd is not a valid file descriptor
     /// * EINVAL - doesnt match implementation parameters
-    /// 
+    ///
     /// ### Panics
-    /// 
+    ///
     /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
     /// * Unknown errno value from fcntl returned, will cause panic.
-    /// 
-    /// for more detailed description of all the commands and return values, see 
+    ///
+    /// for more detailed description of all the commands and return values, see
     /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
@@ -2170,7 +2175,7 @@ impl Cage {
         //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {                    
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
             //'flags' consists of bitwise-or'd access mode, file creation, and file status flags
             //to retrieve a particular flag, it can bitwise-and'd with 'flags'
             let flags = match filedesc_enum {
@@ -2215,7 +2220,7 @@ impl Cage {
             //matching the tuple
             match (cmd, arg) {
                 //because the arg parameter is not used in certain commands, it can be anything (..)
-                //F_GETFD returns file descriptor flags only, meaning that access mode flags 
+                //F_GETFD returns file descriptor flags only, meaning that access mode flags
                 //and file status flags are excluded
                 //F_SETFD is used to set file descriptor flags only, meaning that any changes to access mode flags
                 //or file status flags should be ignored
@@ -2234,32 +2239,31 @@ impl Cage {
                 }
                 //F_GETFL should return file access mode and file status flags, which means that
                 //file creation flags should be masked out
-                (F_GETFL, ..) => {
-                    *flags & !(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC)
-                }
+                (F_GETFL, ..) => *flags & !(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC),
                 //F_SETFL is used to set file status flags, thus any changes to file access mode and file
                 //creation flags should be ignored (see F_SETFL command in the man page for fcntl for the reference)
                 (F_SETFL, arg) if arg >= 0 => {
                     //valid changes are extracted by ignoring changes to file access mode and file creation flags
-                    let valid_changes = arg & !(O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+                    let valid_changes =
+                        arg & !(O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
                     //access mode and creation flags are extracted and other flags are set to 0 to update them
-                    let acc_and_creation_flags = *flags & (O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+                    let acc_and_creation_flags =
+                        *flags & (O_RDWRFLAGS | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
                     //valid changes are combined with the old file access mode and file creation flags
-                    *flags = valid_changes | acc_and_creation_flags; 
+                    *flags = valid_changes | acc_and_creation_flags;
                     0
                 }
                 (F_DUPFD, arg) if arg >= 0 => self._dup2_helper(&filedesc_enum, arg, false),
                 //TO DO: F_GETOWN and F_SETOWN commands are not implemented yet
-                (F_GETOWN, ..) => {
-                    0 
-                }
-                (F_SETOWN, arg) if arg >= 0 => {
-                    0
-                }
+                (F_GETOWN, ..) => 0,
+                (F_SETOWN, arg) if arg >= 0 => 0,
                 _ => {
-                    let err_msg = format!("Arguments pair ({}, {}) does not match implemented parameters", cmd, arg);
+                    let err_msg = format!(
+                        "Arguments pair ({}, {}) does not match implemented parameters",
+                        cmd, arg
+                    );
                     syscall_error(Errno::EINVAL, "fcntl", &err_msg)
-                },
+                }
             }
         } else {
             syscall_error(Errno::EBADF, "fcntl", "File descriptor is out of range")
@@ -2269,7 +2273,7 @@ impl Cage {
     /// ### Description
     ///
     /// The `ioctl_syscall()` manipulates the underlying device parameters of special files. In particular, it is used as a way
-    /// for user-space applications to interface with device drivers. 
+    /// for user-space applications to interface with device drivers.
     ///
     /// ### Arguments
     ///
@@ -2279,7 +2283,7 @@ impl Cage {
     ///              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
     ///              information that all media devices must support.
     /// * `ptrunion` - additional information needed by the addressed device to perform the selected control function.
-    ///              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct 
+    ///              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct
     ///              media_device_info, from which the device information is obtained.
     ///
     /// ### Returns
@@ -2294,7 +2298,7 @@ impl Cage {
     /// * `EINVAL` - request or ptrunion is not valid
     /// * `ENOTTY` - fd is not associated with a character special device
     /// When `ioctl_syscall() is called on a Socket with `FIONBIO` control function, an underlying call to `libc::fcntl()` is made,
-    /// which can return with an error. For a complete list of possible erorrs, see 
+    /// which can return with an error. For a complete list of possible erorrs, see
     /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
     ///
     /// A panic occurs either when a provided file descriptor is out of bounds or when
@@ -2312,7 +2316,7 @@ impl Cage {
         let mut unlocked_fd = checkedfd.write();
         //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //For now, the only implemented control function is FIONBIO command used with sockets 
+            //For now, the only implemented control function is FIONBIO command used with sockets
             match request {
                 //for FIONBIO, 'ptrunion' stores a pointer to an integer. If the integer is 0, the socket's
                 //nonblocking I/O is cleared. Otherwise, the socket is set for nonblocking I/O
@@ -2335,7 +2339,7 @@ impl Cage {
                             let arg: i32 = arg_result;
                             let mut ioctlret = 0;
                             //clearing nonblocking I/O on the socket if the integer is 0
-                            if arg == 0 { 
+                            if arg == 0 {
                                 *flags &= !O_NONBLOCK;
                                 //libc::fcntl is called under the hood with F_SETFL command and 0 as an argument
                                 //to set blocking I/O, and the result of the call is stored in ioctlret
@@ -2384,22 +2388,22 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `_chmod_helper()` is a helper function used by both `chmod_syscall()` 
-    /// and `fchmod_syscall()` to change mode bits that consist of read, write, 
-    /// and execute file permission bits of a file specified by an inode 
+    /// The `_chmod_helper()` is a helper function used by both `chmod_syscall()`
+    /// and `fchmod_syscall()` to change mode bits that consist of read, write,
+    /// and execute file permission bits of a file specified by an inode
     /// obtained from the corresponding caller syscall.
     ///
     /// ### Arguments
     ///
     /// The `_chmod_helper()` accepts two arguments:
-    /// * `inodenum` - an inode of a file whose mode bits we are willing to 
+    /// * `inodenum` - an inode of a file whose mode bits we are willing to
     /// change obtained from the caller syscall.
-    /// * `mode` - the new file mode, which is a bit mask created by 
-    /// bitwise-or'ing zero or more valid mode bits. Some of the examples of 
+    /// * `mode` - the new file mode, which is a bit mask created by
+    /// bitwise-or'ing zero or more valid mode bits. Some of the examples of
     /// such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
     ///
     /// ### Returns
-    /// 
+    ///
     /// Upon successful completion, zero is returned.
     /// In case of a failure, an error is returned, and `errno` is set depending
     /// on the error, e.g. EACCES, ENOENT, etc.
@@ -2415,24 +2419,24 @@ impl Cage {
     /// There are no cases where this helper function panics.
 
     pub fn _chmod_helper(inodenum: usize, mode: u32) -> i32 {
-        //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search 
-        //permissions for the file owner, group owners, 
-        //and other users. It encompasses all the mode bits that can be changed 
-        //via `chmod_syscall()` and is used as a bitmask to make sure that no 
-        //other invalid bit change is being made. 
+        //S_IRWXA is a result of bitwise-or'ing read, write, and execute or search
+        //permissions for the file owner, group owners,
+        //and other users. It encompasses all the mode bits that can be changed
+        //via `chmod_syscall()` and is used as a bitmask to make sure that no
+        //other invalid bit change is being made.
         if (mode & S_IRWXA) == mode {
-            //getting a mutable reference to an inode struct that corresponds to 
+            //getting a mutable reference to an inode struct that corresponds to
             //the file whose mode bits we want to change
             let mut thisinode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
-            //log is used to store all the changes made to the filesystem. After 
-            //the cage is closed, all the collected changes are serialized and 
+            //log is used to store all the changes made to the filesystem. After
+            //the cage is closed, all the collected changes are serialized and
             //the state of the underlying filsystem is persisted. This allows us
-            //to avoid serializing and persisting filesystem state after every 
+            //to avoid serializing and persisting filesystem state after every
             //`chmod_syscall()`.
             let mut log = true;
-            //We obtain the mode bits that should remain intact by bitwise-and'ing 
-            //the inode's mode bits with the set of bits that can be changed via 
-            //`chmod_syscall`. The changes are applied by bitwise-or'ing 
+            //We obtain the mode bits that should remain intact by bitwise-and'ing
+            //the inode's mode bits with the set of bits that can be changed via
+            //`chmod_syscall`. The changes are applied by bitwise-or'ing
             //the intact mode bits with the changed mode bits.
             match *thisinode {
                 Inode::File(ref mut general_inode) => {
@@ -2444,7 +2448,7 @@ impl Cage {
                 Inode::Socket(ref mut sock_inode) => {
                     sock_inode.mode = (sock_inode.mode & !S_IRWXA) | mode;
                     //Sockets only exist as long as the cages using them are running.
-                    //After these cages are closed, no changes to sockets' inodes 
+                    //After these cages are closed, no changes to sockets' inodes
                     //need to be persisted, thus using log is unnecessary.
                     log = false;
                 }
@@ -2452,11 +2456,11 @@ impl Cage {
                     dir_inode.mode = (dir_inode.mode & !S_IRWXA) | mode;
                 }
             }
-            //the mutable reference to the inode has to be dropped because 
-            //`log_metadata` will need to acquire an immutable reference to 
+            //the mutable reference to the inode has to be dropped because
+            //`log_metadata` will need to acquire an immutable reference to
             //the same inode
             drop(thisinode);
-            //changes to an inode are saved into the log for all file types 
+            //changes to an inode are saved into the log for all file types
             //except for Sockets
             if log {
                 log_metadata(&FS_METADATA, inodenum);
@@ -2464,30 +2468,34 @@ impl Cage {
             //return 0 on success
             0
         } else {
-            return syscall_error(Errno::EINVAL, "chmod", "The value of the mode argument is invalid");
+            return syscall_error(
+                Errno::EINVAL,
+                "chmod",
+                "The value of the mode argument is invalid",
+            );
         }
     }
 
     /// ### Description
     ///
-    /// The `chmod_syscall()` changes a file's mode bits that consist of read, 
+    /// The `chmod_syscall()` changes a file's mode bits that consist of read,
     /// write, and execute file permission bits.
-    /// Changing `set-user-ID`, `set-group-ID`, and sticky bits is currently 
+    /// Changing `set-user-ID`, `set-group-ID`, and sticky bits is currently
     /// not supported.
     ///
     /// ### Arguments
     ///
     /// The `chmod_syscall()` accepts two arguments:
-    /// * `path` - pathname of the file whose mode bits we are willing to 
-    /// change (symbolic links are currently not supported). If the 
-    /// pathname is relative, then it is interpreted relative to the 
+    /// * `path` - pathname of the file whose mode bits we are willing to
+    /// change (symbolic links are currently not supported). If the
+    /// pathname is relative, then it is interpreted relative to the
     /// current working directory of the calling process.
-    /// * `mode` - the new file mode, which is a bit mask created by 
-    /// bitwise-or'ing zero or more valid mode bits. Some of the examples 
+    /// * `mode` - the new file mode, which is a bit mask created by
+    /// bitwise-or'ing zero or more valid mode bits. Some of the examples
     /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
     ///
     /// ### Returns
-    /// 
+    ///
     /// Upon successful completion, zero is returned.
     /// In case of a failure, an error is returned, and `errno` is set depending
     /// on the error, e.g. `EACCES`, `ENOENT`, etc.
@@ -2495,7 +2503,7 @@ impl Cage {
     /// ### Errors
     ///
     /// Currently, only two errors are supposrted:
-    /// * `EINVAL` - the value of the mode argument is invalid 
+    /// * `EINVAL` - the value of the mode argument is invalid
     /// * `ENOENT` - a component of path does not name an existing file
     /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
     ///
@@ -2507,51 +2515,55 @@ impl Cage {
     /// [chmod(2)](https://man7.org/linux/man-pages/man2/chmod.2.html)
 
     pub fn chmod_syscall(&self, path: &str, mode: u32) -> i32 {
-        //Convert the provided pathname into an absolute path without `.` or `..` 
+        //Convert the provided pathname into an absolute path without `.` or `..`
         //components.
         let truepath = normpath(convpath(path), self);
-        //Perfrom a walk down the file tree starting from the root directory to 
+        //Perfrom a walk down the file tree starting from the root directory to
         //obtain an inode number of the file whose pathname was specified.
         //`None` is returned if one of the following occurs while moving down
-        //the tree: accessing a child of a non-directory inode, accessing a 
+        //the tree: accessing a child of a non-directory inode, accessing a
         //child of a nonexistent parent directory, accessing a nonexistent child,
-        //accessing an unexpected component, like `.` or `..` directory reference. 
+        //accessing an unexpected component, like `.` or `..` directory reference.
         //In this case, `The file does not exist` error is returned.
         //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(truepath.as_path()) {
             Self::_chmod_helper(inodenum, mode)
         } else {
-            return syscall_error(Errno::ENOENT, "chmod", "A component of path does not name an existing file");
+            return syscall_error(
+                Errno::ENOENT,
+                "chmod",
+                "A component of path does not name an existing file",
+            );
         }
     }
 
     /// ### Description
     ///
     /// The `fchmod_syscall()` is equivalent to `chmod_syscall()` in that
-    /// it is used to change a file's mode bits that consist of read, 
+    /// it is used to change a file's mode bits that consist of read,
     /// write, and execute file permission bits except that the file
-    /// is specified by the file descriptor. Changing `set-user-ID`, 
+    /// is specified by the file descriptor. Changing `set-user-ID`,
     /// `set-group-ID`, and sticky bits is currently not supported.
     ///
     /// ### Arguments
     ///
     /// The `fchmod_syscall()` accepts two arguments:
     /// * `fd` - an open file descriptor.
-    /// * `mode` - the new file mode, which is a bit mask created by 
-    /// bitwise-or'ing zero or more valid mode bits. Some of the examples 
-    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` 
+    /// * `mode` - the new file mode, which is a bit mask created by
+    /// bitwise-or'ing zero or more valid mode bits. Some of the examples
+    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR`
     /// (write by owner), etc.
     ///
     /// ### Returns
-    /// 
+    ///
     /// Upon successful completion, zero is returned.
-    /// In case of a failure, an error is returned, and `errno` is set 
+    /// In case of a failure, an error is returned, and `errno` is set
     /// depending on the error, e.g. `EACCES`, `ENOENT`, etc.
     ///
     /// ### Errors
     ///
-    /// * `EBADF` - the file descriptor `fd` is not valid. 
-    /// * `EINVAL` - the value of the `mode` argument is invalid or 
+    /// * `EBADF` - the file descriptor `fd` is not valid.
+    /// * `EINVAL` - the value of the `mode` argument is invalid or
     /// mode bits cannot be changed on this file type
     /// Other errors, like `EFAULT`, `ENOTDIR`, etc. are not supported.
     ///
@@ -2575,7 +2587,7 @@ impl Cage {
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
-                    Self::_chmod_helper(inodenum, mode)                    
+                    Self::_chmod_helper(inodenum, mode)
                 }
                 Socket(_) => {
                     return syscall_error(
@@ -3214,20 +3226,76 @@ impl Cage {
         }
     }
 
-    //------------------PIPE SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `pipe_syscall()` creates a pipe, a unidirectional data channel that can be
+    /// used for interprocess communication.
+    ///
+    /// ### Arguments
+    ///
+    /// The `pipe_syscall()` accepts one argument:
+    /// * `pipefd` - The array pipefd is used to return two file descriptors referring to the ends of the pipe.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENFILE` etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, only two errors are supposrted:
+    /// * `ENFILE` - no available file descriptors
+    ///
+    /// ### Panics
+    ///
+    /// A panic can occur if there is no lock on the file descriptor index, which should not be possible,
+    /// or if somehow the match statement finds an invalid flag
+    ///
+    /// To learn more about the syscall, flags, and error values, see
+    /// [pipe(2)](https://man7.org/linux/man-pages/man2/pipe.2.html)
     pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
         self.pipe2_syscall(pipefd, 0)
     }
 
+    /// ### Description
+    ///
+    /// The `pipe2_syscall()` creates a pipe, a unidirectional data channel that can be
+    /// used for interprocess communication. This syscall adds additional flags to the pipe syscall. We only implement CLOEXEC and NONBLOCK.
+    ///
+    /// ### Arguments
+    ///
+    /// The `pip2e_syscall()` accepts two arguments:
+    /// * `pipefd` - The array pipefd is used to return two file descriptors referring to the ends of the pipe.
+    /// * `flags` - Flags that can be pre-set on the pipe file descriptors such as CLOEXEC and NONBLOCK.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENFILE` etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, only two errors are supposrted:
+    /// * `ENFILE` - no available file descriptors
+    ///
+    /// ### Panics
+    ///
+    /// A panic can occur if there is no lock on the file descriptor index, which should not be possible,
+    /// or if somehow the match statement finds an invalid flag
+    ///
+    /// To learn more about the syscall, flags, and error values, see
+    /// [pipe(2)](https://man7.org/linux/man-pages/man2/pipe.2.html)
     pub fn pipe2_syscall(&self, pipefd: &mut PipeArray, flags: i32) -> i32 {
         let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
+        // lets make a standard pipe of 65,536 bytes
         let pipe = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
 
-        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
+        // now lets get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
         // append each to pipefds list
-
         let accflags = [O_RDONLY, O_WRONLY];
         for accflag in accflags {
             let (fd, guardopt) = self.get_next_fd(None);
@@ -3236,12 +3304,15 @@ impl Cage {
             }
             let fdoption = &mut *guardopt.unwrap();
 
+            // insert this pipe descriptor into the fd slot
             let _insertval = fdoption.insert(Pipe(PipeDesc {
                 pipe: pipe.clone(),
+                // lets add the additional flags to read/write permission flag and add that to the fd
                 flags: accflag | actualflags,
                 advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
             }));
 
+            // now lets return the fd numbers in the pipefd array
             match accflag {
                 O_RDONLY => {
                     pipefd.readfd = fd;
@@ -3249,7 +3320,7 @@ impl Cage {
                 O_WRONLY => {
                     pipefd.writefd = fd;
                 }
-                _ => panic!("How did you get here."),
+                _ => panic!("Corruption: Invalid flag"),
             }
         }
 
