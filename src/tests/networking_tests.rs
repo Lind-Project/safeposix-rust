@@ -12,12 +12,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_bind() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let port: u16 = generate_random_port();
@@ -51,12 +48,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_bind_on_zero() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
@@ -457,12 +451,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_bind_multiple() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -505,12 +496,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_connect_basic_udp() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //should be okay...
@@ -543,12 +531,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_getpeername() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //doing a few things with connect -- only UDP right now
@@ -587,12 +572,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_getsockname() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -629,12 +611,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_listen() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -685,12 +664,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_poll() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let filefd = cage.open_syscall("/netpolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -878,12 +854,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_recvfrom() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -1093,12 +1066,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_select() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let filefd = cage.open_syscall("/netselecttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -1279,12 +1249,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_shutdown() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -1350,12 +1317,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -1384,12 +1348,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socketoptions() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -1560,12 +1521,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socketpair() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
@@ -1619,12 +1577,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_udp_bad_bind() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -1664,12 +1619,9 @@ pub mod net_tests {
     
     #[test]
     pub fn ut_lind_net_udp_simple() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //just going to test the basic connect with UDP now...
@@ -1753,12 +1705,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_udp_connect() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //getting the sockets set up...
@@ -1816,13 +1765,11 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_gethostname() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
-
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        
         //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
 
         let mut buf = vec![0u8; 5];
@@ -1860,11 +1807,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_dns_rootserver_ping() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
-
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
         #[repr(C)]
@@ -1888,7 +1832,7 @@ pub mod net_tests {
             addr: interface::V4Addr,
         }
 
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
 
         let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -1986,17 +1930,15 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_domain_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
-
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
         let serversockfilename = "/server.sock";
 
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
@@ -2221,12 +2163,9 @@ pub mod net_tests {
     like accepting new connections, sending/receiving data, and modifying the event flags */
     #[test]
     pub fn ut_lind_net_epoll() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let filefd = cage.open_syscall("/netepolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -2397,12 +2336,9 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_writev() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);

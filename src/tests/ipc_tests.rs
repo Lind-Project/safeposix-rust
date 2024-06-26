@@ -13,15 +13,14 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_pipe() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
 
         let byte_chunk: usize = 131072; // 128 KB
         let num_writes: usize = 8192; // 8 KB
 
-        lindrustinit(0);
+        
 
         let cage1 = interface::cagetable_getref(1);
 
@@ -80,17 +79,16 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_domain_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
 
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
         let serversockfilename = "/server.sock";
 
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
@@ -311,12 +309,11 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_socketpair() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
@@ -357,12 +354,11 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_writev() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(

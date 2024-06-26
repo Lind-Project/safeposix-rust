@@ -21,12 +21,6 @@ mod setup {
     use std::sync::Mutex;
 
     // Tests in rust as parallel by default and to make them share resources we are using a global static lock.
-    // The following lines prevent other tests from running concurrently and allows them to use the same file system, cages for testing. 
-    // ```no_run
-    // acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-    // let mut _thelock = TESTMUTEX.lock().unwrap();
-    // setup::test_setup();
-    // ```
     lazy_static! {
         // This has a junk value (a bool).  Could be anything...
         #[derive(Debug)]
@@ -35,11 +29,17 @@ mod setup {
         };
     }
 
-    pub fn test_setup() {
+    // Using explicit lifetime to have a safe reference to the lock in the tests.
+    pub fn lock_and_init<'a>() -> std::sync::MutexGuard<'a, bool> {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
+        let thelock = TESTMUTEX.lock().unwrap();
+
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 
+        //setup the lind filesystem, creates a clean filesystem for each test
         lindrustinit(0);
         {
+            println!("test_setup()");
             let cage = interface::cagetable_getref(1);
             crate::lib_fs_utils::lind_deltree(&cage, "/");
             assert_eq!(cage.mkdir_syscall("/dev", S_IRWXA), 0);
@@ -78,7 +78,14 @@ mod setup {
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         }
         lindrustfinalize();
+
+        //initialize the cage for the test.
+        lindrustinit(0);
+
+        //return the lock to the caller which holds it till the end of the test.
+        thelock
     }
+
 }
 
 pub fn str2cbuf(ruststr: &str) -> *mut u8 {

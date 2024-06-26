@@ -14,12 +14,9 @@ pub mod fs_tests {
     #[test]
     pub fn ut_lind_fs_simple() {
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.access_syscall("/", F_OK), 0);
@@ -41,12 +38,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn rdwrtest() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -73,12 +67,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn prdwrtest() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -102,12 +93,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn chardevtest() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
@@ -153,14 +141,11 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_broken_close() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+//testing a muck up with the inode table where the regular close does not work as intended
 
-        //testing a muck up with the inode table where the regular close does not work as intended
-
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
 
         //write should work
@@ -279,12 +264,9 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_fchmod() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -324,12 +306,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_dir_chdir() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //testing the ability to make and change to directories
@@ -354,12 +333,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_dir_mode() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let filepath1 = "/subdirDirMode1";
@@ -381,12 +357,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_dir_multiple() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
@@ -423,12 +396,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_dup() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -486,12 +456,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_dup2() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -540,12 +507,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -574,12 +538,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_fcntl_invalid_args(){
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let filefd = cage.open_syscall("/fcntl_file_2", O_CREAT | O_EXCL, S_IRWXA);
         //when presented with a nonexistent command, 'Invalid Argument' error should be thrown
@@ -599,12 +560,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_fcntl_dup(){
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let filefd1 = cage.open_syscall("/fcntl_file_4", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -632,9 +590,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-
+    #[test]
     pub fn ut_lind_fs_ioctl_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior
@@ -665,7 +625,9 @@ pub mod fs_tests {
     }
 
     pub fn ut_lind_fs_ioctl_invalid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
@@ -709,12 +671,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_fdflags() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let path = "/fdFlagsFile";
@@ -757,12 +716,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_file_link_unlink() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let path = "/fileLink";
@@ -803,12 +759,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_file_lseek_past_end() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let path = "/lseekPastEnd";
@@ -832,12 +785,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_fstat_complex() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
 
         let cage = interface::cagetable_getref(1);
         let path = "/complexFile";
@@ -858,12 +808,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_getuid() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //let's get the initial -1s out of the way
@@ -884,12 +831,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_load_fs() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let mut statdata = StatData::default();
@@ -1063,12 +1007,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_multiple_open() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //try to open several files at once -- the fd's should not be overwritten
@@ -1101,12 +1042,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_rmdir() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let path = "/parent_dir/dir";
@@ -1120,12 +1058,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_stat_file_complex() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let fd = cage.open_syscall("/fooComplex", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
@@ -1152,12 +1087,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_stat_file_mode() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
@@ -1181,12 +1113,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_statfs() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
@@ -1200,12 +1129,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_fstatfs() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
@@ -1226,12 +1152,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_rename() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let old_path = "/test_dir";
@@ -1244,12 +1167,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_ftruncate() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/ftruncate", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -1276,12 +1196,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_truncate() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let path = String::from("/truncate");
@@ -1315,12 +1232,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_getdents() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         let bufsize = 50;
@@ -1355,12 +1269,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let needed = "/subdir1\0".as_bytes().to_vec().len();
 
@@ -1393,12 +1304,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_exec_cloexec() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let mut uselessstatdata = StatData::default();
 
@@ -1432,12 +1340,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_shm() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         let mut shmidstruct = ShmidsStruct::default();
@@ -1472,12 +1377,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_getpid_getppid() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
 
         let cage1 = interface::cagetable_getref(1);
         let pid1 = cage1.getpid_syscall();
@@ -1502,12 +1404,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_sem_fork() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1559,12 +1458,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_sem_trytimed() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1623,12 +1519,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_sem_test() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1653,12 +1546,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_tmp_file_test() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         // Check if /tmp is there
@@ -1687,12 +1577,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mkdir_empty_directory() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "";
         // Check for error when directory is empty
@@ -1703,12 +1590,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mkdir_nonexisting_directory() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir/dir";
         // Check for error when both parent and child directories don't exist 
@@ -1719,12 +1603,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mkdir_existing_directory() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         // Create a parent directory
@@ -1737,12 +1618,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mkdir_invalid_modebits() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         let invalid_mode = 0o77777; // Invalid mode bits
@@ -1756,12 +1634,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mkdir_success() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         // Create a parent directory
@@ -1791,12 +1666,9 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mkdir_using_symlink() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let mut _thelock = TESTMUTEX.lock().unwrap();
-        //creates the file system if it doesnt exist yet.
-        setup::test_setup();
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         // Create a file which will be referred to as originalFile 
