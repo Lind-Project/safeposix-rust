@@ -1,5 +1,5 @@
 //! This module acts a wrapper for all system calls in the RustPOSIX environment. and has methods for each system call. divided into three categories: filesystem, system, and network
-//! 
+//!
 //! ## System Calls
 //!
 //! Cage objects have methods for system calls, categorized as filesystem, system, or network-related. They return a code or an error from the `errno` enum.

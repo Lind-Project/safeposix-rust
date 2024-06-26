@@ -5,8 +5,8 @@
 #![allow(unused_imports)]
 
 //! # RustPOSIX
-//! Welcome to the RustPOSIX microvisor. 
-//! This serves as the OS-in-a-process in the [Lind architecture](https://github.com/Lind-Project/lind-docs/tree/main). 
+//! Welcome to the RustPOSIX microvisor.
+//! This serves as the OS-in-a-process in the [Lind architecture](https://github.com/Lind-Project/lind-docs/tree/main).
 //! ## Overview
 //!
 //! A microvisor is a piece of software that lives within the same process as the cages. It provides a POSIX interface, allowing cages to believe they have their own operating system.
@@ -16,7 +16,7 @@
 //! - Read and write files on disk.
 //! - Communicate over the network.
 //! - Manage shared memory.
-//! 
+//!
 //! Note this is a re-design of the original (now obsolete) [SafePOSIX](https://github.com/Lind-Project/nacl_repy), which was created using the [RepyV2](https://github.com/SeattleTestbed/docs/blob/master/Programming/RepyV2Tutorial.md) sandbox.
 
 // interface and safeposix are public because otherwise there isn't a great

@@ -1,6 +1,6 @@
 // Author: Nicholas Renner
 //! Module definitions for the RustPOSIX interface
-//! 
+//!
 //! ## Interface Module
 //!
 //! Secure interface module that enforces containment of kernel calls to "popular paths" to enhance security. It restricts access to libraries only through specified paths in order to limit kernel calls to these popular paths.
