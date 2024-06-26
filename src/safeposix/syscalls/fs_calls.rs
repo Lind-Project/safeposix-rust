@@ -3756,22 +3756,34 @@ impl Cage {
 /// ## `sem_init_syscall`
 ///
 /// ### Description
-/// This function initializes a semaphore object, setting its initial value and specifying whether it's shared between threads or processes.
-/// 1. Boundary Check: The function first checks if the initial value is within the allowed range.
-/// 2. Check for Existing Semaphore: The function then checks if a semaphore with the given handle already exists.
-/// 3. Initialize New Semaphore: If the semaphore does not exist, the function creates a new semaphore object and inserts it into the semaphore table.
-/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared between processes, the function adds it to the shared memory attachments of other processes that have already attached to the shared memory segment.
-///
+/// This function initializes a semaphore object, setting its initial value and 
+///specifying whether it's shared between threads or processes.
+/// 1. Boundary Check: The function first checks if the initial value is 
+/// within the allowed range.
+/// 2. Check for Existing Semaphore: The function then checks if a semaphore 
+/// with the given handle already exists.
+/// 3. Initialize New Semaphore: If the semaphore does not exist, the function 
+/// creates a new semaphore object and inserts it into the semaphore table.
+/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared 
+//// between processes, 
+/// the function adds it to the shared memory attachments of other processes 
+/// that have already attached to the shared memory segment.
+/// 5. The function ensures thread safety by using a unique semaphore handle and checking for existing entries in the semaphore table 
+/// before attempting to create a new one.  The code also avoids inserting a semaphore into the same cage twice during the shared 
+/// memory attachment process by excluding the initial cage from the iteration loop.
+///(https://man7.org/linux/man-pages/man3/sem_init.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
-/// * `pshared`:  Indicates whether the semaphore is shared between threads (0) or processes (non-zero).
+/// * `pshared`:  Indicates whether the semaphore is shared between 
+/// threads (0) or processes (non-zero).
 /// * `value`: The initial value of the semaphore.
 ///
 /// ### Returns
 /// * 0 on success.
-/// ### Errors and Panics
+/// ### Errors
 /// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is already initialized.
-/// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value for a semaphore (SEM_VALUE_MAX).
+/// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value 
+/// for a semaphore (SEM_VALUE_MAX).
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
         if value > SEM_VALUE_MAX {
@@ -3826,19 +3838,22 @@ impl Cage {
 /// ## `sem_wait_syscall`
 ///
 /// ### Description
-///  1. Check for Semaphore Existence:The function first checks if the provided semaphore handle exists in the semaphore table.
-///  2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire it using `lock`. This operation will block the calling process until the semaphore becomes available.
-///  3. Error Handling:If the semaphore handle is invalid, the function returns an error
-/// This function allows a process to wait for a semaphore to become available. If the semaphore is
+/// 1. Check for Semaphore Existence:The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+/// 2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire 
+/// it using `lock`. This operation will block the calling process until the semaphore becomes available.
+/// 3. Error Handling:If the semaphore handle is invalid, the function returns an error
+/// 4. This function allows a process to wait for a semaphore to become available. If the semaphore is
 /// currently available (its value is greater than 0), the function will acquire the semaphore and return 0.
-/// If the semaphore is unavailable (its value is 0), the function will block the calling process until the semaphore becomes available.
-///
+/// 5. If the semaphore is unavailable (its value is 0), the function will block the 
+/// calling process until the semaphore becomes available(its value becomes 1).
+///(https://man7.org/linux/man-pages/man3/sem_wait.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
 /// ### Returns
 /// * 0 on success.
-/// ### Errors and Panics
+/// ### Errors
 /// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
@@ -3848,6 +3863,7 @@ impl Cage {
             let semaphore = sementry.clone();
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until the semaphore becomes available.
+            // The `lock` method internally decrements the semaphore value.
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
@@ -3860,10 +3876,12 @@ impl Cage {
 ///
 /// ### Description
 /// This function increments the value of a semaphore.
-///   1. Check for Semaphore Existence:The function first checks if the provided semaphore handle exists in the semaphore table.
-///   2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
-///   3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore would exceed the maximum value, the function returns an appropriate error code.
-/// 
+///  1. Check for Semaphore Existence:The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///  2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
+///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
+///  would exceed the maximum value, the function returns an appropriate error code.
+/// (https://man7.org/linux/man-pages/man3/sem_post.3.html)
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
@@ -3871,7 +3889,7 @@ impl Cage {
 /// ### Returns
 /// * 0 on success.
 ///
-/// ### Errors and Panics
+/// ### Errors
 /// * `EINVAL(22)`: If the semaphore handle is invalid.
 /// * `EOVERFLOW(75)`: If incrementing the semaphore would exceed the maximum allowable value.
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
@@ -3900,18 +3918,21 @@ impl Cage {
 ///
 /// ### Description
 /// This function destroys a semaphore, freeing its associated resources.
-///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle exists in the semaphore table.
-///   2. Remove from Semaphore Table: If the semaphore exists, the function removes it from the semaphore table.
-///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the function also removes it from the shared memory attachments of other processes.
+///   1. Check for Semaphore Existence: The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   2. Remove from Semaphore Table: If the semaphore exists, the function removes 
+/// it from the semaphore table.
+///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the 
+/// function also removes it from the shared memory attachments of other processes.
 ///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///
+///(https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
 /// ### Returns
 /// * 0 on success.
 ///
-/// ### Errors and Panics
+/// ### Errors
 /// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
@@ -3963,10 +3984,14 @@ impl Cage {
 /// ## `sem_getvalue_syscall`
 ///
 /// ### Description
-/// This function implements the `sem_getvalue` system call, which retrieves the current value of a semaphore.
-///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle exists in the semaphore table.
-///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves its current value and returns it.
+/// This function implements the `sem_getvalue` system call, which retrieves the 
+/// current value of a semaphore.
+///   1. Check for Semaphore Existence: The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves
+///  its current value and returns it.
 ///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///(https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
@@ -3974,7 +3999,7 @@ impl Cage {
 /// ### Returns
 /// * The current value of the semaphore on success.
 ///
-/// ### Errors and Panics
+/// ### Errors
 /// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
@@ -3995,21 +4020,25 @@ impl Cage {
 /// ## `sem_trywait_syscall`
 ///
 /// ### Description
-/// This function implements the `sem_trywait` system call, which attempts to acquire a semaphore without blocking.
-///   1. Check for Semaphore Existence: The function first checks if the provided semaphore handle is valid.
-///   2. Attempt to Acquire: If the semaphore exists, the function attempts to acquire it using `trylock`.
-///   3. Error Handling: If the semaphore is unavailable or the handle is invalid, the function returns an appropriate error code.
-///
+/// This function implements the `sem_trywait` system call, which attempts 
+/// to acquire a semaphore without blocking.
+///   1. Check for Semaphore Existence: The function first checks if the 
+/// provided semaphore handle is valid.
+///   2. Attempt to Acquire: If the semaphore exists, the function attempts
+///  to acquire it using `trylock`.
+///   3. Error Handling: If the semaphore is unavailable or the handle is invalid,
+///  the function returns an appropriate error code.
+///(https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
 /// ### Returns
 /// * 0 on success (semaphore acquired).
-/// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
-/// * `EINVAL(22)`: If the semaphore handle is invalid.
 ///
-/// ### Errors and Panics
+/// ### Errors
 /// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
+
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
@@ -4037,22 +4066,26 @@ impl Cage {
 /// ## `sem_timedwait_syscall`
 ///
 /// ### Description
-/// This function implements the `sem_timedwait` system call, which attempts to acquire a semaphore with a timeout.
-///   1. Convert Timeout to Timespec: The function first converts the provided timeout duration into a `timespec` structure, which is used by the underlying `timedlock` function.
-///   2. Check for Semaphore Existence: The function then checks if the provided semaphore handle exists in the semaphore table.
-///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts to acquire it using `timedlock`, which will block for the specified duration.
-///   4. Error Handling: If the semaphore is unavailable, the timeout expires, or the handle is invalid, the function returns an appropriate error code.
-///
+/// This function implements the `sem_timedwait` system call, which attempts to 
+//// acquire a semaphore with a timeout.
+///   1. Convert Timeout to Timespec: The function first converts the provided 
+/// timeout duration into a `timespec` structure, which is used by the underlying `timedlock` function.
+///   2. Check for Semaphore Existence: The function then checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts 
+/// to acquire it using `timedlock`, which will block for the specified duration.
+///   4. Error Handling: If the semaphore is unavailable, the timeout expires, 
+/// or the handle is invalid, the function returns an appropriate error code.
+///(https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 /// * `time`: The maximum time to wait for the semaphore to become available, expressed as a `RustDuration`.
 ///
 /// ### Returns
 /// * 0 on success (semaphore acquired).
-/// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes available.
-/// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
 ///
-/// ### Errors and Panics
+/// ### Errors
+/// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes available.
 /// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
     pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
         let abstime = libc::timespec {
