@@ -1716,7 +1716,7 @@ impl Cage {
 /// * **Side Effects:** The function modifies the global `filedescriptortable` array, adding a new entry for the 
 ///   duplicated file descriptor. It also increments the reference count of the file object associated with the 
 ///   original file descriptor.
-///(https://man7.org/linux/man-pages/man2/dup.2.html)
+///[dup(2)](https://man7.org/linux/man-pages/man2/dup.2.html)
 /// ### Function Arguments
 /// * `fd`: The original file descriptor to duplicate.
 /// * `start_desc`:  An optional starting file descriptor number. If provided, the new file descriptor will be 
@@ -3964,7 +3964,7 @@ impl Cage {
 ///  2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
 ///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
 ///  would exceed the maximum value, the function returns an appropriate error code.
-/// (https://man7.org/linux/man-pages/man3/sem_post.3.html)
+/// [sem_post(3)](https://man7.org/linux/man-pages/man3/sem_post.3.html)
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
