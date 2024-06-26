@@ -2044,4 +2044,40 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
+    pub fn ut_lind_fs_dup2_out_of_range_fd() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a file
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+    
+        // Attempt to duplicate to an out-of-range file descriptor
+        let new_fd = cage.dup2_syscall(fd, MAXFD + 1);
+        assert_eq!(new_fd, -(Errno::EBADF as i32));
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_dup2_full_table() {
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a large number of files to fill the file descriptor table
+        for i in 0..MAXFD {
+            let fd = cage.open_syscall(&format!("/testfile{}", i), O_CREAT | O_WRONLY, S_IRWXA);
+            assert_ne!(fd, -(Errno::ENOENT as i32));
+        }
+    
+        // Attempt to duplicate a file descriptor
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+        let new_fd = cage.dup2_syscall(fd, 5);
+        assert_eq!(new_fd, -(Errno::ENFILE as i32));
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
     }
