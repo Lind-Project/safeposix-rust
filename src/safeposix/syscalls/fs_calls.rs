@@ -496,34 +496,104 @@ impl Cage {
         }
     }
 
-    //------------------MKNOD SYSCALL------------------
-
+    /// ## ------------------MKNOD SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `mknod_syscall()` creates a filesystem node (file, device special file
+    /// or pipe) named by a path as the input parameter.
+    /// The file type and the permissions of the new file are initialized from the
+    /// "mode" provided as the input parameter.
+    /// There are 5 different file types: S_IFREG, S_IFCHR, S_IFBLK, S_IFIFO, or
+    /// S_IFSOCK representing a regular file, character special file, block special
+    /// file, FIFO (named pipe), or UNIX domain socket, respectively.
+    /// The newly created file is empty with size 0.
+    /// On successful completion, the timestamps for both the newly created file
+    /// and its parent are updated along with their linkcounts.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `mknod_syscall()` receives three arguments:
+    /// * `path` - This argument points to a pathname naming the file.
+    /// For example: "/parentdir/file" represents the new file name as "file",
+    /// which will be created at this path (/parentdir/file).
+    ///
+    /// * `mode` - The mode argument specifies both the permissions to use and the
+    /// type of node to be created. It is a combination (using bitwise OR) of one
+    /// of the file types and the permissions for the new node.
+    /// FileType - In LIND, we have only implemented the file type of "Character
+    /// Device" represented by S_IFCHR flag.
+    /// FilePermission - The general permission mode used is "S_IRWXA": which
+    /// represents the read, write, and search permissions on the new file.
+    /// The final file mode is represented by the bitwise-OR of FileType and
+    /// FilePermission Flags.
+    ///
+    /// * `dev` - It is a configuration-dependent specification of a character or
+    /// block I/O device. If mode does not indicate a block special or character
+    /// special device, dev is ignored.
+    /// Since "CharDev" is the only supported type, 'dev' is represented using
+    /// makedev() function; that returns a formatted device number   
+    /// For example: "makedev(&DevNo { major: majorId, minor: minorId })" accepts a
+    /// Device Number that consists of a MajorID, identifying the class of the device,
+    /// and a minor ID, identifying a specific instance of a device in that class.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful creation of the file, 0 is returned.
+    /// Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - occurs when a directory component in the absolute path does
+    /// not exist
+    /// * `EPERM` - the mode bits for the new file are not sane
+    /// * `EINVAL` - when any other file type (regular, socket, block, fifo) instead
+    /// of character file type is passed
+    /// * `EEXIST` - when the file to be created already exists
+    ///
+    /// ### Panics
+    ///
+    /// We don't have panics for mknod_syscall() as of now.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [mknod(2)](https://man7.org/linux/man-pages/man2/mknod.2.html)
+    ///
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
-        //Check that path is not empty
+        // Return an error if the provided path is empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "mknod", "given path was null");
         }
+        // Retrieve the absolute path from the root directory. The absolute path is
+        // then used to validate directory paths while navigating through
+        // subdirectories and establishing new directory at the given location.
         let truepath = normpath(convpath(path), self);
 
-        //pass the metadata to this helper. If passed table is none, then create new instance
+        // Store the FileMetadata into a helper variable which is used for fetching
+        // the metadata of a given inode from the Inode Table.
         let metadata = &FS_METADATA;
 
+        // Walk through the absolute path which returns a tuple consisting of inode
+        // number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
-            //If neither the file nor parent exists
-            (None, None) => syscall_error(
-                Errno::ENOENT,
-                "mknod",
-                "a directory component in pathname does not exist or is a dangling symbolic link",
-            ),
-
-            //If the file doesn't exist but the parent does
+            // Case: When the file doesn't exist but the parent directory exists
             (None, Some(pardirinode)) => {
-                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
+                // for now we assume this is sane, but maybe this should be checked later
+                let filename = truepath.file_name().unwrap().to_str().unwrap().to_string();
 
-                //assert sane mode bits (asserting that the mode bits make sense)
+                // S_FILETYPEFLAGS represents a bitmask that can be used to extract
+                // the file type information from a file's mode.
+                // This code is referenced from Lind-Repy codebase.
+                // Here, we are checking whether the mode bits are sane by ensuring
+                // that only valid file permission bits (S_IRWXA) and file type bits
+                // (S_FILETYPEFLAGS) are set. Else, we return the error.
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mknod", "Mode bits were not sane");
                 }
+
+                // As of now, the only file type in LIND supported by mknod_syscall
+                // is "Char Device" represented by S_IFCHR flag.
+                // In order to check for Char file type, a bitwise-AND operation for
+                // S_IFCHR flag is performed with the "mode" bits and an error is returned
+                // when the result is 0 denoting the support for only character files.
                 if mode as i32 & S_IFCHR == 0 {
                     return syscall_error(
                         Errno::EINVAL,
@@ -531,7 +601,8 @@ impl Cage {
                         "only character files are supported",
                     );
                 }
-                let time = interface::timestamp(); //We do a real timestamp now
+                // New Inode of type CharDev is created with file size 0
+                let time = interface::timestamp(); // We do a real timestamp now
                 let newinode = Inode::CharDev(DeviceInode {
                     size: 0,
                     uid: DEFAULT_UID,
@@ -545,9 +616,15 @@ impl Cage {
                     dev: devtuple(dev),
                 });
 
+                // fetch_add returns the previous value, which is the inode number we want
                 let newinodenum = FS_METADATA
                     .nextinode
-                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
+                    .fetch_add(1, interface::RustAtomicOrdering::Relaxed);
+
+                // Insert a reference to the file in the parent directory and update
+                // the inode attributes.
+                // Fetch the inode of the parent directory and only proceed when its
+                // type is directory.
                 if let Inode::Dir(ref mut parentdir) =
                     *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                 {
@@ -555,17 +632,32 @@ impl Cage {
                         .filename_to_inode_dict
                         .insert(filename, newinodenum);
                     parentdir.linkcount += 1;
-                } //insert a reference to the file in the parent directory
+                    // Update the ctime and mtime for the parent directory as well
+                    // since the new file is linked with it.
+                    parentdir.ctime = time;
+                    parentdir.mtime = time;
+                }
+
+                // Update the inode table by inserting the newly formed inode mapped
+                // with its inode number.
                 metadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(metadata, pardirinode);
                 log_metadata(metadata, newinodenum);
-                0 //mknod has succeeded
+                0 // mknod has succeeded
             }
 
+            // Case: When the file directory name already exists, then return the error.
             (Some(_), ..) => syscall_error(
                 Errno::EEXIST,
                 "mknod",
                 "pathname already exists, cannot create device file",
+            ),
+
+            // Case: When neither the file directory nor the parent directory exists
+            (None, None) => syscall_error(
+                Errno::ENOENT,
+                "mknod",
+                "a directory component in pathname does not exist or is a dangling symbolic link",
             ),
         }
     }
