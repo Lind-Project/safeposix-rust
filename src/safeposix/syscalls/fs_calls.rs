@@ -3768,8 +3768,9 @@ impl Cage {
 /// between processes, 
 /// the function adds it to the shared memory attachments of other processes 
 /// that have already attached to the shared memory segment.
-/// 5. The function ensures thread safety by using a unique semaphore handle and checking for existing entries in the semaphore table 
-/// before attempting to create a new one.  The code also avoids inserting a semaphore into the same cage twice during the shared 
+/// 5. The function ensures thread safety by using a unique semaphore handle and 
+/// checking for existing entries in the semaphore table before attempting to create a new one.
+/// The code also avoids inserting a semaphore into the same cage twice during the shared 
 /// memory attachment process by excluding the initial cage from the iteration loop.
 ///[sem_init](https://man7.org/linux/man-pages/man3/sem_init.3.html)
 /// ### Function Arguments
@@ -3842,11 +3843,12 @@ impl Cage {
 /// ### Description
 /// 1. Check for Semaphore Existence:The function first checks if the provided 
 /// semaphore handle exists in the semaphore table.
-/// 2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire 
-/// it using `lock`. This operation will block the calling process until the semaphore becomes available.
+/// 2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire it using `lock`. 
+/// This operation will block the calling process until the semaphore becomes available.
 /// 3. Error Handling:If the semaphore handle is invalid, the function returns an error
-/// 4. This function allows a process to wait for a semaphore to become available. If the semaphore is
-/// currently available (its value is greater than 0), the function will acquire the semaphore and return 0.
+/// 4. This function allows a process to wait for a semaphore to become available. 
+/// If the semaphore is currently available (its value is greater than 0), the function will 
+/// acquire the semaphore and return 0.
 /// 5. If the semaphore is unavailable (its value is 0), the function will block the 
 /// calling process until the semaphore becomes available(its value becomes 1).
 ///[sem_wait(2)](https://man7.org/linux/man-pages/man3/sem_wait.3.html)
@@ -3865,8 +3867,8 @@ impl Cage {
             // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
             drop(sementry);
-            // Acquire the semaphore. This operation will block the calling process until the semaphore becomes available.
-            // The `lock` method internally decrements the semaphore value.
+            // Acquire the semaphore. This operation will block the calling process until the 
+            ///semaphore becomes available. The`lock` method internally decrements the semaphore value.
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
@@ -3881,7 +3883,8 @@ impl Cage {
 /// This function increments the value of a semaphore.
 ///  1. Check for Semaphore Existence:The function first checks if the provided 
 /// semaphore handle exists in the semaphore table.
-///  2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
+///  2. Increment Semaphore Value: If the semaphore exists, the function 
+/// increments its value using `unlock`.
 ///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
 ///  would exceed the maximum value, the function returns an appropriate error code.
 /// [sem_post](https://man7.org/linux/man-pages/man3/sem_post.3.html)
@@ -4075,7 +4078,8 @@ impl Cage {
 /// This function implements the `sem_timedwait` system call, which attempts to 
 /// acquire a semaphore with a timeout.
 ///   1. Convert Timeout to Timespec: The function first converts the provided 
-/// timeout duration into a `timespec` structure, which is used by the underlying `timedlock` function.
+/// timeout duration into a `timespec` structure, which is used by the underlying 
+/// `timedlock` function.
 ///   2. Check for Semaphore Existence: The function then checks if the provided 
 /// semaphore handle exists in the semaphore table.
 ///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts 
@@ -4085,7 +4089,8 @@ impl Cage {
 ///[sem_timedwait(2)](https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
-/// * `time`: The maximum time to wait for the semaphore to become available, expressed as a `RustDuration`.
+/// * `time`: The maximum time to wait for the semaphore to become available,
+///  expressed as a `RustDuration`.
 ///
 /// ### Returns
 /// * 0 on success (semaphore acquired).
