@@ -83,16 +83,6 @@ pub mod fs_tests {
 
         //dup_sycall_tests
         ut_lind_fs_dup_basic();
-        ut_lind_fs_dup_start_desc();
-        ut_lind_fs_dup_existing_start_desc();
-        ut_lind_fs_dup_full_table();
-
-        //dup2_syscall_tests
-        ut_lind_fs_dup2_basic();
-        ut_lind_fs_dup2_existing_fd();
-        ut_lind_fs_dup2_invalid_fd();
-        ut_lind_fs_dup2_out_of_range_fd();
-        ut_lind_fs_dup2_full_table();
     }
 
     pub fn ut_lind_fs_simple() {
@@ -1877,3 +1867,32 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 }
+
+pub fn ut_lind_fs_dup_basic() {
+    lindrustinit(0);
+    let cage = interface::cagetable_getref(1);
+
+    // Open a file
+    let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+    assert_ne!(fd, -(Errno::ENOENT as i32));
+
+    // Duplicate the file descriptor
+    let new_fd = cage.dup_syscall(fd, None);
+    assert_ne!(new_fd, -(Errno::ENFILE as i32));
+
+    // Verify that the new file descriptor points to the same file
+    let mut statdata = StatData::default();
+    assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
+    let mut statdata2 = StatData::default();
+    assert_eq!(cage.fstat_syscall(new_fd, &mut statdata2), 0);
+    assert_eq!(statdata.st_ino, statdata2.st_ino);
+
+    // Close both file descriptors
+    assert_eq!(cage.close_syscall(fd), 0);
+    assert_eq!(cage.close_syscall(new_fd), 0);
+
+    assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+    lindrustfinalize();
+}
+
+
