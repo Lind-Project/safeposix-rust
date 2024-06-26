@@ -1,6 +1,7 @@
 #[allow(unused_parens)]
 #[cfg(test)]
 pub mod fs_tests {
+
     use super::super::*;
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
@@ -9,94 +10,12 @@ pub mod fs_tests {
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
-    pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
-
-        ut_lind_fs_broken_close();
-        ut_lind_fs_chmod_valid_args();
-        ut_lind_fs_chmod_invalid_args();
-        ut_lind_fs_fchmod();
-        ut_lind_fs_dir_chdir();
-        ut_lind_fs_dir_mode();
-        ut_lind_fs_dir_multiple();
-        ut_lind_fs_dup();
-        ut_lind_fs_dup2();
-        ut_lind_fs_fcntl_valid_args();
-        ut_lind_fs_fcntl_invalid_args();
-        ut_lind_fs_fcntl_dup();
-        ut_lind_fs_ioctl_valid_args();
-        ut_lind_fs_ioctl_invalid_args();
-        ut_lind_fs_fdflags();
-        ut_lind_fs_file_link_unlink();
-        ut_lind_fs_file_lseek_past_end();
-        ut_lind_fs_fstat_complex();
-        ut_lind_fs_getuid();
-        ut_lind_fs_load_fs();
-
-        // mknod_syscall_tests
-        ut_lind_fs_mknod_empty_path();
-        ut_lind_fs_mknod_nonexisting_parent_directory();
-        ut_lind_fs_mknod_existing_file();
-        ut_lind_fs_mknod_invalid_modebits();
-        ut_lind_fs_mknod_invalid_filetypes();
-        ut_lind_fs_mknod_success();
-
-        ut_lind_fs_multiple_open();
-        ut_lind_fs_rename();
-        ut_lind_fs_rmdir();
-        ut_lind_fs_stat_file_complex();
-        ut_lind_fs_stat_file_mode();
-        ut_lind_fs_statfs();
-        ut_lind_fs_fstatfs();
-        ut_lind_fs_ftruncate();
-        ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
-        ut_lind_fs_dir_chdir_getcwd();
-        rdwrtest();
-        prdwrtest();
-        chardevtest();
-        ut_lind_fs_exec_cloexec();
-        ut_lind_fs_shm();
-        ut_lind_fs_getpid_getppid();
-        ut_lind_fs_sem_fork();
-        ut_lind_fs_sem_trytimed();
-        ut_lind_fs_sem_test();
-        ut_lind_fs_tmp_file_test();
-
-        //mkdir_syscall_tests
-        ut_lind_fs_mkdir_empty_directory();
-        ut_lind_fs_mkdir_nonexisting_directory();
-        ut_lind_fs_mkdir_existing_directory();
-        ut_lind_fs_mkdir_invalid_modebits();
-        ut_lind_fs_mkdir_success();
-        ut_lind_fs_mkdir_using_symlink();
-
-        //open_syscall_tests
-        ut_lind_fs_open_empty_directory();
-        ut_lind_fs_open_nonexisting_parentdirectory_and_file();
-        ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file();
-        ut_lind_fs_open_existing_file_without_flags();
-        ut_lind_fs_open_existing_file_with_flags();
-        ut_lind_fs_open_create_new_file_and_check_link_count();
-        ut_lind_fs_open_existing_file_with_o_trunc_flag();
-        ut_lind_fs_open_new_file_with_s_ifchar_flag();
-
-        //dup_sycall_tests
-        // ut_lind_fs_dup_basic();
-        // ut_lind_fs_dup_start_desc();
-        // ut_lind_fs_dup_existing_start_desc();
-        // ut_lind_fs_dup_full_table();
-
-        // //dup2_syscall_tests
-        // ut_lind_fs_dup2_basic();
-        // ut_lind_fs_dup2_existing_fd();
-        // ut_lind_fs_dup2_invalid_fd();
-        // ut_lind_fs_dup2_out_of_range_fd();
-        // ut_lind_fs_dup2_full_table();
-    }
-
+    #[test]
     pub fn ut_lind_fs_simple() {
-        lindrustinit(0);
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.access_syscall("/", F_OK), 0);
@@ -112,11 +31,15 @@ pub mod fs_tests {
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+
         lindrustfinalize();
     }
 
+    #[test]
     pub fn rdwrtest() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -141,8 +64,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn prdwrtest() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -164,8 +90,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn chardevtest() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
@@ -209,10 +138,13 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_broken_close() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        
         //testing a muck up with the inode table where the regular close does not work as intended
-
-        lindrustinit(0);
+        
         let cage = interface::cagetable_getref(1);
 
         //write should work
@@ -243,8 +175,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_chmod_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -314,8 +249,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_chmod_invalid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //checking if passing a nonexistent pathname to `chmod_syscall()`
@@ -345,8 +283,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fchmod() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -387,8 +328,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_chdir() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //testing the ability to make and change to directories
@@ -411,8 +355,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_mode() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let filepath1 = "/subdirDirMode1";
@@ -432,8 +379,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_multiple() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
@@ -468,8 +418,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -525,8 +478,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup2() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -573,8 +529,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -604,8 +563,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_fcntl_invalid_args() {
-        lindrustinit(0);
+    #[test]
+    pub fn ut_lind_fs_fcntl_invalid_args(){
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let filefd = cage.open_syscall("/fcntl_file_2", O_CREAT | O_EXCL, S_IRWXA);
         //when presented with a nonexistent command, 'Invalid Argument' error should be thrown
@@ -632,8 +594,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_fcntl_dup() {
-        lindrustinit(0);
+    #[test]
+    pub fn ut_lind_fs_fcntl_dup(){
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let filefd1 = cage.open_syscall("/fcntl_file_4", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -664,8 +629,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ioctl_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior
@@ -698,8 +666,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ioctl_invalid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
@@ -754,10 +725,13 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
+        }
 
+    #[test]
     pub fn ut_lind_fs_fdflags() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/fdFlagsFile";
@@ -798,8 +772,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_file_link_unlink() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/fileLink";
@@ -838,8 +815,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_file_lseek_past_end() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/lseekPastEnd";
@@ -861,8 +841,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fstat_complex() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
         let path = "/complexFile";
@@ -881,8 +863,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_getuid() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //let's get the initial -1s out of the way
@@ -901,8 +886,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_load_fs() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let mut statdata = StatData::default();
@@ -923,8 +911,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_empty_path() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "";
@@ -937,8 +928,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_nonexisting_parent_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/parentdir/file";
@@ -951,8 +945,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_existing_file() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/charfile";
@@ -968,8 +965,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_invalid_modebits() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/testfile";
@@ -983,9 +983,12 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_invalid_filetypes() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // Check for error when file types other than S_IFCHR are passed in the input
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/invalidfile";
@@ -1018,9 +1021,12 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_success() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // let's create /dev/null
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
 
@@ -1083,8 +1089,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_multiple_open() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //try to open several files at once -- the fd's should not be overwritten
@@ -1115,8 +1124,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_rmdir() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/parent_dir/dir";
@@ -1128,8 +1140,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_stat_file_complex() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let fd = cage.open_syscall("/fooComplex", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
@@ -1154,8 +1169,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_stat_file_mode() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
@@ -1177,8 +1195,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_statfs() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
@@ -1190,8 +1211,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fstatfs() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
@@ -1210,8 +1234,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_rename() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let old_path = "/test_dir";
@@ -1222,8 +1249,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ftruncate() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/ftruncate", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -1248,8 +1278,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_truncate() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = String::from("/truncate");
@@ -1281,8 +1314,11 @@ pub mod fs_tests {
     #[cfg(not(target_os = "macos"))]
     type CharPtr = *const i8;
 
+    #[test]
     pub fn ut_lind_fs_getdents() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let bufsize = 50;
@@ -1315,8 +1351,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let needed = "/subdir1\0".as_bytes().to_vec().len();
 
@@ -1347,8 +1386,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_exec_cloexec() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let mut uselessstatdata = StatData::default();
 
@@ -1380,8 +1422,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_shm() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         let mut shmidstruct = ShmidsStruct::default();
@@ -1414,8 +1459,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_getpid_getppid() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
 
         let cage1 = interface::cagetable_getref(1);
         let pid1 = cage1.getpid_syscall();
@@ -1438,47 +1486,64 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    // This test verifies the functionality of semaphores in a fork scenario.
+    // The test involves a parent process and a child process that synchronize
+    //their execution using a shared semaphore. The test aims to ensure:
+    //   1. The semaphore is initialized correctly.
+    //   2. The child process can acquire and release the semaphore.
+    //   3. The parent process can acquire and release the
+    //      semaphore after the child process exits.
+    //   4. The semaphore can be destroyed safely.
+    #[test]
     pub fn ut_lind_fs_sem_fork() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
-        // Create a shared memory region
+
+        // Create a shared memory region of 1024 bytes. This region will be
+        // shared between the parent and child process.
+        // IPC_CREAT tells the system to create a new memory segment for the shared memory
+        // and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        // Attach the shared memory region
+        
+        // Attach shared memory for semaphore access.
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
-        // Initialize the semaphore with shared between process
+        // Initialize semaphore in shared memory (initial value: 1, available).
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        // Fork child process
+        // Fork process to create child (new cagetable ID 2) for semaphore testing.
         assert_eq!(cage.fork_syscall(2), 0);
-        // Child process
+        // Create thread to simulate child process behavior after forking.
         let thread_child = interface::helper_thread(move || {
+            // Set reference to child process's cagetable (ID 2) for independent operation.
             let cage1 = interface::cagetable_getref(2);
-            // Child waits for the semaphore
-            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
+            // Child process blocks on semaphore wait (decrementing it from 1 to 0).
+            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);            
+            // Simulate processing time with 40ms delay.
             interface::sleep(interface::RustDuration::from_millis(40));
-            // Release the semaphore
+            // Child process releases semaphore, signaling its availability to parent
+            //(value increases from 0 to 1).
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
 
-        //Parent processes
-        // Parents waits for the semaphore
+        // Parent waits on semaphore (blocks until released by child, decrementing to 0).
         assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
+        // Simulate parent process processing time with 100ms delay to ensure synchronization.
         interface::sleep(interface::RustDuration::from_millis(100));
-
-        // Parents release the semaphore
-        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
-
-        // wait for the child process to exit before destroying the semaphore.
+        // Wait for child process to finish to prevent race conditions before destroying semaphore.
+        //Release semaphore, making it available again (value increases to 1).
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0); 
         thread_child.join().unwrap();
 
         // Destroy the semaphore
         assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-        // mark the shared memory to be rmoved
+        // Mark the shared memory segment to be removed.
         let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
         assert_eq!(shmctlret2, 0);
         //detach from shared memory
@@ -1489,53 +1554,74 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    // This test verifies the functionality of timed semaphores in a fork scenario.
+    // It involves a parent process and a child process that synchronize their execution using a
+    //shared semaphore with a timeout. The test aims to ensure:
+    //  1. The semaphore is initialized correctly.
+    //  2. The child process can acquire and release the semaphore.
+    //  3. The parent process can acquire the semaphore using a timed wait operation with a
+    //  timeout, and the semaphore is acquired successfully.
+    //  4. The parent process can release the semaphore.
+    //  5. The semaphore can be destroyed safely.
+    #[test]
     pub fn ut_lind_fs_sem_trytimed() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
-        // Create a shared memory region
+        // Create a shared memory region of 1024 bytes.
+        //This region will be shared between the parent and child process.
+        // IPC_CREAT tells the system to create a new memory segment for the shared memory
+        // and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        // Attach the shared memory region
+        // Attach the shared memory region to the address space of the process
+        // to make sure for both processes to access the shared semaphore.
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
-        // Initialize the semaphore with shared between process
+        // Initialize semaphore in shared memory (initial value: 1, available).
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
-        // assert_eq!(shmatret as u32, 0);
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        // Fork child process
+        // Fork process, creating a child process with its own independent cagetable (ID 2).
         assert_eq!(cage.fork_syscall(2), 0);
-        // Child process
+        // Define the child process behavior in a separate thread
         let thread_child = interface::helper_thread(move || {
+            // Get reference to child's cagetable (ID 2) for independent operations.
             let cage1 = interface::cagetable_getref(2);
-            // Child waits for the semaphore
+            // Child process blocks on semaphore, waiting until it becomes available
+            //(semaphore decremented to 0).
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            // Wait
+            // Simulate some work by sleeping for 20 milliseconds.
             interface::sleep(interface::RustDuration::from_millis(20));
-            // Release the semaphore
+            // Child process releases semaphore, signaling its availability to the parent process
+            //(value increases from 0 to 1).
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
         });
-        //Parent processes
-        // Parents waits for the semaphore
+        // Parent process waits (with 100ms timeout) for semaphore release by child
+        //returns 0 if acquired successfully before timeout.
         assert_eq!(
             cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)),
             0
         );
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
+        // Simulate some work by sleeping for 10 milliseconds.
         interface::sleep(interface::RustDuration::from_millis(10));
-        // Parents release the semaphore
+        // Release semaphore, signaling its availability for parent
+        //(value increases from 0 to 1).
         assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
 
+        // wait for the child process to exit before destroying the semaphore.
         // wait for the child to exit before destroying the semaphore.
         thread_child.join().unwrap();
 
         // Destroy the semaphore
         assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-        // mark the shared memory to be rmoved
+        // Mark the shared memory segment to be removed.
         let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
         assert_eq!(shmctlret2, 0);
-        //detach from shared memory
+        // Detach from the shared memory region.
         let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
         assert_eq!(shmdtret, shmid);
 
@@ -1544,8 +1630,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_test() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1568,8 +1657,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_tmp_file_test() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Check if /tmp is there
@@ -1596,8 +1688,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_empty_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "";
         // Check for error when directory is empty
@@ -1606,8 +1701,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_nonexisting_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir/dir";
         // Check for error when both parent and child directories don't exist
@@ -1616,8 +1714,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_existing_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         // Create a parent directory
@@ -1628,8 +1729,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_invalid_modebits() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         let invalid_mode = 0o77777; // Invalid mode bits
@@ -1644,8 +1748,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_success() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         // Create a parent directory
@@ -1673,8 +1780,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_using_symlink() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a file which will be referred to as originalFile
@@ -1694,8 +1804,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_empty_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "";
         // Check for error when directory is empty
@@ -1707,8 +1820,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/dir/file";
         // Check for error when neither file nor parent exists and O_CREAT flag is not present
@@ -1727,8 +1843,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         // Create a parent directory
         assert_eq!(cage.mkdir_syscall("/dir", S_IRWXA), 0);
@@ -1757,11 +1876,14 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_file_without_flags() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // This test is used for validating two scenarios:
         // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
         // 2. When the same existing file is being opened without O_CREAT flag, it should open successfully.
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         // Open a non-existing file with O_CREAT flag
@@ -1779,11 +1901,14 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_file_with_flags() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // This test is used for validating two scenarios:
         // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
         // 2. When the same existing file is opened using O_CREAT and O_EXCL flags, it should return an error for file already existing.
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         // Open a non-existing file with O_CREAT flag
@@ -1804,8 +1929,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_create_new_file_and_check_link_count() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a new file
@@ -1830,8 +1958,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_file_with_o_trunc_flag() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a new file
@@ -1859,8 +1990,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_new_file_with_s_ifchar_flag() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a parent directory
@@ -1876,4 +2010,4 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    }
+}
