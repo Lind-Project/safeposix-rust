@@ -3765,13 +3765,13 @@ impl Cage {
 /// 3. Initialize New Semaphore: If the semaphore does not exist, the function 
 /// creates a new semaphore object and inserts it into the semaphore table.
 /// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared 
-//// between processes, 
+/// between processes, 
 /// the function adds it to the shared memory attachments of other processes 
 /// that have already attached to the shared memory segment.
 /// 5. The function ensures thread safety by using a unique semaphore handle and checking for existing entries in the semaphore table 
 /// before attempting to create a new one.  The code also avoids inserting a semaphore into the same cage twice during the shared 
 /// memory attachment process by excluding the initial cage from the iteration loop.
-///(https://man7.org/linux/man-pages/man3/sem_init.3.html)
+///[sem_init](https://man7.org/linux/man-pages/man3/sem_init.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 /// * `pshared`:  Indicates whether the semaphore is shared between 
@@ -3783,6 +3783,7 @@ impl Cage {
 /// ### Errors
 /// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is already initialized.
 /// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value 
+/// * 'ENOSYS(38)' : Currently not supported
 /// for a semaphore (SEM_VALUE_MAX).
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
@@ -3793,10 +3794,9 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let is_shared = pshared != 0;
 
-        // Iterate semaphore table, if semaphore is already initialized return error
+        // Iterate semaphore table, if semaphore is already initialized return error & Will initialize only it's new
         let semtable = &self.sem_table;
 
-        // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
             // Create a new semaphore object.
             let new_semaphore =
@@ -3813,6 +3813,8 @@ impl Cage {
                 {
                     let offset = mapaddr - sem_handle;
                     // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
+                    // offset represents the relative position of the semaphore within the shared memory region.
+                    
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
                             // iterate through all cages containing segment
@@ -3847,7 +3849,7 @@ impl Cage {
 /// currently available (its value is greater than 0), the function will acquire the semaphore and return 0.
 /// 5. If the semaphore is unavailable (its value is 0), the function will block the 
 /// calling process until the semaphore becomes available(its value becomes 1).
-///(https://man7.org/linux/man-pages/man3/sem_wait.3.html)
+///[sem_wait(2)](https://man7.org/linux/man-pages/man3/sem_wait.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
@@ -3855,6 +3857,7 @@ impl Cage {
 /// * 0 on success.
 /// ### Errors
 /// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * 'EAGAIN(11)' & 'EINTR(4)' currently are not supported 
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
@@ -3881,7 +3884,7 @@ impl Cage {
 ///  2. Increment Semaphore Value: If the semaphore exists, the function increments its value using `unlock`.
 ///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
 ///  would exceed the maximum value, the function returns an appropriate error code.
-/// (https://man7.org/linux/man-pages/man3/sem_post.3.html)
+/// [sem_post](https://man7.org/linux/man-pages/man3/sem_post.3.html)
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
@@ -3900,6 +3903,8 @@ impl Cage {
             let semaphore = sementry.clone();
             drop(sementry);
             // Increment the semaphore value.
+            //If the semaphore's value becomes greater than zero, one or more blocked threads will be woken up and 
+            // proceed to acquire the semaphore, decreasing its value.
             if !semaphore.unlock() {
                 // Return an error indicating that the maximum allowable value for a semaphore would be exceeded.
                 return syscall_error(
@@ -3925,7 +3930,7 @@ impl Cage {
 ///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the 
 /// function also removes it from the shared memory attachments of other processes.
 ///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///(https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
+///[sem_destroy](https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
@@ -3965,6 +3970,7 @@ impl Cage {
                             // Iterate through all addresses and remove the semaphore from the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
+                                //offset represents the relative position of the semaphore within the shared memory region.
                             }
                         }
                     }
@@ -3991,7 +3997,7 @@ impl Cage {
 ///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves
 ///  its current value and returns it.
 ///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///(https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
+///[sem_getvalue(2)](https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
 ///
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
@@ -4028,7 +4034,7 @@ impl Cage {
 ///  to acquire it using `trylock`.
 ///   3. Error Handling: If the semaphore is unavailable or the handle is invalid,
 ///  the function returns an appropriate error code.
-///(https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
+/// [sem_trywait(2)](https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 ///
@@ -4067,7 +4073,7 @@ impl Cage {
 ///
 /// ### Description
 /// This function implements the `sem_timedwait` system call, which attempts to 
-//// acquire a semaphore with a timeout.
+/// acquire a semaphore with a timeout.
 ///   1. Convert Timeout to Timespec: The function first converts the provided 
 /// timeout duration into a `timespec` structure, which is used by the underlying `timedlock` function.
 ///   2. Check for Semaphore Existence: The function then checks if the provided 
@@ -4076,7 +4082,7 @@ impl Cage {
 /// to acquire it using `timedlock`, which will block for the specified duration.
 ///   4. Error Handling: If the semaphore is unavailable, the timeout expires, 
 /// or the handle is invalid, the function returns an appropriate error code.
-///(https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
+///[sem_timedwait(2)](https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
 /// ### Function Arguments
 /// * `sem_handle`: A unique identifier for the semaphore.
 /// * `time`: The maximum time to wait for the semaphore to become available, expressed as a `RustDuration`.
