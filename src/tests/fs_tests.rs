@@ -1866,7 +1866,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-}
+
 
 pub fn ut_lind_fs_dup_basic() {
     lindrustinit(0);
@@ -1896,3 +1896,4 @@ pub fn ut_lind_fs_dup_basic() {
 }
 
 
+}
