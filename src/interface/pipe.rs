@@ -223,7 +223,6 @@ impl EmulatedPipe {
 
         let pipe_space = write_end.remaining();
         if nonblocking && (pipe_space == 0) {
-            // BUG: FIX NONBLOCK
             return syscall_error(
                 Errno::EAGAIN,
                 "write",
