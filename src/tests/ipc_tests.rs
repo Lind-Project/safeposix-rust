@@ -7,9 +7,6 @@ pub mod ipc_tests {
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
     use std::time::Instant;
-    use lazy_static::lazy_static;
-    use std::sync::{Arc, Mutex};
-    use setup::TESTMUTEX;
 
     #[test]
     pub fn ut_lind_ipc_pipe() {

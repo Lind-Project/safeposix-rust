@@ -6,9 +6,6 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
-    use lazy_static::lazy_static;
-    use std::sync::Mutex;
-    use setup::TESTMUTEX;
 
     #[test]
     pub fn ut_lind_net_bind() {
