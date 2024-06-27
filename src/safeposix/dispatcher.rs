@@ -1,9 +1,12 @@
-//! The dispatcher function handles system call requests, validates cage existence, and ensures safe concurrent access with a lock.
+//! The dispatcher function handles system call requests, validates cage
+//! existence, and ensures safe concurrent access with a lock.
 //!
 //!  ## Dispatcher Function
 //!
-//! - Receives system call requests with a cage ID, syscall number, and six arguments.
-//! - Validates cage existence, initializes if necessary, and calls the corresponding method using `match`.
+//! - Receives system call requests with a cage ID, syscall number, and six
+//!   arguments.
+//! - Validates cage existence, initializes if necessary, and calls the
+//!   corresponding method using `match`.
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
@@ -140,10 +143,11 @@ macro_rules! get_onearg {
     };
 }
 
-//this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and all of the arguments
-//to the syscall. Then it unwraps the arguments, returning the error if any one of them is an error
-//value, and returning the value of the function if not. It does this by using the ? operator in
-//the body of a closure within the variadic macro
+//this macro takes in a syscall invocation name (i.e. cage.fork_syscall), and
+// all of the arguments to the syscall. Then it unwraps the arguments, returning
+// the error if any one of them is an error value, and returning the value of
+// the function if not. It does this by using the ? operator in the body of a
+// closure within the variadic macro
 macro_rules! check_and_dispatch {
     ( $cage:ident . $func:ident, $($arg:expr),* ) => {
         match (|| Ok($cage.$func( $($arg?),* )))() {
@@ -1012,7 +1016,8 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     if !interface::lind_sigismember(sigset.load(interface::RustAtomicOrdering::Relaxed), signo) {
         return match cage.signalhandler.get(&signo) {
             Some(action_struct) => {
-                action_struct.sa_handler // if we have a handler and its not blocked return it
+                action_struct.sa_handler // if we have a handler and its not
+                                         // blocked return it
             }
             None => 0, // if we dont have a handler return 0
         };
@@ -1022,8 +1027,9 @@ pub extern "C" fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
             interface::lind_sigaddset(mutpendingset, signo),
             interface::RustAtomicOrdering::Relaxed,
         );
-        1 // if its blocked add the signal to the pending set and return 1 to indicated it was blocked
-          //  a signal handler cant be located at address 0x1 so this value is fine to return and check
+        1 // if its blocked add the signal to the pending set and return 1 to
+          // indicated it was blocked  a signal handler cant be
+          // located at address 0x1 so this value is fine to return and check
     }
 }
 
@@ -1099,7 +1105,8 @@ pub extern "C" fn lindrustfinalize() {
     // if we get here, persist and delete log
     persist_metadata(&FS_METADATA);
     if interface::pathexists(LOGFILENAME.to_string()) {
-        // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
+        // remove file if it exists, assigning it to nothing to avoid the compiler
+        // yelling about unused result
         let mut logobj = LOGMAP.write();
         let log = logobj.take().unwrap();
         let _close = log.close().unwrap();
