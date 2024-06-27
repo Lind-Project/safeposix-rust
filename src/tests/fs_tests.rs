@@ -1,6 +1,7 @@
 #[allow(unused_parens)]
 #[cfg(test)]
 pub mod fs_tests {
+
     use super::super::*;
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
@@ -9,81 +10,11 @@ pub mod fs_tests {
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
-    pub fn test_fs() {
-        ut_lind_fs_simple(); // has to go first, else the data files created screw with link count test
-
-        ut_lind_fs_broken_close();
-        ut_lind_fs_chmod_valid_args();
-        ut_lind_fs_chmod_invalid_args();
-        ut_lind_fs_fchmod();
-        ut_lind_fs_dir_chdir();
-        ut_lind_fs_dir_mode();
-        ut_lind_fs_dir_multiple();
-        ut_lind_fs_dup();
-        ut_lind_fs_dup2();
-        ut_lind_fs_fcntl_valid_args();
-        ut_lind_fs_fcntl_invalid_args();
-        ut_lind_fs_fcntl_dup();
-        ut_lind_fs_ioctl_valid_args();
-        ut_lind_fs_ioctl_invalid_args();
-        ut_lind_fs_fdflags();
-        ut_lind_fs_file_link_unlink();
-        ut_lind_fs_file_lseek_past_end();
-        ut_lind_fs_fstat_complex();
-        ut_lind_fs_getuid();
-        ut_lind_fs_load_fs();
-
-        // mknod_syscall_tests
-        ut_lind_fs_mknod_empty_path();
-        ut_lind_fs_mknod_nonexisting_parent_directory();
-        ut_lind_fs_mknod_existing_file();
-        ut_lind_fs_mknod_invalid_modebits();
-        ut_lind_fs_mknod_invalid_filetypes();
-        ut_lind_fs_mknod_success();
-
-        ut_lind_fs_multiple_open();
-        ut_lind_fs_rename();
-        ut_lind_fs_rmdir();
-        ut_lind_fs_stat_file_complex();
-        ut_lind_fs_stat_file_mode();
-        ut_lind_fs_statfs();
-        ut_lind_fs_fstatfs();
-        ut_lind_fs_ftruncate();
-        ut_lind_fs_truncate();
-        ut_lind_fs_getdents();
-        ut_lind_fs_dir_chdir_getcwd();
-        rdwrtest();
-        prdwrtest();
-        chardevtest();
-        ut_lind_fs_exec_cloexec();
-        ut_lind_fs_shm();
-        ut_lind_fs_getpid_getppid();
-        ut_lind_fs_sem_fork();
-        ut_lind_fs_sem_trytimed();
-        ut_lind_fs_sem_test();
-        ut_lind_fs_tmp_file_test();
-
-        //mkdir_syscall_tests
-        ut_lind_fs_mkdir_empty_directory();
-        ut_lind_fs_mkdir_nonexisting_directory();
-        ut_lind_fs_mkdir_existing_directory();
-        ut_lind_fs_mkdir_invalid_modebits();
-        ut_lind_fs_mkdir_success();
-        ut_lind_fs_mkdir_using_symlink();
-
-        //open_syscall_tests
-        ut_lind_fs_open_empty_directory();
-        ut_lind_fs_open_nonexisting_parentdirectory_and_file();
-        ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file();
-        ut_lind_fs_open_existing_file_without_flags();
-        ut_lind_fs_open_existing_file_with_flags();
-        ut_lind_fs_open_create_new_file_and_check_link_count();
-        ut_lind_fs_open_existing_file_with_o_trunc_flag();
-        ut_lind_fs_open_new_file_with_s_ifchar_flag();
-    }
-
+    #[test]
     pub fn ut_lind_fs_simple() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.access_syscall("/", F_OK), 0);
@@ -99,11 +30,15 @@ pub mod fs_tests {
         //ensure that there is no associated size
         assert_eq!(statdata2.st_size, 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+
         lindrustfinalize();
     }
 
+    #[test]
     pub fn rdwrtest() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -128,8 +63,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn prdwrtest() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/foobar2", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -151,8 +89,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn chardevtest() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
@@ -196,10 +137,13 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_broken_close() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         //testing a muck up with the inode table where the regular close does not work as intended
 
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         //write should work
@@ -230,8 +174,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_chmod_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -301,8 +248,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_chmod_invalid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //checking if passing a nonexistent pathname to `chmod_syscall()`
@@ -332,8 +282,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fchmod() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -374,8 +327,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_chdir() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //testing the ability to make and change to directories
@@ -398,8 +354,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_mode() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let filepath1 = "/subdirDirMode1";
@@ -419,8 +378,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_multiple() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         assert_eq!(cage.mkdir_syscall("/subdirMultiple1", S_IRWXA), 0);
@@ -455,8 +417,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -512,8 +477,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dup2() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
@@ -560,8 +528,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
@@ -591,8 +562,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fcntl_invalid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let filefd = cage.open_syscall("/fcntl_file_2", O_CREAT | O_EXCL, S_IRWXA);
         //when presented with a nonexistent command, 'Invalid Argument' error should be thrown
@@ -619,8 +593,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fcntl_dup() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let filefd1 = cage.open_syscall("/fcntl_file_4", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
@@ -651,8 +628,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ioctl_valid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior
@@ -685,8 +665,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ioctl_invalid_args() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
@@ -743,8 +726,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fdflags() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/fdFlagsFile";
@@ -785,8 +771,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_file_link_unlink() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/fileLink";
@@ -825,8 +814,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_file_lseek_past_end() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/lseekPastEnd";
@@ -848,8 +840,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fstat_complex() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
         let path = "/complexFile";
@@ -868,8 +862,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_getuid() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //let's get the initial -1s out of the way
@@ -888,8 +885,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_load_fs() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let mut statdata = StatData::default();
@@ -910,8 +910,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_empty_path() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "";
@@ -924,8 +927,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_nonexisting_parent_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/parentdir/file";
@@ -938,8 +944,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_existing_file() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/charfile";
@@ -955,8 +964,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_invalid_modebits() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/testfile";
@@ -970,9 +982,12 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_invalid_filetypes() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // Check for error when file types other than S_IFCHR are passed in the input
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
         let path = "/invalidfile";
@@ -1005,9 +1020,12 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mknod_success() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // let's create /dev/null
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         let dev = makedev(&DevNo { major: 1, minor: 3 });
 
@@ -1070,8 +1088,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_multiple_open() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         //try to open several files at once -- the fd's should not be overwritten
@@ -1102,8 +1123,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_rmdir() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = "/parent_dir/dir";
@@ -1115,8 +1139,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_stat_file_complex() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let fd = cage.open_syscall("/fooComplex", O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
 
@@ -1141,8 +1168,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_stat_file_mode() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
@@ -1164,8 +1194,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_statfs() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
@@ -1177,8 +1210,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_fstatfs() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let mut fsdata = FSData::default();
 
@@ -1197,8 +1233,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_rename() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let old_path = "/test_dir";
@@ -1209,8 +1248,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_ftruncate() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let fd = cage.open_syscall("/ftruncate", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
@@ -1235,8 +1277,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_truncate() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let path = String::from("/truncate");
@@ -1268,8 +1313,11 @@ pub mod fs_tests {
     #[cfg(not(target_os = "macos"))]
     type CharPtr = *const i8;
 
+    #[test]
     pub fn ut_lind_fs_getdents() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         let bufsize = 50;
@@ -1302,8 +1350,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let needed = "/subdir1\0".as_bytes().to_vec().len();
 
@@ -1334,8 +1385,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_exec_cloexec() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let mut uselessstatdata = StatData::default();
 
@@ -1367,8 +1421,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_shm() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         let mut shmidstruct = ShmidsStruct::default();
@@ -1401,8 +1458,10 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_getpid_getppid() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
 
         let cage1 = interface::cagetable_getref(1);
         let pid1 = cage1.getpid_syscall();
@@ -1425,8 +1484,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_fork() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1476,8 +1538,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_trytimed() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1531,8 +1596,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_sem_test() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let key = 31337;
         // Create a shared memory region
@@ -1555,8 +1623,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_tmp_file_test() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Check if /tmp is there
@@ -1583,8 +1654,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_empty_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "";
         // Check for error when directory is empty
@@ -1593,8 +1667,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_nonexisting_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir/dir";
         // Check for error when both parent and child directories don't exist
@@ -1603,8 +1680,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_existing_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         // Create a parent directory
@@ -1615,8 +1695,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_invalid_modebits() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         let invalid_mode = 0o77777; // Invalid mode bits
@@ -1631,8 +1714,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_success() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/parentdir";
         // Create a parent directory
@@ -1660,8 +1746,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_mkdir_using_symlink() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a file which will be referred to as originalFile
@@ -1681,8 +1770,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_empty_directory() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "";
         // Check for error when directory is empty
@@ -1694,8 +1786,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         let path = "/dir/file";
         // Check for error when neither file nor parent exists and O_CREAT flag is not present
@@ -1714,8 +1809,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
         // Create a parent directory
         assert_eq!(cage.mkdir_syscall("/dir", S_IRWXA), 0);
@@ -1744,11 +1842,14 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_file_without_flags() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // This test is used for validating two scenarios:
         // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
         // 2. When the same existing file is being opened without O_CREAT flag, it should open successfully.
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         // Open a non-existing file with O_CREAT flag
@@ -1766,11 +1867,14 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_file_with_flags() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         // This test is used for validating two scenarios:
         // 1. When the non-existing file is opened using O_CREAT flag, it should open successfully.
         // 2. When the same existing file is opened using O_CREAT and O_EXCL flags, it should return an error for file already existing.
-        lindrustinit(0);
         let cage = interface::cagetable_getref(1);
 
         // Open a non-existing file with O_CREAT flag
@@ -1791,8 +1895,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_create_new_file_and_check_link_count() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a new file
@@ -1817,8 +1924,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_existing_file_with_o_trunc_flag() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a new file
@@ -1846,8 +1956,11 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_open_new_file_with_s_ifchar_flag() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
 
         // Create a parent directory

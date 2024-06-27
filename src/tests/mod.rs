@@ -9,25 +9,37 @@ use std::net::{TcpListener, UdpSocket};
 use crate::interface;
 use crate::safeposix::{cage::*, filesystem::*};
 
+#[allow(unused_parens)]
 #[cfg(test)]
-mod main_tests {
-    use crate::tests::fs_tests::fs_tests::test_fs;
-    use crate::tests::ipc_tests::ipc_tests::test_ipc;
-    use crate::tests::networking_tests::net_tests::net_tests;
+mod setup {
 
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
 
+    use lazy_static::lazy_static;
     use std::process::Command;
+    use std::sync::Mutex;
 
-    #[test]
-    pub fn tests() {
-        set_panic_hook();
+    // Tests in rust as parallel by default and to make them share resources we are using a global static lock.
+    lazy_static! {
+        // This has a junk value (a bool).  Could be anything...
+        #[derive(Debug)]
+        pub static ref TESTMUTEX: Mutex<bool> = {
+            Mutex::new(true)
+        };
+    }
+
+    // Using explicit lifetime to have a safe reference to the lock in the tests.
+    pub fn lock_and_init<'a>() -> std::sync::MutexGuard<'a, bool> {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
+        let thelock = TESTMUTEX.lock().unwrap();
 
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 
+        //setup the lind filesystem, creates a clean filesystem for each test
         lindrustinit(0);
         {
+            println!("test_setup()");
             let cage = interface::cagetable_getref(1);
             crate::lib_fs_utils::lind_deltree(&cage, "/");
             assert_eq!(cage.mkdir_syscall("/dev", S_IRWXA), 0);
@@ -67,26 +79,11 @@ mod main_tests {
         }
         lindrustfinalize();
 
-        println!("FS TESTS");
-        test_fs();
+        //initialize the cage for the test.
+        lindrustinit(0);
 
-        println!("NET TESTS");
-        net_tests();
-
-        println!("IPC TESTS");
-        test_ipc();
-    }
-
-    fn set_panic_hook() {
-        let orig_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |panic_info| {
-            // this hook would be triggered whenever a panic occurs
-            // good for test cases that panicked inside the non-main thread
-            // so the trace information could be printed immediately
-            // instead of raising the error when the thread is joined, which might
-            // never happen and left the test blocking forever in some test cases
-            orig_hook(panic_info);
-        }));
+        //return the lock to the caller which holds it till the end of the test.
+        thelock
     }
 }
 
