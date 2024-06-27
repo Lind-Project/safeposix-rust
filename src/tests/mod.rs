@@ -16,8 +16,8 @@ mod setup {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
 
-    use std::process::Command;
     use lazy_static::lazy_static;
+    use std::process::Command;
     use std::sync::Mutex;
 
     // Tests in rust as parallel by default and to make them share resources we are using a global static lock.
@@ -85,7 +85,6 @@ mod setup {
         //return the lock to the caller which holds it till the end of the test.
         thelock
     }
-
 }
 
 pub fn str2cbuf(ruststr: &str) -> *mut u8 {

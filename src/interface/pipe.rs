@@ -28,7 +28,7 @@ const PAGE_SIZE: usize = 4096;
 
 // lets also define an interval to check for thread cancellations since we may be blocking in trusted space here
 // we're going to define this as 2^20 which should be ~1 sec according to the standard CLOCKS_PER_SEC definition, though it should be quite shorter on modern CPUs
-const CANCEL_CHECK_INTERVAL: usize = 1048576; // check to cancel pipe reads every 2^20 iterations
+const CANCEL_CHECK_INTERVAL: usize = 1048576;
 
 /// # Description
 /// Helper function to create pipe objects
@@ -220,16 +220,6 @@ impl EmulatedPipe {
         };
 
         let mut write_end = self.write_end.lock();
-
-        let pipe_space = write_end.remaining();
-        if nonblocking && (pipe_space == 0) {
-            return syscall_error(
-                Errno::EAGAIN,
-                "write",
-                "there is no space available right now, try again later",
-            );
-        }
-
         let mut bytes_written = 0;
 
         while bytes_written < length {
@@ -240,15 +230,20 @@ impl EmulatedPipe {
 
             let remaining = write_end.remaining();
 
-            // we loop until either more than a page of bytes is free in the pipe or the amount left to write is less than the free space remaining
+            // we loop until either more than a page of bytes is free in the pipe
             // for why we wait for a free page of bytes, refer to the pipe man page about atomicity of writes or the pipe_write kernel implementation
-            if remaining < PAGE_SIZE && (length - bytes_written) > remaining {
+            if remaining < PAGE_SIZE {
                 if nonblocking {
-                    return syscall_error(
-                        Errno::EAGAIN,
-                        "write",
-                        "there is no space available right now, try again later",
-                    );
+                    // for non-blocking if we have written a bit lets return how much we've written, otherwise we return EAGAIN
+                    if bytes_written > 0 {
+                        return bytes_written as i32;
+                    } else {
+                        return syscall_error(
+                            Errno::EAGAIN,
+                            "write",
+                            "there is no space available right now, try again later",
+                        );
+                    }
                 } else {
                     // we yield here on a non-writable pipe to let other threads continue more quickly
                     interface::lind_yield();
@@ -380,7 +375,7 @@ impl EmulatedPipe {
             // we return EAGAIN here so we can go back to check if this cage has been sent a cancel notification in the calling syscall
             // if the calling descriptor is blocking we then attempt to read again
             if count == CANCEL_CHECK_INTERVAL {
-                return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
+                return -(Errno::EAGAIN as i32);
             }
 
             // lets check again if were empty

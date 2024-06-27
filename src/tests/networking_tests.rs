@@ -1613,7 +1613,7 @@ pub mod net_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+
     #[test]
     pub fn ut_lind_net_udp_simple() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
@@ -1764,9 +1764,9 @@ pub mod net_tests {
     pub fn ut_lind_net_gethostname() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
-        
+
         let cage = interface::cagetable_getref(1);
 
         let mut buf = vec![0u8; 5];
@@ -1829,7 +1829,6 @@ pub mod net_tests {
             addr: interface::V4Addr,
         }
 
-        
         let cage = interface::cagetable_getref(1);
 
         let dnssocket = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
@@ -1929,13 +1928,12 @@ pub mod net_tests {
     pub fn ut_lind_net_domain_socket() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
         let serversockfilename = "/server.sock";
 
-        
         let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
