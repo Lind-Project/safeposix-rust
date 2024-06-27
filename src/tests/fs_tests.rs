@@ -477,6 +477,86 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    #[test]
+    fn ut_lind_fs_dup_invalid_fd() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        // Open a file and get a valid file descriptor
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+    
+        // Close the file descriptor, making it invalid
+        assert_eq!(cage.close_syscall(fd), 0);
+    
+        // Attempt to duplicate the invalid file descriptor
+        let new_fd = cage.dup_syscall(fd, None);
+        assert_eq!(new_fd, -(Errno::EBADF as i32));
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_dup2_invalid_fd() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Open a file
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+
+        // Close the file descriptor, making it invalid
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        // Attempt to duplicate the invalid file descriptor
+        let new_fd = cage.dup2_syscall(fd, 5);
+        assert_eq!(new_fd, -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_dup_full_table() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Open a large number of files to fill the file descriptor table
+        for i in 0..1024 {
+            let fd = cage.open_syscall(&format!("/testfile{}", i), O_CREAT | O_WRONLY, S_IRWXA);
+            assert_ne!(fd, -(Errno::ENOENT as i32));
+        }
+
+        // Attempt to duplicate a file descriptor, which should fail 
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+        let new_fd = cage.dup_syscall(fd, None);
+        assert_eq!(new_fd, -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    #[test]
+    fn ut_lind_fs_dup2_full_table() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Open a large number of files to fill the file descriptor table
+        for i in 0..1024 {
+            let fd = cage.open_syscall(&format!("/testfile{}", i), O_CREAT | O_WRONLY, S_IRWXA);
+            assert_ne!(fd, -(Errno::ENOENT as i32));
+        }
+
+        // Attempt to duplicate a file descriptor, which should fail 
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+        let new_fd = cage.dup2_syscall(fd, 5); // Try to duplicate to an existing fd 
+        assert_eq!(new_fd, -(Errno::EBADF as i32)); // Expect ENFILE error
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     #[test]
     pub fn ut_lind_fs_dup2() {
