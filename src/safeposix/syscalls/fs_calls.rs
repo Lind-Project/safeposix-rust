@@ -3461,21 +3461,76 @@ impl Cage {
         }
     }
 
-    //------------------------------------GETCWD SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `getcwd_syscall()` function places an absolute pathname of the
+    /// current working directory in the string pointed to by buf.
+    ///
+    /// ### Arguments
+    ///
+    /// The `getcwd_syscall()` accepts two arguments:
+    /// * `buf` - a pointer to the string into which the current working
+    /// directory is stored
+    /// * `bufsize` - the length of the string `buf`
+    ///
+    /// ### Returns
+    ///
+    /// The standard requires returning the pointer to the string that
+    /// stores the current working directory. In the current implementation,
+    /// 0 is returned on success, while returning the pointer to the string is
+    /// handled inside glibc.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EINVAL, ERANGE, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the bufsize argument is zero and buf is not a NULL pointer.
+    /// * `ERANGE` - the bufsize argument is less than the length of the absolute
+    /// pathname of the working directory, including the terminating null byte.
+    /// * `EFAULT` - buf points to a bad address.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this function panics.
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [getcwd(3)](https://man7.org/linux/man-pages/man3/getcwd.3.html)
+
 
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-        let mut bytes: Vec<u8> = self.cwd.read().to_str().unwrap().as_bytes().to_vec();
-        bytes.push(0u8); //Adding a null terminator to the end of the string
-        let length = bytes.len();
-
-        if (bufsize as usize) < length {
-            return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+    //The first two conditions help to error-out quickly if either
+    //the pointer to the string is a null pointer or the specified
+    //size of the string is 0.
+        if !buf.is_null() {
+            if (bufsize as usize) == 0 {
+                return syscall_error(Errno::EINVAL, "getcwd", "size of the specified buffer is 0");
+            } else {            
+                //Cages store their current working directory as path buffers.
+                //To use the obtained directory as a string, a null terminator needs
+                //to be added to the path.
+                let mut bytes: Vec<u8> = self.cwd.read().to_str().unwrap().as_bytes().to_vec();
+                bytes.push(0u8); //Adding a null terminator to the end of the string
+                let length = bytes.len();
+                //The bufsize argument should be at least the length of the absolute
+                //pathname of the working directory, including the terminating null byte.
+                if (bufsize as usize) < length {
+                    return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+                }
+                //It is expected that only the first `bufsize` bytes of the `buf` string
+                //will be written into. The `fill()` function ensures this by taking
+                //a mutable slice of length `bufsize` to the string pointed to by `buf`
+                //and inserting the obtained current working directory into that slice,
+                //thus prohibiting writing into the remaining bytes of the string.
+                interface::fill(buf, length, &bytes);
+                //returning 0 on success
+                0
+            }
+        } else {            
+            return syscall_error(Errno::EFAULT, "getcwd", "an invalid (null) pointer to the buffer is provided");  
         }
-
-        interface::fill(buf, length, &bytes);
-
-        0 //getcwd has succeeded!;
     }
+
 
     //------------------SHMHELPERS----------------------
 
