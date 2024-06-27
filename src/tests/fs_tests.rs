@@ -9,7 +9,7 @@ pub mod fs_tests {
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-
+    use std::sync::{Arc, Mutex};
     #[test]
     pub fn ut_lind_fs_simple() {
 
@@ -2010,7 +2010,6 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    use std::sync::{Arc, Mutex};
 
     // Helper function to initialize a clean cage, file system, and acquire a lock
     fn lock_and_init() -> (Arc<Mutex<FsCalls>>, i32) {
