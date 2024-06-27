@@ -662,34 +662,85 @@ impl Cage {
         }
     }
 
-    //------------------------------------LINK SYSCALL------------------------------------
-
+    /// ## ------------------LINK SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `link_syscall()` creates a new link (directory entry) for the existing file 
+    /// represented by oldpath and increments its link count by one. Since, we are 
+    /// creating hard links between the files, both of them must exist on the same file system. 
+    /// Both the old and the new link share equal access and rights to the underlying object. 
+    /// On successful completion, the timestamps for both the newly created file
+    /// and its parent are updated along with their linkcounts.
+    /// If it fails, no link is created and the link count of the file remains unchanged.
+    /// 
+    /// ### Function Arguments
+    ///
+    /// The `link_syscall()` receives two arguments:
+    /// * `oldpath` - This argument points to a pathname naming an existing file.
+    /// * `newpath` - This argument points to a pathname naming the new directory
+    /// entry and the link to be created.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful linking of the files, 0 is returned.
+    /// Otherwise, −1 is returned, no link is created, and errno is set to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The oldpath or newpath argument is a null pathname; 
+    /// a component of either path prefix does not exist; or the file 
+    /// named by oldpath does not exist.
+    /// * `EPERM` - The file named by oldpath is a directory; current 
+    /// implementation probibits links to directories.
+    /// * `EEXIST` - The link named by newpath already exists
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing unwrap() to panic.
+    /// * If the parent inode is not of the type `directory`, causing code to panic.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [link(2)](https://man7.org/linux/man-pages/man2/link.2.html)
+    ///
     pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
+        // Return an error if the provided oldpath is empty
         if oldpath.len() == 0 {
             return syscall_error(Errno::ENOENT, "link", "given oldpath was null");
         }
+        // Return an error if the provided newpath is empty
         if newpath.len() == 0 {
             return syscall_error(Errno::ENOENT, "link", "given newpath was null");
         }
+        // Retrieve the absolute path from the root directory for both oldpath and newpath. 
+        // The absolute path is then used to validate directory paths while navigating through
+        // subdirectories.
         let trueoldpath = normpath(convpath(oldpath), self);
         let truenewpath = normpath(convpath(newpath), self);
+        //for now we assume this is sane, but maybe this should be checked later
         let filename = truenewpath
             .file_name()
             .unwrap()
             .to_str()
             .unwrap()
-            .to_string(); //for now we assume this is sane, but maybe this should be checked later
+            .to_string(); 
 
+        // Walk through the absolute path for the oldpath file which returns the inode number
+        // of file (if it exists).
         match metawalk(trueoldpath.as_path()) {
-            //If neither the file nor parent exists
+            // Case: If the directory component doesn't exist, return an error.
             None => syscall_error(
                 Errno::ENOENT,
                 "link",
                 "a directory component in pathname does not exist or is a dangling symbolic link",
             ),
+            // Case: Get the inode number and increment the link count of the existing
+            // directory component i.e., (File, CharDev, and Socket). 
+            // "Directory" type is not supported for this implementation.
             Some(inodenum) => {
+                // Get the mutable instance of the inode object from the FileMetaData table.
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
+                // Match the inode object with the correct inode type and increment link count
                 match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to inode
@@ -703,19 +754,29 @@ impl Cage {
                         socket_inode_obj.linkcount += 1; //add link to inode
                     }
 
+                    // Directory type inode is not supported for linking, so return an error.
                     Inode::Dir(_) => {
                         return syscall_error(Errno::EPERM, "link", "oldpath is a directory")
                     }
                 }
 
-                drop(inodeobj);
+                // the mutable reference to the inode has to be dropped because
+                //`log_metadata` will need to acquire an immutable reference to
+                // the same inode
+                drop(thisinode);
 
+                // Walk the newpath and once the parent directory inode is found, insert a reference 
+                // of this oldpath inode in the inode table
                 let retval = match metawalkandparent(truenewpath.as_path()) {
+                    // If both the file and the parent doesn't exist, newpath can't be created
                     (None, None) => {
                         syscall_error(Errno::ENOENT, "link", "newpath cannot be created")
                     }
 
+                    // If the parent directory inode exists, make a reference of the oldpath inode
+                    // in the parent directory to make a link between the two directory paths.
                     (None, Some(pardirinode)) => {
+                        // Get the mutable instance of the parent inode object
                         let mut parentinodeobj =
                             FS_METADATA.inodetable.get_mut(&pardirinode).unwrap();
                         //insert a reference to the inode in the parent directory
@@ -723,34 +784,42 @@ impl Cage {
                             parentdirinodeobj
                                 .filename_to_inode_dict
                                 .insert(filename, inodenum);
+                            // Increment the link count of the parent inode as well
                             parentdirinodeobj.linkcount += 1;
+                            //drop the mutable instance of the parent inode object
                             drop(parentinodeobj);
                             log_metadata(&FS_METADATA, pardirinode);
                             log_metadata(&FS_METADATA, inodenum);
                         } else {
+                            // If the parent inode is not of type "Directory", panic occurs.
                             panic!("Parent directory was not a directory!");
                         }
-                        0 //link has succeeded
+                        // If the linking is successful, 0 is returned.
+                        0 
                     }
 
+                    // If the newpath exists, linking can't be perfomed and an error is returned.
                     (Some(_), ..) => syscall_error(Errno::EEXIST, "link", "newpath already exists"),
                 };
 
+                // If the linking fails, an error with a value < 0 is returned from above.
+                // So, we revert the link count updates made to the oldpath inode.
                 if retval != 0 {
-                    //reduce the linkcount to its previous value if linking failed
+                    // Fetch the inode object from the FileMetadata Table
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
+                    // Match the relevant inode object type and decrement link count
                     match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             normalfile_inode_obj.linkcount -= 1;
                         }
 
                         Inode::CharDev(ref mut chardev_inode_obj) => {
-                            chardev_inode_obj.linkcount -= 1;
+                            chardev_inode_obj.linkcount -= 1; 
                         }
 
                         Inode::Socket(ref mut socket_inode_obj) => {
-                            socket_inode_obj.linkcount -= 1;
+                            socket_inode_obj.linkcount -= 1; 
                         }
 
                         Inode::Dir(_) => {
@@ -764,11 +833,49 @@ impl Cage {
         }
     }
 
-    //------------------------------------UNLINK SYSCALL------------------------------------
-
+    /// ## ------------------UNLINK SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `unlink_syscall()` creates a new link (directory entry) for the existing file 
+    /// represented by oldpath and increments its link count by one. Since, we are 
+    /// creating hard links between the files, both of them must exist on the same file system. 
+    /// Both the old and the new link share equal access and rights to the underlying object. 
+    /// On successful completion, the timestamps for both the newly created file
+    /// and its parent are updated along with their linkcounts.
+    /// If it fails, no link is created and the link count of the file remains unchanged.
+    /// 
+    /// ### Function Arguments
+    ///
+    /// The `link_syscall()` receives two arguments:
+    /// * `oldpath` - This argument points to a pathname naming an existing file.
+    /// * `newpath` - This argument points to a pathname naming the new directory
+    /// entry and the link to be created.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful linking of the files, 0 is returned.
+    /// Otherwise, −1 is returned, no link is created, and errno is set to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The oldpath or newpath argument is a null pathname; 
+    /// a component of either path prefix does not exist; or the file 
+    /// named by oldpath does not exist.
+    /// * `EPERM` - The file named by oldpath is a directory; current 
+    /// implementation probibits links to directories.
+    /// * `EEXIST` - The link named by newpath already exists
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing unwrap() to panic.
+    /// * If the parent inode is not of the type `directory`, causing code to panic.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [unlink(2)](https://man7.org/linux/man-pages/man2/unlink.2.html)
+    ///
     pub fn unlink_syscall(&self, path: &str) -> i32 {
         if path.len() == 0 {
-            return syscall_error(Errno::ENOENT, "unmknod", "given oldpath was null");
+            return syscall_error(Errno::ENOENT, "unlink", "given path was null");
         }
         let truepath = normpath(convpath(path), self);
 
