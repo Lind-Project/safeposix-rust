@@ -2,9 +2,13 @@
 //!
 //! ## Notes:
 //!
-//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
-//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
-//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
+//! - These calls are implementations of the [`Cage`] struct in the
+//!   [`safeposix`](crate::safeposix) crate. See the
+//!   [`safeposix`](crate::safeposix) crate for more information.
+//! They have been structed as different modules for better maintainability and
+//! related functions. since they are tied to the `Cage` struct This module's
+//! rustdoc may turn up empty, thus they have been explicitly listed below for
+//! documentation purposes.
 //!
 //!
 //! ## System Calls
@@ -26,8 +30,6 @@
 //! - [setitimer_syscall](crate::safeposix::cage::Cage::setitimer_syscall)
 //! - [getrlimit](crate::safeposix::cage::Cage::getrlimit)
 //! - [setrlimit](crate::safeposix::cage::Cage::setrlimit)
-//!
-//!
 
 #![allow(dead_code)]
 
@@ -70,7 +72,8 @@ impl Cage {
     }
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        //construct a new mutex in the child cage where each initialized mutex is in the parent cage
+        //construct a new mutex in the child cage where each initialized mutex is in
+        // the parent cage
         let mutextable = self.mutex_table.read();
         let mut new_mutex_table = vec![];
         for elem in mutextable.iter() {
@@ -99,7 +102,8 @@ impl Cage {
         }
         drop(mutextable);
 
-        //construct a new condvar in the child cage where each initialized condvar is in the parent cage
+        //construct a new condvar in the child cage where each initialized condvar is
+        // in the parent cage
         let cvtable = self.cv_table.read();
         let mut new_cv_table = vec![];
         for elem in cvtable.iter() {
@@ -220,8 +224,9 @@ impl Cage {
         }
 
         // we grab the parent cages main threads sigset and store it at 0
-        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        // we do this because we haven't established a thread for the cage yet, and dont
+        // have a threadid to store it at this way the child can initialize the
+        // sigset properly when it establishes its own mainthreadid
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // we don't add these for the test suite
@@ -240,7 +245,8 @@ impl Cage {
         }
 
         /*
-         *  Construct a new semaphore table in child cage which equals to the one in the parent cage
+         *  Construct a new semaphore table in child cage which equals to the one in
+         * the parent cage
          */
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<
@@ -258,7 +264,8 @@ impl Cage {
             parent: self.cageid,
             filedescriptortable: newfdtable,
             cancelstatus: interface::RustAtomicBool::new(false),
-            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
+            // This happens because self.getgid tries to copy atomic value which does not implement
+            // "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(
                 self.getgid.load(interface::RustAtomicOrdering::Relaxed),
             ),
@@ -326,7 +333,8 @@ impl Cage {
         }
 
         // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        // this way the child can initialize the sigset properly when it establishes its
+        // own mainthreadid
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // we don't add these for the test suite
@@ -386,7 +394,8 @@ impl Cage {
         let cwd_container = self.cwd.read();
         decref_dir(&*cwd_container);
 
-        //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
+        //may not be removable in case of lindrustfinalize, we don't unwrap the remove
+        // result
         interface::cagetable_remove(self.cageid);
 
         // Trigger SIGCHLD
@@ -403,9 +412,9 @@ impl Cage {
 
     /// ### Description
     ///  
-    /// The `getpid_syscall()` system call returns the id of the calling process. The uid is
-    /// guaranteed to be unique and can be used for naming temporary files.
-    /// The call is always successful.
+    /// The `getpid_syscall()` system call returns the id of the calling
+    /// process. The uid is guaranteed to be unique and can be used for
+    /// naming temporary files. The call is always successful.
     ///
     /// ### Arguments
     ///
@@ -420,26 +429,30 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `getppid_syscall()` returns the id of the parent process of the calling process.
-    /// The uid is guaranteed to be unique, and like the getpid call, this call is also always successful.  
-    /// This call is always successfull
+    /// The `getppid_syscall()` returns the id of the parent process of the
+    /// calling process. The uid is guaranteed to be unique, and like the
+    /// getpid call, this call is also always successful. This call is
+    /// always successfull
     ///
     /// ### Arguments
     /// The getppid syscall does not take any arguments
     ///
     /// ### Returns
-    /// Returns a 32 bit integer value that represents the unique id of the parent process.
+    /// Returns a 32 bit integer value that represents the unique id of the
+    /// parent process.
     pub fn getppid_syscall(&self) -> i32 {
-        self.parent as i32 // mimicing the call above -- easy to change later if necessary
+        self.parent as i32 // mimicing the call above -- easy to change later if
+                           // necessary
     }
 
     /// ### Description
     ///
-    /// This function returns the real group id of the calling process. The real group id is specified at
-    /// login time. The group id is the group of the user who invoked the program.
-    /// Lind is only run in one group - and hence a default value is expected from this function.  
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
-    /// gid to be the default value.
+    /// This function returns the real group id of the calling process. The real
+    /// group id is specified at login time. The group id is the group of
+    /// the user who invoked the program. Lind is only run in one group -
+    /// and hence a default value is expected from this function.
+    /// Initially we check if the call takes place during the loading stage, and
+    /// return -1 if yes and set the gid to be the default value.
     ///
     /// ### Arguments
     ///
@@ -447,23 +460,26 @@ impl Cage {
     ///
     /// ### Returns
     ///
-    /// Depending on whether the gid has been initialized or not this function returns either -1
-    /// or the default gid as a 32 bit integer.
+    /// Depending on whether the gid has been initialized or not this function
+    /// returns either -1 or the default gid as a 32 bit integer.
     pub fn getgid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
+        DEFAULT_GID as i32 //Lind is only run in one group so a default value
+                           // is returned
     }
 
     /// ### Description
     ///
-    /// The `getegid_syscall` returns the effective group id of the user who invoked the process.
-    /// Since Lind is only run in one group a default value (or -1) is returned.
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
+    /// The `getegid_syscall` returns the effective group id of the user who
+    /// invoked the process. Since Lind is only run in one group a default
+    /// value (or -1) is returned. Initially we check if the call takes
+    /// place during the loading stage, and return -1 if yes and set the
     /// egid to be the default value.
     ///
     /// ### Arguments
@@ -472,15 +488,18 @@ impl Cage {
     ///
     /// ### Returns
     ///
-    /// Returns a 32 bit integer value (or -1) which represents the effective group
+    /// Returns a 32 bit integer value (or -1) which represents the effective
+    /// group
     pub fn getegid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
+        DEFAULT_GID as i32 //Lind is only run in one group so a default value
+                           // is returned
     }
 
     /// ### Description
@@ -488,8 +507,8 @@ impl Cage {
     /// The `getuid_syscall` returns the real user id of the calling process.
     /// The real user id is the user who invoked the calling process.
     /// As Lind only allows one user, a default value is returned.
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
-    /// uid to be the default value.
+    /// Initially we check if the call takes place during the loading stage, and
+    /// return -1 if yes and set the uid to be the default value.
     ///
     /// ### Arguments
     ///  
@@ -499,36 +518,42 @@ impl Cage {
     ///
     /// Returns a 32 bit default integer (or -1) representing the user
     pub fn getuid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+        DEFAULT_UID as i32 //Lind is only run as one user so a default value is
+                           // returned
     }
 
     /// ### Description
     ///
-    /// The `geteuid_syscall` returns the effective user id of the calling process.
-    /// As Lind only allows one user, a default value (or -1) is returned.
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
-    /// euid to be the default value.
+    /// The `geteuid_syscall` returns the effective user id of the calling
+    /// process. As Lind only allows one user, a default value (or -1) is
+    /// returned. Initially we check if the call takes place during the
+    /// loading stage, and return -1 if yes and set the euid to be the
+    /// default value.
     ///
     /// ### Function Arguments
     /// The geteuid syscall does not take any arguments
     ///
     /// ### Returns
     ///
-    /// Returns a 32 bit default integer value (or -1) representing the effective user
+    /// Returns a 32 bit default integer value (or -1) representing the
+    /// effective user
     pub fn geteuid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+        DEFAULT_UID as i32 //Lind is only run as one user so a default value is
+                           // returned
     }
 
     pub fn sigaction_syscall(
