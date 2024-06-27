@@ -12,7 +12,6 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_simple() {
-
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -142,9 +141,9 @@ pub mod fs_tests {
     pub fn ut_lind_fs_broken_close() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         //testing a muck up with the inode table where the regular close does not work as intended
-        
+
         let cage = interface::cagetable_getref(1);
 
         //write should work
@@ -564,7 +563,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_fcntl_invalid_args(){
+    pub fn ut_lind_fs_fcntl_invalid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -595,7 +594,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_fcntl_dup(){
+    pub fn ut_lind_fs_fcntl_dup() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -670,7 +669,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_ioctl_invalid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
@@ -725,7 +724,7 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-        }
+    }
 
     #[test]
     pub fn ut_lind_fs_fdflags() {
@@ -1355,7 +1354,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_getcwd_valid_args() {
         //Acquiring a lock on TESTMUTEX prevents other tests from running
         //concurrently, and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
+        let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
         //Checking if retrieving the current working directory
@@ -1385,16 +1384,16 @@ pub mod fs_tests {
         assert_eq!(cage.chdir_syscall("/newcwd1"), 0);
         assert_eq!(cage.getcwd_syscall(bufptr, newcwdsize_u32), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "/newcwd1\0");
- 
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_getcwd_invalid_args() {
         //Acquiring a lock on TESTMUTEX prevents other tests from running
         //concurrently, and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
+        let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
         //`/newcwd2` is a valid directory that we will create to check
@@ -1414,7 +1413,10 @@ pub mod fs_tests {
         //to `getcwd_syscall()`correctly results in `Buf points to
         //a bad address` error
         let null_ptr: *mut u8 = std::ptr::null_mut();
-        assert_eq!(cage.getcwd_syscall(null_ptr, newcwdsize_u32), -(Errno::EFAULT as i32));
+        assert_eq!(
+            cage.getcwd_syscall(null_ptr, newcwdsize_u32),
+            -(Errno::EFAULT as i32)
+        );
 
         //Checking if passing a valid string pointer and a size of 0 to
         //`getcwd_syscall()` correctly results in `The size argument is zero and
@@ -1430,11 +1432,14 @@ pub mod fs_tests {
         //character to `getcwd_syscall()` correctly results in `The bufsize argument
         //is less than the length of the absolute pathname of the working directory,
         //including the terminating null byte` error
-        assert_eq!(cage.getcwd_syscall(bufptr, newcwdsize_u32 - 1), -(Errno::ERANGE as i32)); 
- 
+        assert_eq!(
+            cage.getcwd_syscall(bufptr, newcwdsize_u32 - 1),
+            -(Errno::ERANGE as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
+    }
 
     #[test]
     pub fn ut_lind_fs_exec_cloexec() {
@@ -1513,7 +1518,6 @@ pub mod fs_tests {
     pub fn ut_lind_fs_getpid_getppid() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
 
         let cage1 = interface::cagetable_getref(1);
         let pid1 = cage1.getpid_syscall();

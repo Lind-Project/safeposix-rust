@@ -3497,15 +3497,14 @@ impl Cage {
     /// To learn more about the syscall and possible error values, see
     /// [getcwd(3)](https://man7.org/linux/man-pages/man3/getcwd.3.html)
 
-
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-    //The first two conditions help to error-out quickly if either
-    //the pointer to the string is a null pointer or the specified
-    //size of the string is 0.
+        //The first two conditions help to error-out quickly if either
+        //the pointer to the string is a null pointer or the specified
+        //size of the string is 0.
         if !buf.is_null() {
             if (bufsize as usize) == 0 {
                 return syscall_error(Errno::EINVAL, "getcwd", "size of the specified buffer is 0");
-            } else {            
+            } else {
                 //Cages store their current working directory as path buffers.
                 //To use the obtained directory as a string, a null terminator needs
                 //to be added to the path.
@@ -3526,8 +3525,12 @@ impl Cage {
                 //returning 0 on success
                 0
             }
-        } else {            
-            return syscall_error(Errno::EFAULT, "getcwd", "an invalid (null) pointer to the buffer is provided");  
+        } else {
+            return syscall_error(
+                Errno::EFAULT,
+                "getcwd",
+                "an invalid (null) pointer to the buffer is provided",
+            );
         }
     }
 
