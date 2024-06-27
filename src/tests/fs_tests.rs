@@ -1435,8 +1435,7 @@ pub mod fs_tests {
  
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
 
     #[test]
     pub fn ut_lind_fs_exec_cloexec() {
