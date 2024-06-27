@@ -31,12 +31,10 @@ mod setup {
 
     // Using explicit lifetime to have a safe reference to the lock in the tests.
     pub fn lock_and_init<'a>() -> std::sync::MutexGuard<'a, bool> {
+        set_panic_hook();
+
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let thelock = TESTMUTEX.lock().unwrap();
-
-    #[test]
-    pub fn tests() {
-        set_panic_hook();
       
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 

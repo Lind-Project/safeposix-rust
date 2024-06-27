@@ -1586,7 +1586,9 @@ pub mod net_tests {
     #[test]
     pub fn ut_lind_net_socketpair_bad_input() {
         // test for error cases of socketpair
-        lindrustinit(0);
+        
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
 
@@ -1631,7 +1633,8 @@ pub mod net_tests {
         // when cloexec flag is set, the file descriptor of the socket should
         // be automatically closed when exec_syscall is called
 
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         // try with cloexec flag
@@ -1686,7 +1689,8 @@ pub mod net_tests {
         // recv_syscall, instead, EAGAIN error should be returned when there is no
         // data to receive
 
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
 
