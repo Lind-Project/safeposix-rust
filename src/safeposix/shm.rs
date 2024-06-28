@@ -16,7 +16,8 @@ pub struct ShmSegment {
     pub size: usize,
     pub filebacking: interface::ShmFile,
     pub rmid: bool,
-    pub attached_cages: interface::RustHashMap<u64, i32>, // attached cages, number of references in cage
+    pub attached_cages: interface::RustHashMap<u64, i32>, /* attached cages, number of
+                                                           * references in cage */
     pub semaphor_offsets: interface::RustHashSet<u32>,
 }
 

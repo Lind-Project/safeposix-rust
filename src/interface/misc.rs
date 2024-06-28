@@ -263,7 +263,8 @@ type CharPtr = *const u8;
 type CharPtr = *const i8;
 
 pub unsafe fn charstar_to_ruststr<'a>(cstr: CharPtr) -> Result<&'a str, Utf8Error> {
-    std::ffi::CStr::from_ptr(cstr as *const _).to_str() //returns a result to be unwrapped later
+    std::ffi::CStr::from_ptr(cstr as *const _).to_str() //returns a result to
+                                                        // be unwrapped later
 }
 
 pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
@@ -273,9 +274,10 @@ pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, 
 
 // Sigset Operations
 //
-// sigsetops defined here are different from the ones in glibc. Since the sigset is just a u64
-// bitmask, we can just return the modified version of the sigset instead of changing it in-place.
-// It would also avoid any ownership issue and make the code cleaner.
+// sigsetops defined here are different from the ones in glibc. Since the sigset
+// is just a u64 bitmask, we can just return the modified version of the sigset
+// instead of changing it in-place. It would also avoid any ownership issue and
+// make the code cleaner.
 
 pub fn lind_sigemptyset() -> SigsetType {
     0
@@ -308,19 +310,20 @@ pub fn lind_kill_from_id(cage_id: u64, sig: i32) {
 
 #[derive(Debug)]
 pub struct AdvisoryLock {
-    //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many shared lock holders
+    //0 signifies unlocked, -1 signifies locked exclusively, positive number signifies that many
+    // shared lock holders
     advisory_lock: RustRfc<Mutex<i32>>,
     advisory_condvar: Condvar,
 }
 
 /*
-* AdvisoryLock is used to implement advisory locking for files.
-* Specifically, it is used by the flock syscall.
-* If works as follows: The underying mutex has a guard value associated with it.
-* A guard value of zero indicates that it is unlocked.
-* In case an exclusive lock is held, the guard value is set to -1.
-* In case a shared lock is held, the guard value is incremented by 1.
-*/
+ * AdvisoryLock is used to implement advisory locking for files.
+ * Specifically, it is used by the flock syscall.
+ * If works as follows: The underying mutex has a guard value associated with
+ * it. A guard value of zero indicates that it is unlocked.
+ * In case an exclusive lock is held, the guard value is set to -1.
+ * In case a shared lock is held, the guard value is incremented by 1.
+ */
 impl AdvisoryLock {
     pub fn new() -> Self {
         Self {
@@ -373,9 +376,11 @@ impl AdvisoryLock {
 
     /*
      * unlock is used to release a lock
-     * If a shared lock was held(guard value > 0), it decrements the guard value by one
-     * if no more shared locks are held (i.e. the guard value is now zero), then it notifies a waiting writer
-     * If an exclusive lock was held, it sets the guard value to zero and notifies all waiting readers and writers
+     * If a shared lock was held(guard value > 0), it decrements the guard value
+     * by one if no more shared locks are held (i.e. the guard value is now
+     * zero), then it notifies a waiting writer If an exclusive lock was
+     * held, it sets the guard value to zero and notifies all waiting readers and
+     * writers
      */
     pub fn unlock(&self) -> bool {
         let mut guard = self.advisory_lock.lock();
@@ -545,8 +550,8 @@ impl std::fmt::Debug for RawCondvar {
 }
 
 /*
-* RustSemaphore is the rust version of sem_t
-*/
+ * RustSemaphore is the rust version of sem_t
+ */
 #[derive(Debug)]
 pub struct RustSemaphore {
     pub value: Mutex<u32>,

@@ -5,7 +5,8 @@ use crate::interface::errnos::{syscall_error, Errno};
 const SIZEOF_SOCKADDR: u32 = 16;
 
 //redefining the FSData struct in this file so that we maintain flow of program
-//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
+//derive eq attributes for testing whether the structs equal other fsdata
+// structs from stat/fstat
 #[derive(Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct FSData {
@@ -26,8 +27,9 @@ pub struct FSData {
     pub f_spare: [u8; 32],
 }
 
-//redefining the StatData struct in this file so that we maintain flow of program
-//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
+//redefining the StatData struct in this file so that we maintain flow of
+// program derive eq attributes for testing whether the structs equal other
+// statdata structs from stat/fstat
 #[derive(Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct StatData {
@@ -73,8 +75,8 @@ pub struct SockPair {
 #[repr(C)]
 pub struct EpollEvent {
     pub events: u32,
-    pub fd: i32, //in native this is a union which could be one of a number of things
-                 //however, we only support EPOLL_CTL subcommands which take the fd
+    pub fd: i32, /*in native this is a union which could be one of a number of things
+                  *however, we only support EPOLL_CTL subcommands which take the fd */
 }
 
 #[derive(Debug, Default)]
@@ -113,7 +115,8 @@ pub struct TimeSpec {
 #[repr(C)]
 pub union IoctlPtrUnion {
     pub int_ptr: *mut i32,
-    pub c_char_ptr: *mut u8, //Right now, we do not support passing struct pointers to ioctl as the related call are not implemented
+    pub c_char_ptr: *mut u8, /* Right now, we do not support passing struct pointers to ioctl as
+                              * the related call are not implemented */
 }
 
 #[derive(Copy, Clone, Default)]
@@ -165,12 +168,17 @@ pub union Arg {
     pub dispatch_uint: u32,
     pub dispatch_ulong: u64,
     pub dispatch_long: i64,
-    pub dispatch_usize: usize, //For types not specified to be a given length, but often set to word size (i.e. size_t)
-    pub dispatch_isize: isize, //For types not specified to be a given length, but often set to word size (i.e. off_t)
-    pub dispatch_cbuf: *const u8, //Typically corresponds to an immutable void* pointer as in write
+    pub dispatch_usize: usize, /* For types not specified to be a given length, but often set to
+                                * word size (i.e. size_t) */
+    pub dispatch_isize: isize, /* For types not specified to be a given length, but often set to
+                                * word size (i.e. off_t) */
+    pub dispatch_cbuf: *const u8, //Typically corresponds to an immutable void* pointer as in
+    // write
     pub dispatch_mutcbuf: *mut u8, //Typically corresponds to a mutable void* pointer as in read
-    pub dispatch_cstr: *const i8, //Typically corresponds to a passed in string of type char*, as in open
-    pub dispatch_cstrarr: *const *const i8, //Typically corresponds to a passed in string array of type char* const[] as in execve
+    pub dispatch_cstr: *const i8,  /* Typically corresponds to a passed in string of type char*,
+                                    * as in open */
+    pub dispatch_cstrarr: *const *const i8, /* Typically corresponds to a passed in string array
+                                             * of type char* const[] as in execve */
     pub dispatch_rlimitstruct: *mut Rlimit,
     pub dispatch_statdatastruct: *mut StatData,
     pub dispatch_fsdatastruct: *mut FSData,
@@ -198,7 +206,8 @@ pub union Arg {
 
 use std::mem::size_of;
 
-// Represents a Dirent struct without the string, as rust has no flexible array member support
+// Represents a Dirent struct without the string, as rust has no flexible array
+// member support
 #[repr(C, packed(1))]
 pub struct ClippedDirent {
     pub d_ino: u64,
@@ -240,11 +249,13 @@ pub fn get_uint(union_argument: Arg) -> Result<u32, i32> {
 }
 
 pub fn get_long(union_argument: Arg) -> Result<i64, i32> {
-    return Ok(unsafe { union_argument.dispatch_long }); //this should not return error
+    return Ok(unsafe { union_argument.dispatch_long }); //this should not
+                                                        // return error
 }
 
 pub fn get_ulong(union_argument: Arg) -> Result<u64, i32> {
-    return Ok(unsafe { union_argument.dispatch_ulong }); //this should not return error
+    return Ok(unsafe { union_argument.dispatch_ulong }); //this should not
+                                                         // return error
 }
 
 pub fn get_isize(union_argument: Arg) -> Result<isize, i32> {
@@ -326,7 +337,8 @@ pub fn get_cstrarr<'a>(union_argument: Arg) -> Result<Vec<&'a str>, i32> {
     //iterate though the pointers in a function and:
     //  1: check that the pointer is not null
     //  2: push the data from that pointer onto the vector being returned
-    //once we encounter a null pointer, we know that we have either hit the end of the array or another null pointer in the memory
+    //once we encounter a null pointer, we know that we have either hit the end of
+    // the array or another null pointer in the memory
 
     let mut pointer = unsafe { union_argument.dispatch_cstrarr };
     let mut data_vector: Vec<&str> = Vec::new();
@@ -421,43 +433,55 @@ pub fn get_ioctl_char<'a>(ptrunion: IoctlPtrUnion) -> Result<u8, i32> {
     return Err(syscall_error(Errno::EFAULT, "ioctl", "argp is not valid"));
 }
 
-/// Given the vector of tuples produced from getdents_syscall, each of which consists of
-/// a ClippedDirent struct and a u8 vector representing the name, and also given the
-/// pointer to the base of the buffer to which the getdents structs should be copied,
-/// populate said buffer with these getdents structs and the names at the requisite locations
+/// Given the vector of tuples produced from getdents_syscall, each of which
+/// consists of a ClippedDirent struct and a u8 vector representing the name,
+/// and also given the pointer to the base of the buffer to which the getdents
+/// structs should be copied, populate said buffer with these getdents structs
+/// and the names at the requisite locations
 ///
 /// We assume a number of things about the tuples that are input:
 ///
 /// 1. The name in the u8 vec is null terminated
-/// 2. After being null terminated it is then padded to the next highest 8 byte boundary
-/// 3. After being padded, the last byte of padding is populated with DT_UNKNOWN (0) for now,
-/// as the d_type field does not have to be fully implemented for getdents to be POSIX compliant
-/// 4. All fields in the clipped dirent,  are correctly filled--i.e. d_off has the correct offset
-/// of the next struct in the buffer and d_reclen has the length of the struct with the padded name
-/// 5. The number of tuples in the vector is such that they all fit in the buffer
+/// 2. After being null terminated it is then padded to the next highest 8 byte
+///    boundary
+/// 3. After being padded, the last byte of padding is populated with DT_UNKNOWN
+///    (0) for now,
+/// as the d_type field does not have to be fully implemented for getdents to be
+/// POSIX compliant
+/// 4. All fields in the clipped dirent,  are correctly filled--i.e. d_off has
+///    the correct offset
+/// of the next struct in the buffer and d_reclen has the length of the struct
+/// with the padded name
+/// 5. The number of tuples in the vector is such that they all fit in the
+///    buffer
 ///
-/// There is enough information to produce a tuple vector that can satisfy these assumptions well
-/// in getdents syscall, and thus all the work to satisfy these assumptions should be done there
+/// There is enough information to produce a tuple vector that can satisfy these
+/// assumptions well in getdents syscall, and thus all the work to satisfy these
+/// assumptions should be done there
 pub fn pack_dirents(dirtuplevec: Vec<(ClippedDirent, Vec<u8>)>, baseptr: *mut u8) {
     let mut curptr = baseptr;
 
-    //for each tuple we write in the ClippedDirent struct, and then the padded name vec
+    //for each tuple we write in the ClippedDirent struct, and then the padded name
+    // vec
     for dirtuple in dirtuplevec {
         //get pointer to start of next dirent in the buffer as a ClippedDirent pointer
         let curclippedptr = curptr as *mut ClippedDirent;
         //turn that pointer into a rust reference
         let curwrappedptr = unsafe { &mut *curclippedptr };
-        //assign to the data that reference points to with the value of the ClippedDirent from the tuple
+        //assign to the data that reference points to with the value of the
+        // ClippedDirent from the tuple
         *curwrappedptr = dirtuple.0;
 
-        //advance pointer by the size of one ClippedDirent, std::mem::size_of should be added into the interface
+        //advance pointer by the size of one ClippedDirent, std::mem::size_of should be
+        // added into the interface
         curptr = curptr.wrapping_offset(size_of::<ClippedDirent>() as isize);
 
-        //write, starting from this advanced location, the u8 vec representation of the name
+        //write, starting from this advanced location, the u8 vec representation of the
+        // name
         unsafe { curptr.copy_from(dirtuple.1.as_slice().as_ptr(), dirtuple.1.len()) };
 
-        //advance pointer by the size of name, which we assume to be null terminated and padded correctly
-        //and thus we are finished with this struct
+        //advance pointer by the size of name, which we assume to be null terminated
+        // and padded correctly and thus we are finished with this struct
         curptr = curptr.wrapping_offset(dirtuple.1.len() as isize);
     }
 }
@@ -491,7 +515,7 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
     if !pointer.is_null() {
         let tmpsock = unsafe { &*pointer };
         match tmpsock.sa_family {
-            /*AF_UNIX*/
+            /* AF_UNIX */
             1 => {
                 if addrlen < SIZEOF_SOCKADDR
                     || addrlen > size_of::<interface::SockaddrUnix>() as u32
@@ -505,7 +529,7 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
                 let unix_ptr = pointer as *const interface::SockaddrUnix;
                 return Ok(interface::GenSockaddr::Unix(unsafe { *unix_ptr }));
             }
-            /*AF_INET*/
+            /* AF_INET */
             2 => {
                 if addrlen < size_of::<interface::SockaddrV4>() as u32 {
                     return Err(syscall_error(
@@ -517,7 +541,7 @@ pub fn get_sockaddr(union_argument: Arg, addrlen: u32) -> Result<interface::GenS
                 let v4_ptr = pointer as *const interface::SockaddrV4;
                 return Ok(interface::GenSockaddr::V4(unsafe { *v4_ptr }));
             }
-            /*AF_INET6*/
+            /* AF_INET6 */
             30 => {
                 if addrlen < size_of::<interface::SockaddrV6>() as u32 {
                     return Err(syscall_error(
