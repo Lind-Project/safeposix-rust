@@ -827,7 +827,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_link_nonexistent_oldpath() {
+    pub fn ut_lind_fs_link_nonexistent_oldpath() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -845,7 +845,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_link_existing_newpath() {
+    pub fn ut_lind_fs_link_existing_newpath() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -869,7 +869,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_link_directory() {
+    pub fn ut_lind_fs_link_directory() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -890,7 +890,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_unlink_empty_path() {
+    pub fn ut_lind_fs_unlink_empty_path() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -906,7 +906,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_unlink_nonexistent_file() {
+    pub fn ut_lind_fs_unlink_nonexistent_file() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -922,7 +922,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_unlink_root_directory() {
+    pub fn ut_lind_fs_unlink_root_directory() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -938,7 +938,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_unlink_directory() {
+    pub fn ut_lind_fs_unlink_directory() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -957,7 +957,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn test_unlink_success() {
+    pub fn ut_lind_fs_unlink_success() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
