@@ -805,8 +805,93 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_file_link_unlink() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+    pub fn ut_lind_fs_link_empty_path() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Case: When only oldpath is empty, expect an error ENOENT
+        let oldpath = "";
+        let newpath = "/newpath";
+        assert_eq!(cage.link_syscall(oldpath, newpath), -(Errno::ENOENT as i32));
+
+        // Case: When only newpath is empty, expect an error ENOENT
+        let oldpath = "/oldpath";
+        let newpath = "";
+        assert_eq!(cage.link_syscall(oldpath, newpath), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_link_nonexistent_oldpath() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let oldpath = "/nonexistent";
+        let newpath = "/newpath";
+
+        // Expect an error for non-existent oldpath
+        assert_eq!(cage.link_syscall(oldpath, newpath), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_link_existing_newpath() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let oldpath = "/oldfile";
+        let newpath = "/newfile";
+
+        // Create the oldfile
+        let _fd1 = cage.open_syscall(oldpath, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+
+        // Create the newfile
+        let _fd2 = cage.open_syscall(newpath, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+
+        // Expect an error since newpath already exists
+        assert_eq!(cage.link_syscall(oldpath, newpath), -(Errno::EEXIST as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_link_directory() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let oldpath = "/olddir";
+        let newpath = "/newpath";
+
+        // Create the directory for the oldpath
+        assert_eq!(cage.mkdir_syscall(oldpath, S_IRWXA), 0);
+
+        // Expect an error since linking directories is not allowed
+        assert_eq!(cage.link_syscall(oldpath, newpath), -(Errno::EPERM as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_link_unlink_success() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
