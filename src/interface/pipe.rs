@@ -6,8 +6,18 @@
 //! ## Pipe Module
 //!
 //! This module provides a method for in memory iPC between cages and is able to
-//! replicate both pipes and Unix domain sockets
-
+//! replicate both pipes and Unix domain sockets.
+//!
+//! Linux pipes are implemented as a circular buffer of 16 pages (4096 bytes
+//! each). Instead for RustPOSIX we implement the buffer as a lock-free circular
+//! buffer for the sum of bytes in those pages.
+//!
+//! This implementation is also used internally by RustPOSIX to approximate Unix
+//! sockets by allocating two of these pipes bi-directionally.
+//!
+//! We expose an API allowing to read and write to the pipe as well as check if
+//! pipe descriptors are reading for reading and writing via select/poll
+///
 /// To learn more about pipes
 /// [pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)
 use crate::interface;
@@ -35,7 +45,9 @@ const PAGE_SIZE: usize = 4096;
 const CANCEL_CHECK_INTERVAL: usize = 1048576;
 
 /// # Description
-/// In-memory pipe struct
+/// In-memory pipe struct of given size which contains references to read and
+/// write ends of a lock-free ringbuffer, as well as reference counters to each
+/// end
 #[derive(Clone)]
 pub struct EmulatedPipe {
     write_end: Arc<Mutex<Producer<u8>>>,
@@ -97,7 +109,9 @@ impl EmulatedPipe {
     }
 
     /// # Description
-    /// Increase references to write or read descriptor
+    /// Increase references to write or read end.
+    /// This is called when a reference to the pipe end is duplicated in cases
+    /// such as fork() and dup/dup2().
     ///
     /// # Arguments
     ///
@@ -113,7 +127,9 @@ impl EmulatedPipe {
     }
 
     /// # Description
-    /// Decrease references to write or read descriptor
+    /// Decrease references to write or read end.
+    /// This is called when a reference to the pipe end is removed in cases such
+    /// as close().
     ///
     /// # Arguments
     ///
@@ -129,7 +145,9 @@ impl EmulatedPipe {
     }
 
     /// # Description
-    /// Checks if pipe is currently ready for reading, used by select/poll etc
+    /// Checks if pipe is currently ready for reading, used by select/poll etc.
+    /// A pipe descriptor is ready if there is anything in the pipe or there are
+    /// 0 remaining write references.
     ///
     /// # Returns
     ///
@@ -142,7 +160,10 @@ impl EmulatedPipe {
     }
 
     /// # Description
-    /// Checks if pipe is currently ready for writing, used by select/poll etc
+    /// Checks if pipe is currently ready for writing, used by select/poll etc.
+    /// A pipe descriptor is ready for writing if there is more than a page
+    /// (4096 bytes) of room in the pipe or if there are 0 remaining read
+    /// references.
     ///
     /// # Returns
     ///
@@ -202,6 +223,29 @@ impl EmulatedPipe {
         let mut write_end = self.write_end.lock();
         let mut bytes_written = 0;
 
+        // Here we attempt to write the data to the pipe, looping until all bytes are
+        // written or in non-blocking scenarios error with EAGAIN
+        //
+        // Here are the four different scenarios we encounter (via the pipe(7) manpage):
+        //
+        // O_NONBLOCK disabled, n <= PAGE_SIZE
+        // All n bytes are written, write may block if
+        // there is not room for n bytes to be written immediately
+
+        // O_NONBLOCK enabled, n <= PAGE_SIZE
+        // If there is room to write n bytes to the pipe, then
+        // write succeeds immediately, writing all n bytes;
+        // otherwise write fails, with errno set to EAGAIN.
+
+        // O_NONBLOCK disabled, n > PAGE_SIZE
+        // The write blocks until n bytes have been written.
+        // Because Linux implements pipes as a buffer of pages, we need to wait until
+        // a page worth of bytes is free in our buffer until we can write
+
+        // O_NONBLOCK enabled, n > PAGE_SIZE
+        // If the pipe is full, then write fails, with errno set to EAGAIN.
+        // Otherwise, a "partial write" may occur returning the number of bytes written
+
         while bytes_written < length {
             if self.get_read_ref() == 0 {
                 // we send EPIPE here since all read ends are closed
@@ -213,8 +257,6 @@ impl EmulatedPipe {
             // we loop until either more than a page of bytes is free in the pipe
             // Linux technically writes a page per iteration here but its more efficient and
             // should be semantically equivalent to write more for why we wait
-            // for a free page of bytes, refer to the pipe man page about atomicity of
-            // writes or the pipe_write kernel implementation
             if remaining < PAGE_SIZE {
                 if nonblocking {
                     // for non-blocking if we have written a bit lets return how much we've written,
