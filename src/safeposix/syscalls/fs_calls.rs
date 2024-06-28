@@ -3495,7 +3495,7 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// Currently, only two errors are supposrted:
+    /// Currently, the only error supported is:
     /// * `ENFILE` - no available file descriptors
     ///
     /// ### Panics

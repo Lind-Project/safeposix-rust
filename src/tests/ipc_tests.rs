@@ -20,6 +20,8 @@ pub mod ipc_tests {
 
         let cage1 = interface::cagetable_getref(1);
 
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
         let mut pipefds = PipeArray {
             readfd: -1,
             writefd: -1,
