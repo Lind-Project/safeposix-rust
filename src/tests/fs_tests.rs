@@ -890,6 +890,102 @@ pub mod fs_tests {
     }
 
     #[test]
+    pub fn test_unlink_empty_path() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "";
+        // Expect an error for empty path
+        assert_eq!(cage.unlink_syscall(path), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_unlink_nonexistent_file() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "/nonexistent";
+        // Expect an error for non-existent path
+        assert_eq!(cage.unlink_syscall(path), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_unlink_root_directory() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "/";
+        // Expect an error for unlinking root directory
+        assert_eq!(cage.unlink_syscall(path), -(Errno::EISDIR as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_unlink_directory() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "/testdir";
+        // Create the directory
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+
+        // Expect an error for unlinking a directory
+        assert_eq!(cage.unlink_syscall(path), -(Errno::EISDIR as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn test_unlink_success() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let path = "/testfile";
+        // Create a file
+        let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        // Linkcount for the file should be 1 originally
+        assert_eq!(statdata.st_nlink, 1);
+        // Perform the unlinking of the file
+        assert_eq!(cage.unlink_syscall(path), 0);
+        // Since the file is unlinked and is not referenced by any other files
+        // Its link count should reduce to 0 and hence it should get deleted
+        // from the file system.
+        // The function below should return an error denoting no such file.
+        assert_eq!(
+            cage.stat_syscall(path, &mut statdata),
+            -(Errno::ENOENT as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_link_unlink_success() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -897,37 +993,41 @@ pub mod fs_tests {
 
         let cage = interface::cagetable_getref(1);
 
-        let path = "/fileLink";
-        let path2 = "/fileLink2";
+        let oldpath = "/fileLink";
+        let newpath = "/fileLink2";
 
-        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        // Create the oldpath file
+        let fd = cage.open_syscall(oldpath, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
         assert_eq!(cage.write_syscall(fd, str2cbuf("hi"), 2), 2);
 
         let mut statdata = StatData::default();
-
-        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(cage.stat_syscall(oldpath, &mut statdata), 0);
         assert_eq!(statdata.st_size, 2);
+
+        // Linkcount for the original file (oldpath) before linking should be 1
         assert_eq!(statdata.st_nlink, 1);
 
         let mut statdata2 = StatData::default();
 
-        //make sure that this has the same traits as the other file that we linked
-        // and make sure that the link count on the orig file has increased
-        assert_eq!(cage.link_syscall(path, path2), 0);
-        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
-        assert_eq!(cage.stat_syscall(path2, &mut statdata2), 0);
+        // Link the two files
+        assert_eq!(cage.link_syscall(oldpath, newpath), 0);
+        assert_eq!(cage.stat_syscall(oldpath, &mut statdata), 0);
+        assert_eq!(cage.stat_syscall(newpath, &mut statdata2), 0);
+        // make sure that this has the same traits as the other file that we linked
         assert!(statdata == statdata2);
+        // and make sure that the link count on the orig file has increased by 1
         assert_eq!(statdata.st_nlink, 2);
 
-        //now we unlink
-        assert_eq!(cage.unlink_syscall(path), 0);
-        assert_eq!(cage.stat_syscall(path2, &mut statdata2), 0);
+        // Perform unlinking of the original file (oldpath)
+        assert_eq!(cage.unlink_syscall(oldpath), 0);
+        assert_eq!(cage.stat_syscall(newpath, &mut statdata2), 0);
+        // Since the file is unlinked, it's link count should be decreased by 1
         assert_eq!(statdata2.st_nlink, 1);
 
-        //it shouldn't work to stat the orig since it is gone
-        assert_ne!(cage.stat_syscall(path, &mut statdata), 0);
-        assert_eq!(cage.unlink_syscall(path2), 0);
+        //it shouldn't work to stat the original since it is gone
+        assert_ne!(cage.stat_syscall(oldpath, &mut statdata), 0);
+        assert_eq!(cage.unlink_syscall(newpath), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
