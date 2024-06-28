@@ -120,8 +120,9 @@ impl IntervalTimer {
                         let new_next_duration = guard.next_duration;
 
                         self._set_itimer(&mut guard, new_curr_duration, new_next_duration);
-                        // Calling self.set_itimer will automatically turn of the timer if
-                        // next_duration is ZERO
+                        // Calling self.set_itimer will automatically turn of
+                        // the timer if next_duration is
+                        // ZERO
                     }
                 } else {
                     break;
