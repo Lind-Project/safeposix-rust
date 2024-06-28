@@ -12,7 +12,6 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_simple() {
-
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -142,9 +141,9 @@ pub mod fs_tests {
     pub fn ut_lind_fs_broken_close() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         //testing a muck up with the inode table where the regular close does not work as intended
-        
+
         let cage = interface::cagetable_getref(1);
 
         //write should work
@@ -564,7 +563,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_fcntl_invalid_args(){
+    pub fn ut_lind_fs_fcntl_invalid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -595,7 +594,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_fcntl_dup(){
+    pub fn ut_lind_fs_fcntl_dup() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -670,7 +669,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_ioctl_invalid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
@@ -725,7 +724,7 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-        }
+    }
 
     #[test]
     pub fn ut_lind_fs_fdflags() {
@@ -1141,6 +1140,25 @@ pub mod fs_tests {
     }
 
     #[test]
+    pub fn ut_lind_fs_search_permission_bug_with_rmdir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "/parent_dir/dir";
+        assert_eq!(
+            cage.mkdir_syscall("/parent_dir", S_IWUSR | S_IWGRP | S_IWOTH),
+            0
+        );
+        assert_eq!(cage.mkdir_syscall(path, S_IWUSR | S_IWGRP | S_IWOTH), 0);
+        assert_eq!(cage.rmdir_syscall(path), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_stat_file_complex() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -1463,7 +1481,6 @@ pub mod fs_tests {
     pub fn ut_lind_fs_getpid_getppid() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
 
         let cage1 = interface::cagetable_getref(1);
         let pid1 = cage1.getpid_syscall();
