@@ -4167,7 +4167,6 @@ impl Cage {
                     
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages containing segment
                             let cage = interface::cagetable_getref(*cageid);
                             // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
@@ -4211,13 +4210,16 @@ impl Cage {
 /// * 'EAGAIN(11)' & 'EINTR(4)' currently are not supported 
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        // Check whether semaphore exists
+        // Check whether the semaphore exists in the semaphore table. If found, obtain a mutable borrow to the semaphore entry.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            // Clone the semaphore entry to avoid modifying the original entry in the table.
+        // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads.
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until the 
             ///semaphore becomes available. The`lock` method internally decrements the semaphore value.
+            // The lock fun is located in misc.rs
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
@@ -4251,12 +4253,15 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            // Clone the semaphore entry to avoid modifying the original entry in the table.
+            // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             // Increment the semaphore value.
             //If the semaphore's value becomes greater than zero, one or more blocked threads will be woken up and 
             // proceed to acquire the semaphore, decreasing its value.
+            // The unlock fun is located in misc.rs
             if !semaphore.unlock() {
                 // Return an error indicating that the maximum allowable value for a semaphore would be exceeded.
                 return syscall_error(
@@ -4365,6 +4370,8 @@ impl Cage {
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             return semaphore.get_value();
         }
@@ -4403,6 +4410,8 @@ impl Cage {
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             // Attempt to acquire the semaphore without blocking.
             // If the semaphore is currently unavailable (value is 0), this operation will fail.
@@ -4458,8 +4467,10 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            // Clone the semaphore entry to avoid modifying the original entry in the table.
+            // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             // Attempt to acquire the semaphore with a timeout.
             if !semaphore.timedlock(time) {
