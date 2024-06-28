@@ -2191,24 +2191,15 @@ impl Cage {
                         let inodenum = ui.inode;
                         if let Some(sendpipe) = ui.sendpipe.as_ref() {
                             sendpipe.decr_ref(O_WRONLY);
-                            // we're closing the last write end, lets set eof
-                            if sendpipe.get_write_ref() == 0 {
-                                sendpipe.set_eof();
-                            }
                             //last reference, lets remove it
-                            if (sendpipe.get_write_ref() as u64) + (sendpipe.get_read_ref() as u64)
-                                == 0
-                            {
+                            if sendpipe.is_pipe_closed() {
                                 ui.sendpipe = None;
                             }
                         }
                         if let Some(receivepipe) = ui.receivepipe.as_ref() {
                             receivepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
-                            if (receivepipe.get_write_ref() as u64)
-                                + (receivepipe.get_read_ref() as u64)
-                                == 0
-                            {
+                            if receivepipe.is_pipe_closed() {
                                 ui.receivepipe = None;
                             }
                         }

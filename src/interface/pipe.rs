@@ -18,7 +18,7 @@ use ringbuf::{Consumer, Producer, RingBuffer};
 use std::cmp::min;
 use std::fmt;
 use std::slice;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 // lets define a few constants for permission flags and the standard size of a
@@ -42,7 +42,6 @@ pub struct EmulatedPipe {
     read_end: Arc<Mutex<Consumer<u8>>>,
     refcount_write: Arc<AtomicU32>,
     refcount_read: Arc<AtomicU32>,
-    eof: Arc<AtomicBool>,
     size: usize,
 }
 
@@ -68,9 +67,19 @@ impl EmulatedPipe {
             read_end: Arc::new(Mutex::new(cons)),
             refcount_write: Arc::new(AtomicU32::new(1)),
             refcount_read: Arc::new(AtomicU32::new(1)),
-            eof: Arc::new(AtomicBool::new(false)),
             size: size,
         }
+    }
+
+    /// # Description
+    /// Checks the references to each end of the pipe to determine if its closed
+    /// Necessary for determining if Unix sockets are closed for each direction
+    ///
+    /// # Returns
+    ///
+    /// True if all references are closed, false if there are open references
+    pub fn is_pipe_closed(&self) -> bool {
+        self.get_write_ref() + self.get_read_ref() == 0
     }
 
     /// Internal getter for write references
@@ -284,14 +293,14 @@ impl EmulatedPipe {
         let mut length = 0;
 
         // we're going to loop through the iovec array and combine the buffers into one
-        // slice, recording the length this is hacky but is the best way to do
-        // this for now
+        // Rust slice so that we can use the write_to_pipe function, recording the
+        // length this is hacky but is the best way to do this for now
         for _iov in 0..iovcnt {
             unsafe {
                 assert!(!ptr.is_null());
-                let iovec = *ptr;
-                // lets convert this iovec into a slice,
+                // lets convert this iovec into a Rust slice,
                 // and then extend our combined buffer
+                let iovec = *ptr;
                 let iovbuf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
                 buf.extend_from_slice(iovbuf);
                 length = length + iovec.iov_len
@@ -398,7 +407,6 @@ impl fmt::Debug for EmulatedPipe {
         f.debug_struct("EmulatedPipe")
             .field("refcount read", &self.refcount_read)
             .field("refcount write", &self.refcount_write)
-            .field("eof", &self.eof)
             .finish()
     }
 }
