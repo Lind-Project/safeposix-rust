@@ -4144,7 +4144,9 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let is_shared = pshared != 0;
 
-        // Iterate semaphore table, if semaphore is already initialized return error & Will initialize only it's new
+        // Check if a semaphore with the given handle already exists in the semaphore table. 
+        // If it exists, the semaphore is already initialized, so an error is returned.
+        // This ensures that only new semaphores are initialized.
         let semtable = &self.sem_table;
 
         if !semtable.contains_key(&sem_handle) {
@@ -4161,8 +4163,8 @@ impl Cage {
                 if let Some((mapaddr, shmid)) =
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
-                    let offset = mapaddr - sem_handle;
-                    // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
+                    let offset = mapaddr - sem_handle; 
+                    // iterate through all cages with shared memory segment attached and add semaphor in segments at attached addr + offset
                     // offset represents the relative position of the semaphore within the shared memory region.
                     
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
