@@ -4238,8 +4238,7 @@ impl Cage {
         }
     }
 
-<<<<<<< HEAD
-        //##------------------SEMAPHORE SYSCALLS------------------
+    //##------------------SEMAPHORE SYSCALLS------------------
 /*
  *  Initialize semaphore object SEM to value
  *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
