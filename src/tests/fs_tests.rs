@@ -1524,7 +1524,7 @@ pub mod fs_tests {
         // Calculate the exact buffer size needed
         let entry_size = interface::CLIPPED_DIRENT_SIZE + 32; // Approximate size for each entry
         let exact_bufsize = (num_files * entry_size as usize) as u32;
-        
+    
         // Test with an exact buffer size
         let mut vec_exact = vec![0u8; exact_bufsize as usize];
         let baseptr_exact: *mut u8 = &mut vec_exact[0];
