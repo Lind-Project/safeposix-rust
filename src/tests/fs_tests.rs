@@ -1408,6 +1408,35 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
+    #[test]
+    fn ut_lind_fs_getdents_invalid_fd() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        let bufsize = 50;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+
+        // Create a directory
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
+
+        // Open the directory
+        let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
+
+        // Attempt to call `getdents_syscall` with an invalid file descriptor
+        let result = cage.getdents_syscall(-1, baseptr, bufsize as u32);
+
+        // Assert that the return value is EBADF (errno for "Bad file descriptor")
+        assert_eq!(result, -(Errno::EBADF as i32));
+
+        // Close the directory
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
     #[test]
     fn ut_lind_fs_getdents_invalid_fd() {
         let _thelock = setup::lock_and_init();
