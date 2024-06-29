@@ -1464,7 +1464,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+
     #[test]
     fn ut_lind_fs_getdents_empty_directory() {
         let _thelock = setup::lock_and_init();
@@ -1483,8 +1483,11 @@ pub mod fs_tests {
         // Call getdents_syscall on the empty directory
         let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
 
+        // Debugging output
+        println!("Buffer contents after syscall: {:?}", &vec[..result as usize]);
+
         // Assert that the return value is 0, indicating an empty directory
-        assert_eq!(result, 0);
+        assert_eq!(result, 0, "Expected empty directory to return 0, got {}", result);
 
         // Close the directory
         assert_eq!(cage.close_syscall(fd), 0);
@@ -1492,6 +1495,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
 
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
