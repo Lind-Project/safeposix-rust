@@ -1408,7 +1408,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+
     #[test]
     fn ut_lind_fs_getdents_invalid_fd() {
         let _thelock = setup::lock_and_init();
@@ -1432,22 +1432,6 @@ pub mod fs_tests {
 
         // Close the directory
         assert_eq!(cage.close_syscall(fd), 0);
-
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-    #[test]
-    fn ut_lind_fs_getdents_invalid_fd() {
-        let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1);
-
-        // Attempt to call getdents_syscall with an invalid file descriptor
-        let dirp = unsafe { std::alloc::alloc(std::alloc::Layout::new::<u8>(1024)) };
-        let result = cage.getdents_syscall(-1, dirp, 1024); 
-        unsafe { std::alloc::dealloc(dirp, std::alloc::Layout::new::<u8>(1024)) };
-
-        assert_eq!(result, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
