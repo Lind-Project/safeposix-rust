@@ -3497,10 +3497,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
 
-        let checkedfd = match self.get_filedescriptor(fd) {
-            Ok(fd) => fd,
-            Err(_) => return syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor."),
-        };
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
