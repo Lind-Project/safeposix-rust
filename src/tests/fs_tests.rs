@@ -1438,6 +1438,34 @@ pub mod fs_tests {
     }
 
     #[test]
+    fn ut_lind_fs_getdents_bufsize_too_small() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        let bufsize = interface::CLIPPED_DIRENT_SIZE - 1; // Buffer size smaller than CLIPPED_DIRENT_SIZE
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+
+        // Create a directory
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
+
+        // Open the directory
+        let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
+
+        // Attempt to call `getdents_syscall` with a buffer size smaller than CLIPPED_DIRENT_SIZE
+        let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
+
+        // Assert that the return value is EINVAL (errno for "Invalid argument")
+        assert_eq!(result, -(Errno::EINVAL as i32));
+
+        // Close the directory
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
