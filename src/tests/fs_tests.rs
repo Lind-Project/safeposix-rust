@@ -1504,7 +1504,7 @@ pub mod fs_tests {
         let mut small_buffer = vec![0u8; small_buffer_size];
     
         // Open a directory to get a valid file descriptor
-        let fd = unsafe { open("/some/directory", O_RDONLY) };
+        let fd = unsafe { cage.open_syscall("/some/directory", O_RDONLY) };
         if fd < 0 {
             panic!("Failed to open directory");
         }
