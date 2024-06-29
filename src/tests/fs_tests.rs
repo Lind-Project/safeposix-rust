@@ -1515,6 +1515,8 @@ pub mod fs_tests {
 
         // Call getdents on the directory
         let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
+        println!("Syscall result: {}", result);
+        println!("Buffer contents: {:?}", &buf[..result as usize]);
 
         // Check that the result is 0, indicating an empty directory
         assert_eq!(result, 0, "Expected empty directory to return 0, got {}", result);
