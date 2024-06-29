@@ -1553,11 +1553,11 @@ pub mod fs_tests {
 
         // Call getdents on the directory
         let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
-        println!("Syscall result: {}", result);
-        println!("Buffer contents: {:?}", &buf[..result as usize]);
+        println!("Syscall result ex: {}", result);
+        println!("Buffer contents ex: {:?}", &buf[..result as usize]);
 
         // Check that the result is 48, indicating the presence of "." and ".."
-        assert_eq!(result, 48, "Expected directory with '.' and '..' to return 48, got {}", result);
+        assert_eq!(result, 48, "Expected directory with ex '.' and '..' to return 48, got {}", result);
 
         // Optionally check buffer contents if necessary
         assert!(is_only_dot_entries(&buf[..result as usize]), "Directory contains unexpected entries");
