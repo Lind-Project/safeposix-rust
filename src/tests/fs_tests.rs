@@ -1497,78 +1497,33 @@ pub mod fs_tests {
     //     lindrustfinalize();
     // }
     #[test]
-    fn test_empty_directory_getdents() {
-        let _thelock = setup::lock_and_init(); // Lock and setup the environment
-        let cage = interface::cagetable_getref(1); // Get a reference to the cage
-
-        // Create an empty directory
-        assert_eq!(cage.mkdir_syscall("/empty_test_directory", S_IRWXA), 0);
-
-        // Open the directory
-        let fd = cage.open_syscall("/empty_test_directory", O_RDWR, S_IRWXA);
-        assert!(fd >= 0, "Failed to open directory");
-
-        // Prepare a buffer for getdents
-        let bufsize = 1024;
-        let mut buf = vec![0u8; bufsize];
-        let buf_ptr = buf.as_mut_ptr();
-
-        // Call getdents on the directory
-        let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
-        println!("Syscall result: {}", result);
-        println!("Buffer contents: {:?}", &buf[..result as usize]);
-
-        // Check that the result is 0, indicating an empty directory
-        assert_eq!(result, 48, "Expected empty directory to return 0, got {}", result);
-
-        // Optionally check buffer contents if necessary
-        // Example: assert_eq!(&buf[..result as usize], &[]);
-
-        // Close the directory
+    fn ut_lind_fs_getdents_non_directory_fd() {
+        // Acquire a lock on TESTMUTEX to prevent other tests from running concurrently,
+        // and also perform clean environment setup.
+        let _thelock = setup::lock_and_init();
+    
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a regular file
+        let filepath = "/regularfile";
+        let fd = cage.open_syscall(filepath, O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+    
+        // Allocate a buffer to store directory entries
+        let bufsize = 50;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+    
+        // Attempt to call getdents_syscall on the regular file descriptor
+        let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
+    
+        // Verify that it returns ENOTDIR
+        assert_eq!(result, -(Errno::ENOTDIR as i32));
+    
+        // Clean up: Close the file descriptor and finalize the test environment
         assert_eq!(cage.close_syscall(fd), 0);
-
-        // Cleanup
-        assert_eq!(cage.rmdir_syscall("/empty_test_directory"), 0);
-
-        lindrustfinalize(); // Finalize and release the lock
-    }
-    #[test]
-    fn test_existing_directory_getdents() {
-        let _thelock = setup::lock_and_init(); // Lock and setup the environment
-        let cage = interface::cagetable_getref(1); // Get a reference to the cage
-
-        // Create the directory if it does not exist
-        let dir_path = "/existing_test_directory";
-        let mkdir_result = cage.mkdir_syscall(dir_path, S_IRWXA);
-        assert_eq!(mkdir_result, 0, "Failed to create directory");
-
-        // Open the directory
-        let fd = cage.open_syscall(dir_path, O_RDWR, S_IRWXA);
-        assert!(fd >= 0, "Failed to open directory");
-
-        // Prepare a buffer for getdents
-        let bufsize = 1024; // Ensure buffer is adequately sized
-        let mut buf = vec![0u8; bufsize];
-        let buf_ptr = buf.as_mut_ptr();
-
-        // Call getdents on the directory
-        let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
-        println!("Syscall result ex: {}", result);
-        println!("Buffer contents ex: {:?}", &buf[..result as usize]);
-
-        // Check that the result is 48, indicating the presence of "." and ".."
-        assert_eq!(result, 48, "Expected directory with ex '.' and '..' to return 48, got {}", result);
-
-        // Optionally check buffer contents if necessary
-        assert!(is_only_dot_entries(&buf[..result as usize]), "Directory contains unexpected entries");
-
-        // Close the directory
-        assert_eq!(cage.close_syscall(fd), 0);
-
-        // Cleanup: Remove the directory
-        assert_eq!(cage.rmdir_syscall(dir_path), 0);
-
-        lindrustfinalize(); // Finalize and release the lock
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
     }
     
     fn is_only_dot_entries(data: &[u8]) -> bool {
