@@ -1464,6 +1464,34 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
+    #[test]
+    fn ut_lind_fs_getdents_empty_directory() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        let bufsize = 1024;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+
+        // Create an empty directory
+        assert_eq!(cage.mkdir_syscall("/empty_directory", S_IRWXA), 0);
+
+        // Open the empty directory
+        let fd = cage.open_syscall("/empty_directory", O_RDWR, S_IRWXA);
+
+        // Call getdents_syscall on the empty directory
+        let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
+
+        // Assert that the return value is 0, indicating an empty directory
+        assert_eq!(result, 0);
+
+        // Close the directory
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
