@@ -74,14 +74,36 @@ impl Cage {
         }
         0
     }
-//Creates a new socket, ensuring the requested domain, socket type, and protocol are supported by SafePOSIX and also
-//validates the requested communication domain, socket type, and protocol permitting only combinations that are known
+
+/// ## `socket_syscall`
+///
+/// ### Description
+/// This function creates a new socket, ensuring the requested domain, socket type, 
+/// and protocol are supported by SafePosix. 
+/// It validates the requested communication domain, socket type, and protocol, permitting only combinations that are known 
+/// to be safe and secure.
+///
+/// ### Function Arguments
+/// * `domain`: The communication domain for the socket. Supported values are 
+///   `PF_INET` (Internet Protocol) and `PF_UNIX` (Unix domain sockets).
+/// * `socktype`: The socket type. Supported values are `SOCK_STREAM` (stream sockets) and `SOCK_DGRAM` (datagram sockets).
+/// * `protocol`: The protocol to use for communication. This defaults to TCP for stream sockets 
+///   (`SOCK_STREAM`) and UDP for datagram sockets (`SOCK_DGRAM`).
+///
+/// ### Returns
+/// * The new file descriptor representing the socket on success.
+///
+/// ### Errors
+/// * `EOPNOTSUPP(95)`: If an unsupported combination of domain, socket type, or protocol is requested.
+/// * `EINVAL(22)`: If an invalid combination of flags is provided.
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
-        //Check blocking status for storage in the file descriptor, we'll need this for calls that don't access the kernel socket, unix sockets, and properly directing kernel calls for recv and accept
+        //Check blocking status for storage in the file descriptor, we'll need this for calls that don't access the kernel 
+        //socket, unix sockets, and properly directing kernel calls for recv and accept
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
-        // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is automatically closed if the current process executes another program, preventing unintended inheritance of the socket by the new program.
+        // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is automatically closed if the current
+        // process executes another program, preventing unintended inheritance of the socket by the new program.
        
         // additional flags are not supported
         // filtering out any socktypes with unexpected flags set.
@@ -95,7 +117,8 @@ impl Cage {
                 "Invalid combination of flags"
             );
         }
-        //SafePOSIX intentionally supports only a restricted subset of socket types . This is to make sure that applications not creating other socket types which may lead to security issues. 
+        //SafePOSIX intentionally supports only a restricted subset of socket types . This is to make sure that 
+        // applications not creating other socket types which may lead to security issues. 
         //By using the match statement, SafePOSIX ensures that only these approved socket types are allowed.
         match real_socktype {// Handles different socket types SOCK_STREAM or SOCK_DGRAM in this cases
             SOCK_STREAM => {
@@ -121,9 +144,11 @@ impl Cage {
                             cloexec,
                             ConnState::NOTCONNECTED,
                         );
-                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a helper function that encapsulates the internal details of socket creation and initialization.
+                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a helper function 
+                        // that encapsulates the internal details of socket creation and initialization.
                         return self._socket_inserter(Socket(sockfdobj));
-                        // Inserts the newly created socket descriptor into the cage's file descriptor table,making it accessible to the application. Returns the file descriptor (an integer) representing the socket.
+                        // Inserts the newly created socket descriptor into the cage's file descriptor table,
+                        // making it accessible to the application.Returns the file descriptor representing the socket.
                     }
                     _ => {
                         return syscall_error(
@@ -146,6 +171,9 @@ impl Cage {
                         "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.",
                     );
                 }
+                // SafePOSIX intentionally supports only a restricted subset of socket types . This is to make sure
+                // that applications not creating other socket types which may lead to security issues. 
+                //By using the match statement,  SafePOSIX ensures that only these approved socket types are allowed.
                 match domain {// Handles different communication domains in this case PF_INET/PF_UNIX 
                     PF_INET | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
                         //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same 
@@ -158,9 +186,11 @@ impl Cage {
                             cloexec,
                             ConnState::NOTCONNECTED,
                         );
-                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a helper function that encapsulates the internal details of socket creation and initialization.
+                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a helper 
+                        // function that encapsulates the internal details of socket creation and initialization.
                         return self._socket_inserter(Socket(sockfdobj));
-                        // Inserts the newly created socket descriptor into the cage's file descriptor table,making it accessible to the application. Returns the file descriptor (an integer) representing the socket.
+                        // Inserts the newly created socket descriptor into the cage's file descriptor table,making it accessible to the application. 
+                        // Returns the file descriptor (an integer) representing the socket.
                     }
                     _ => {
                         return syscall_error(
