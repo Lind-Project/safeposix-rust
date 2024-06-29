@@ -1497,34 +1497,37 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     #[test]
-    fn test_empty_directory_check() {
+    fn test_empty_directory_getdents() {
         let _thelock = setup::lock_and_init(); // Lock and setup the environment
         let cage = interface::cagetable_getref(1); // Get a reference to the cage
-    
+
         // Create an empty directory
         assert_eq!(cage.mkdir_syscall("/empty_test_directory", S_IRWXA), 0);
-    
+
         // Open the directory
         let fd = cage.open_syscall("/empty_test_directory", O_RDWR, S_IRWXA);
         assert!(fd >= 0, "Failed to open directory");
-    
+
         // Prepare a buffer for getdents
         let bufsize = 1024;
         let mut buf = vec![0u8; bufsize];
         let buf_ptr = buf.as_mut_ptr();
-    
+
         // Call getdents on the directory
         let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
-    
-        // Check that the result is 0 or only contains `.` and `..`
+
+        // Check that the result is 0, indicating an empty directory
         assert_eq!(result, 0, "Expected empty directory to return 0, got {}", result);
-    
+
+        // Optionally check buffer contents if necessary
+        // Example: assert_eq!(&buf[..result as usize], &[]);
+
         // Close the directory
         assert_eq!(cage.close_syscall(fd), 0);
-    
+
         // Cleanup
         assert_eq!(cage.rmdir_syscall("/empty_test_directory"), 0);
-    
+
         lindrustfinalize(); // Finalize and release the lock
     }
     
