@@ -1510,7 +1510,7 @@ pub mod fs_tests {
         assert_ne!(fd, -(Errno::ENOENT as i32));
     
         // Allocate a buffer to store directory entries
-        let bufsize = 50;
+        let bufsize = 1024;
         let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
     
