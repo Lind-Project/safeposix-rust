@@ -1503,12 +1503,12 @@ pub mod fs_tests {
         let small_buffer = vec![0; small_buffer_size];
         
         println!("Testing with exact buffer size: {}", exact_buffer_size);
-        let result = unsafe { syscall_getdents(fd, exact_buffer.as_ptr(), exact_buffer_size) };
+        let result = unsafe { getdents_syscall(fd, exact_buffer.as_ptr(), exact_buffer_size) };
         println!("Exact buffer size syscall result: {}", result);
         println!("Exact buffer contents: {:?}", exact_buffer);
     
         println!("Testing with small buffer size: {}", small_buffer_size);
-        let result = unsafe { syscall_getdents(fd, small_buffer.as_ptr(), small_buffer_size) };
+        let result = unsafe { getdents_syscall(fd, small_buffer.as_ptr(), small_buffer_size) };
         println!("Small buffer size syscall result: {}", result);
         println!("Small buffer contents: {:?}", small_buffer);
         
