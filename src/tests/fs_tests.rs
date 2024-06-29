@@ -1519,7 +1519,7 @@ pub mod fs_tests {
         println!("Buffer contents: {:?}", &buf[..result as usize]);
 
         // Check that the result is 0, indicating an empty directory
-        assert_eq!(result, 0, "Expected empty directory to return 0, got {}", result);
+        assert_eq!(result, 48, "Expected empty directory to return 0, got {}", result);
 
         // Optionally check buffer contents if necessary
         // Example: assert_eq!(&buf[..result as usize], &[]);
@@ -1529,6 +1529,44 @@ pub mod fs_tests {
 
         // Cleanup
         assert_eq!(cage.rmdir_syscall("/empty_test_directory"), 0);
+
+        lindrustfinalize(); // Finalize and release the lock
+    }
+    #[test]
+    fn test_existing_directory_getdents() {
+        let _thelock = setup::lock_and_init(); // Lock and setup the environment
+        let cage = interface::cagetable_getref(1); // Get a reference to the cage
+
+        // Create the directory if it does not exist
+        let dir_path = "/existing_test_directory";
+        let mkdir_result = cage.mkdir_syscall(dir_path, S_IRWXA);
+        assert_eq!(mkdir_result, 0, "Failed to create directory");
+
+        // Open the directory
+        let fd = cage.open_syscall(dir_path, O_RDWR, S_IRWXA);
+        assert!(fd >= 0, "Failed to open directory");
+
+        // Prepare a buffer for getdents
+        let bufsize = 1024; // Ensure buffer is adequately sized
+        let mut buf = vec![0u8; bufsize];
+        let buf_ptr = buf.as_mut_ptr();
+
+        // Call getdents on the directory
+        let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
+        println!("Syscall result: {}", result);
+        println!("Buffer contents: {:?}", &buf[..result as usize]);
+
+        // Check that the result is 48, indicating the presence of "." and ".."
+        assert_eq!(result, 48, "Expected directory with '.' and '..' to return 48, got {}", result);
+
+        // Optionally check buffer contents if necessary
+        assert!(is_only_dot_entries(&buf[..result as usize]), "Directory contains unexpected entries");
+
+        // Close the directory
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        // Cleanup: Remove the directory
+        assert_eq!(cage.rmdir_syscall(dir_path), 0);
 
         lindrustfinalize(); // Finalize and release the lock
     }
