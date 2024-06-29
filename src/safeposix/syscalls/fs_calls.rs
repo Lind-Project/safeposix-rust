@@ -3484,7 +3484,7 @@ impl Cage {
 ///
 /// ### Errors and Panics
 /// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
-/// * `ENOTDIR(20)`: If the file descriptor does not refer to a directory.
+/// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
 /// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
     pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32) -> i32 {
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();

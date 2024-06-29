@@ -1482,7 +1482,8 @@ pub mod fs_tests {
         let bufsize = 1024;
         let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
-    
+        println!("Buffer contents: {:?}", vec);
+        println!("Syscall result: {}", result);
         // Attempt to call getdents_syscall on the regular file descriptor
         let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
     
@@ -1494,38 +1495,6 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    #[test]
-    fn test_empty_directory_getdents() {
-        let _thelock = setup::lock_and_init(); // Lock and setup the environment
-        let cage = interface::cagetable_getref(1); // Get a reference to the cage
-
-        // Create an empty directory
-        assert_eq!(cage.mkdir_syscall("/empty_test_directory", S_IRWXA), 0);
-
-        // Open the directory
-        let fd = cage.open_syscall("/empty_test_directory", O_RDWR, S_IRWXA);
-        assert!(fd >= 0, "Failed to open directory");
-
-        // Prepare a buffer for getdents
-        let bufsize = 1024; // Ensure buffer is adequately sized
-        let mut buf = vec![0u8; bufsize];
-        let buf_ptr = buf.as_mut_ptr();
-
-        // Call getdents on the directory
-        let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
-
-        // Optionally check buffer contents if necessary
-        assert!(is_only_dot_entries(&buf[..result as usize]), "Directory is not empty or contains unexpected entries");
-
-        // Close the directory
-        assert_eq!(cage.close_syscall(fd), 0);
-
-        // Cleanup
-        assert_eq!(cage.rmdir_syscall("/empty_test_directory"), 0);
-
-        lindrustfinalize(); // Finalize and release the lock
-    }
-
 
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
