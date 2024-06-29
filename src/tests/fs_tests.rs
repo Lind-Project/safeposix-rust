@@ -1517,7 +1517,7 @@ pub mod fs_tests {
         let result = cage.getdents_syscall(fd, buf_ptr, bufsize as u32);
     
         // Check that the result is 0 or only contains `.` and `..`
-        assert!(result == 0 || is_only_dot_entries(&buf[0..result as usize]), "Directory is not empty or contains unexpected entries");
+        assert_eq!(result, 0, "Expected empty directory to return 0, got {}", result);
     
         // Close the directory
         assert_eq!(cage.close_syscall(fd), 0);
