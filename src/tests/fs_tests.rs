@@ -604,7 +604,7 @@ pub mod fs_tests {
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
         assert_ne!(fd, -(Errno::ENOENT as i32));
         let new_fd = cage.dup2_syscall(fd, 5); // Try to duplicate to an existing fd 
-        assert_eq!(new_fd, -(Errno::EBADF as i32)); // Expect ENFILE error
+        assert_eq!(new_fd, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
