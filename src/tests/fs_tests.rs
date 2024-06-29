@@ -1495,35 +1495,6 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    #[test]
-    fn test_setup() {
-        let fs = FS;
-        let exact_buffer_size = 368;
-        let small_buffer_size = 10;
-        let mut exact_buffer = vec![0u8; exact_buffer_size];
-        let mut small_buffer = vec![0u8; small_buffer_size];
-    
-        // Open a directory to get a valid file descriptor
-        let fd = unsafe { cage.open_syscall("/some/directory", O_RDONLY) };
-        if fd < 0 {
-            panic!("Failed to open directory");
-        }
-    
-        println!("Testing with exact buffer size: {}", exact_buffer_size);
-        let result = fs.getdents_syscall(fd, exact_buffer.as_mut_ptr(), exact_buffer_size as u32);
-        println!("Exact buffer size syscall result: {}", result);
-        println!("Exact buffer contents: {:?}", exact_buffer);
-    
-        println!("Testing with small buffer size: {}", small_buffer_size);
-        let result = fs.getdents_syscall(fd, small_buffer.as_mut_ptr(), small_buffer_size as u32);
-        println!("Small buffer size syscall result: {}", result);
-        println!("Small buffer contents: {:?}", small_buffer);
-    
-        assert_eq!(result, 0, "Syscall did not return expected result for small buffer size");
-    
-        // Close the directory file descriptor
-        unsafe { close(fd) };
-    }
     
     // #[test]
     // fn ut_lind_fs_getdents_boundary_conditions() {
