@@ -1465,37 +1465,6 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    // #[test]
-    // fn ut_lind_fs_getdents_empty_directory() {
-    //     let _thelock = setup::lock_and_init();
-    //     let cage = interface::cagetable_getref(1);
-
-    //     let bufsize = 1024;
-    //     let mut vec = vec![0u8; bufsize as usize];
-    //     let baseptr: *mut u8 = &mut vec[0];
-
-    //     // Create an empty directory
-    //     assert_eq!(cage.mkdir_syscall("/empty_dir", S_IRWXA), 0);
-
-    //     // Open the empty directory
-    //     let fd = cage.open_syscall("/empty_dir", O_RDWR, S_IRWXA);
-
-    //     // Call getdents_syscall on the empty directory
-    //     let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
-
-    //     // Debugging output
-    //     println!("Buffer contents after syscall: {:?}", &vec[..result as usize]);
-
-    //     // Assert that the return value is 0, indicating an empty directory
-    //     // assert_eq!(result, 0, "Expected empty directory to return 0, got {}", result);
-    //     assert_ne!(result, 0, "Expected non-empty directory to return a value other than 0.");
-
-    //     // Close the directory
-    //     assert_eq!(cage.close_syscall(fd), 0);
-
-    //     assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-    //     lindrustfinalize();
-    // }
     #[test]
     fn ut_lind_fs_getdents_non_directory_fd() {
         // Acquire a lock on TESTMUTEX to prevent other tests from running concurrently,
@@ -1525,15 +1494,6 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
-    fn is_only_dot_entries(data: &[u8]) -> bool {
-        // Parse data to check for only `.` and `..` entries
-        // This function needs to be implemented based on how directory entries are structured in the buffer
-        true // Placeholder return
-    }
-    
-
-
 
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
