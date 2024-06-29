@@ -3497,7 +3497,10 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
 
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = match self.get_filedescriptor(fd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor."),
+        };
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -3524,6 +3527,10 @@ impl Cage {
                                 .into_iter()
                                 .skip(position)
                             {
+                                   
+                                if inode == 2 || inode == 1 { 
+                                    continue;
+                                } 
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
