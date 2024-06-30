@@ -6,11 +6,13 @@
 
 /// Author: Jonathan Singer
 ///
-/// This file provides a command line interface for interacting in certain ways with the lind file
-/// system from the host, such as copying files from the host into lind, removing files and
-/// directories, and listing files in the lind fs, and more
+/// This file provides a command line interface for interacting in certain ways
+/// with the lind file system from the host, such as copying files from the host
+/// into lind, removing files and directories, and listing files in the lind fs,
+/// and more
 ///
-/// This interface should be sufficient for anything we'd need to do between lind and the host
+/// This interface should be sufficient for anything we'd need to do between
+/// lind and the host
 use std::env;
 use std::iter::repeat;
 
@@ -33,7 +35,8 @@ fn lind_tree(cage: &Cage, path: &str, indentlevel: usize) {
             return;
         }
 
-        //visit the children of this directory, and show them all as being children of this directory in the tree
+        //visit the children of this directory, and show them all as being children of
+        // this directory in the tree
         visit_children(
             cage,
             path,
@@ -64,7 +67,8 @@ fn lind_ls(cage: &Cage, path: &str) {
 
     if stat_us == 0 {
         if is_dir(lindstat_res.st_mode) {
-            //for each child, if it's a directory, print its name with a slash, otherwise omit the slash
+            //for each child, if it's a directory, print its name with a slash, otherwise
+            // omit the slash
             visit_children(cage, path, None, |_childcage, childpath, isdir, _| {
                 if isdir {
                     print!("{}/ ", childpath);

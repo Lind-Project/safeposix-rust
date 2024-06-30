@@ -3,16 +3,18 @@ use super::syscalls::net_constants::*;
 use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
 
-//Because other processes on the OS may allocate ephemeral ports, we allocate them from high to
-//low whereas the OS allocates them from low to high
-//Additionally, we can't tell whether a port is truly rebindable, this is because even when a port
-//is closed sometimes there still is cleanup that the OS needs to do (for ephemeral ports which end
-//up in the TIME_WAIT state). Therefore, we will assign ephemeral ports rather than simply from the
-//highest available one, in a cyclic fashion skipping over unavailable ports. While this still may
-//cause issues if specific port adresses in the ephemeral port range are allocated and closed before
-//an ephemeral port would be bound there, it is much less likely that this will happen and is easy
-//to avoid and nonstandard in user programs. See the code for _get_available_udp_port and its tcp
-//counterpart for the implementation details.
+//Because other processes on the OS may allocate ephemeral ports, we allocate
+// them from high to low whereas the OS allocates them from low to high
+//Additionally, we can't tell whether a port is truly rebindable, this is
+// because even when a port is closed sometimes there still is cleanup that the
+// OS needs to do (for ephemeral ports which end up in the TIME_WAIT state).
+// Therefore, we will assign ephemeral ports rather than simply from the highest
+// available one, in a cyclic fashion skipping over unavailable ports. While
+// this still may cause issues if specific port adresses in the ephemeral port
+// range are allocated and closed before an ephemeral port would be bound there,
+// it is much less likely that this will happen and is easy to avoid and
+// nonstandard in user programs. See the code for _get_available_udp_port and
+// its tcp counterpart for the implementation details.
 const EPHEMERAL_PORT_RANGE_START: u16 = 32768; //sane default on linux
 const EPHEMERAL_PORT_RANGE_END: u16 = 60999;
 pub const TCPPORT: bool = true;
@@ -36,14 +38,16 @@ pub static NET_METADATA: interface::RustLazyGlobal<interface::RustRfc<NetMetadat
             )),
             listening_port_set: interface::RustHashSet::new(),
             pending_conn_table: interface::RustHashMap::new(),
-            domsock_accept_table: interface::RustHashMap::new(), // manages domain socket connection process
-            domsock_paths: interface::RustHashSet::new(), // set of all currently bound domain sockets
+            domsock_accept_table: interface::RustHashMap::new(), /* manages domain socket
+                                                                  * connection process */
+            domsock_paths: interface::RustHashSet::new(), /* set of all currently bound domain
+                                                           * sockets */
         })
     }); //we want to check if fs exists before doing a blank init, but not for now
 
 //A list of all network devices present on the machine
-//It is populated from a file that should be present prior to running rustposix, see
-//the implementation of read_netdevs for specifics
+//It is populated from a file that should be present prior to running
+// rustposix, see the implementation of read_netdevs for specifics
 pub static NET_IFADDRS_STR: interface::RustLazyGlobal<String> =
     interface::RustLazyGlobal::new(|| interface::getifaddrs_from_file());
 
@@ -131,13 +135,15 @@ pub struct SocketHandle {
     pub errno: i32,
 }
 
-//This cleanup-on-drop strategy is used in lieu of manual refcounting in order to allow the close
-//syscall not to have to wait to increase the refcnt manually in case for example it is in a
-//blocking recv. This clean-on-drop strategy is made possible by the fact that file descriptors
-//hold reference to a SocketHandle via an Arc, so only when the last reference to a SocketHandle is
-//gone--that is when the last cage has closed it--do we actually attempt to shut down the inner
-//socket, which is what we could have done manually in close instead. This should be both cleaner
-//and faster, because we don't have to wait for the recv timeout like we do in shutdown
+//This cleanup-on-drop strategy is used in lieu of manual refcounting in order
+// to allow the close syscall not to have to wait to increase the refcnt
+// manually in case for example it is in a blocking recv. This clean-on-drop
+// strategy is made possible by the fact that file descriptors hold reference to
+// a SocketHandle via an Arc, so only when the last reference to a SocketHandle
+// is gone--that is when the last cage has closed it--do we actually attempt to
+// shut down the inner socket, which is what we could have done manually in
+// close instead. This should be both cleaner and faster, because we don't have
+// to wait for the recv timeout like we do in shutdown
 impl Drop for SocketHandle {
     fn drop(&mut self) {
         Cage::_cleanup_socket_inner_helper(self, -1, false);
@@ -198,7 +204,7 @@ impl DomsockTableEntry {
 }
 
 pub struct NetMetadata {
-    pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, //maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed
+    pub used_port_set: interface::RustHashMap<(u16, PortType), Vec<(interface::GenIpaddr, u32)>>, /* maps port tuple to whether rebinding is allowed: 0 means there's a user but rebinding is not allowed, positive number means that many users, rebinding is allowed */
     next_ephemeral_port_tcpv4: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_udpv4: interface::RustRfc<interface::RustLock<u16>>,
     next_ephemeral_port_tcpv6: interface::RustRfc<interface::RustLock<u16>>,
@@ -269,7 +275,8 @@ impl NetMetadata {
         }
         let mut porttuple = mux_port(addr, 0, domain, UDPPORT);
 
-        //start from the starting location we specified in a previous attempt to get an ephemeral port
+        //start from the starting location we specified in a previous attempt to get an
+        // ephemeral port
         let mut next_ephemeral = if domain == AF_INET {
             self.next_ephemeral_port_udpv4.write()
         } else if domain == AF_INET6 {
@@ -287,7 +294,8 @@ impl NetMetadata {
 
                 //if we think we can bind to this port
                 if self.initialize_port(&porttuple, if rebindability { 1 } else { 0 }) {
-                    //rebindability of 0 means not rebindable, 1 means it's rebindable and there's 1 bound to it
+                    //rebindability of 0 means not rebindable, 1 means it's rebindable and there's
+                    // 1 bound to it
                     *next_ephemeral -= 1;
                     if *next_ephemeral < EPHEMERAL_PORT_RANGE_START {
                         *next_ephemeral = EPHEMERAL_PORT_RANGE_END;
@@ -317,7 +325,8 @@ impl NetMetadata {
         }
         let mut porttuple = mux_port(addr.clone(), 0, domain, TCPPORT);
 
-        //start from the starting location we specified in a previous attempt to get an ephemeral port
+        //start from the starting location we specified in a previous attempt to get an
+        // ephemeral port
         let mut next_ephemeral = if domain == AF_INET {
             self.next_ephemeral_port_tcpv4.write()
         } else if domain == AF_INET6 {
@@ -334,7 +343,8 @@ impl NetMetadata {
                 porttuple.1 = port;
 
                 if self.initialize_port(&porttuple, if rebindability { 1 } else { 0 }) {
-                    //rebindability of 0 means not rebindable, 1 means it's rebindable and there's 1 bound to it
+                    //rebindability of 0 means not rebindable, 1 means it's rebindable and there's
+                    // 1 bound to it
 
                     *next_ephemeral -= 1;
                     if *next_ephemeral < EPHEMERAL_PORT_RANGE_START {
@@ -483,7 +493,8 @@ impl NetMetadata {
                 } else {
                     for portuser in userarr.clone() {
                         if portuser.0 == muxed.0 {
-                            //if it's rebindable and we're removing the last bound port or it's just not rebindable
+                            //if it's rebindable and we're removing the last bound port or it's
+                            // just not rebindable
                             if portuser.1 <= 1 {
                                 if userarr.len() == 1 {
                                     userentry.remove();

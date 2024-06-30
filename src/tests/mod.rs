@@ -1,4 +1,5 @@
-#![allow(dead_code)] //suppress warning for these functions not being used in targets other than the tests
+#![allow(dead_code)] //suppress warning for these functions not being used in targets other than the
+                     // tests
 
 mod fs_tests;
 mod ipc_tests;
@@ -16,11 +17,12 @@ mod setup {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
 
-    use std::process::Command;
     use lazy_static::lazy_static;
+    use std::process::Command;
     use std::sync::Mutex;
 
-    // Tests in rust as parallel by default and to make them share resources we are using a global static lock.
+    // Tests in rust as parallel by default and to make them share resources we are
+    // using a global static lock.
     lazy_static! {
         // This has a junk value (a bool).  Could be anything...
         #[derive(Debug)]
@@ -85,7 +87,6 @@ mod setup {
         //return the lock to the caller which holds it till the end of the test.
         thelock
     }
-
 }
 
 pub fn str2cbuf(ruststr: &str) -> *mut u8 {
@@ -105,7 +106,10 @@ pub fn cbuf2str(buf: &[u8]) -> &str {
     std::str::from_utf8(buf).unwrap()
 }
 
-// The RustPOSIX test suite avoids conflicts caused by repeatedly binding to the same ports by generating a random port number within the valid range (49152-65535) for each test run. This eliminates the need for waiting between tests.
+// The RustPOSIX test suite avoids conflicts caused by repeatedly binding to the
+// same ports by generating a random port number within the valid range
+// (49152-65535) for each test run. This eliminates the need for waiting between
+// tests.
 
 fn is_port_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok() && UdpSocket::bind(("127.0.0.1", port)).is_ok()

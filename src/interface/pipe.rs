@@ -127,7 +127,8 @@ impl EmulatedPipe {
                 interface::lind_yield(); //yield on a full pipe
                 continue;
             }
-            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
+            // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes
+            // (unless whats leftover of this write is < 4096)
             if remaining != self.size
                 && (length - bytes_written) > PAGE_SIZE
                 && remaining < PAGE_SIZE
@@ -152,8 +153,9 @@ impl EmulatedPipe {
         let mut buf = Vec::new();
         let mut length = 0;
 
-        // we're going to loop through the iovec array and combine the buffers into one slice, recording the length
-        // this is hacky but is the best way to do this for now
+        // we're going to loop through the iovec array and combine the buffers into one
+        // slice, recording the length this is hacky but is the best way to do
+        // this for now
         for _iov in 0..iovcnt {
             unsafe {
                 assert!(!ptr.is_null());
@@ -198,7 +200,8 @@ impl EmulatedPipe {
             }
 
             if count == CANCEL_CHECK_INTERVAL {
-                return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
+                return -(Errno::EAGAIN as i32); // we've tried enough, return to
+                                                // pipe
             }
 
             pipe_space = read_end.len();
