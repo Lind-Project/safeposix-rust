@@ -1408,6 +1408,92 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    #[test]
+    fn ut_lind_fs_getdents_invalid_fd() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        let bufsize = 50;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+
+        // Create a directory
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
+
+        // Open the directory
+        let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
+
+        // Attempt to call `getdents_syscall` with an invalid file descriptor
+        let result = cage.getdents_syscall(-1, baseptr, bufsize as u32);
+
+        // Assert that the return value is EBADF (errno for "Bad file descriptor")
+        assert_eq!(result, -(Errno::EBADF as i32));
+
+        // Close the directory
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_getdents_bufsize_too_small() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        let bufsize = interface::CLIPPED_DIRENT_SIZE - 1; // Buffer size smaller than CLIPPED_DIRENT_SIZE
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+
+        // Create a directory
+        assert_eq!(cage.mkdir_syscall("/getdents", S_IRWXA), 0);
+
+        // Open the directory
+        let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
+
+        // Attempt to call `getdents_syscall` with a buffer size smaller than CLIPPED_DIRENT_SIZE
+        let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
+
+        // Assert that the return value is EINVAL (errno for "Invalid argument")
+        assert_eq!(result, -(Errno::EINVAL as i32));
+
+        // Close the directory
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_getdents_non_directory_fd() {
+        // Acquire a lock on TESTMUTEX to prevent other tests from running concurrently,
+        // and also perform clean environment setup.
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a regular file
+        let filepath = "/regularfile";
+        let fd = cage.open_syscall(filepath, O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+
+        // Allocate a buffer to store directory entries
+        let bufsize = 1024;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+        println!("Buffer contents: {:?}", vec);
+
+        // Attempt to call getdents_syscall on the regular file descriptor
+        let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
+        println!("Syscall result: {}", result);
+        // Verify that it returns ENOTDIR
+        assert_eq!(result, -(Errno::ENOTDIR as i32));
+
+        // Clean up: Close the file descriptor and finalize the test environment
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {

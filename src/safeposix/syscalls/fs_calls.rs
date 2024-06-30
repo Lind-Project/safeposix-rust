@@ -3496,16 +3496,42 @@ impl Cage {
     }
 
     //------------------GETDENTS SYSCALL------------------
+/// ## `getdents_syscall`
+///
+/// ### Description
+/// This function implements the `getdents` system call, which reads directory entries from a directory file descriptor
+/// and returns them in a buffer. Reading directory entries using multiple read calls can be less efficient because it
+/// involves reading the data in smaller chunks and then parsing it.
+/// getdents can often be faster by reading directory entries in a more optimized way.
+///
+/// ### Function Arguments
+/// * `fd`: A file descriptor representing the directory to read.
+/// * `dirp`: A pointer to a buffer where the directory entries will be written.
+/// * `bufsize`: The size of the buffer in bytes.
+///
+/// ### Returns
+/// * The number of bytes written to the buffer on success.
+///
+/// ### Errors and Panics
+/// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
+/// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
+/// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
 
     pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32) -> i32 {
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
 
         // make sure bufsize is at least greater than size of a ClippedDirent struct
+        // ClippedDirent is a simplified version of the traditional dirent structure used in POSIX systems
+        // By using a simpler structure, SafePosix can store and retrieve directory entries more efficiently,
+        // potentially improving performance compared to using the full dirent structure.
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
 
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = match self.get_filedescriptor(fd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor."),
+        };
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
