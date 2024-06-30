@@ -2,14 +2,19 @@
 //!
 //! ## Notes:
 //!
-//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
-//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
-//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
+//! - These calls are implementations of the [`Cage`] struct in the
+//!   [`safeposix`](crate::safeposix) crate. See the
+//!   [`safeposix`](crate::safeposix) crate for more information.
+//! They have been structed as different modules for better maintainability and
+//! related functions. since they are tied to the `Cage` struct This module's
+//! rustdoc may turn up empty, thus they have been explicitly listed below for
+//! documentation purposes.
 //!
 //!
 //! ## File System Calls
 //!
-//! Cages have methods for filesystem-related calls. They return a code or an error from the `errno` enum.
+//! Cages have methods for filesystem-related calls. They return a code or an
+//! error from the `errno` enum.
 //!
 //!
 //! - [open_syscall](crate::safeposix::cage::Cage::open_syscall)
@@ -83,7 +88,6 @@
 //! - [sem_getvalue_syscall](crate::safeposix::cage::Cage::sem_getvalue_syscall)
 //! - [sem_trywait_syscall](crate::safeposix::cage::Cage::sem_trywait_syscall)
 //! - [sem_timedwait_syscall](crate::safeposix::cage::Cage::sem_timedwait_syscall)
-//!
 
 #![allow(dead_code)]
 
@@ -100,50 +104,64 @@ use crate::safeposix::shm::*;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
-    /// The `open_syscall()` creates an open file description that refers to a file and a file descriptor that refers to that open file description.
-    /// The file descriptor is used by other I/O functions to refer to that file.
-    /// There are generally two cases which occur when this function is called.
-    /// Case 1: If the file to be opened doesn't exist, then a new file is created at the given location and a new file descriptor is created.
-    /// Case 2: If the file already exists, then a few conditions are checked and based on them, file is updated accordingly.
+    /// The `open_syscall()` creates an open file description that refers to a
+    /// file and a file descriptor that refers to that open file description.
+    /// The file descriptor is used by other I/O functions to refer to that
+    /// file. There are generally two cases which occur when this function
+    /// is called. Case 1: If the file to be opened doesn't exist, then a
+    /// new file is created at the given location and a new file descriptor is
+    /// created. Case 2: If the file already exists, then a few conditions
+    /// are checked and based on them, file is updated accordingly.
 
     /// ### Function Arguments
     /// The `open_syscall()` receives three arguments:
-    /// * `path` - This argument points to a pathname naming the file.
-    ///           For example: "/parentdir/file1" represents a file which will be either opened if exists or will be created at the given path.
-    /// * `flags` - This argument contains the file status flags and file access modes which will be alloted to the open file description.
-    ///            The flags are combined together using a bitwise-inclusive-OR and the result is passed as an argument to the function.
-    ///            Some of the most common flags used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY, with each representing a different file mode.
-    /// * `mode` - This represents the permission of the newly created file.
-    ///           The general mode used is "S_IRWXA": which represents the read, write, and search permissions on the new file.
+    /// * `path` - This argument points to a pathname naming the file. For
+    ///   example: "/parentdir/file1" represents a file which will be either
+    ///   opened if exists or will be created at the given path.
+    /// * `flags` - This argument contains the file status flags and file access
+    ///   modes which will be alloted to the open file description. The flags
+    ///   are combined together using a bitwise-inclusive-OR and the result is
+    ///   passed as an argument to the function. Some of the most common flags
+    ///   used are: O_CREAT | O_TRUNC | O_RDWR | O_EXCL | O_RDONLY | O_WRONLY,
+    ///   with each representing a different file mode.
+    /// * `mode` - This represents the permission of the newly created file. The
+    ///   general mode used is "S_IRWXA": which represents the read, write, and
+    ///   search permissions on the new file.
 
     /// ### Returns
-    /// Upon successful completion of this call, a file descriptor is returned which points the file which is opened.
-    /// Otherwise, errors or panics are returned for different scenarios.
+    /// Upon successful completion of this call, a file descriptor is returned
+    /// which points the file which is opened. Otherwise, errors or panics
+    /// are returned for different scenarios.
     ///
     /// ### Errors and Panics
     /// * ENFILE - no available file descriptor number could be found
     /// * ENOENT - tried to open a file that did not exist
-    /// * EINVAL - the input flags contain S_IFCHR flag representing a special character file
+    /// * EINVAL - the input flags contain S_IFCHR flag representing a special
+    ///   character file
     /// * EPERM - the mode bits for a file are not sane
-    /// * ENOTDIR - tried to create a file as a child of something that isn't a directory
-    /// * EEXIST - the file already exists and O_CREAT and O_EXCL flags were passed
+    /// * ENOTDIR - tried to create a file as a child of something that isn't a
+    ///   directory
+    /// * EEXIST - the file already exists and O_CREAT and O_EXCL flags were
+    ///   passed
     /// * ENXIO - the file is of type UNIX domain socket
     ///
     /// A panic occurs when there is some issue fetching the file descriptor.
     ///
     /// for more detailed description of all the commands and return values, see
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
-    ///
 
     // This function is used to create a new File Descriptor Object and return it.
-    // This file descriptor object is then inserted into the File Descriptor Table of the associated cage in the open_syscall() function
+    // This file descriptor object is then inserted into the File Descriptor Table
+    // of the associated cage in the open_syscall() function
     fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc {
         let position = if 0 != flags & O_APPEND { size } else { 0 };
 
-        // While creating a new FileDescriptor, there are two important things that need to be present:
-        // O_RDWRFLAGS:- This flag determines whether the file is opened for reading, writing, or both.
-        // O_CLOEXEC - This flag indicates that the file descriptor should be automatically closed during an exec family function.
-        // It’s needed for managing file descriptors across different processes, ensuring that they do not unintentionally remain open.
+        // While creating a new FileDescriptor, there are two important things that need
+        // to be present: O_RDWRFLAGS:- This flag determines whether the file is
+        // opened for reading, writing, or both. O_CLOEXEC - This flag indicates
+        // that the file descriptor should be automatically closed during an exec family
+        // function. It’s needed for managing file descriptors across different
+        // processes, ensuring that they do not unintentionally remain open.
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
         FileDesc {
             position: position,
@@ -159,14 +177,18 @@ impl Cage {
             return syscall_error(Errno::ENOENT, "open", "given path was null");
         }
 
-        // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
-        // while navigating through subdirectories and creating a new file or open existing file at the given location.
+        // Retrieve the absolute path from the root directory. The absolute path is then
+        // used to validate directory paths while navigating through
+        // subdirectories and creating a new file or open existing file at the given
+        // location.
         let truepath = normpath(convpath(path), self);
 
-        // Fetch the next file descriptor and its lock write guard to ensure the file can be associated with the file descriptor
+        // Fetch the next file descriptor and its lock write guard to ensure the file
+        // can be associated with the file descriptor
         let (fd, guardopt) = self.get_next_fd(None);
         match fd {
-            // If the file descriptor is invalid, the return value is always an error with value (ENFILE).
+            // If the file descriptor is invalid, the return value is always an error with value
+            // (ENFILE).
             fd if fd == (Errno::ENFILE as i32) => {
                 return syscall_error(
                     Errno::ENFILE,
@@ -174,16 +196,19 @@ impl Cage {
                     "no available file descriptor number could be found",
                 );
             }
-            // When the file descriptor is valid, we proceed with performing the remaining checks for open_syscall.
+            // When the file descriptor is valid, we proceed with performing the remaining checks
+            // for open_syscall.
             fd if fd > 0 => {
                 // File Descriptor Write Lock Guard
                 let fdoption = &mut *guardopt.unwrap();
 
-                // Walk through the absolute path which returns a tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
+                // Walk through the absolute path which returns a tuple consisting of inode
+                // number of file (if it exists), and inode number of parent (if it exists)
                 match metawalkandparent(truepath.as_path()) {
                     // Case 1: When the file doesn't exist but the parent directory exists
                     (None, Some(pardirinode)) => {
-                        // Check if O_CREAT flag is not present, then a file can not be created and error is returned.
+                        // Check if O_CREAT flag is not present, then a file can not be created and
+                        // error is returned.
                         if 0 == (flags & O_CREAT) {
                             return syscall_error(
                                 Errno::ENOENT,
@@ -192,14 +217,18 @@ impl Cage {
                             );
                         }
 
-                        // Error is thrown when the input flags contain S_IFCHR flag representing a special character file.
+                        // Error is thrown when the input flags contain S_IFCHR flag representing a
+                        // special character file.
                         if S_IFCHR == (S_IFCHR & flags) {
                             return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
                         }
 
-                        // S_FILETYPEFLAGS represents a bitmask that can be used to extract the file type information from a file's mode.
-                        // This code is referenced from Lind-Repy codebase.
-                        // Here, we are checking whether the mode bits are sane by ensuring that only valid file permission bits (S_IRWXA) and file type bits (S_FILETYPEFLAGS) are set. Else, we return the error.
+                        // S_FILETYPEFLAGS represents a bitmask that can be used to extract the file
+                        // type information from a file's mode. This code is
+                        // referenced from Lind-Repy codebase. Here, we are
+                        // checking whether the mode bits are sane by ensuring that only valid file
+                        // permission bits (S_IRWXA) and file type bits (S_FILETYPEFLAGS) are set.
+                        // Else, we return the error.
                         if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                             return syscall_error(Errno::EPERM, "open", "Mode bits were not sane");
                         }
@@ -207,17 +236,22 @@ impl Cage {
                         let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
                         let time = interface::timestamp(); //We do a real timestamp now
 
-                        // S_IFREG is the flag for a regular file, so it's added to the mode to indicate that the new file being created is a regular file.
+                        // S_IFREG is the flag for a regular file, so it's added to the mode to
+                        // indicate that the new file being created is a regular file.
                         let effective_mode = S_IFREG as u32 | mode;
 
-                        // Create a new inode of type "File" representing a file and set the required attributes
+                        // Create a new inode of type "File" representing a file and set the
+                        // required attributes
                         let newinode = Inode::File(GenericInode {
                             size: 0,
                             uid: DEFAULT_UID,
                             gid: DEFAULT_GID,
                             mode: effective_mode,
-                            linkcount: 1, // because when a new file is created, it has a single hard link, which is the directory entry that points to this file's inode.
-                            refcount: 1, // Because a new file descriptor will open and refer to this file
+                            linkcount: 1, /* because when a new file is created, it has a single
+                                           * hard link, which is the directory entry that points
+                                           * to this file's inode. */
+                            refcount: 1, /* Because a new file descriptor will open and refer to
+                                          * this file */
                             atime: time,
                             ctime: time,
                             mtime: time,
@@ -228,12 +262,14 @@ impl Cage {
                             .nextinode
                             .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
 
-                        // Fetch the inode of the parent directory and only proceed when its type is directory.
+                        // Fetch the inode of the parent directory and only proceed when its type is
+                        // directory.
                         if let Inode::Dir(ref mut ind) =
                             *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                         {
                             ind.filename_to_inode_dict.insert(filename, newinodenum);
-                            ind.linkcount += 1; // Since the parent is now associated to the new file, its linkcount will increment by 1
+                            ind.linkcount += 1; // Since the parent is now associated to the new file, its linkcount
+                                                // will increment by 1
                             ind.ctime = time; // Here, update the ctime and mtime for the parent directory as well
                             ind.mtime = time;
                         } else {
@@ -243,13 +279,15 @@ impl Cage {
                                 "tried to create a file as a child of something that isn't a directory",
                             );
                         }
-                        // Update the inode table by inserting the newly formed inode mapped with its inode number.
+                        // Update the inode table by inserting the newly formed inode mapped with
+                        // its inode number.
                         FS_METADATA.inodetable.insert(newinodenum, newinode);
                         log_metadata(&FS_METADATA, pardirinode);
                         log_metadata(&FS_METADATA, newinodenum);
 
-                        // FileObjectTable stores the entries of the currently opened files in the system
-                        // Since, a new file is being opened here, an entry corresponding to that newinode is made in the FileObjectTable
+                        // FileObjectTable stores the entries of the currently opened files in the
+                        // system Since, a new file is being opened here, an
+                        // entry corresponding to that newinode is made in the FileObjectTable
                         // An entry in the table has the following representation:
                         // Key - inode number
                         // Value - Opened file with its size as 0
@@ -261,16 +299,21 @@ impl Cage {
                             // new file of size 0
                         }
 
-                        // The file object of size 0, associated with the newinode number is inserted into the FileDescriptorTable associated with the cage using the guard lock.
+                        // The file object of size 0, associated with the newinode number is
+                        // inserted into the FileDescriptorTable associated with the cage using the
+                        // guard lock.
                         let _insertval =
                             fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
                     }
 
                     // Case 2: When the file exists (we don't need to look at parent here)
                     (Some(inodenum), ..) => {
-                        //If O_CREAT and O_EXCL flags are set in the input parameters, open_syscall() fails if the file exists.
-                        //This is because the check for the existence of the file and the creation of the file if it does not exist is atomic,
-                        //with respect to other threads executing open() naming the same filename in the same directory with O_EXCL and O_CREAT set.
+                        //If O_CREAT and O_EXCL flags are set in the input parameters,
+                        // open_syscall() fails if the file exists.
+                        // This is because the check for the existence of the file and the creation
+                        // of the file if it does not exist is atomic,
+                        // with respect to other threads executing open() naming the same filename
+                        // in the same directory with O_EXCL and O_CREAT set.
                         if (O_CREAT | O_EXCL) == (flags & (O_CREAT | O_EXCL)) {
                             return syscall_error(
                                 Errno::EEXIST,
@@ -280,16 +323,19 @@ impl Cage {
                         }
                         let size;
 
-                        // Fetch the Inode Object associated with the inode number of the existing file.
-                        // There are different Inode types supported by the open_syscall (i.e., File, Directory, Socket, CharDev).
+                        // Fetch the Inode Object associated with the inode number of the existing
+                        // file. There are different Inode types supported
+                        // by the open_syscall (i.e., File, Directory, Socket, CharDev).
                         let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                         match *inodeobj {
                             Inode::File(ref mut f) => {
-                                //This is a special case when the input flags contain "O_TRUNC" flag,
-                                //This flag truncates the file size to 0, and the mode and owner are unchanged
+                                //This is a special case when the input flags contain "O_TRUNC"
+                                // flag, This flag truncates the
+                                // file size to 0, and the mode and owner are unchanged
                                 // and is only used when the file exists and is a regular file
                                 if O_TRUNC == (flags & O_TRUNC) {
-                                    // Close the existing file object and remove it from the FileObject Hashtable using the inodenumber
+                                    // Close the existing file object and remove it from the
+                                    // FileObject Hashtable using the inodenumber
                                     let entry = FILEOBJECTTABLE.entry(inodenum);
                                     if let interface::RustHashEntry::Occupied(occ) = &entry {
                                         occ.get().close().unwrap();
@@ -312,8 +358,11 @@ impl Cage {
                                     interface::removefile(sysfilename.clone()).unwrap();
                                 }
 
-                                // Once the metadata for the file is reset, a new file is inserted in file system.
-                                // Also, it is inserted back to the FileObjectTable and associated with same inodeNumber representing that the file is currently in open state.
+                                // Once the metadata for the file is reset, a new file is inserted
+                                // in file system. Also, it is
+                                // inserted back to the FileObjectTable and associated with same
+                                // inodeNumber representing that the file is currently in open
+                                // state.
                                 if let interface::RustHashEntry::Vacant(vac) =
                                     FILEOBJECTTABLE.entry(inodenum)
                                 {
@@ -325,11 +374,17 @@ impl Cage {
                                 size = f.size;
                                 f.refcount += 1;
 
-                                // Current Implementation for File Truncate: The previous entry of the file is removed from the FileObjectTable, with a new file of size 0 inserted back into the table.
-                                // Possible Bug: Why are we not simply adjusting the file size and pointer of the existing file?
+                                // Current Implementation for File Truncate: The
+                                // previous entry of the file is removed from
+                                // the FileObjectTable, with a new file of size
+                                // 0 inserted back into the table.
+                                // Possible Bug: Why are we not simply adjusting
+                                // the file size and pointer of the existing
+                                // file?
                             }
 
-                            // When the existing file type is of Directory or Character Device, only the file size and the reference count is updated.
+                            // When the existing file type is of Directory or Character Device, only
+                            // the file size and the reference count is updated.
                             Inode::Dir(ref mut f) => {
                                 size = f.size;
                                 f.refcount += 1;
@@ -339,7 +394,8 @@ impl Cage {
                                 f.refcount += 1;
                             }
 
-                            // If the existing file type is a socket, error is thrown as socket type files are not supported by open_syscall
+                            // If the existing file type is a socket, error is thrown as socket type
+                            // files are not supported by open_syscall
                             Inode::Socket(_) => {
                                 return syscall_error(
                                     Errno::ENXIO,
@@ -349,7 +405,9 @@ impl Cage {
                             }
                         }
 
-                        // The file object of size 0, associated with the existing inode number is inserted into the FileDescriptorTable associated with the cage using the guard lock.
+                        // The file object of size 0, associated with the existing inode number is
+                        // inserted into the FileDescriptorTable associated with the cage using the
+                        // guard lock.
                         let _insertval =
                             fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
                     }
@@ -357,7 +415,8 @@ impl Cage {
                     // Case 3: When neither the file directory nor the parent directory exists
                     (None, None) => {
                         // O_CREAT flag is used to create a file if it doesn't exist.
-                        // If this flag is not present, then a file can not be created and error is returned.
+                        // If this flag is not present, then a file can not be created and error is
+                        // returned.
                         if 0 == (flags & O_CREAT) {
                             return syscall_error(
                                 Errno::ENOENT,
@@ -365,7 +424,8 @@ impl Cage {
                                 "tried to open a file that did not exist, and O_CREAT was not specified",
                             );
                         }
-                        // O_CREAT flag is set but the path doesn't exist, so return an error with a different message string.
+                        // O_CREAT flag is set but the path doesn't exist, so return an error with a
+                        // different message string.
                         return syscall_error(Errno::ENOENT, "open", "a directory component in pathname does not exist or is a dangling symbolic link");
                     }
                 }
@@ -382,17 +442,22 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `mkdir_syscall()` creates a new directory named by the path name pointed to by a path as the input parameter in the function.
-    /// The mode of the new directory is initialized from the "mode" provided as the input parameter in the function.
-    /// The newly created directory is empty with size 0 and is associated with a new inode of type "DIR".
-    /// On successful completion, the timestamps for both the newly formed directory and its parent are updated along with their linkcounts.
+    /// The `mkdir_syscall()` creates a new directory named by the path name
+    /// pointed to by a path as the input parameter in the function.
+    /// The mode of the new directory is initialized from the "mode" provided as
+    /// the input parameter in the function. The newly created directory is
+    /// empty with size 0 and is associated with a new inode of type "DIR".
+    /// On successful completion, the timestamps for both the newly formed
+    /// directory and its parent are updated along with their linkcounts.
 
     /// ### Arguments
     ///
-    /// * `path` - This represents the path at which the new directory will be created.
-    ///     For example: `/parentdir/dir` represents the new directory name as `dir`, which will be created at this path (`/parentdir/dir`).
-    /// * `mode` - This represents the permission of the newly created directory.
-    ///     The general mode used is `S_IRWXA`: which represents the read, write, and search permissions on the new directory.
+    /// * `path` - This represents the path at which the new directory will be
+    ///   created. For example: `/parentdir/dir` represents the new directory
+    ///   name as `dir`, which will be created at this path (`/parentdir/dir`).
+    /// * `mode` - This represents the permission of the newly created
+    ///   directory. The general mode used is `S_IRWXA`: which represents the
+    ///   read, write, and search permissions on the new directory.
     ///
     /// ### Returns
     ///
@@ -400,33 +465,40 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// * ENOENT - if given path was null or the parent directory does not exist in the inode table.
+    /// * ENOENT - if given path was null or the parent directory does not exist
+    ///   in the inode table.
     /// * EPERM - if mode bits were not set.
-    /// * EEXIST - if a directory with the same name already exists at the given path.
+    /// * EEXIST - if a directory with the same name already exists at the given
+    ///   path.
     ///
     /// ### Panics
     ///
-    /// * If truepath.file_name() returns None or if to_str() fails, causing unwrap() to panic.
-    /// * If the parent inode does not exist in the inode table, causing unwrap() to panic.
-    /// * If the code execution reaches the unreachable!() macro, indicating a logical inconsistency in the program.
+    /// * If truepath.file_name() returns None or if to_str() fails, causing
+    ///   unwrap() to panic.
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * If the code execution reaches the unreachable!() macro, indicating a
+    ///   logical inconsistency in the program.
     ///
     /// for more detailed description of all the commands and return values, see
     /// [mkdir(2)](https://man7.org/linux/man-pages/man2/mkdir.2.html)
-    ///
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
         // Check that the given input path is not empty
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "mkdir", "given path was null");
         }
 
-        // Store the FileMetadata into a helper variable which is used for fetching the metadata of a given inode from the Inode Table.
+        // Store the FileMetadata into a helper variable which is used for fetching the
+        // metadata of a given inode from the Inode Table.
         let metadata = &FS_METADATA;
 
-        // Retrieve the absolute path from the root directory. The absolute path is then used to validate directory paths
-        // while navigating through subdirectories and establishing new directory at the given location.
+        // Retrieve the absolute path from the root directory. The absolute path is then
+        // used to validate directory paths while navigating through
+        // subdirectories and establishing new directory at the given location.
         let truepath = normpath(convpath(path), self);
 
-        // Walk through the absolute path which returns a tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
+        // Walk through the absolute path which returns a tuple consisting of inode
+        // number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
             // Case 1: When neither the file directory nor the parent directory exists
             (None, None) => syscall_error(
@@ -440,13 +512,15 @@ impl Cage {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
                 let effective_mode = S_IFDIR as u32 | mode;
-                // Check for the condition if the mode bits are correct and have the required permissions to create a directory
+                // Check for the condition if the mode bits are correct and have the required
+                // permissions to create a directory
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "mkdir", "Mode bits were not sane");
                 }
 
                 // Fetch the next available inode number using the FileSystem MetaData table
-                // Create a new inode of type "Dir" representing a directory and set the required attributes
+                // Create a new inode of type "Dir" representing a directory and set the
+                // required attributes
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
@@ -456,29 +530,33 @@ impl Cage {
                     uid: DEFAULT_UID,
                     gid: DEFAULT_GID,
                     mode: effective_mode,
-                    linkcount: 3, //because of the directory name(.), itself, and reference to the parent directory(..)
-                    refcount: 0,  //because no file descriptors are pointing to it currently
+                    linkcount: 3, /* because of the directory name(.), itself, and reference to
+                                   * the parent directory(..) */
+                    refcount: 0, //because no file descriptors are pointing to it currently
                     atime: time,
                     ctime: time,
                     mtime: time,
-                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode), //Establish a mapping between the newly created inode and the parent directory inode for easy retrieval and linking
+                    filename_to_inode_dict: init_filename_to_inode_dict(newinodenum, pardirinode), /* Establish a mapping between the newly created inode and the parent directory inode for easy retrieval and linking */
                 });
 
-                // Insert a reference to the file in the parent directory and update the inode attributes
-                // Fetch the inode of the parent directory and only proceed when its type is directory.
+                // Insert a reference to the file in the parent directory and update the inode
+                // attributes Fetch the inode of the parent directory and only
+                // proceed when its type is directory.
                 if let Inode::Dir(ref mut parentdir) =
                     *(metadata.inodetable.get_mut(&pardirinode).unwrap())
                 {
                     parentdir
                         .filename_to_inode_dict
                         .insert(filename, newinodenum);
-                    parentdir.linkcount += 1; // Since the parent is now associated to the new directory, its linkcount will increment by 1
+                    parentdir.linkcount += 1; // Since the parent is now associated to the new directory, its linkcount will
+                                              // increment by 1
                     parentdir.ctime = time; // Here, update the ctime and mtime for the parent directory as well
                     parentdir.mtime = time;
                 } else {
                     unreachable!();
                 }
-                // Update the inode table by inserting the newly formed inode mapped with its inode number.
+                // Update the inode table by inserting the newly formed inode mapped with its
+                // inode number.
                 metadata.inodetable.insert(newinodenum, newinode);
                 log_metadata(&metadata, pardirinode);
                 log_metadata(&metadata, newinodenum);
@@ -499,14 +577,14 @@ impl Cage {
     /// ## ------------------MKNOD SYSCALL------------------
     /// ### Description
     ///
-    /// The `mknod_syscall()` creates a filesystem node (file, device special file
-    /// or pipe) named by a path as the input parameter.
-    /// The file type and the permissions of the new file are initialized from the
-    /// "mode" provided as the input parameter.
+    /// The `mknod_syscall()` creates a filesystem node (file, device special
+    /// file or pipe) named by a path as the input parameter.
+    /// The file type and the permissions of the new file are initialized from
+    /// the "mode" provided as the input parameter.
     /// There are 5 different file types: S_IFREG, S_IFCHR, S_IFBLK, S_IFIFO, or
-    /// S_IFSOCK representing a regular file, character special file, block special
-    /// file, FIFO (named pipe), or UNIX domain socket, respectively.
-    /// The newly created file is empty with size 0.
+    /// S_IFSOCK representing a regular file, character special file, block
+    /// special file, FIFO (named pipe), or UNIX domain socket,
+    /// respectively. The newly created file is empty with size 0.
     /// On successful completion, the timestamps for both the newly created file
     /// and its parent are updated along with their linkcounts.
     ///
@@ -517,9 +595,10 @@ impl Cage {
     /// For example: "/parentdir/file" represents the new file name as "file",
     /// which will be created at this path (/parentdir/file).
     ///
-    /// * `mode` - The mode argument specifies both the permissions to use and the
-    /// type of node to be created. It is a combination (using bitwise OR) of one
-    /// of the file types and the permissions for the new node.
+    /// * `mode` - The mode argument specifies both the permissions to use and
+    ///   the
+    /// type of node to be created. It is a combination (using bitwise OR) of
+    /// one of the file types and the permissions for the new node.
     /// FileType - In LIND, we have only implemented the file type of "Character
     /// Device" represented by S_IFCHR flag.
     /// FilePermission - The general permission mode used is "S_IRWXA": which
@@ -527,14 +606,16 @@ impl Cage {
     /// The final file mode is represented by the bitwise-OR of FileType and
     /// FilePermission Flags.
     ///
-    /// * `dev` - It is a configuration-dependent specification of a character or
+    /// * `dev` - It is a configuration-dependent specification of a character
+    ///   or
     /// block I/O device. If mode does not indicate a block special or character
     /// special device, dev is ignored.
     /// Since "CharDev" is the only supported type, 'dev' is represented using
     /// makedev() function; that returns a formatted device number   
-    /// For example: "makedev(&DevNo { major: majorId, minor: minorId })" accepts a
-    /// Device Number that consists of a MajorID, identifying the class of the device,
-    /// and a minor ID, identifying a specific instance of a device in that class.
+    /// For example: "makedev(&DevNo { major: majorId, minor: minorId })"
+    /// accepts a Device Number that consists of a MajorID, identifying the
+    /// class of the device, and a minor ID, identifying a specific instance
+    /// of a device in that class.
     ///
     /// ### Returns
     ///
@@ -546,7 +627,8 @@ impl Cage {
     /// * `ENOENT` - occurs when a directory component in the absolute path does
     /// not exist
     /// * `EPERM` - the mode bits for the new file are not sane
-    /// * `EINVAL` - when any other file type (regular, socket, block, fifo) instead
+    /// * `EINVAL` - when any other file type (regular, socket, block, fifo)
+    ///   instead
     /// of character file type is passed
     /// * `EEXIST` - when the file to be created already exists
     ///
@@ -556,7 +638,6 @@ impl Cage {
     ///
     /// For more detailed description of all the commands and return values, see
     /// [mknod(2)](https://man7.org/linux/man-pages/man2/mknod.2.html)
-    ///
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
         // Return an error if the provided path is empty
         if path.len() == 0 {
@@ -692,7 +773,8 @@ impl Cage {
 
                 match *inodeobj {
                     Inode::File(ref mut normalfile_inode_obj) => {
-                        normalfile_inode_obj.linkcount += 1; //add link to inode
+                        normalfile_inode_obj.linkcount += 1; //add link to
+                                                             // inode
                     }
 
                     Inode::CharDev(ref mut chardev_inode_obj) => {
@@ -818,7 +900,8 @@ impl Cage {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename).unwrap();
                         }
-                    } //we don't need a separate unlinked flag, we can just check that refcount is 0
+                    } //we don't need a separate unlinked flag, we can just
+                      // check that refcount is 0
                 }
                 NET_METADATA.domsock_paths.remove(&truepath);
 
@@ -847,7 +930,8 @@ impl Cage {
         if let Some(inodenum) = metawalk(truepath.as_path()) {
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
-            //populate those fields in statbuf which depend on things other than the inode object
+            //populate those fields in statbuf which depend on things other than the inode
+            // object
             statbuf.st_dev = FS_METADATA.dev_id;
             statbuf.st_ino = inodenum;
 
@@ -916,7 +1000,8 @@ impl Cage {
         statbuf.st_size = inodeobj.size;
     }
 
-    //Streams and pipes don't have associated inodes so we populate them from mostly dummy information
+    //Streams and pipes don't have associated inodes so we populate them from
+    // mostly dummy information
     fn _stat_alt_helper(&self, statbuf: &mut StatData, inodenum: usize) {
         statbuf.st_dev = FS_METADATA.dev_id;
         statbuf.st_ino = inodenum;
@@ -936,10 +1021,11 @@ impl Cage {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
-            //Delegate populating statbuf to the relevant helper depending on the file type.
-            //First we check in the file descriptor to handle sockets, streams, and pipes,
-            //and if it is a normal file descriptor we handle regular files, dirs, and char
-            //files based on the information in the inode.
+            //Delegate populating statbuf to the relevant helper depending on the file
+            // type. First we check in the file descriptor to handle sockets,
+            // streams, and pipes, and if it is a normal file descriptor we
+            // handle regular files, dirs, and char files based on the
+            // information in the inode.
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
                     let inode = FS_METADATA
@@ -947,7 +1033,8 @@ impl Cage {
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //populate those fields in statbuf which depend on things other than the inode object
+                    //populate those fields in statbuf which depend on things other than the inode
+                    // object
                     statbuf.st_ino = normalfile_filedesc_obj.inode;
                     statbuf.st_dev = FS_METADATA.dev_id;
 
@@ -1059,7 +1146,8 @@ impl Cage {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type (none of them are implemented yet)
+            //delegate to pipe, stream, or socket helper if specified by file descriptor
+            // enum type (none of them are implemented yet)
             match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
@@ -1076,7 +1164,8 @@ impl Cage {
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character if it's a character file, checking based on the type of the inode object
+                    //delegate to character if it's a character file, checking based on the type of
+                    // the inode object
                     match &*inodeobj {
                         Inode::File(_) => {
                             let position = normalfile_filedesc_obj.position;
@@ -1089,7 +1178,8 @@ impl Cage {
                                 normalfile_filedesc_obj.position += bytesread;
                                 bytesread as i32
                             } else {
-                                0 //0 bytes read, but not an error value that can/should be passed to the user
+                                0 //0 bytes read, but not an error value that
+                                  // can/should be passed to the user
                             }
                         }
 
@@ -1142,13 +1232,15 @@ impl Cage {
                                 .cancelstatus
                                 .load(interface::RustAtomicOrdering::Relaxed)
                             {
-                                // if the cancel status is set in the cage, we trap around a cancel point
-                                // until the individual thread is signaled to cancel itself
+                                // if the cancel status is set in the cage, we trap around a cancel
+                                // point until the individual thread
+                                // is signaled to cancel itself
                                 loop {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
-                            continue; //received EAGAIN on blocking pipe, try again
+                            continue; //received EAGAIN on blocking pipe, try
+                                      // again
                         }
                         return ret; // if we get here we can return
                     }
@@ -1185,7 +1277,8 @@ impl Cage {
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character if it's a character file, checking based on the type of the inode object
+                    //delegate to character if it's a character file, checking based on the type of
+                    // the inode object
                     match &*inodeobj {
                         Inode::File(_) => {
                             let fileobject =
@@ -1194,7 +1287,8 @@ impl Cage {
                             if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
                                 bytesread as i32
                             } else {
-                                0 //0 bytes read, but not an error value that can/should be passed to the user
+                                0 //0 bytes read, but not an error value that
+                                  // can/should be passed to the user
                             }
                         }
 
@@ -1259,7 +1353,8 @@ impl Cage {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //delegate to pipe, stream, or socket helper if specified by file descriptor enum type
+            //delegate to pipe, stream, or socket helper if specified by file descriptor
+            // enum type
             match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
@@ -1289,7 +1384,8 @@ impl Cage {
                                 .get_mut(&normalfile_filedesc_obj.inode)
                                 .unwrap();
 
-                            //we need to pad the file with blank bytes if we are at a position past the end of the file!
+                            //we need to pad the file with blank bytes if we are at a position past
+                            // the end of the file!
                             if blankbytecount > 0 {
                                 if let Ok(byteswritten) =
                                     fileobject.zerofill_at(filesize, blankbytecount as usize)
@@ -1316,7 +1412,8 @@ impl Cage {
 
                                 byteswritten as i32
                             } else {
-                                0 //0 bytes written, but not an error value that can/should be passed to the user
+                                0 //0 bytes written, but not an error value
+                                  // that can/should be passed to the user
                             }
                         }
 
@@ -1420,7 +1517,8 @@ impl Cage {
                                 .get_mut(&normalfile_filedesc_obj.inode)
                                 .unwrap();
 
-                            //we need to pad the file with blank bytes if we are seeking past the end of the file!
+                            //we need to pad the file with blank bytes if we are seeking past the
+                            // end of the file!
                             if blankbytecount > 0 {
                                 if let Ok(byteswritten) =
                                     fileobject.zerofill_at(filesize, blankbytecount as usize)
@@ -1443,8 +1541,10 @@ impl Cage {
                                 byteswritten as i32
                             } else {
                                 newposition = position;
-                                0 //0 bytes written, but not an error value that can/should be passed to the user
-                                  //we still may need to update file size from blank bytes write, so we don't bail out
+                                0 //0 bytes written, but not an error value
+                                  // that can/should be passed to the user
+                                  // we still may need to update file size from
+                                  // blank bytes write, so we don't bail out
                             };
 
                             if newposition > filesize {
@@ -1533,7 +1633,8 @@ impl Cage {
                     match sockhandle.domain {
                         AF_INET | AF_INET6 => match sockhandle.protocol {
                             IPPROTO_TCP => {
-                                // to be able to send here we either need to be fully connected, or connected for write only
+                                // to be able to send here we either need to be fully connected, or
+                                // connected for write only
                                 if (sockhandle.state != ConnState::CONNECTED)
                                     && (sockhandle.state != ConnState::CONNWRONLY)
                                 {
@@ -1579,7 +1680,8 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    // to be able to send here we either need to be fully connected,
+                                    // or connected for write only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1699,8 +1801,9 @@ impl Cage {
                                     "seek to before position 0 in file",
                                 );
                             }
-                            //subsequent writes to the end of the file must zero pad up until this point if we
-                            //overran the end of our file when seeking
+                            //subsequent writes to the end of the file must zero pad up until this
+                            // point if we overran the end of our file
+                            // when seeking
 
                             normalfile_filedesc_obj.position = eventualpos as usize;
                             //return the location that we sought to
@@ -1708,7 +1811,8 @@ impl Cage {
                         }
 
                         Inode::CharDev(_) => {
-                            0 //for character files, rather than seeking, we transparently do nothing
+                            0 //for character files, rather than seeking, we
+                              // transparently do nothing
                         }
 
                         Inode::Socket(_) => {
@@ -1716,7 +1820,8 @@ impl Cage {
                         }
 
                         Inode::Dir(dir_inode_obj) => {
-                            //for directories we seek between entries, and thus our end position is the total number of entries
+                            //for directories we seek between entries, and thus our end position is
+                            // the total number of entries
                             let eventualpos = match whence {
                                 SEEK_SET => offset,
                                 SEEK_CUR => normalfile_filedesc_obj.position as isize + offset,
@@ -1871,7 +1976,8 @@ impl Cage {
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(&truepath) {
             if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
-                //increment refcount of new cwd inode to ensure that you can't remove a directory while it is the cwd of a cage
+                //increment refcount of new cwd inode to ensure that you can't remove a
+                // directory while it is the cwd of a cage
                 dir.refcount += 1;
             } else {
                 return syscall_error(
@@ -1890,7 +1996,8 @@ impl Cage {
         //at this point, syscall isn't an error
         let mut cwd_container = self.cwd.write();
 
-        //decrement refcount of previous cwd's inode, to allow it to be removed if no cage has it as cwd
+        //decrement refcount of previous cwd's inode, to allow it to be removed if no
+        // cage has it as cwd
         decref_dir(&*cwd_container);
 
         *cwd_container = interface::RustRfc::new(truepath);
@@ -1900,7 +2007,8 @@ impl Cage {
     //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
 
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
-        //if a starting fd was passed, then use that as the starting point, but otherwise, use the designated minimum of STARTINGFD
+        //if a starting fd was passed, then use that as the starting point, but
+        // otherwise, use the designated minimum of STARTINGFD
         let start_fd = match start_desc {
             Some(start_desc) => start_desc,
             None => STARTINGFD,
@@ -1955,7 +2063,8 @@ impl Cage {
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
             let closebool = fdguard.is_some();
             drop(fdguard);
-            // close the fd in the way of the new fd. mirror the implementation of linux, ignore the potential error of the close here
+            // close the fd in the way of the new fd. mirror the implementation of linux,
+            // ignore the potential error of the close here
             if closebool {
                 let _close_result = Self::_close_helper_inner(&self, newfd);
             }
@@ -2065,9 +2174,10 @@ impl Cage {
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             //Decide how to proceed depending on the fd type.
-            //First we check in the file descriptor to handle sockets (no-op), sockets (clean the socket), and pipes (clean the pipe),
-            //and if it is a normal file descriptor we decrement the refcount to reflect
-            //one less reference to the file.
+            //First we check in the file descriptor to handle sockets (no-op), sockets
+            // (clean the socket), and pipes (clean the pipe), and if it is a
+            // normal file descriptor we decrement the refcount to reflect
+            // one less reference to the file.
             match filedesc_enum {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {}
@@ -2149,7 +2259,8 @@ impl Cage {
                                     .unwrap();
                                 if normalfile_inode_obj.linkcount == 0 {
                                     drop(inodeobj);
-                                    //removing the file from the entire filesystem (interface, metadata, and object table)
+                                    //removing the file from the entire filesystem (interface,
+                                    // metadata, and object table)
                                     FS_METADATA.inodetable.remove(&inodenum);
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
@@ -2232,20 +2343,23 @@ impl Cage {
 
     /// ### Description
     ///
-    /// `fcntl_syscall` performs operations, like returning or setting file status flags,
-    /// duplicating a file descriptor, etc., on an open file descriptor
+    /// `fcntl_syscall` performs operations, like returning or setting file
+    /// status flags, duplicating a file descriptor, etc., on an open file
+    /// descriptor
     ///
     /// ### Arguments
     ///
     /// it accepts three parameters:
     /// * `fd` - an open file descriptor
     /// * `cmd` - an operation to be performed on fd
-    /// * `arg` - an optional argument (whether or not arg is required is determined by cmd)
+    /// * `arg` - an optional argument (whether or not arg is required is
+    ///   determined by cmd)
     ///
     /// ### Returns
     ///
-    /// for a successful call, the return value depends on the operation and can be one of: zero, the new file descriptor,
-    /// value of file descriptor flags, value of status flags, etc.
+    /// for a successful call, the return value depends on the operation and can
+    /// be one of: zero, the new file descriptor, value of file descriptor
+    /// flags, value of status flags, etc.
     ///
     /// ### Errors
     ///
@@ -2254,7 +2368,8 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
+    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will
+    ///   cause a panic.
     /// * Unknown errno value from fcntl returned, will cause panic.
     ///
     /// for more detailed description of all the commands and return values, see
@@ -2262,8 +2377,8 @@ impl Cage {
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
         //BUG
-        //if the provided file descriptor is out of bounds, get_filedescriptor returns Err(),
-        //unwrapping on which  produces a 'panic!'
+        //if the provided file descriptor is out of bounds, get_filedescriptor returns
+        // Err(), unwrapping on which  produces a 'panic!'
         //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
@@ -2364,24 +2479,29 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `ioctl_syscall()` manipulates the underlying device parameters of special files. In particular, it is used as a way
-    /// for user-space applications to interface with device drivers.
+    /// The `ioctl_syscall()` manipulates the underlying device parameters of
+    /// special files. In particular, it is used as a way for user-space
+    /// applications to interface with device drivers.
     ///
     /// ### Arguments
     ///
     /// The `ioctl_syscall()` accepts three arguments:
     /// * `fd` - an open file descriptor that refers to a device.
-    /// * `request` - the control function to be performed. The set of valid request values depends entirely on the device
-    ///              being addressed. MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to query device
-    ///              information that all media devices must support.
-    /// * `ptrunion` - additional information needed by the addressed device to perform the selected control function.
-    ///              In the example of MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to a struct
-    ///              media_device_info, from which the device information is obtained.
+    /// * `request` - the control function to be performed. The set of valid
+    ///   request values depends entirely on the device being addressed.
+    ///   MEDIA_IOC_DEVICE_INFO is an example of an ioctl control function to
+    ///   query device information that all media devices must support.
+    /// * `ptrunion` - additional information needed by the addressed device to
+    ///   perform the selected control function. In the example of
+    ///   MEDIA_IOC_DEVICE_INFO request, a valid ptrunion value is a pointer to
+    ///   a struct media_device_info, from which the device information is
+    ///   obtained.
     ///
     /// ### Returns
     ///
-    /// Upon successful completion, a value other than -1 that depends on the selected control function is returned.
-    /// In case of a failure, -1 is returned with errno set to a particular value, like EBADF, EINVAL, etc.
+    /// Upon successful completion, a value other than -1 that depends on the
+    /// selected control function is returned. In case of a failure, -1 is
+    /// returned with errno set to a particular value, like EBADF, EINVAL, etc.
     ///
     /// ### Errors and Panics
     ///
@@ -2389,32 +2509,37 @@ impl Cage {
     /// * `EFAULT` - ptrunion references an inaccessible memory area
     /// * `EINVAL` - request or ptrunion is not valid
     /// * `ENOTTY` - fd is not associated with a character special device
-    /// When `ioctl_syscall() is called on a Socket with `FIONBIO` control function, an underlying call to `libc::fcntl()` is made,
-    /// which can return with an error. For a complete list of possible erorrs, see
-    /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
+    /// When `ioctl_syscall() is called on a Socket with `FIONBIO` control
+    /// function, an underlying call to `libc::fcntl()` is made,
+    /// which can return with an error. For a complete list of possible erorrs,
+    /// see [fcntl(2)](https://linux.die.net/man/2/fcntl)
     ///
-    /// A panic occurs either when a provided file descriptor is out of bounds or when
-    /// an underlying call to `libc::fcntl()` for Socket type is returned with an unknown error.
+    /// A panic occurs either when a provided file descriptor is out of bounds
+    /// or when an underlying call to `libc::fcntl()` for Socket type is
+    /// returned with an unknown error.
     ///
-    /// To learn more about the syscall, control functions applicable to all the devices, and possible error values, see
-    /// [ioctl(2)](https://man.openbsd.org/ioctl)
+    /// To learn more about the syscall, control functions applicable to all the
+    /// devices, and possible error values, see [ioctl(2)](https://man.openbsd.org/ioctl)
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
         //BUG
-        //if the provided file descriptor is out of bounds, 'get_filedescriptor' returns Err(),
-        //unwrapping on which  produces a 'panic!'
+        //if the provided file descriptor is out of bounds, 'get_filedescriptor'
+        // returns Err(), unwrapping on which  produces a 'panic!'
         //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //For now, the only implemented control function is FIONBIO command used with sockets
+            //For now, the only implemented control function is FIONBIO command used with
+            // sockets
             match request {
-                //for FIONBIO, 'ptrunion' stores a pointer to an integer. If the integer is 0, the socket's
-                //nonblocking I/O is cleared. Otherwise, the socket is set for nonblocking I/O
+                //for FIONBIO, 'ptrunion' stores a pointer to an integer. If the integer is 0, the
+                // socket's nonblocking I/O is cleared. Otherwise, the socket is set
+                // for nonblocking I/O
                 FIONBIO => {
                     //if 'ptrunion' stores a Null pointer, a 'Bad address' error is returned
-                    //otheriwse, the integer value stored in that address is returned and saved into 'arg_result'
+                    //otheriwse, the integer value stored in that address is returned and saved
+                    // into 'arg_result'
                     let arg_result = interface::get_ioctl_int(ptrunion);
                     match (arg_result, filedesc_enum) {
                         (Err(arg_result), ..)=> {
@@ -2480,10 +2605,11 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `_chmod_helper()` is a helper function used by both `chmod_syscall()`
-    /// and `fchmod_syscall()` to change mode bits that consist of read, write,
-    /// and execute file permission bits of a file specified by an inode
-    /// obtained from the corresponding caller syscall.
+    /// The `_chmod_helper()` is a helper function used by both
+    /// `chmod_syscall()` and `fchmod_syscall()` to change mode bits that
+    /// consist of read, write, and execute file permission bits of a file
+    /// specified by an inode obtained from the corresponding caller
+    /// syscall.
     ///
     /// ### Arguments
     ///
@@ -2492,7 +2618,8 @@ impl Cage {
     /// change obtained from the caller syscall.
     /// * `mode` - the new file mode, which is a bit mask created by
     /// bitwise-or'ing zero or more valid mode bits. Some of the examples of
-    /// such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
+    /// such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner),
+    /// etc.
     ///
     /// ### Returns
     ///
@@ -2584,7 +2711,8 @@ impl Cage {
     /// current working directory of the calling process.
     /// * `mode` - the new file mode, which is a bit mask created by
     /// bitwise-or'ing zero or more valid mode bits. Some of the examples
-    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner), etc.
+    /// of such bits are `S_IRUSR` (read by owner), `S_IWUSR` (write by owner),
+    /// etc.
     ///
     /// ### Returns
     ///
@@ -2798,8 +2926,9 @@ impl Cage {
         if len == 0 {
             syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-        //NaCl's munmap implementation actually just writes over the previously mapped data with PROT_NONE
-        //This frees all of the resources except page table space, and is put inside safeposix for consistency
+        //NaCl's munmap implementation actually just writes over the previously mapped
+        // data with PROT_NONE This frees all of the resources except page table
+        // space, and is put inside safeposix for consistency
         interface::libc_mmap(
             addr,
             len,
@@ -3045,10 +3174,12 @@ impl Cage {
                 let mut tempbind;
                 let close_on_exit;
 
-                //We check if the fileobject exists. If file_must_exist is true (i.e. we called the helper from
-                //ftruncate) then we know that an fd must exist and thus we panic if the fileobject does not
-                //exist. If file_must_exist is false (i.e. we called the helper from truncate), if the file does
-                //not exist,  we create a new fileobject to use which we remove once we are done with it
+                //We check if the fileobject exists. If file_must_exist is true (i.e. we called
+                // the helper from ftruncate) then we know that an fd must exist
+                // and thus we panic if the fileobject does not
+                // exist. If file_must_exist is false (i.e. we called the helper from truncate),
+                // if the file does not exist,  we create a new fileobject to
+                // use which we remove once we are done with it
                 let fileobject = if let interface::RustHashEntry::Occupied(ref mut occ) =
                     maybe_fileobject
                 {
@@ -3230,9 +3361,13 @@ impl Cage {
                         .unwrap();
                     match &*inodeobj {
                         Inode::File(_) => {
-                            // This code segment obtains the file object associated with the specified inode from FILEOBJECTTABLE.
-                            // It calls 'sync_file_range' on this file object, where initially the flags are validated, returning -EINVAL for incorrect flags.
-                            // If the flags are correct, libc::sync_file_range is invoked; if it fails (returns -1), 'from_discriminant' function handles the error code.
+                            // This code segment obtains the file object associated with the
+                            // specified inode from FILEOBJECTTABLE.
+                            // It calls 'sync_file_range' on this file object, where initially the
+                            // flags are validated, returning -EINVAL for incorrect flags.
+                            // If the flags are correct, libc::sync_file_range is invoked; if it
+                            // fails (returns -1), 'from_discriminant' function handles the error
+                            // code.
 
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
                             let result = fobj.sync_file_range(offset, nbytes, flags);
@@ -3410,7 +3545,8 @@ impl Cage {
                                     vec_filename.push(00);
                                 }
 
-                                // the fixed dirent size and length of filename vector add up to total size
+                                // the fixed dirent size and length of filename vector add up to
+                                // total size
                                 curr_size =
                                     interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32;
 
@@ -3418,7 +3554,8 @@ impl Cage {
 
                                 // stop iteration if current bufcount exceeds argument bufsize
                                 if bufcount > bufsize {
-                                    bufcount = bufcount - curr_size; // decrement bufcount since current element is not actually written
+                                    bufcount = bufcount - curr_size; // decrement bufcount since current element is not actually
+                                                                     // written
                                     break;
                                 }
 
@@ -3440,7 +3577,8 @@ impl Cage {
                             );
 
                             interface::pack_dirents(vec, dirp);
-                            bufcount as i32 // return the number of bytes written
+                            bufcount as i32 // return the number of bytes
+                                            // written
                         }
                         _ => syscall_error(
                             Errno::ENOTDIR,
@@ -3613,7 +3751,8 @@ impl Cage {
 
                 shmid = metadata.new_keyid();
                 vacant.insert(shmid);
-                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
+                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do
+                                                    // anything with them
 
                 let segment = new_shm_segment(
                     key,
@@ -3646,7 +3785,8 @@ impl Cage {
 
             // update semaphores
             if !segment.semaphor_offsets.is_empty() {
-                // lets just look at the first cage in the set, since we only need to grab the ref from one
+                // lets just look at the first cage in the set, since we only need to grab the
+                // ref from one
                 if let Some(cageid) = segment
                     .attached_cages
                     .clone()
@@ -3702,7 +3842,8 @@ impl Cage {
                         metadata.shmkeyidtable.remove(&key);
                     }
 
-                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
+                    return shmid; //NaCl relies on this non-posix behavior of
+                                  // returning the shmid on success
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
@@ -3806,8 +3947,8 @@ impl Cage {
         }
         //the RawMutex is destroyed on Drop
 
-        //this is currently assumed to always succeed, as the man page does not list possible
-        //errors for pthread_mutex_destroy
+        //this is currently assumed to always succeed, as the man page does not
+        // list possible errors for pthread_mutex_destroy
     }
 
     pub fn mutex_lock_syscall(&self, mutex_handle: i32) -> i32 {
@@ -3966,8 +4107,8 @@ impl Cage {
         }
         //the RawCondvar is destroyed on Drop
 
-        //this is currently assumed to always succeed, as the man page does not list possible
-        //errors for pthread_cv_destroy
+        //this is currently assumed to always succeed, as the man page does not
+        // list possible errors for pthread_cv_destroy
     }
 
     pub fn cond_signal_syscall(&self, cv_handle: i32) -> i32 {
@@ -4064,7 +4205,8 @@ impl Cage {
                 {
                     loop {
                         interface::cancelpoint(self.cageid);
-                    } // we check cancellation status here without letting the function return
+                    } // we check cancellation status here without letting the
+                      // function return
                 }
 
                 if retval < 0 {
@@ -4153,12 +4295,46 @@ impl Cage {
         }
     }
 
-    //------------------SEMAPHORE SYSCALLS------------------
-    /*
-     *  Initialize semaphore object SEM to value
-     *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
-     *  or shared between processes (when nonzero)
-     */
+    //##------------------SEMAPHORE SYSCALLS------------------
+/*
+ *  Initialize semaphore object SEM to value
+ *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
+ *  or shared between processes (when nonzero)
+ */
+/// ## `sem_init_syscall`
+///
+/// ### Description
+/// This function initializes a semaphore object, setting its initial value and 
+///specifying whether it's shared between threads or processes.
+/// 1. Boundary Check: The function first checks if the initial value is 
+/// within the allowed range.
+/// 2. Check for Existing Semaphore: The function then checks if a semaphore 
+/// with the given handle already exists.
+/// 3. Initialize New Semaphore: If the semaphore does not exist, the function 
+/// creates a new semaphore object and inserts it into the semaphore table.
+/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared 
+/// between processes, 
+/// the function adds it to the shared memory attachments of other processes 
+/// that have already attached to the shared memory segment.
+/// 5. The function ensures thread safety by using a unique semaphore handle and 
+/// checking for existing entries in the semaphore table before attempting to create a new one.
+/// The code also avoids inserting a semaphore into the same cage twice during the shared 
+/// memory attachment process by excluding the initial cage from the iteration loop.
+///[sem_init](https://man7.org/linux/man-pages/man3/sem_init.3.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+/// * `pshared`:  Indicates whether the semaphore is shared between 
+/// threads (0) or processes (non-zero).
+/// * `value`: The initial value of the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// ### Errors
+/// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is already initialized.
+/// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value 
+/// * 'ENOSYS(38)' : Currently not supported
+/// for a semaphore (SEM_VALUE_MAX).
+
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
         if value > SEM_VALUE_MAX {
@@ -4168,60 +4344,129 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let is_shared = pshared != 0;
 
-        // Iterate semaphore table, if semaphore is already initialzed return error
+        // Check if a semaphore with the given handle already exists in the semaphore table. 
+        // If it exists, the semaphore is already initialized, so an error is returned.
+        // This ensures that only new semaphores are initialized.
         let semtable = &self.sem_table;
 
-        // Will initialize only it's new
         if !semtable.contains_key(&sem_handle) {
+            // Create a new semaphore object.
             let new_semaphore =
                 interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
+            // Insert the new semaphore into the semaphore table.
             semtable.insert(sem_handle, new_semaphore.clone());
 
+            // If the semaphore is shared, add it to the shared memory attachments of other processes.
             if is_shared {
                 let rev_shm = self.rev_shm.lock();
-                // if its shared and exists in an existing mapping we need to add it to other cages
+                // if its shared and exists in an existing mapping we need to add it to other
+                // cages
                 if let Some((mapaddr, shmid)) =
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
-                    let offset = mapaddr - sem_handle;
+                    let offset = mapaddr - sem_handle; 
+                    // iterate through all cages with shared memory segment attached and add semaphor in segments at attached addr + offset
+                    // offset represents the relative position of the semaphore within the shared memory region.
+                    
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
                             let cage = interface::cagetable_getref(*cageid);
+                            // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            // Iterate through all addresses and add the semaphore to the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.insert(addr + offset, new_semaphore.clone());
                             }
                         }
+                        // Add the offset to the semaphore offsets list.
                         segment.semaphor_offsets.insert(offset);
                     }
                 }
             }
             return 0;
         }
-
+        // Return an error indicating that the semaphore is already initialized.
         return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
     }
 
+/// ## `sem_wait_syscall`
+///
+/// ### Description
+/// 1. Check for Semaphore Existence:The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+/// 2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire it using `lock`. 
+/// This operation will block the calling process until the semaphore becomes available.
+/// 3. Error Handling:If the semaphore handle is invalid, the function returns an error
+/// 4. This function allows a process to wait for a semaphore to become available. 
+/// If the semaphore is currently available (its value is greater than 0), the function will 
+/// acquire the semaphore and return 0.
+/// 5. If the semaphore is unavailable (its value is 0), the function will block the 
+/// calling process until the semaphore becomes available(its value becomes 1).
+///[sem_wait(2)](https://man7.org/linux/man-pages/man3/sem_wait.3.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * 'EAGAIN(11)' & 'EINTR(4)' currently are not supported 
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        // Check whether semaphore exists
+        // Check whether the semaphore exists in the semaphore table. If found, obtain a mutable borrow to the semaphore entry.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+        // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads.
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
+            // Acquire the semaphore. This operation will block the calling process until the 
+            ///semaphore becomes available. The`lock` method internally decrements the semaphore value.
+            // The lock fun is located in misc.rs
             semaphore.lock();
         } else {
             return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
 
+/// ## `sem_post_syscall`
+///
+/// ### Description
+/// This function increments the value of a semaphore.
+///  1. Check for Semaphore Existence:The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///  2. Increment Semaphore Value: If the semaphore exists, the function 
+/// increments its value using `unlock`.
+///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
+///  would exceed the maximum value, the function returns an appropriate error code.
+/// [sem_post](https://man7.org/linux/man-pages/man3/sem_post.3.html)
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * `EOVERFLOW(75)`: If incrementing the semaphore would exceed the maximum allowable value.
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
+        // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
+            // Increment the semaphore value.
+            //If the semaphore's value becomes greater than zero, one or more blocked threads will be woken up and 
+            // proceed to acquire the semaphore, decreasing its value.
+            // The unlock fun is located in misc.rs
             if !semaphore.unlock() {
+                // Return an error indicating that the maximum allowable value for a semaphore would be exceeded.
                 return syscall_error(
                     Errno::EOVERFLOW,
                     "sem_post",
@@ -4234,12 +4479,33 @@ impl Cage {
         return 0;
     }
 
+/// ## `sem_destroy_syscall`
+///
+/// ### Description
+/// This function destroys a semaphore, freeing its associated resources.
+///   1. Check for Semaphore Existence: The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   2. Remove from Semaphore Table: If the semaphore exists, the function removes 
+/// it from the semaphore table.
+///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the 
+/// function also removes it from the shared memory attachments of other processes.
+///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///[sem_destroy](https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success.
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
 
         let semtable = &self.sem_table;
         // remove entry from semaphore table
         if let Some(sementry) = semtable.remove(&sem_handle) {
+            // If the semaphore is shared, remove it from other process attachments.
             if sementry
                 .1
                 .is_shared
@@ -4247,23 +4513,30 @@ impl Cage {
             {
                 // if its shared we'll need to remove it from other attachments
                 let rev_shm = self.rev_shm.lock();
+                // Search for the semaphore address in the shared memory region.
                 if let Some((mapaddr, shmid)) =
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
                     // find all segments that contain semaphore
                     let offset = mapaddr - sem_handle;
+                    // Iterate through all segments containing the semaphore.
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+                        // Iterate through all cages containing the segment.
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages containing segment
+                            // Get a reference to the cagetable for the current cage.
                             let cage = interface::cagetable_getref(*cageid);
+                            // Find all addresses in the shared memory region that belong to the current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
+                            // Iterate through all addresses and remove the semaphore from the cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
+                                //offset represents the relative position of the semaphore within the shared memory region.
                             }
                         }
                     }
                 }
             }
+            // Return 0 to indicate successful semaphore destruction.
             return 0;
         } else {
             return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
@@ -4273,10 +4546,35 @@ impl Cage {
     /*
      * Take only sem_t *sem as argument, and return int *sval
      */
+
+/// ## `sem_getvalue_syscall`
+///
+/// ### Description
+/// This function implements the `sem_getvalue` system call, which retrieves the 
+/// current value of a semaphore.
+///   1. Check for Semaphore Existence: The function first checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves
+///  its current value and returns it.
+///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
+///[sem_getvalue(2)](https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
+///
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * The current value of the semaphore on success.
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
+        // Check whether the semaphore exists in the semaphore table.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             return semaphore.get_value();
         }
@@ -4287,13 +4585,41 @@ impl Cage {
         );
     }
 
+/// ## `sem_trywait_syscall`
+///
+/// ### Description
+/// This function implements the `sem_trywait` system call, which attempts 
+/// to acquire a semaphore without blocking.
+///   1. Check for Semaphore Existence: The function first checks if the 
+/// provided semaphore handle is valid.
+///   2. Attempt to Acquire: If the semaphore exists, the function attempts
+///  to acquire it using `trylock`.
+///   3. Error Handling: If the semaphore is unavailable or the handle is invalid,
+///  the function returns an appropriate error code.
+/// [sem_trywait(2)](https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+///
+/// ### Returns
+/// * 0 on success (semaphore acquired).
+///
+/// ### Errors
+/// * `EINVAL(22)`: If the semaphore handle is invalid.
+/// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
+
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
+            // Attempt to acquire the semaphore without blocking.
+            // If the semaphore is currently unavailable (value is 0), this operation will fail.
             if !semaphore.trylock() {
+                // Return an error indicating that the operation could not be performed without blocking.
                 return syscall_error(
                     Errno::EAGAIN,
                     "sem_trywait",
@@ -4303,9 +4629,36 @@ impl Cage {
         } else {
             return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
-
+    
+/// ## `sem_timedwait_syscall`
+///
+/// ### Description
+/// This function implements the `sem_timedwait` system call, which attempts to 
+/// acquire a semaphore with a timeout.
+///   1. Convert Timeout to Timespec: The function first converts the provided 
+/// timeout duration into a `timespec` structure, which is used by the underlying 
+/// `timedlock` function.
+///   2. Check for Semaphore Existence: The function then checks if the provided 
+/// semaphore handle exists in the semaphore table.
+///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts 
+/// to acquire it using `timedlock`, which will block for the specified duration.
+///   4. Error Handling: If the semaphore is unavailable, the timeout expires, 
+/// or the handle is invalid, the function returns an appropriate error code.
+///[sem_timedwait(2)](https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
+/// ### Function Arguments
+/// * `sem_handle`: A unique identifier for the semaphore.
+/// * `time`: The maximum time to wait for the semaphore to become available,
+///  expressed as a `RustDuration`.
+///
+/// ### Returns
+/// * 0 on success (semaphore acquired).
+///
+/// ### Errors
+/// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes available.
+/// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
     pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
         let abstime = libc::timespec {
             tv_sec: time.as_secs() as i64,
@@ -4317,9 +4670,14 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
+            // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads
             let semaphore = sementry.clone();
+            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
+            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
+            // Attempt to acquire the semaphore with a timeout.
             if !semaphore.timedlock(time) {
+                // Return an error indicating that the call timed out before the semaphore could be locked.
                 return syscall_error(
                     Errno::ETIMEDOUT,
                     "sem_timedwait",
@@ -4333,6 +4691,7 @@ impl Cage {
                 "sem is not a valid semaphore",
             );
         }
+        // If the semaphore was successfully acquired, return 0.
         return 0;
     }
 }

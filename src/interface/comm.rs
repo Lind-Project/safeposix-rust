@@ -516,7 +516,8 @@ impl Socket {
                 &mut len as *mut u32,
             )
         };
-        (ret == 0) && (valbuf == 0) // if return val is 0 and error is 0 it's connected
+        (ret == 0) && (valbuf == 0) // if return val is 0 and error is 0 it's
+                                    // connected
     }
 }
 
@@ -584,7 +585,8 @@ impl FdSet {
         fd_array.iter().all(|&byte| byte == 0)
     }
 
-    // for each fd, if kernel_fds turned it on, then self will turn the corresponding tranlated fd on
+    // for each fd, if kernel_fds turned it on, then self will turn the
+    // corresponding tranlated fd on
     pub fn set_from_kernelfds_and_translate(
         &mut self,
         kernel_fds: &FdSet,
