@@ -104,6 +104,7 @@ use crate::safeposix::shm::*;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
+    ///
     /// The `open_syscall()` creates an open file description that refers to a
     /// file and a file descriptor that refers to that open file description.
     /// The file descriptor is used by other I/O functions to refer to that
@@ -114,6 +115,7 @@ impl Cage {
     /// are checked and based on them, file is updated accordingly.
 
     /// ### Function Arguments
+    ///
     /// The `open_syscall()` receives three arguments:
     /// * `path` - This argument points to a pathname naming the file. For
     ///   example: "/parentdir/file1" represents a file which will be either
@@ -129,11 +131,13 @@ impl Cage {
     ///   search permissions on the new file.
 
     /// ### Returns
+    ///
     /// Upon successful completion of this call, a file descriptor is returned
     /// which points the file which is opened. Otherwise, errors or panics
     /// are returned for different scenarios.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
+    ///
     /// * ENFILE - no available file descriptor number could be found
     /// * ENOENT - tried to open a file that did not exist
     /// * EINVAL - the input flags contain S_IFCHR flag representing a special
@@ -145,9 +149,15 @@ impl Cage {
     ///   passed
     /// * ENXIO - the file is of type UNIX domain socket
     ///
-    /// A panic occurs when there is some issue fetching the file descriptor.
+    /// ### Panics
     ///
-    /// for more detailed description of all the commands and return values, see
+    /// * If truepath.file_name() returns None or if to_str() fails, causing
+    ///   unwrap() to panic.
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
 
     // This function is used to create a new File Descriptor Object and return it.
@@ -917,6 +927,7 @@ impl Cage {
 
     /// ## ------------------CREAT SYSCALL------------------
     /// ### Description
+    ///
     /// The `creat_syscall()` is similar to `open_syscall()` with the "flags"
     /// parameter for open_syscall set to representing create, truncate or write
     /// only for the file. It simplifies the process of creating a new file or
@@ -924,6 +935,7 @@ impl Cage {
     /// O_WRONLY flags.
     ///
     /// ### Function Arguments
+    ///
     /// The `creat_syscall()` receives two arguments:
     /// * `path` - This argument points to a pathname naming the file. For
     ///   example: "/parentdir/file1" represents a file which will be either
@@ -931,13 +943,15 @@ impl Cage {
     /// * `mode` - This represents the permission of the newly created file. The
     ///   general mode used is "S_IRWXA": which represents the read, write, and
     ///   search permissions on the new file.
-
+    ///
     /// ### Returns
+    ///
     /// Upon successful completion of this call, a file descriptor is returned
     /// which points the file which is opened. Otherwise, errors or panics
     /// are returned for different scenarios.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
+    ///
     /// * ENFILE - no available file descriptor number could be found
     /// * ENOENT - tried to open a file that did not exist
     /// * EPERM - the mode bits for a file are not sane
@@ -946,9 +960,15 @@ impl Cage {
     /// * EEXIST - the given file already exists
     /// * ENXIO - the file is of type UNIX domain socket
     ///
-    /// A panic occurs when there is some issue fetching the file descriptor.
+    /// ### Panics
     ///
-    /// for more detailed description of all the commands and return values, see
+    /// * If truepath.file_name() returns None or if to_str() fails, causing
+    ///   unwrap() to panic.
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
     /// [creat(3p)](https://man7.org/linux/man-pages/man3/creat.3p.html)
     pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
         // These flags represent that the given file is either newly created
@@ -4422,8 +4442,8 @@ impl Cage {
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until
             // the
-            ///semaphore becomes available. The`lock` method internally
-            /// decrements the semaphore value.
+            // semaphore becomes available. The`lock` method internally
+            // decrements the semaphore value.
             // The lock fun is located in misc.rs
             semaphore.lock();
         } else {
