@@ -1034,6 +1034,32 @@ pub mod fs_tests {
     }
 
     #[test]
+    pub fn ut_lind_fs_link_invalid_path_permissions() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let oldpath = "/testdir/olddir";
+        let newpath = "/newpath";
+
+        // Create the directory for the oldpath with the parent not having read permission.
+        // Currently assigning "Write only" permissions
+        assert_eq!(cage.mkdir_syscall("/testdir", S_IWUSR), 0);
+        let fd = cage.open_syscall(oldpath, O_CREAT | O_EXCL | O_WRONLY, S_IWUSR);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+
+        // Expect the linking to be successful, but this is a bug which must be fixed 
+        // as the parent directory doesn't have read permissions due to which it should
+        // not be able to link the files.
+        assert_eq!(cage.link_syscall(oldpath, newpath), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_file_lseek_past_end() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup

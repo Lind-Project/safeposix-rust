@@ -811,6 +811,9 @@ impl Cage {
             .unwrap()
             .to_string();
 
+        // TODO BUG: Man-page contains a check for the directories in the path
+        // to have search/read permissions, which is not implemented in this syscall.
+          
         // Walk through the absolute path for the oldpath file which returns the inode
         // number of file (if it exists).
         match metawalk(trueoldpath.as_path()) {
@@ -818,7 +821,8 @@ impl Cage {
             None => syscall_error(
                 Errno::ENOENT,
                 "link",
-                "a directory component in pathname does not exist or is a dangling symbolic link",
+                "a directory component in pathname does not exist", 
+                // Currently, we don't support the symbolic links
             ),
             // Case: Get the inode number and increment the link count of the existing
             // directory component i.e., (File, CharDev, and Socket).
@@ -872,7 +876,9 @@ impl Cage {
                             parentdirinodeobj
                                 .filename_to_inode_dict
                                 .insert(filename, inodenum);
-                            // Increment the link count of the parent inode as well
+                            // Increment the link count of the parent inode as well because
+                            // when a link is created, a new directory entry is added to
+                            // the parent directory of the new link. 
                             parentdirinodeobj.linkcount += 1;
                             //drop the mutable instance of the parent inode object
                             drop(parentinodeobj);
