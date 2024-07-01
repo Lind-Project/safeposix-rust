@@ -1552,8 +1552,8 @@ pub mod fs_tests {
     //their execution using a shared semaphore. The test aims to ensure:
     //   1. The semaphore is initialized correctly.
     //   2. The child process can acquire and release the semaphore.
-    //   3. The parent process can acquire and release the
-    //      semaphore after the child process exits.
+    //   3. The parent process can acquire and release the semaphore after the child
+    //      process exits.
     //   4. The semaphore can be destroyed safely.
     #[test]
     pub fn ut_lind_fs_sem_fork() {
@@ -1566,10 +1566,10 @@ pub mod fs_tests {
 
         // Create a shared memory region of 1024 bytes. This region will be
         // shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared memory
-        // and 0666 sets the access permissions of the memory segment.
+        // IPC_CREAT tells the system to create a new memory segment for the shared
+        // memory and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        
+
         // Attach shared memory for semaphore access.
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
@@ -1584,7 +1584,7 @@ pub mod fs_tests {
             // Set reference to child process's cagetable (ID 2) for independent operation.
             let cage1 = interface::cagetable_getref(2);
             // Child process blocks on semaphore wait (decrementing it from 1 to 0).
-            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);            
+            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             // Simulate processing time with 40ms delay.
             interface::sleep(interface::RustDuration::from_millis(40));
             // Child process releases semaphore, signaling its availability to parent
@@ -1593,14 +1593,17 @@ pub mod fs_tests {
             cage1.exit_syscall(EXIT_SUCCESS);
         });
 
-        // Parent waits on semaphore (blocks until released by child, decrementing to 0).
+        // Parent waits on semaphore (blocks until released by child, decrementing to
+        // 0).
         assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-        // Simulate parent process processing time with 100ms delay to ensure synchronization.
+        // Simulate parent process processing time with 100ms delay to ensure
+        // synchronization.
         interface::sleep(interface::RustDuration::from_millis(100));
-        // Wait for child process to finish to prevent race conditions before destroying semaphore.
-        //Release semaphore, making it available again (value increases to 1).
-        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0); 
+        // Wait for child process to finish to prevent race conditions before destroying
+        // semaphore. Release semaphore, making it available again (value
+        // increases to 1).
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
         thread_child.join().unwrap();
 
         // Destroy the semaphore
@@ -1617,11 +1620,13 @@ pub mod fs_tests {
     }
 
     // This test verifies the functionality of timed semaphores in a fork scenario.
-    // It involves a parent process and a child process that synchronize their execution using a
-    //shared semaphore with a timeout. The test aims to ensure:
+    // It involves a parent process and a child process that synchronize their
+    // execution using a shared semaphore with a timeout. The test aims to
+    // ensure:
     //  1. The semaphore is initialized correctly.
     //  2. The child process can acquire and release the semaphore.
-    //  3. The parent process can acquire the semaphore using a timed wait operation with a
+    //  3. The parent process can acquire the semaphore using a timed wait operation
+    //     with a
     //  timeout, and the semaphore is acquired successfully.
     //  4. The parent process can release the semaphore.
     //  5. The semaphore can be destroyed safely.
@@ -1635,8 +1640,8 @@ pub mod fs_tests {
         let key = 31337;
         // Create a shared memory region of 1024 bytes.
         //This region will be shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared memory
-        // and 0666 sets the access permissions of the memory segment.
+        // IPC_CREAT tells the system to create a new memory segment for the shared
+        // memory and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
         // Attach the shared memory region to the address space of the process
         // to make sure for both processes to access the shared semaphore.
@@ -1646,7 +1651,8 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        // Fork process, creating a child process with its own independent cagetable (ID 2).
+        // Fork process, creating a child process with its own independent cagetable (ID
+        // 2).
         assert_eq!(cage.fork_syscall(2), 0);
         // Define the child process behavior in a separate thread
         let thread_child = interface::helper_thread(move || {
@@ -1657,7 +1663,8 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             // Simulate some work by sleeping for 20 milliseconds.
             interface::sleep(interface::RustDuration::from_millis(20));
-            // Child process releases semaphore, signaling its availability to the parent process
+            // Child process releases semaphore, signaling its availability to the parent
+            // process
             //(value increases from 0 to 1).
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
@@ -2100,6 +2107,67 @@ pub mod fs_tests {
             cage.open_syscall(path, O_CREAT | S_IFCHR, S_IRWXA),
             -(Errno::EINVAL as i32)
         );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_creat_new_file() {
+        // Since this call is almost similar to open_syscall, and we have
+        // covered all the possible test scenarios for open_syscall above. So,
+        // just testing the basic working flow for the creat_sycall.
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a file and validate the size of it.
+        let path = "/creatFile";
+        let fd = cage.creat_syscall(path, S_IRWXA);
+        assert!(fd > 0);
+
+        let mut statdata = StatData::default();
+
+        // The size of the file should be 0
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(statdata.st_size, 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_creat_truncate_existing_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "/creatFile";
+        // Create a new file
+        let fd = cage.creat_syscall(path, S_IRWXA);
+
+        // Write a string to the newly opened file of size 12
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Get the stat data for the file and check for file attributes
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+
+        // Validate the size of the file to be 12
+        assert_eq!(statdata.st_size, 12);
+
+        // Call the function on the existing file, which should truncate
+        // the file size to 0.
+        let _fd2 = cage.creat_syscall(path, S_IRWXA);
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+
+        // Validate the size of the file to be 0 now as should be truncated
+        assert_eq!(statdata.st_size, 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
