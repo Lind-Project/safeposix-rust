@@ -3091,6 +3091,7 @@ impl Cage {
     /// ### Errors and Panics
     /// * EAFNOSUPPORT - The specified address family is not supported on this machine.
     /// * EOPNOTSUPP - The specified protocol does not support creation of socket pairs.
+    /// * EINVAL - The specified flag is not valid
 
     // Because socketpair needs to spawn off a helper thread to connect the two ends of the socket pair, and because that helper thread,
     // along with the main thread, need to access the cage to call methods (syscalls) of it, and because rust's threading model states that
@@ -3123,6 +3124,11 @@ impl Cage {
                 "socketpair",
                 "Socketpair currently only supports SOCK_STREAM TCP.",
             );
+        }
+
+        // check if socktype contains any invalid flag bits
+        if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
+            return syscall_error( Errno::EINVAL, "socket", "Invalid combination of flags" );
         }
 
         // get the flags

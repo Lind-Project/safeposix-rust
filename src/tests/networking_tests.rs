@@ -1623,6 +1623,12 @@ pub mod net_tests {
             -(Errno::EOPNOTSUPP as i32)
         );
 
+        // test for invalid flags
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM | 1024, 0, &mut socketpair),
+            -(Errno::EINVAL as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
