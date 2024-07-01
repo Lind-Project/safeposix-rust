@@ -422,6 +422,8 @@ pub mod ipc_tests {
 
         let cage1 = interface::cagetable_getref(1);
 
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
         let mut pipefds = PipeArray {
             readfd: -1,
             writefd: -1,
@@ -507,6 +509,8 @@ pub mod ipc_tests {
 
         let cage1 = interface::cagetable_getref(1);
 
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
         let mut pipefds = PipeArray {
             readfd: -1,
             writefd: -1,
@@ -580,11 +584,15 @@ pub mod ipc_tests {
 
         let cage1 = interface::cagetable_getref(1);
 
-        // lets setup the pipe and fork
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
         let mut pipefds = PipeArray {
             readfd: -1,
             writefd: -1,
         };
+
+        // now setup the pipe and fork
+
         assert_eq!(cage1.pipe_syscall(&mut pipefds), 0);
         assert_eq!(cage1.fork_syscall(3), 0);
 
