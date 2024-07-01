@@ -3047,12 +3047,13 @@ impl Cage {
     /// * `ENOENT` - `path` is an empty string or names a nonexistent directory
     /// * `EBUSY` - `path` names a root directory that cannot be removed
     /// * `ENOEMPTY` - `path` names a non-empty directory,
-    /// * `EPERM` - the directory to be removed does not grant write permission
+    /// * `EPERM` - the directory to be removed or its parent directory
+    /// does not grant write permission
     /// * `ENOTDIR` - `path` is not a directory
     /// Other errors, like `EACCES`, `EINVAL`, etc. are not supported.
     ///
     /// A panic occurs when the directory to be removed does not have `S_IFDIR"`
-    /// (directory file type flag) set.
+    /// (directory file type flag) set or when parent inode is not a directory.
     ///
     /// To learn more about the syscall, error values, etc.,
     /// see [rmdir(3)](https://linux.die.net/man/3/rmdir)
@@ -3061,21 +3062,32 @@ impl Cage {
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "rmdir", "Given path is an empty string");
         }
+        //Convert the provided pathname into an absolute path without `.` or `..`
+        //components.
         let truepath = normpath(convpath(path), self);
 
-        // try to get inodenum of input path and its parent
+        //Perfrom a walk down the file tree starting from the root directory to
+        //obtain an inode number of the file whose pathname was specified and
+        //its parent directory's inode.
         match metawalkandparent(truepath.as_path()) {
             (None, ..) => syscall_error(Errno::ENOENT, "rmdir", "Path does not exist"),
+            //The specified directory exists, but its parent does not,
+            //which means it is a root directory that cannot be removed
             (Some(_), None) => {
-                // path exists but parent does not => path is root dir
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
+                //Getting a mutable reference to an inode struct that corresponds to
+                //the directory that shall be removed
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
                 match &mut *inodeobj {
-                    // make sure inode matches a directory
+                    //A sanity check to make sure the inode matches a directory
                     Inode::Dir(ref mut dir_obj) => {
+                        //When a new empty directory is created, its linkcount
+                        //is set to 3. Thus, any empty directory should have a 
+                        //linkcount of 3. Otherwise, it is a non-empty directory
+                        //that cannot be removed
                         if dir_obj.linkcount > 3 {
                             return syscall_error(
                                 Errno::ENOTEMPTY,
@@ -3083,11 +3095,13 @@ impl Cage {
                                 "Directory is not empty",
                             );
                         }
+                        //A sanity check to make sure that the correct directory
+                        //file type flag is set
                         if !is_dir(dir_obj.mode) {
                             panic!("This directory does not have its mode set to S_IFDIR");
                         }
 
-                        // check if dir has write permission
+                        //The directory to be removed should grant write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {
                             return syscall_error(
                                 Errno::EPERM,
@@ -3096,13 +3110,32 @@ impl Cage {
                             );
                         }
 
+                        //The directory cannot be removed if one or more processes 
+                        //have the directory open, which corresponds to a non-zero
+                        //reference count 
                         let remove_inode = dir_obj.refcount == 0;
+                        //`mkdir_syscall()` sets linkcount of a new empty
+                        //directory to 3, though the standard specifies it should
+                        //2: its pathname and `.` reference to iself. Even assuming
+                        //that setting 3 as a linkcount has some reasoning, which
+                        //I don't know of, setting it to 2 now seems erroneous
                         if remove_inode {
                             dir_obj.linkcount = 2;
-                        } // linkcount for an empty directory after rmdir must be 2
+                        }
+
+                        //The mutable reference to the inode has to be dropped because
+                        //remove() method will need to acquire an immutable reference to
+                        //the same inode to remove it from the inodetable
                         drop(inodeobj);
 
                         let removal_result =
+                            //This helper function returns 0 if an entry corresponding
+                            //to the specified directory was successfully removed from 
+                            //the filename-inode dictionary of its parent
+                            //If the parent directory does not grant write permission,
+                            //`EPERM` is returned
+                            //As a sanity check, if the parent inode specifies a
+                            //non-directory type, the funciton panics
                             Self::remove_from_parent_dir(parent_inodenum, &truepath);
                         if removal_result != 0 {
                             return removal_result;
@@ -3112,7 +3145,11 @@ impl Cage {
                         if remove_inode {
                             FS_METADATA.inodetable.remove(&inodenum).unwrap();
                         }
-
+                        //log is used to store all the changes made to the filesystem. After
+                        //the cage is closed, all the collected changes are serialized and
+                        //the state of the underlying filsystem is persisted. This allows us
+                        //to avoid serializing and persisting filesystem state after every
+                        //`rmdir_syscall()`.
                         log_metadata(&FS_METADATA, parent_inodenum);
                         log_metadata(&FS_METADATA, inodenum);
                         0 // success
@@ -4394,7 +4431,7 @@ impl Cage {
             // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until the 
-            ///semaphore becomes available. The`lock` method internally decrements the semaphore value.
+            //semaphore becomes available. The`lock` method internally decrements the semaphore value.
             // The lock fun is located in misc.rs
             semaphore.lock();
         } else {
