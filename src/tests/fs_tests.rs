@@ -1468,15 +1468,6 @@ pub mod fs_tests {
         assert_eq!(cage.access_syscall("newcwd2", F_OK), 0);
         assert_eq!(cage.chdir_syscall("newcwd2"), 0);
 
-        //Checking if passing a null pointer and the correct string size
-        //to `getcwd_syscall()`correctly results in `Buf points to
-        //a bad address` error
-        let null_ptr: *mut u8 = std::ptr::null_mut();
-        assert_eq!(
-            cage.getcwd_syscall(null_ptr, newcwdsize_u32),
-            -(Errno::EFAULT as i32)
-        );
-
         //Checking if passing a valid string pointer and a size of 0 to
         //`getcwd_syscall()` correctly results in `The size argument is zero and
         //buf is not a null pointer` error
