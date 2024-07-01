@@ -1,5 +1,5 @@
 /* Benchmarks for the microvisor implementation.  In general, I'm not doing
- * results checking / assertations to avoid adding bias to the results.  */
+ * results checking / assertations to avoid adding bias to the results. */
 
 // I hate allowing this, but this is apparently a known issue for a lot of
 // code with CStrings.  https://github.com/rust-lang/rust/issues/78691
