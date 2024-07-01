@@ -3025,11 +3025,41 @@ impl Cage {
         0
     }
 
-    //------------------RMDIR SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `rmdir_syscall()` deletes a directory whose name is given by `path`.
+    /// The directory shall be removed only if it is an empty directory.
+    ///
+    /// ### Arguments
+    ///
+    /// The `rmdir_syscall()` accepts one argument:
+    /// * `path` - the path to the directory that shall be removed. It can be either 
+    /// relative or absolute (symlinks are not supported).
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, 0 is returned. 
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors and Panics
+    ///
+    /// * `ENOENT` - `path` is an empty string or names a nonexistent directory
+    /// * `EBUSY` - `path` names a root directory that cannot be removed
+    /// * `ENOEMPTY` - `path` names a non-empty directory,
+    /// * `EPERM` - the directory to be removed does not grant write permission
+    /// * `ENOTDIR` - `path` is not a directory
+    /// Other errors, like `EACCES`, `EINVAL`, etc. are not supported.
+    ///
+    /// A panic occurs when the directory to be removed does not have `S_IFDIR"`
+    /// (directory file type flag) set.
+    ///
+    /// To learn more about the syscall, error values, etc.,
+    /// see [rmdir(3)](https://linux.die.net/man/3/rmdir)
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
         if path.len() == 0 {
-            return syscall_error(Errno::ENOENT, "rmdir", "Given path is null");
+            return syscall_error(Errno::ENOENT, "rmdir", "Given path is an empty string");
         }
         let truepath = normpath(convpath(path), self);
 
@@ -3062,7 +3092,7 @@ impl Cage {
                             return syscall_error(
                                 Errno::EPERM,
                                 "rmdir",
-                                "Directory does not have write permission",
+                                "Directory does not grant write permission",
                             );
                         }
 
