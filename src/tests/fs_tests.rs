@@ -1487,7 +1487,7 @@ pub mod fs_tests {
         assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::EINVAL as i32));
 
         //Checking if passing a valid string pointer and a non-zero size smaller
-        //than the size of the current working direcotry plus the terminating null
+        //than the size of the current working directory plus the terminating null
         //character to `getcwd_syscall()` correctly results in `The bufsize argument
         //is less than the length of the absolute pathname of the working directory,
         //including the terminating null byte` error
