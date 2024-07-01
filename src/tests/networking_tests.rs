@@ -9,7 +9,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_bind() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -45,7 +46,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_bind_on_zero() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -75,7 +77,8 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        //creating a thread for the server so that the information can be sent between the two threads
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
         let thread = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             let port: u16 = generate_random_port();
@@ -383,7 +386,8 @@ pub mod net_tests {
 
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
 
-        //send the data with delays so that the server can process the information cleanly
+        //send the data with delays so that the server can process the information
+        // cleanly
         assert_eq!(
             cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
             100
@@ -413,7 +417,8 @@ pub mod net_tests {
         //connect to the server with the other sockfd
         assert_eq!(cage.connect_syscall(clientsockfd2, &socket), 0);
 
-        //send the data with delays so that the server can process the information cleanly
+        //send the data with delays so that the server can process the information
+        // cleanly
         assert_eq!(
             cage.send_syscall(clientsockfd2, str2cbuf(&"A".repeat(100)), 100, 0),
             100
@@ -448,7 +453,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_bind_multiple() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -493,7 +499,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_connect_basic_udp() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -528,7 +535,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_getpeername() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -569,7 +577,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_getsockname() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -608,7 +617,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_listen() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -661,7 +671,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_poll() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -709,7 +720,8 @@ pub mod net_tests {
                 cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0),
                 4
             );
-            //giving it a longer pause time to that it can process all of the data that it is recieving
+            //giving it a longer pause time to that it can process all of the data that it
+            // is recieving
             interface::sleep(interface::RustDuration::from_millis(100));
 
             assert_eq!(cage2.close_syscall(serversockfd), 0);
@@ -785,7 +797,8 @@ pub mod net_tests {
                         //Write to a file...
                         assert_eq!(cage.write_syscall(sockfd, str2cbuf("test"), 4), 4);
                         assert_eq!(cage.lseek_syscall(sockfd, 0, SEEK_SET), 0);
-                        //Once the write is successful into a file, modify the file descriptor so that its ready for reading out of the file.
+                        //Once the write is successful into a file, modify the file descriptor so
+                        // that its ready for reading out of the file.
                         for polledfile in &mut polled {
                             if polledfile.fd == sockfd {
                                 polledfile.events = POLLOUT;
@@ -793,19 +806,23 @@ pub mod net_tests {
                             }
                         }
                     } else {
-                        //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
+                        //If the socket is in established conn., then we recv the data. If there's
+                        // no data, then close the client socket.
                         let mut buf = sizecbuf(4);
                         let mut result: i32;
                         loop {
                             result = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
                             if result != -libc::EINTR {
-                                assert_eq!(result & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for recieving or it's closed
-                                break; // if the error was EINTR, retry the syscall
+                                assert_eq!(result & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for
+                                                            // recieving or it's closed
+                                break; // if the error was EINTR, retry the
+                                       // syscall
                             }
                         }
                         if result == 4 {
                             assert_eq!(cbuf2str(&buf), "test");
-                            //This socket is ready for writing, modify the socket descriptor to be in read-write mode. This socket can write data out to network
+                            //This socket is ready for writing, modify the socket descriptor to be
+                            // in read-write mode. This socket can write data out to network
                             for polledfile in &mut polled {
                                 if polledfile.fd == sockfd {
                                     polledfile.events = POLLOUT;
@@ -813,7 +830,8 @@ pub mod net_tests {
                                 }
                             }
                         } else {
-                            //No data means remote socket closed, hence close the client socket in server, also remove this socket from polling.
+                            //No data means remote socket closed, hence close the client socket in
+                            // server, also remove this socket from polling.
                             assert_eq!(cage.close_syscall(sockfd), 0);
                             polled.retain(|x| x.fd != sockfd);
                         }
@@ -828,7 +846,8 @@ pub mod net_tests {
                         //test for file finished, remove from polling.
                         polled.retain(|x| x.fd != sockfd);
                     } else {
-                        //Data is sent out of this socket, it's no longer ready for writing, modify it only read mode.
+                        //Data is sent out of this socket, it's no longer ready for writing, modify
+                        // it only read mode.
                         assert_eq!(cage.send_syscall(sockfd, str2cbuf(&"test"), 4, 0), 4);
                         for polledfile in &mut polled {
                             if polledfile.fd == sockfd {
@@ -851,7 +870,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_recvfrom() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -879,7 +899,8 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        //creating a thread for the server so that the information can be sent between the two threads
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
         let thread = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             interface::sleep(interface::RustDuration::from_millis(100));
@@ -1029,7 +1050,8 @@ pub mod net_tests {
         //connect to the server
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
 
-        //send the data with delays so that the server can process the information cleanly
+        //send the data with delays so that the server can process the information
+        // cleanly
         assert_eq!(
             cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
             100
@@ -1334,7 +1356,8 @@ pub mod net_tests {
         // currently would fail since select_syscall does not handle socket pipe writefds correctly
         let byte_chunk: usize = UDSOCK_CAPACITY;
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
@@ -1698,7 +1721,8 @@ pub mod net_tests {
                 if !working_set.is_set(sock) {
                     continue;
                 }
-                //If the socket returned was listerner socket, then there's a new conn., so we accept it, and put the client socket in the list of Inputs.
+                //If the socket returned was listerner socket, then there's a new conn., so we
+                // accept it, and put the client socket in the list of Inputs.
                 if sock == serversockfd {
                     let mut sockgarbage =
                         interface::GenSockaddr::V4(interface::SockaddrV4::default());
@@ -1744,7 +1768,8 @@ pub mod net_tests {
                     // pipe select test done
                     master_set.clear(sock);
                 } else {
-                    //If the socket is in established conn., then we recv the data. If there's no data, then close the client socket.
+                    //If the socket is in established conn., then we recv the data. If there's no
+                    // data, then close the client socket.
                     let mut buf = sizecbuf(4);
                     let mut recvresult: i32;
                     loop {
@@ -1780,7 +1805,8 @@ pub mod net_tests {
                     assert_eq!(cbuf2str(&buf), "test");
                     master_outputs_set.clear(sock);
                 } else {
-                    //Data is sent out this socket, it's no longer ready for writing remove this socket from writefd's.
+                    //Data is sent out this socket, it's no longer ready for writing remove this
+                    // socket from writefd's.
                     assert_eq!(cage.send_syscall(sock as i32, str2cbuf("test"), 4, 0), 4);
                     master_outputs_set.clear(sock);
                 }
@@ -1803,7 +1829,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_shutdown() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -1871,7 +1898,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -1902,7 +1930,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socketoptions() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2075,7 +2104,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socketpair() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2131,7 +2161,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_udp_bad_bind() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2173,7 +2204,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_udp_simple() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2259,7 +2291,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_udp_connect() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2319,7 +2352,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_gethostname() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
@@ -2361,7 +2395,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_dns_rootserver_ping() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         //https://w3.cs.jmu.edu/kirkpams/OpenCSF/Books/csf/html/UDPSockets.html
@@ -2470,20 +2505,23 @@ pub mod net_tests {
             nameptr += dnsresp[nameptr] as usize + 1;
         }
 
-        //next we need to skip the null byte, qtype, and qclass to extract the main response payload
+        //next we need to skip the null byte, qtype, and qclass to extract the main
+        // response payload
         let recordptr =
             dnsresp.as_ptr().wrapping_offset(nameptr as isize + 5) as *const DnsRecordAT;
         let record = unsafe { &*recordptr };
         let addr = u32::from_be(record.addr.s_addr);
         assert_eq!(addr, 0x23ac5973); //check that what is returned is the actual ip, 35.172.89.115
-                                      //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is the actual ip, 35.172.89.115
+                                      //assert_eq!(record.addr.s_addr, 0x7359ac23); //check that what is returned is
+                                      // the actual ip, 35.172.89.115
 
         lindrustfinalize();
     }
 
     #[test]
     pub fn ut_lind_net_domain_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         //bind net zero test reformatted for domain sockets
@@ -2516,7 +2554,8 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        //creating a thread for the server so that the information can be sent between the two threads
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
         let thread = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             let mut socket2 = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
@@ -2674,7 +2713,8 @@ pub mod net_tests {
 
         assert_eq!(cage.connect_syscall(clientsockfd, &serversocket), 0);
 
-        //send the data with delays so that the server can process the information cleanly
+        //send the data with delays so that the server can process the information
+        // cleanly
         assert_eq!(
             cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
             100
@@ -2715,7 +2755,8 @@ pub mod net_tests {
     like accepting new connections, sending/receiving data, and modifying the event flags */
     #[test]
     pub fn ut_lind_net_epoll() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2763,7 +2804,8 @@ pub mod net_tests {
                 cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0),
                 4
             );
-            // Wait for data processing, give it a longer pause time so that it can process all of the data received
+            // Wait for data processing, give it a longer pause time so that it can process
+            // all of the data received
             interface::sleep(interface::RustDuration::from_millis(100));
             // Close the server socket and exit the thread
             assert_eq!(cage2.close_syscall(serversockfd), 0);
@@ -2813,7 +2855,8 @@ pub mod net_tests {
 
                 // Wait for events using epoll_wait_syscall
                 for event in &mut event_list[..num_events as usize] {
-                    // Check for any activity in the input socket and if there are events ready for reading
+                    // Check for any activity in the input socket and if there are events ready for
+                    // reading
                     if event.events & (EPOLLIN as u32) != 0 {
                         // If the socket returned was listener socket, then there's a new connection
                         if event.fd == serversockfd {
@@ -2833,7 +2876,8 @@ pub mod net_tests {
                                 events: EPOLLIN as u32,
                                 fd: newsockfd,
                             };
-                            // Error raised to indicate that the socket file descriptor couldn't be added to the epoll instance
+                            // Error raised to indicate that the socket file descriptor couldn't be
+                            // added to the epoll instance
                             assert_eq!(
                                 cage.epoll_ctl_syscall(epfd, EPOLL_CTL_ADD, newsockfd, &event),
                                 0
@@ -2888,7 +2932,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_writev() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -2917,7 +2962,8 @@ pub mod net_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        //creating a thread for the server so that the information can be sent between the two threads
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
         let thread = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             interface::sleep(interface::RustDuration::from_millis(100));

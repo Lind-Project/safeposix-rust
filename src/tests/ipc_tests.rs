@@ -10,7 +10,8 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_pipe() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let byte_chunk: usize = 131072; // 128 KB
@@ -73,7 +74,8 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_domain_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         //bind net zero test reformatted for domain sockets
@@ -106,7 +108,8 @@ pub mod ipc_tests {
         //forking the cage to get another cage with the same information
         assert_eq!(cage.fork_syscall(2), 0);
 
-        //creating a thread for the server so that the information can be sent between the two threads
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
         let thread = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
             let mut socket2 = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
@@ -263,7 +266,8 @@ pub mod ipc_tests {
 
         assert_eq!(cage.connect_syscall(clientsockfd, &serversocket), 0);
 
-        //send the data with delays so that the server can process the information cleanly
+        //send the data with delays so that the server can process the information
+        // cleanly
         assert_eq!(
             cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
             100
@@ -301,7 +305,8 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_socketpair() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -344,7 +349,8 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_writev() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);

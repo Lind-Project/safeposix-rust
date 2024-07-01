@@ -9,7 +9,9 @@
 //! This serves as the OS-in-a-process in the [Lind architecture](https://github.com/Lind-Project/lind-docs/tree/main).
 //! ## Overview
 //!
-//! A microvisor is a piece of software that lives within the same process as the cages. It provides a POSIX interface, allowing cages to believe they have their own operating system.
+//! A microvisor is a piece of software that lives within the same process as
+//! the cages. It provides a POSIX interface, allowing cages to believe they
+//! have their own operating system.
 //!
 //! With this crate, you can:
 //! - Fork and execute other cages.
