@@ -2,14 +2,19 @@
 //!
 //! ## Notes:
 //!
-//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
-//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
-//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
+//! - These calls are implementations of the [`Cage`] struct in the
+//!   [`safeposix`](crate::safeposix) crate. See the
+//!   [`safeposix`](crate::safeposix) crate for more information.
+//! They have been structed as different modules for better maintainability and
+//! related functions. since they are tied to the `Cage` struct This module's
+//! rustdoc may turn up empty, thus they have been explicitly listed below for
+//! documentation purposes.
 //!
 //!
 //! ## Networking System Calls
 //!
-//! This module contains all networking system calls that are being emulated/faked in Lind.
+//! This module contains all networking system calls that are being
+//! emulated/faked in Lind.
 //!
 //! - [socket_syscall](crate::safeposix::cage::Cage::socket_syscall)
 //! - [force_innersocket](crate::safeposix::cage::Cage::force_innersocket)
@@ -43,7 +48,8 @@
 
 #![allow(dead_code)]
 // Network related system calls
-// outlines and implements all of the networking system calls that are being emulated/faked in Lind
+// outlines and implements all of the networking system calls that are being
+// emulated/faked in Lind
 
 use super::fs_constants::*;
 use super::net_constants::*;
@@ -66,12 +72,12 @@ impl Cage {
         conn: ConnState,
     ) -> SocketDesc {
         //For blocking sockets, operations wait until completed.
-        //For non-blocking sockets, operations return immediately, even if the requested operation is not completed.
-        //To further understand blocking, refer to https://www.scottklement.com/rpg/socktut/nonblocking.html
+        //For non-blocking sockets, operations return immediately, even if the
+        // requested operation is not completed. To further understand blocking, refer to https://www.scottklement.com/rpg/socktut/nonblocking.html
         //
-        //O_CLOEXEC flag closes the fd pointing to the socket on the execution of a new program
-        //This flag is neccessary upon setting the fd to avoid race condition described in
-        //https://man7.org/linux/man-pages/man2/open.2.html under the O_CLOEXEC section
+        //O_CLOEXEC flag closes the fd pointing to the socket on the execution of a new
+        // program This flag is neccessary upon setting the fd to avoid race
+        // condition described in https://man7.org/linux/man-pages/man2/open.2.html under the O_CLOEXEC section
         let flags = if nonblocking { O_NONBLOCK } else { 0 } | if cloexec { O_CLOEXEC } else { 0 };
 
         let sockfd = SocketDesc {
@@ -82,7 +88,8 @@ impl Cage {
                 domain, socktype, protocol, conn, flags,
             ))),
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-        }; //currently on failure to create handle we create successfully but it's corrupted, change?
+        }; //currently on failure to create handle we create successfully but it's
+           // corrupted, change?
 
         return sockfd;
     }
@@ -104,9 +111,10 @@ impl Cage {
     }
 
     //An implicit bind refers to the automatic binding of a socket to an address
-    //and port by the system, without an explicit call to the bind() function by the
-    //programmer. This typically happens when the socket is used for client-side
-    //operations, such as when it initiates a connection to a server.
+    //and port by the system, without an explicit call to the bind() function by
+    // the programmer. This typically happens when the socket is used for
+    // client-side operations, such as when it initiates a connection to a
+    // server.
     fn _implicit_bind(&self, sockhandle: &mut SocketHandle, domain: i32) -> i32 {
         if sockhandle.localaddr.is_none() {
             //Assign a new local address to the socket handle
@@ -235,8 +243,8 @@ impl Cage {
         //fd into innersocket
         if let None = sockhandle.innersocket {
             //Create a new socket, as no sockhandle exists
-            //Socket creation rarely fails except for invalid parameters or extremely low-resources conditions
-            //Upon failure, process will panic
+            //Socket creation rarely fails except for invalid parameters or extremely
+            // low-resources conditions Upon failure, process will panic
             //Lind handles IPv4, IPv6, and Unix for domains
             let thissock =
                 interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
@@ -257,7 +265,8 @@ impl Cage {
                 //Failure occured upon setting a socket option
                 //Possible failures can be read at the man page linked above
                 //
-                // TODO: Possibly add errors instead of having a single panic for all errors ??? ** //
+                // TODO: Possibly add errors instead of having a single panic for all errors ???
+                // ** //
                 if sockret < 0 {
                     panic!("Cannot handle failure in setsockopt on socket creation");
                 }
@@ -268,15 +277,15 @@ impl Cage {
         };
     }
 
-    //TODO: bind_syscall can be merged with bind_inner to be one function as this is a remnant
-    //from a previous refactor
+    //TODO: bind_syscall can be merged with bind_inner to be one function as this
+    // is a remnant from a previous refactor
 
     /// ### Description
     ///
-    /// `bind_syscall` - when a socket is created with socket_syscall, it exists in a name
-    ///  space (address family) but has no address assigned to it. bind_syscall
-    ///  assigns the address specified by localaddr to the socket referred to
-    ///  by the file descriptor fd.
+    /// `bind_syscall` - when a socket is created with socket_syscall, it exists
+    /// in a name  space (address family) but has no address assigned to it.
+    /// bind_syscall  assigns the address specified by localaddr to the
+    /// socket referred to  by the file descriptor fd.
     ///
     /// ### Arguments
     ///
@@ -291,49 +300,46 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// * EACCES - The address is protected, and the user is not the
-    ///            superuser.
+    /// * EACCES - The address is protected, and the user is not the superuser.
     /// * EADDRINUSE - The given address is already in use.
-    /// * EADDRINUSE - (Internet domain sockets) The port number was specified as
-    ///                zero in the socket address structure, but, upon attempting
-    ///                to bind to an ephemeral port, it was determined that all
-    ///                port numbers in the ephemeral port range are currently in
-    ///                use.  See the discussion of
-    ///                /proc/sys/net/ipv4/ip_local_port_range ip(7).
+    /// * EADDRINUSE - (Internet domain sockets) The port number was specified
+    ///   as zero in the socket address structure, but, upon attempting to bind
+    ///   to an ephemeral port, it was determined that all port numbers in the
+    ///   ephemeral port range are currently in use.  See the discussion of
+    ///   /proc/sys/net/ipv4/ip_local_port_range ip(7).
     /// * EBADF - sockfd is not a valid file descriptor.
     /// * EINVAL - The socket is already bound to an address.
     /// * EINVAL - addrlen is wrong, or addr is not a valid address for this
-    ///            socket's domain.
+    ///   socket's domain.
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     ///
     /// The following errors are specific to UNIX domain (AF_UNIX)
     /// sockets:
     ///
     /// * EACCES - Search permission is denied on a component of the path
-    ///            prefix.  (See also path_resolution(7).)
+    ///   prefix.  (See also path_resolution(7).)
     /// * EADDRNOTAVAIL - A nonexistent interface was requested or the requested
-    ///                   address was not local.
+    ///   address was not local.
     /// * EFAULT - addr points outside the user's accessible address space.
-    /// * ELOOP - Too many symbolic links were encountered in resolving
-    ///           addr.
+    /// * ELOOP - Too many symbolic links were encountered in resolving addr.
     /// * ENAMETOOLONG - addr is too long.
     /// * ENOENT - A component in the directory prefix of the socket pathname
-    ///        does not exist.
+    ///   does not exist.
     /// * ENOMEM - Insufficient kernel memory was available.
     /// * ENOTDIR - A component of the path prefix is not a directory.
     /// * EROFS - The socket inode would reside on a read-only filesystem.
-    ///
-    // ** should this comment be left ?? : we assume we've converted into a RustSockAddr in the dispatcher
+    // ** should this comment be left ?? : we assume we've converted into a
+    // RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
 
     //Direct to appropriate helper function based on the domain of the socket
     //to bind socket with local address
-    //For INET sockets, create and bind the inner socket which is a kernel socket noted by raw_sys_fd
-    //For Unix sockets, setup unix info field and bind to local address
-    //On success, zero is returned.  On error, -errno is returned, and
-    //errno is set to indicate the error.
+    //For INET sockets, create and bind the inner socket which is a kernel socket
+    // noted by raw_sys_fd For Unix sockets, setup unix info field and bind to
+    // local address On success, zero is returned.  On error, -errno is
+    // returned, and errno is set to indicate the error.
     fn bind_inner_socket(
         &self,
         sockhandle: &mut SocketHandle,
@@ -405,14 +411,16 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
-                //FS_METADATA contains information about the file system
+                //this may end up skipping an inode number in the case of ENOTDIR, but that's
+                // not catastrophic FS_METADATA contains information about the
+                // file system
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed);
-                //fetch_add returns the previous value, which is the inode number we want, while incrementing the nextinode value as well
-                //The ordering argument Relaxed guarantees the memory location is atomic, which is all that is neccessary for a counter
-                //Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
+                //fetch_add returns the previous value, which is the inode number we want,
+                // while incrementing the nextinode value as well The ordering
+                // argument Relaxed guarantees the memory location is atomic, which is all that
+                // is neccessary for a counter Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
 
                 let newinode;
 
@@ -767,7 +775,8 @@ impl Cage {
         }
         let remotepathbuf = normpath(convpath(remoteaddr.path()), self);
 
-        // try to get and hold reference to the key-value pair, so other process can't alter it
+        // try to get and hold reference to the key-value pair, so other process can't
+        // alter it
         let path_ref = NET_METADATA.domsock_paths.get(&remotepathbuf);
         // if the entry doesn't exist, return an error.
         if path_ref.is_none() {
@@ -1058,7 +1067,8 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    // to be able to send here we either need to be fully connected,
+                                    // or connected for write only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1146,7 +1156,8 @@ impl Cage {
                                 };
                                 drop(unlocked_fd);
                                 drop(sockhandle);
-                                //send from a udp socket is just shunted off to sendto with the remote address set
+                                //send from a udp socket is just shunted off to sendto with the
+                                // remote address set
                                 return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
                             }
 
@@ -1241,7 +1252,8 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the state here
+        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the
+        // state here
         if sockhandle.state == ConnState::INPROGRESS
             && sockhandle
                 .innersocket
@@ -1264,16 +1276,17 @@ impl Cage {
         let mut newbuflen = buflen;
         let mut newbufptr = buf;
 
-        //if we have peeked some data before, fill our buffer with that data before moving on
+        //if we have peeked some data before, fill our buffer with that data before
+        // moving on
         if !sockhandle.last_peek.is_empty() {
             let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
             interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
             newbuflen -= bytecount;
             newbufptr = newbufptr.wrapping_add(bytecount);
 
-            //if we're not still peeking data, consume the data we peeked from our peek buffer
-            //and if the bytecount is more than the length of the peeked data, then we remove the entire
-            //buffer
+            //if we're not still peeking data, consume the data we peeked from our peek
+            // buffer and if the bytecount is more than the length of the peeked
+            // data, then we remove the entire buffer
             if flags & MSG_PEEK == 0 {
                 let len = sockhandle.last_peek.len();
                 sockhandle
@@ -1307,13 +1320,15 @@ impl Cage {
                         return (buflen - buflenleft) as i32;
                     }
                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
-                        // with blocking sockets, we return EAGAIN here to check for cancellation, then return to reading
+                        // with blocking sockets, we return EAGAIN here to check for cancellation,
+                        // then return to reading
                         if self
                             .cancelstatus
                             .load(interface::RustAtomicOrdering::Relaxed)
                         {
-                            // if the cancel status is set in the cage, we trap around a cancel point
-                            // until the individual thread is signaled to cancel itself
+                            // if the cancel status is set in the cage, we trap around a cancel
+                            // point until the individual thread is
+                            // signaled to cancel itself
                             loop {
                                 interface::cancelpoint(self.cageid)
                             }
@@ -1364,7 +1379,8 @@ impl Cage {
                                     .cancelstatus
                                     .load(interface::RustAtomicOrdering::Relaxed)
                                 {
-                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                    // if the cancel status is set in the cage, we trap around a
+                                    // cancel point
                                     // until the individual thread is signaled to cancel itself
                                     loop {
                                         interface::cancelpoint(self.cageid);
@@ -1441,14 +1457,16 @@ impl Cage {
                                 .cancelstatus
                                 .load(interface::RustAtomicOrdering::Relaxed)
                             {
-                                // if the cancel status is set in the cage, we trap around a cancel point
-                                // until the individual thread is signaled to cancel itself
+                                // if the cancel status is set in the cage, we trap around a cancel
+                                // point until the individual thread
+                                // is signaled to cancel itself
                                 loop {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
                             interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
-                            continue; //received EAGAIN on blocking socket, try again
+                            continue; //received EAGAIN on blocking socket, try
+                                      // again
                         }
                         return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
                     }
@@ -1866,8 +1884,10 @@ impl Cage {
 
                     if let Some(ds) = dsconnobj {
                         // we loop here to accept the connection
-                        // if we get a connection object from the accept table, we complete the connection and set up the address and pipes
-                        // if theres no object, we retry, except in the case of non-blocking accept where we return EAGAIN
+                        // if we get a connection object from the accept table, we complete the
+                        // connection and set up the address and pipes
+                        // if theres no object, we retry, except in the case of non-blocking accept
+                        // where we return EAGAIN
                         if let Some(connvar) = ds.get_cond_var() {
                             if !connvar.broadcast() {
                                 drop(ds);
@@ -1960,9 +1980,11 @@ impl Cage {
                 );
 
                 loop {
-                    // we loop here so we can cancel blocking accept, see comments below and in Socket::new in interface/comm.rs
+                    // we loop here so we can cancel blocking accept, see comments below and in
+                    // Socket::new in interface/comm.rs
 
-                    // if we got a pending connection in select/poll/whatever, return that here instead
+                    // if we got a pending connection in select/poll/whatever, return that here
+                    // instead
                     let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
                     let porttuple =
                         mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
@@ -2015,7 +2037,8 @@ impl Cage {
                                         .cancelstatus
                                         .load(interface::RustAtomicOrdering::Relaxed)
                                     {
-                                        // if the cancel status is set in the cage, we trap around a cancel point
+                                        // if the cancel status is set in the cage, we trap around a
+                                        // cancel point
                                         // until the individual thread is signaled to cancel itself
                                         loop {
                                             interface::cancelpoint(self.cageid);
@@ -2095,7 +2118,8 @@ impl Cage {
         };
 
         let mut retval = 0;
-        // in the loop below, we always read from original fd_sets, but make updates to the new copies
+        // in the loop below, we always read from original fd_sets, but make updates to
+        // the new copies
         let new_readfds = &mut interface::FdSet::new();
         let new_writefds = &mut interface::FdSet::new();
         loop {
@@ -2117,7 +2141,8 @@ impl Cage {
             }
 
             // 3. iterate thru exceptfds
-            // currently we don't really do select on execptfds, we just check if those fds are valid
+            // currently we don't really do select on execptfds, we just check if those fds
+            // are valid
             if let Some(exceptfds_ref) = exceptfds.as_ref() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
@@ -2201,7 +2226,8 @@ impl Cage {
                                     let dsconnobj =
                                         NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() {
-                                        // we have a connecting domain socket, return as readable to be accepted
+                                        // we have a connecting domain socket, return as readable to
+                                        // be accepted
                                         new_readfds.set(fd);
                                         *retval += 1;
                                     }
@@ -2216,7 +2242,8 @@ impl Cage {
                                 }
                             }
                             AF_INET | AF_INET6 => {
-                                // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
+                                // here we simply record the inet fd into inet_fds and the tuple
+                                // list for using kernel_select
                                 if sockfdobj.rawfd < 0 {
                                     continue;
                                 }
@@ -2730,7 +2757,8 @@ impl Cage {
         }
     }
 
-    //we only return the default host name because we do not allow for the user to change the host name right now
+    //we only return the default host name because we do not allow for the user to
+    // change the host name right now
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
         if length < 0 {
             return syscall_error(
@@ -2794,8 +2822,9 @@ impl Cage {
 
                 let mut mask: i16 = 0;
 
-                //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
-                // NOTE that the nfds argument is highest fd + 1
+                //0 essentially sets the timeout to the max value allowed (which is almost
+                // always more than enough time) NOTE that the nfds argument is
+                // highest fd + 1
                 let selectret = Self::select_syscall(
                     &self,
                     fd + 1,
@@ -2828,7 +2857,8 @@ impl Cage {
     }
 
     pub fn _epoll_object_allocator(&self) -> i32 {
-        //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
+        //seems to only be called in functions that don't have a filedesctable lock, so
+        // not passing the lock.
 
         let epollobjfd = Epoll(EpollDesc {
             mode: 0000,
@@ -2888,8 +2918,8 @@ impl Cage {
                 //now that we know that the types are all good...
                 match op {
                     EPOLL_CTL_DEL => {
-                        //since remove returns the value at the key and the values will always be EpollEvents,
-                        //I am using this to optimize the code
+                        //since remove returns the value at the key and the values will always be
+                        // EpollEvents, I am using this to optimize the code
                         epollfdobj.registered_fds.remove(&fd).unwrap().1;
                     }
                     EPOLL_CTL_MOD => {
@@ -3088,7 +3118,7 @@ impl Cage {
     /// On success, zero is returned. Otherwise, errors or panics are returned for
     /// different scenarios.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
     /// * EAFNOSUPPORT - The specified address family is not supported on this machine.
     /// * EOPNOTSUPP - The specified protocol does not support creation of socket pairs.
     /// * EINVAL - The specified flag is not valid
@@ -3203,8 +3233,8 @@ impl Cage {
         return 0;
     }
 
-    // all this does is send the net_devs data in a string to libc, where we will later parse and
-    // alloc into getifaddrs structs
+    // all this does is send the net_devs data in a string to libc, where we will
+    // later parse and alloc into getifaddrs structs
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
         if NET_IFADDRS_STR.len() < count {
             interface::fill(

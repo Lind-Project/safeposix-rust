@@ -18,13 +18,15 @@ pub fn update_dir_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lin
     if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("following symlink at {:?} on host fs", hostfilepath);
-        } //if read_link succeeds it's a symlink, whose destination must exist because of the nature of the .exists function
+        } //if read_link succeeds it's a symlink, whose destination must exist
+          // because of the nature of the .exists function
     } else {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
         return;
     }
 
-    //update directly if not a directory on the host, otherwise recursively handle children
+    //update directly if not a directory on the host, otherwise recursively handle
+    // children
     if hostfilepath.is_file() {
         update_into_lind(cage, hostfilepath, lindfilepath);
     } else {
@@ -90,7 +92,8 @@ fn update_into_lind(cage: &Cage, hostfilepath: &interface::RustPath, lindfilepat
         false
     };
 
-    //if they are not the same file, remove the lind file and replace it with the host file
+    //if they are not the same file, remove the lind file and replace it with the
+    // host file
     if !samefile {
         if lind_exists {
             cage.unlink_syscall(lindfilepath);
@@ -114,13 +117,15 @@ pub fn cp_dir_into_lind(
     if hostfilepath.exists() {
         if let Ok(_) = hostfilepath.read_link() {
             println!("following symlink at {:?} on host fs", hostfilepath);
-        } //if read_link succeeds it's a symlink, whose destination must exist because of the nature of the .exists function
+        } //if read_link succeeds it's a symlink, whose destination must exist
+          // because of the nature of the .exists function
     } else {
         eprintln!("Cannot locate file on host fs: {:?}", hostfilepath);
         return;
     }
 
-    //update directly if not a directory on the host, otherwise recursively handle children
+    //update directly if not a directory on the host, otherwise recursively handle
+    // children
     if hostfilepath.is_file() {
         cp_into_lind(cage, hostfilepath, lindfilepath, create_missing_dirs);
     } else if hostfilepath.is_dir() {
@@ -159,7 +164,8 @@ fn cp_into_lind(
 
     let lindtruepath = normpath(convpath(lindfilepath), cage);
 
-    //if a directory in the lindfilepath does not exist in the lind file system, create it!
+    //if a directory in the lindfilepath does not exist in the lind file system,
+    // create it!
     let mut ancestor = interface::RustPathBuf::from("/");
     for component in lindtruepath.parent().unwrap().components() {
         ancestor.push(component);
@@ -179,8 +185,8 @@ fn cp_into_lind(
             return;
         }
 
-        //check whether we are supposed to create missing directories, and whether we'd be
-        //clobbering anything to do so (if so error out)
+        //check whether we are supposed to create missing directories, and whether we'd
+        // be clobbering anything to do so (if so error out)
         if create_missing_dirs {
             if cage.mkdir_syscall(ancestor.to_str().unwrap(), S_IRWXA) != 0 {
                 //let's not mirror stat data
@@ -211,8 +217,9 @@ fn cp_into_lind(
     let veclen = filecontents.len();
     let mut writtenlen: usize = 0;
 
-    //on Linux, write() (and similar system calls) will transfer at most 0x7ffff000 (2,147,479,552) bytes
-    //dividing filecontents into chunks of 0x7ffff000 (2,147,479,552) bytes and writing each chunk
+    //on Linux, write() (and similar system calls) will transfer at most 0x7ffff000
+    // (2,147,479,552) bytes dividing filecontents into chunks of 0x7ffff000
+    // (2,147,479,552) bytes and writing each chunk
     for chunk in filecontents.chunks(LINUX_MAX_RW_COUNT) {
         writtenlen += cage.write_syscall(lindfd, chunk.as_ptr(), chunk.len()) as usize;
     }
