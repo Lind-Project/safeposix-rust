@@ -3128,14 +3128,15 @@ impl Cage {
                         //the same inode to remove it from the inodetable
                         drop(inodeobj);
 
+                        //`remove_from_parent_dir()` helper function returns 0 if an 
+                        //entry corresponding to the specified directory was 
+                        //successfully removed from the filename-inode dictionary 
+                        //of its parent.
+                        //If the parent directory does not grant write permission,
+                        //`EPERM` is returned.
+                        //As a sanity check, if the parent inode specifies a
+                        //non-directory type, the funciton panics
                         let removal_result =
-                            //This helper function returns 0 if an entry corresponding
-                            //to the specified directory was successfully removed from 
-                            //the filename-inode dictionary of its parent
-                            //If the parent directory does not grant write permission,
-                            //`EPERM` is returned
-                            //As a sanity check, if the parent inode specifies a
-                            //non-directory type, the funciton panics
                             Self::remove_from_parent_dir(parent_inodenum, &truepath);
                         if removal_result != 0 {
                             return removal_result;

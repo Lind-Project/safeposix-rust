@@ -1302,15 +1302,18 @@ pub mod fs_tests {
 
         let cage = interface::cagetable_getref(1);
 
-        //We create a new parent directory `/parent_dir` without any write permission
-        //flags and its child directory '/parent_dir/dir` with all write
-        //permision flags, thus calling `rmdir_syscall()`on the child directory 
+        //We create a new parent directory `/parent_dir` with all write permission
+        //flags (to be able to create its child directory) and its child directory
+        //'/parent_dir/dir` with all write permision flags.
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        //Now, we change the parent directories write permission flags to 0,
+        //thus calling `rmdir_syscall()`on the child directory 
         //should return `Directory does not grant write permission` error
         //because the directory cannot be removed if its parent directory
         //does not grant write permission
-        let path = "/parent_dir/dir";
-        assert_eq!(cage.mkdir_syscall("/parent_dir", 0), 0);
-        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(cage.chmod_syscall("/parent_dir", S_IRUSR | S_IRGRP | S_IROTH), 0);
         assert_eq!(cage.rmdir_syscall(path), -(Errno::EPERM as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
