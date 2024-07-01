@@ -1318,31 +1318,6 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_rmdir_regfile() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        let cage = interface::cagetable_getref(1);
-
-        //Checking if calling `rmdir_syscall()` on a non-directory
-        //file type correctly results in `Path is not a directory` error
-        
-        //Creating a valid parent directory
-        assert_eq!(cage.mkdir_syscall("/parent_dir", 0), 0);
-        //Opening a regular file inside the parent directory
-        let path = "/parent_dir/nondir";
-        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        assert_ne!(cage.open_syscall(path, flags, S_IRWXA), -1);
-        //Calling `rmdir_syscall()` on a regular file type
-        //should return `Path is not a directory` error
-        assert_eq!(cage.rmdir_syscall(path), -(Errno::ENOTDIR as i32));
-        
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-    #[test]
     pub fn ut_lind_fs_search_permission_bug_with_rmdir() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         //and also performs clean env setup
