@@ -933,6 +933,12 @@ impl Cage {
     /// only for the file. It simplifies the process of creating a new file or
     /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
     /// O_WRONLY flags.
+    /// There are generally two cases which occur when this syscall happens:
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
+    /// a new file is created at the given location and a new file descriptor is 
+    /// created and returned. 
+    /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
+    /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
     /// ### Function Arguments
     ///
