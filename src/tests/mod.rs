@@ -37,7 +37,7 @@ mod setup {
 
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let thelock = TESTMUTEX.lock().unwrap();
-      
+
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 
         //setup the lind filesystem, creates a clean filesystem for each test
@@ -89,7 +89,7 @@ mod setup {
         //return the lock to the caller which holds it till the end of the test.
         thelock
     }
-  
+
     fn set_panic_hook() {
         let orig_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic_info| {
