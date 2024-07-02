@@ -2157,4 +2157,65 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
+    #[test]
+    pub fn ut_lind_fs_creat_new_file() {
+        // Since this call is almost similar to open_syscall, and we have
+        // covered all the possible test scenarios for open_syscall above. So,
+        // just testing the basic working flow for the creat_sycall.
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a file and validate the size of it.
+        let path = "/creatFile";
+        let fd = cage.creat_syscall(path, S_IRWXA);
+        assert!(fd > 0);
+
+        let mut statdata = StatData::default();
+
+        // The size of the file should be 0
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        assert_eq!(statdata.st_size, 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_creat_truncate_existing_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let path = "/creatFile";
+        // Create a new file
+        let fd = cage.creat_syscall(path, S_IRWXA);
+
+        // Write a string to the newly opened file of size 12
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Get the stat data for the file and check for file attributes
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+
+        // Validate the size of the file to be 12
+        assert_eq!(statdata.st_size, 12);
+
+        // Call the function on the existing file, which should truncate
+        // the file size to 0.
+        let _fd2 = cage.creat_syscall(path, S_IRWXA);
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+
+        // Validate the size of the file to be 0 now as should be truncated
+        assert_eq!(statdata.st_size, 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 }
