@@ -1412,34 +1412,80 @@ pub mod fs_tests {
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        //and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
         let cage = interface::cagetable_getref(1);
-        let needed = "/subdir1\0".as_bytes().to_vec().len();
 
-        let needed_u32: u32 = needed as u32;
-
-        let mut buf = vec![0u8; needed];
+        //Checking if retrieving the current working directory
+        //`/newcwd1` by passing a string long enough to store
+        //the directory succeeds
+        //`newcwdsize` is the size of the string needed to store the new
+        //current woring directory `/newcwd1`
+        let newcwdsize = "/newcwd1\0".as_bytes().to_vec().len();
+        let newcwdsize_u32: u32 = newcwdsize as u32;
+        //Creating the new current working directory and checking if it exists
+        cage.mkdir_syscall("/newcwd1", S_IRWXA);
+        assert_eq!(cage.access_syscall("newcwd1", F_OK), 0);
+        //Creating a string large enough to store the new current
+        //working directory and filling it with 0's
+        let mut buf = vec![0u8; newcwdsize];
         let bufptr: *mut u8 = &mut buf[0];
 
+        //First, we change to the root directory and call `getcwd_syscall()`
+        //to check if the root current working directory is successfully
+        //retrieved
         assert_eq!(cage.chdir_syscall("/"), 0);
-        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
-        assert_eq!(cage.getcwd_syscall(bufptr, 1), -(Errno::ERANGE as i32));
         assert_eq!(cage.getcwd_syscall(bufptr, 2), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "/\0\0\0\0\0\0\0\0");
 
-        cage.mkdir_syscall("/subdir1", S_IRWXA);
-        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
-        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        //Now, we change to the newly created directory and check if it is
+        //successfully retrieved as a new current working directory
+        assert_eq!(cage.chdir_syscall("/newcwd1"), 0);
+        assert_eq!(cage.getcwd_syscall(bufptr, newcwdsize_u32), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "/newcwd1\0");
 
-        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_getcwd_invalid_args() {
+        //Acquiring a lock on TESTMUTEX prevents other tests from running
+        //concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        //`/newcwd2` is a valid directory that we will create to check
+        //if calling `getcwd_syscall()` with invalid arguments
+        //correctly returns the required errors.
+        //`newcwdsize` is the size of the string needed to store the new
+        //current working directory `/newcwd1`
+        let newcwdsize = "/newcwd2\0".as_bytes().to_vec().len();
+        let newcwdsize_u32: u32 = newcwdsize as u32;
+        //Creating the new current working directory, checking if it exists
+        //and changing to it
+        cage.mkdir_syscall("/newcwd2", S_IRWXA);
+        assert_eq!(cage.access_syscall("newcwd2", F_OK), 0);
+        assert_eq!(cage.chdir_syscall("newcwd2"), 0);
+
+        //Checking if passing a valid string pointer and a size of 0 to
+        //`getcwd_syscall()` correctly results in `The size argument is zero and
+        //buf is not a null pointer` error
+        //Creating a string large enough to store the new current
+        //working directory and filling it with 0's
+        let mut buf = vec![0u8; newcwdsize];
+        let bufptr: *mut u8 = &mut buf[0];
+        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::EINVAL as i32));
+
+        //Checking if passing a valid string pointer and a non-zero size smaller
+        //than the size of the current working directory plus the terminating null
+        //character to `getcwd_syscall()` correctly results in `The bufsize argument
+        //is less than the length of the absolute pathname of the working directory,
+        //including the terminating null byte` error
         assert_eq!(
-            cage.getcwd_syscall(bufptr, needed_u32 - 1),
+            cage.getcwd_syscall(bufptr, newcwdsize_u32 - 1),
             -(Errno::ERANGE as i32)
         );
-        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32), 0);
-        assert_eq!(std::str::from_utf8(&buf).unwrap(), "/subdir1\0");
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();

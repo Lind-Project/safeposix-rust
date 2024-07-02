@@ -2253,24 +2253,15 @@ impl Cage {
                         let inodenum = ui.inode;
                         if let Some(sendpipe) = ui.sendpipe.as_ref() {
                             sendpipe.decr_ref(O_WRONLY);
-                            // we're closing the last write end, lets set eof
-                            if sendpipe.get_write_ref() == 0 {
-                                sendpipe.set_eof();
-                            }
                             //last reference, lets remove it
-                            if (sendpipe.get_write_ref() as u64) + (sendpipe.get_read_ref() as u64)
-                                == 0
-                            {
+                            if sendpipe.is_pipe_closed() {
                                 ui.sendpipe = None;
                             }
                         }
                         if let Some(receivepipe) = ui.receivepipe.as_ref() {
                             receivepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
-                            if (receivepipe.get_write_ref() as u64)
-                                + (receivepipe.get_read_ref() as u64)
-                                == 0
-                            {
+                            if receivepipe.is_pipe_closed() {
                                 ui.receivepipe = None;
                             }
                         }
@@ -2292,15 +2283,9 @@ impl Cage {
                     }
                 }
                 Pipe(ref pipe_filedesc_obj) => {
-                    let pipe = &pipe_filedesc_obj.pipe;
-                    pipe.decr_ref(pipe_filedesc_obj.flags);
-
-                    if pipe.get_write_ref() == 0
-                        && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY
-                    {
-                        // we're closing the last write end, lets set eof
-                        pipe.set_eof();
-                    }
+                    // lets decrease the pipe objects internal ref count for the corresponding end
+                    // depending on what flags are set
+                    pipe_filedesc_obj.pipe.decr_ref(pipe_filedesc_obj.flags);
                 }
                 File(ref normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -2394,7 +2379,7 @@ impl Cage {
             return inner_result;
         }
 
-        //removing inode from fd table
+        //removing descriptor from fd table
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if unlocked_fd.is_some() {
@@ -3515,20 +3500,84 @@ impl Cage {
         }
     }
 
-    //------------------PIPE SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `pipe_syscall()` creates a pipe, a unidirectional data channel that
+    /// can be used for interprocess communication.
+    ///
+    /// ### Arguments
+    ///
+    /// The `pipe_syscall()` accepts one argument:
+    /// * `pipefd` - The array pipefd is used to return two file descriptors
+    ///   referring to the ends of the pipe.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENFILE` etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, only two errors are supposrted:
+    /// * `ENFILE` - no available file descriptors
+    ///
+    /// ### Panics
+    ///
+    /// A panic can occur if there is no lock on the file descriptor index,
+    /// which should not be possible, or if somehow the match statement
+    /// finds an invalid flag
+    ///
+    /// To learn more about the syscall, flags, and error values, see
+    /// [pipe(2)](https://man7.org/linux/man-pages/man2/pipe.2.html)
     pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
         self.pipe2_syscall(pipefd, 0)
     }
 
+    /// ### Description
+    ///
+    /// The `pipe2_syscall()` creates a pipe, a unidirectional data channel that
+    /// can be used for interprocess communication. This syscall adds
+    /// additional flags to the pipe syscall. We only implement CLOEXEC and
+    /// NONBLOCK.
+    ///
+    /// ### Arguments
+    ///
+    /// The `pip2e_syscall()` accepts two arguments:
+    /// * `pipefd` - The array pipefd is used to return two file descriptors
+    ///   referring to the ends of the pipe.
+    /// * `flags` - Flags that can be pre-set on the pipe file descriptors such
+    ///   as CLOEXEC and NONBLOCK.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENFILE` etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, the only error supported is:
+    /// * `ENFILE` - no available file descriptors
+    ///
+    /// ### Panics
+    ///
+    /// A panic can occur if there is no lock on the file descriptor index,
+    /// which should not be possible, or if somehow the match statement
+    /// finds an invalid flag
+    ///
+    /// To learn more about the syscall, flags, and error values, see
+    /// [pipe(2)](https://man7.org/linux/man-pages/man2/pipe.2.html)
     pub fn pipe2_syscall(&self, pipefd: &mut PipeArray, flags: i32) -> i32 {
         let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
-        let pipe = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
+        // lets make a standard pipe of 65,536 bytes
+        let pipe =
+            interface::RustRfc::new(interface::EmulatedPipe::new_with_capacity(PIPE_CAPACITY));
 
-        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
-        // append each to pipefds list
-
+        // now lets get an fd for each end of the pipe and set flags to RD_ONLY and
+        // WR_ONLY append each to pipefds list
         let accflags = [O_RDONLY, O_WRONLY];
         for accflag in accflags {
             let (fd, guardopt) = self.get_next_fd(None);
@@ -3537,12 +3586,16 @@ impl Cage {
             }
             let fdoption = &mut *guardopt.unwrap();
 
+            // insert this pipe descriptor into the fd slot
             let _insertval = fdoption.insert(Pipe(PipeDesc {
                 pipe: pipe.clone(),
+                // lets add the additional flags to read/write permission flag and add that to the
+                // fd
                 flags: accflag | actualflags,
                 advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
             }));
 
+            // now lets return the fd numbers in the pipefd array
             match accflag {
                 O_RDONLY => {
                     pipefd.readfd = fd;
@@ -3550,7 +3603,7 @@ impl Cage {
                 O_WRONLY => {
                     pipefd.writefd = fd;
                 }
-                _ => panic!("How did you get here."),
+                _ => panic!("Corruption: Invalid flag"),
             }
         }
 
@@ -3661,20 +3714,69 @@ impl Cage {
         }
     }
 
-    //------------------------------------GETCWD SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `getcwd_syscall()` function places an absolute pathname of the
+    /// current working directory in the string pointed to by buf.
+    ///
+    /// ### Arguments
+    ///
+    /// The `getcwd_syscall()` accepts two arguments:
+    /// * `buf` - a pointer to the string into which the current working
+    /// directory is stored
+    /// * `bufsize` - the length of the string `buf`
+    ///
+    /// ### Returns
+    ///
+    /// The standard requires returning the pointer to the string that
+    /// stores the current working directory. In the current implementation,
+    /// 0 is returned on success, while returning the pointer to the string is
+    /// handled inside glibc.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EINVAL, ERANGE, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the bufsize argument is zero and buf is not a NULL pointer.
+    /// * `ERANGE` - the bufsize argument is less than the length of the
+    /// absolute pathname of the working directory, including the
+    /// terminating null byte.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this function panics.
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [getcwd(3)](https://man7.org/linux/man-pages/man3/getcwd.3.html)
 
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-        let mut bytes: Vec<u8> = self.cwd.read().to_str().unwrap().as_bytes().to_vec();
-        bytes.push(0u8); //Adding a null terminator to the end of the string
-        let length = bytes.len();
-
-        if (bufsize as usize) < length {
-            return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+        //Here we only check if the size of the specified
+        //string is 0. Null pointers are handled beforehand
+        //by nacl and `types.rs`.
+        if (bufsize as usize) == 0 {
+            return syscall_error(Errno::EINVAL, "getcwd", "size of the specified buffer is 0");
+        } else {
+            //Cages store their current working directory as path buffers.
+            //To use the obtained directory as a string, a null terminator needs
+            //to be added to the path.
+            let mut bytes: Vec<u8> = self.cwd.read().to_str().unwrap().as_bytes().to_vec();
+            bytes.push(0u8); //Adding a null terminator to the end of the string
+            let length = bytes.len();
+            //The bufsize argument should be at least the length of the absolute
+            //pathname of the working directory, including the terminating null byte.
+            if (bufsize as usize) < length {
+                return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+            }
+            //It is expected that only the first `bufsize` bytes of the `buf` string
+            //will be written into. The `fill()` function ensures this by taking
+            //a mutable slice of length `bufsize` to the string pointed to by `buf`
+            //and inserting the obtained current working directory into that slice,
+            //thus prohibiting writing into the remaining bytes of the string.
+            interface::fill(buf, length, &bytes);
+            //returning 0 on success
+            0
         }
-
-        interface::fill(buf, length, &bytes);
-
-        0 //getcwd has succeeded!;
     }
 
     //------------------SHMHELPERS----------------------
@@ -4448,8 +4550,8 @@ impl Cage {
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until
             // the
-            // semaphore becomes available. The`lock` method internally
-            // decrements the semaphore value.
+            ///semaphore becomes available. The`lock` method internally
+            /// decrements the semaphore value.
             // The lock fun is located in misc.rs
             semaphore.lock();
         } else {
