@@ -3194,6 +3194,56 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SOCKETPAIR SYSCALL------------------
+    /// ### Description
+    /// The `socketpair_syscall()` call creates an unnamed pair of connected
+    /// sockets in the specified domain, of the specified type, and using
+    /// the optionally specified protocol.
+    /// The file descriptors used in referencing the new sockets are returned
+    /// in sv.sock1 and sv.sock2. The two sockets are indistinguishable.
+    /// ### Function Arguments
+    /// The `socketpair_syscall()` receives four arguments:
+    /// * `domain` -  The domain argument specifies a communication domain; this
+    ///   selects the protocol family which will be used for communication.
+    ///   Currently supported domains are AF_UNIX, AF_INET and AF_INET6.
+    /// * `socktype` - specifies the communication semantics. Currently defined
+    ///   types are:
+    ///                1. SOCK_STREAM Provides sequenced, reliable, two-way,
+    ///                   connection-based byte streams.  An out-of-band data
+    ///                   transmission mechanism may be supported.
+    ///                2. SOCK_DGRAM Supports datagrams (connectionless,
+    ///                   unreliable messages of a fixed maximum length). The
+    ///                   type argument serves a second purpose: in addition to
+    ///                   specifying a socket type, it may include the bitwise
+    ///                   OR of any of the following values, to modify the
+    ///                   behavior of the socket:
+    ///                1. SOCK_NONBLOCK Set the O_NONBLOCK file status flag on
+    ///                   the open file description referred to by the new file
+    ///                   descriptor.
+    ///                2. SOCK_CLOEXEC Set the close-on-exec flag on the new
+    ///                   file descriptor.
+    /// * `protocol` - The protocol specifies a particular protocol to be used
+    ///   with the socket. Currently only support the default protocol
+    ///   (IPPROTO_TCP).
+    /// * `sv` -  The file descriptors used in referencing the new sockets are
+    ///   returned in sv.sock1 and sv.sock2. The two sockets are
+    ///   indistinguishable.
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EAFNOSUPPORT - The specified address family is not supported on this
+    ///   machine.
+    /// * EOPNOTSUPP - The specified protocol does not support creation of
+    ///   socket pairs.
+    /// * EINVAL - The specified flag is not valid
+    /// * ENFILE - no enough file descriptors can be assigned
+    ///
+    /// ### Panics
+    /// No Panic is expected for this syscall.
+
     // Because socketpair needs to spawn off a helper thread to connect the two ends
     // of the socket pair, and because that helper thread, along with the main
     // thread, need to access the cage to call methods (syscalls) of it, and because
@@ -3208,14 +3258,22 @@ impl Cage {
         protocol: i32,
         sv: &mut interface::SockPair,
     ) -> i32 {
-        let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol };
+        let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol }; // only support protocol of 0 currently
+                                                                              // BUG: current implementation of socketpair creates two sockets and bind to an
+                                                                              // unique address.
+                                                                              // But according to standard, the sockets created from socketpair should not
+                                                                              // bind to any address
+
         // firstly check the parameters
+        // socketpair should always be a AF_UNIX TCP socket
         if domain != AF_UNIX {
             return syscall_error(
                 Errno::EOPNOTSUPP,
                 "socketpair",
                 "Linux socketpair only supports AF_UNIX aka AF_LOCAL domain.",
             );
+        // socket type is stored at the lowest 3 bits
+        // so we and it with 0x7 to retrieve it
         } else if socktype & 0x7 != SOCK_STREAM || newprotocol != IPPROTO_TCP {
             return syscall_error(
                 Errno::EOPNOTSUPP,
@@ -3224,6 +3282,12 @@ impl Cage {
             );
         }
 
+        // check if socktype contains any invalid flag bits
+        if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
+            return syscall_error(Errno::EINVAL, "socket", "Invalid combination of flags");
+        }
+
+        // get the flags
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
@@ -3248,6 +3312,7 @@ impl Cage {
         let sock2fd = this._socket_inserter(Socket(sock2fdobj.clone()));
 
         // assign local addresses and connect
+        // we are not supposed to assign and bind address to socketpair sockets
         let sock1tmp = sock1fdobj.handle.clone();
         let sock2tmp = sock2fdobj.handle.clone();
         let mut sock1handle = sock1tmp.write();
@@ -3274,6 +3339,9 @@ impl Cage {
 
         sv.sock1 = sock1fd;
         sv.sock2 = sock2fd;
+
+        // since socket file should not exist in the first place
+        // the code below is supposed to be removed as well
 
         // we need to increment the refcount of the sockets we created
         // reason: in bind_inner_socket, we added entries to the inode table

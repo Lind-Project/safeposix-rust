@@ -2120,10 +2120,13 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_socketpair() {
+        // this test is used for testing a generic use case of socketpair
+        // test involves creating a TCP socketpair let two threads communicate
+        // with the socketpair
+
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
@@ -2133,6 +2136,7 @@ pub mod net_tests {
         let cage2 = cage.clone();
 
         let thread = interface::helper_thread(move || {
+            // this thread first receives the message, then send the message
             let mut buf = sizecbuf(10);
             loop {
                 let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
@@ -2140,36 +2144,263 @@ pub mod net_tests {
                     break; // if the error was EINTR, retry the syscall
                 }
             }
+            // check if received message is correct
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
 
-            interface::sleep(interface::RustDuration::from_millis(30));
+            // send message to peer
             assert_eq!(
                 cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0),
                 15
             );
         });
 
-        assert_eq!(
-            cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
-            4
-        );
+        let cage3 = cage.clone();
+        let thread_2 = interface::helper_thread(move || {
+            // this thread first send the message, then receive the message
+            assert_eq!(
+                cage3.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
+                4
+            );
 
-        let mut buf2 = sizecbuf(15);
-        loop {
-            let result = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
-            if result != -libc::EINTR {
-                break; // if the error was EINTR, retry the syscall
+            let mut buf2 = sizecbuf(15);
+            loop {
+                let result = cage3.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
             }
-        }
-        let str2 = cbuf2str(&buf2);
-        assert_eq!(str2, "Socketpair Test");
+            let str2 = cbuf2str(&buf2);
+            // check if received message is correct
+            assert_eq!(str2, "Socketpair Test");
+        });
 
         thread.join().unwrap();
+        thread_2.join().unwrap();
 
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         // end of the socket pair test (note we are only supporting AF_UNIX and TCP)
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_socketpair_bad_input() {
+        // test for error cases of socketpair
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+
+        // test for unsupported domain
+        // socketpair only works with AF_UNIX
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_INET, SOCK_STREAM, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_INET6, SOCK_STREAM, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for unsupported socktype
+        // socketpair only works with SOCK_STREAM
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_DGRAM, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for unsupported protocol
+        // we only support for protocol of 0
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 1, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for bad structured input
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, 472810394, 0, &mut socketpair),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // test for invalid flags
+        assert_eq!(
+            Cage::socketpair_syscall(
+                cage.clone(),
+                AF_UNIX,
+                SOCK_STREAM | 1024,
+                0,
+                &mut socketpair
+            ),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_socketpair_cloexec() {
+        // this test is used for testing socketpair when cloexec flag is set
+        // when cloexec flag is set, the file descriptor of the socket should
+        // be automatically closed when exec_syscall is called
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+        // try with cloexec flag
+        assert_eq!(
+            Cage::socketpair_syscall(
+                cage.clone(),
+                AF_UNIX,
+                SOCK_STREAM | SOCK_CLOEXEC,
+                0,
+                &mut socketpair
+            ),
+            0
+        );
+
+        // we use fstat_syscall to inspect if the file descriptor is valid
+        let mut uselessstatdata = StatData::default();
+
+        // check if the file descriptor exists
+        // if the file descriptor does not exist, it should return another error
+        assert_eq!(
+            cage.fstat_syscall(socketpair.sock1, &mut uselessstatdata),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+        assert_eq!(
+            cage.fstat_syscall(socketpair.sock2, &mut uselessstatdata),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // now exec the cage
+        assert_eq!(cage.exec_syscall(2), 0);
+
+        // check if the file descriptor is closed in new cage
+        // EBADF is the error that is supposed to be returned when file descriptor does
+        // not exist
+        let newcage = interface::cagetable_getref(2);
+        assert_eq!(
+            newcage.fstat_syscall(socketpair.sock1, &mut uselessstatdata),
+            -(Errno::EBADF as i32)
+        );
+        assert_eq!(
+            newcage.fstat_syscall(socketpair.sock2, &mut uselessstatdata),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(newcage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_socketpair_nonblocking() {
+        // this test is used for testing socketpair when nonblocking flag is set
+        // when nonblocking flag is set, the socket should not block on syscalls like
+        // recv_syscall, instead, EAGAIN error should be returned when there is no
+        // data to receive
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+
+        // try with nonblocking flag
+        assert_eq!(
+            Cage::socketpair_syscall(
+                cage.clone(),
+                AF_UNIX,
+                SOCK_STREAM | SOCK_NONBLOCK,
+                0,
+                &mut socketpair
+            ),
+            0
+        );
+
+        let cage2 = cage.clone();
+
+        let thread = interface::helper_thread(move || {
+            let mut buf = sizecbuf(10);
+            // counter is used for recording how many times do recv_syscall returned
+            // with EAGAIN
+            let mut counter = 0;
+
+            // receive the message
+            // since peer will sleep for 30ms before send the message
+            // some nonblocking returns are expected
+            loop {
+                let result = cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
+                if result == -(Errno::EAGAIN as i32) {
+                    // return due to nonblocking flag
+                    counter += 1;
+                    continue;
+                }
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
+            }
+            // check if the received message is correct
+            assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
+            // check if there is any nonblocking return
+            assert_ne!(counter, 0);
+
+            // sleep for 30ms so receiver could have some nonblocking return
+            interface::sleep(interface::RustDuration::from_millis(30));
+            // send the message
+            assert_eq!(
+                cage2.send_syscall(socketpair.sock2, str2cbuf("Socketpair Test"), 15, 0),
+                15
+            );
+        });
+
+        let cage3 = cage.clone();
+
+        let thread_2 = interface::helper_thread(move || {
+            // sleep for 30ms so receiver could have some nonblocking return
+            interface::sleep(interface::RustDuration::from_millis(30));
+
+            // send message
+            assert_eq!(
+                cage3.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
+                4
+            );
+
+            // receive the message
+            // since peer will sleep for 30ms before send the message
+            // some nonblocking returns are expected
+            let mut buf2 = sizecbuf(15);
+            let mut counter = 0;
+            loop {
+                let result = cage3.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 15, 0);
+                if result == -(Errno::EAGAIN as i32) {
+                    // return due to nonblocking flag
+                    counter += 1;
+                    continue;
+                }
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
+            }
+            // check if the received message is correct
+            let str2 = cbuf2str(&buf2);
+            assert_eq!(str2, "Socketpair Test");
+            // check if there is any nonblocking return
+            assert_ne!(counter, 0);
+        });
+
+        thread.join().unwrap();
+        thread_2.join().unwrap();
+
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
