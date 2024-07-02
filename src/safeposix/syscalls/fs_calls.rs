@@ -3511,7 +3511,7 @@ impl Cage {
 ///
 /// ### Returns
 /// * The number of bytes written to the buffer on success.
-///
+/// 
 /// ### Errors and Panics
 /// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
 /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
