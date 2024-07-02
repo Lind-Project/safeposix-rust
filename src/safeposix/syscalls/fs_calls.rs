@@ -833,6 +833,11 @@ impl Cage {
 
                 // Match the inode object with the correct inode type and increment link count
                 match *inodeobj {
+                    // Directory type inode is not supported for linking, so return an error.
+                    Inode::Dir(_) => {
+                        return syscall_error(Errno::EPERM, "link", "oldpath is a directory")
+                    }
+
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.linkcount += 1; //add link to
                                                              // inode
@@ -844,11 +849,6 @@ impl Cage {
 
                     Inode::Socket(ref mut socket_inode_obj) => {
                         socket_inode_obj.linkcount += 1; //add link to inode
-                    }
-
-                    // Directory type inode is not supported for linking, so return an error.
-                    Inode::Dir(_) => {
-                        return syscall_error(Errno::EPERM, "link", "oldpath is a directory")
                     }
                 }
 
@@ -864,6 +864,9 @@ impl Cage {
                     (None, None) => {
                         syscall_error(Errno::ENOENT, "link", "newpath cannot be created")
                     }
+
+                    // If the newpath exists, linking can't be perfomed and an error is returned.
+                    (Some(_), ..) => syscall_error(Errno::EEXIST, "link", "newpath already exists"),
 
                     // If the parent directory inode exists, make a reference of the oldpath inode
                     // in the parent directory to make a link between the two directory paths.
@@ -891,12 +894,13 @@ impl Cage {
                         // If the linking is successful, 0 is returned.
                         0
                     }
-
-                    // If the newpath exists, linking can't be perfomed and an error is returned.
-                    (Some(_), ..) => syscall_error(Errno::EEXIST, "link", "newpath already exists"),
                 };
 
                 // If the linking fails, an error with a value < 0 is returned from above.
+                // The following cases lead to the failing of the linking of files:
+                // 1. When both the file and the parent doesn't exist, newpath can't be created
+                // 2. When the the parent inode is not of type "Directory".
+                // 3. When the newpath already exists.
                 // So, we revert the link count updates made to the oldpath inode.
                 if retval != 0 {
                     // Fetch the inode object from the FileMetadata Table
@@ -1002,6 +1006,10 @@ impl Cage {
                 // data from the filesystem. It is only "true" for "File" type inode.
                 // `log`: indicates whether the FileMetaData will be updated for the inode.
                 let (currefcount, curlinkcount, has_fobj, log) = match *inodeobj {
+                    Inode::Dir(_) => {
+                        // Unlinking of a directory is not supported
+                        return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");
+                    }
                     Inode::File(ref mut f) => {
                         // "File" type inode has an associated File Object, so is set to "True"
                         f.linkcount -= 1;
@@ -1017,10 +1025,6 @@ impl Cage {
                         // After these cages are closed, no changes to sockets' inodes
                         // need to be persisted, thus using log is unnecessary and is set to "false"
                         (f.refcount, f.linkcount, false, false)
-                    }
-                    Inode::Dir(_) => {
-                        // Unlinking of a directory is not supported
-                        return syscall_error(Errno::EISDIR, "unlink", "cannot unlink directory");
                     }
                 }; //count current number of links and references
 
@@ -1043,6 +1047,11 @@ impl Cage {
                     // only "File" type inode has this flag set to "true",
                     // so, the file is removed from the FileSystem
                     if has_fobj {
+                        // FILEDATAPREFIX represents the common prefix of the name 
+                        // of the file which combined with the inode number represents
+                        // a unique entity. It stores the data of the inode object.
+                        // Since the file is of no use, we are removing its entry
+                        // from the system.
                         let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                         interface::removefile(sysfilename).unwrap();
                     }
