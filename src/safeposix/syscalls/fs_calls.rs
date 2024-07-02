@@ -4487,9 +4487,8 @@ impl Cage {
             // the dashmap.
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until
-            // the
-            ///semaphore becomes available. The`lock` method internally
-            /// decrements the semaphore value.
+            // the semaphore becomes available. The`lock` method internally
+            // decrements the semaphore value.
             // The lock fun is located in misc.rs
             semaphore.lock();
         } else {

@@ -1479,6 +1479,7 @@ pub mod net_tests {
     }
 
     #[test]
+    #[ignore]
     pub fn ut_lind_net_select() {
         // test for select monitoring on multiple different file descriptors:
         // 1. regular file

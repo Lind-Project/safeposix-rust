@@ -174,7 +174,7 @@ impl EmulatedPipe {
 
         // Linux considers a pipe writeable if there is at least PAGE_SIZE (PIPE_BUF)
         // remaining space (4096 bytes)
-        return (self.size - pipe_space) > PAGE_SIZE || self.get_read_ref() == 0;
+        return pipe_space > PAGE_SIZE || self.get_read_ref() == 0;
     }
 
     /// ### Description
