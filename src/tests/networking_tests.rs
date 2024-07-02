@@ -1086,7 +1086,8 @@ pub mod net_tests {
     pub fn ut_lind_net_select_badinput() {
         // this test is used for testing select with error cases
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
@@ -1136,7 +1137,8 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_select_timeout() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
@@ -1166,7 +1168,8 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(clientsockfd), 0);
 
         // this barrier is used for preventing
-        // an unfixed bug (`close` could block when other thread/cage is `accept`) from deadlocking the test
+        // an unfixed bug (`close` could block when other thread/cage is `accept`) from
+        // deadlocking the test
         let barrier = Arc::new(Barrier::new(2));
         let barrier_2 = barrier.clone();
 
@@ -1190,7 +1193,8 @@ pub mod net_tests {
             cage2.exit_syscall(EXIT_SUCCESS);
         });
 
-        // make sure client thread closed the duplicated socket before server start to accept
+        // make sure client thread closed the duplicated socket before server start to
+        // accept
         barrier.wait();
 
         // wait for client to connect
@@ -1201,7 +1205,8 @@ pub mod net_tests {
         let master_sets = &mut interface::FdSet::new();
         master_sets.set(sockfd);
 
-        // this counter is used for recording how many times do select returns due to timeout
+        // this counter is used for recording how many times do select returns due to
+        // timeout
         let mut counter = 0;
 
         loop {
@@ -1235,7 +1240,8 @@ pub mod net_tests {
         threadclient.join().unwrap();
 
         // subtest 2: select when all arguments were None except for timeout
-        // since no set is passed into `select`, `select` here should behave like `sleep`
+        // since no set is passed into `select`, `select` here should behave like
+        // `sleep`
         let start_time = interface::starttimer();
         let timeout = interface::RustDuration::new(0, 10000000); // 10ms
         let select_result = cage.select_syscall(sockfd + 1, None, None, None, Some(timeout));
@@ -1253,7 +1259,8 @@ pub mod net_tests {
         // PIPE_CAPACITY: the maximum size of a pipe buffer
         let byte_chunk: usize = PIPE_CAPACITY;
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
@@ -1263,12 +1270,13 @@ pub mod net_tests {
             writefd: -1,
         };
 
-        // we use nonblocking mode since we can check if pipe is ready to read/write easily
-        // by checking if the read/write is returning EAGAIN
+        // we use nonblocking mode since we can check if pipe is ready to read/write
+        // easily by checking if the read/write is returning EAGAIN
         assert_eq!(cage.pipe2_syscall(&mut pipefds, O_NONBLOCK), 0);
         assert_eq!(cage.fork_syscall(2), 0);
 
-        // this barrier is for better control about when receiver should consume the data
+        // this barrier is for better control about when receiver should consume the
+        // data
         let barrier = Arc::new(Barrier::new(2));
         let barrier_clone = barrier.clone();
 
@@ -1334,7 +1342,8 @@ pub mod net_tests {
         let select_result = cage.select_syscall(2, None, Some(outputs), None, None);
         assert!(select_result == 1); // should have exactly one file descriptor ready
 
-        // all the data are just consumed by the receiver, now the write should be successful
+        // all the data are just consumed by the receiver, now the write should be
+        // successful
         assert_ne!(
             cage.write_syscall(1, bufptr, byte_chunk),
             -(Errno::EAGAIN as i32)
@@ -1353,7 +1362,8 @@ pub mod net_tests {
     #[ignore]
     pub fn ut_lind_net_select_socket_write_blocking() {
         // this test is used for testing select on AF_UNIX socket pipe writefds
-        // currently would fail since select_syscall does not handle socket pipe writefds correctly
+        // currently would fail since select_syscall does not handle socket pipe
+        // writefds correctly
         let byte_chunk: usize = UDSOCK_CAPACITY;
 
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -1362,8 +1372,8 @@ pub mod net_tests {
         let cage = interface::cagetable_getref(1);
 
         // create a AF_UNIX socket
-        // we use nonblocking mode since we can check if pipe is ready to read/write easily
-        // by checking if the read/write is returning EAGAIN
+        // we use nonblocking mode since we can check if pipe is ready to read/write
+        // easily by checking if the read/write is returning EAGAIN
         let serversockfd_unix = cage.socket_syscall(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
         let clientsockfd_unix = cage.socket_syscall(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
@@ -1382,7 +1392,8 @@ pub mod net_tests {
 
         assert_eq!(cage.fork_syscall(2), 0);
 
-        // this barrier is for better control about when receiver should consume the data
+        // this barrier is for better control about when receiver should consume the
+        // data
         let barrier = Arc::new(Barrier::new(2));
         let barrier_clone = barrier.clone();
 
@@ -1421,8 +1432,8 @@ pub mod net_tests {
             cage2.exit_syscall(EXIT_SUCCESS);
         });
 
-        // this sleep is to prevent an unfixed bug (`close` would block when other thread/cage is `accept`)
-        // from deadlocking the test
+        // this sleep is to prevent an unfixed bug (`close` would block when other
+        // thread/cage is `accept`) from deadlocking the test
         interface::sleep(interface::RustDuration::from_millis(10));
 
         let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
@@ -1452,7 +1463,8 @@ pub mod net_tests {
         let select_result = cage.select_syscall(sockfd + 1, None, Some(outputs), None, None);
         assert!(select_result == 1); // should have exactly one file descriptor ready
 
-        // all the data are just consumed by the receiver, now the write should be successful
+        // all the data are just consumed by the receiver, now the write should be
+        // successful
         assert_ne!(
             cage.send_syscall(sockfd, bufptr, byte_chunk, 0),
             -(Errno::EAGAIN as i32)
@@ -1475,7 +1487,8 @@ pub mod net_tests {
         // 4. AF_UNIX server socket's connection file descriptor with a client
         // 5. pipe
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
@@ -1537,9 +1550,11 @@ pub mod net_tests {
 
         // allocate spaces for fd_set bitmaps
         // `master_set`: Consits of all read file descriptors.
-        // `working_set`: Consits of a copy of `master_set`. Modified by `select()` to contain only ready descriptors.
-        // `master_outputs_set`: Consits of all write file descriptors.
-        // `outputs`: Consits of a copy of `master_outputs_set`. Modified by `select()` to contain only ready descriptors.
+        // `working_set`: Consits of a copy of `master_set`. Modified by `select()` to
+        // contain only ready descriptors. `master_outputs_set`: Consits of all
+        // write file descriptors. `outputs`: Consits of a copy of
+        // `master_outputs_set`. Modified by `select()` to contain only ready
+        // descriptors.
         let master_set = &mut interface::FdSet::new();
         let working_set = &mut interface::FdSet::new();
         let master_outputs_set = &mut interface::FdSet::new();
@@ -1577,8 +1592,9 @@ pub mod net_tests {
         assert_eq!(cage.close_syscall(clientsockfd2), 0);
         assert_eq!(cage.close_syscall(clientsockfd_unix), 0);
 
-        // this barrier have to ensure that the clients finish the connect before we do the select
-        // due to an unfixed bug (`close` could block when other thread/cage is `accept`)
+        // this barrier have to ensure that the clients finish the connect before we do
+        // the select due to an unfixed bug (`close` could block when other
+        // thread/cage is `accept`)
         let barrier = Arc::new(Barrier::new(3));
         let barrier_clone1 = barrier.clone();
         let barrier_clone2 = barrier.clone();
