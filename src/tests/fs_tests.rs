@@ -1412,34 +1412,80 @@ pub mod fs_tests {
     #[test]
     pub fn ut_lind_fs_dir_chdir_getcwd() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        //and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
         let cage = interface::cagetable_getref(1);
-        let needed = "/subdir1\0".as_bytes().to_vec().len();
 
-        let needed_u32: u32 = needed as u32;
-
-        let mut buf = vec![0u8; needed];
+        //Checking if retrieving the current working directory
+        //`/newcwd1` by passing a string long enough to store
+        //the directory succeeds
+        //`newcwdsize` is the size of the string needed to store the new
+        //current woring directory `/newcwd1`
+        let newcwdsize = "/newcwd1\0".as_bytes().to_vec().len();
+        let newcwdsize_u32: u32 = newcwdsize as u32;
+        //Creating the new current working directory and checking if it exists
+        cage.mkdir_syscall("/newcwd1", S_IRWXA);
+        assert_eq!(cage.access_syscall("newcwd1", F_OK), 0);
+        //Creating a string large enough to store the new current
+        //working directory and filling it with 0's
+        let mut buf = vec![0u8; newcwdsize];
         let bufptr: *mut u8 = &mut buf[0];
 
+        //First, we change to the root directory and call `getcwd_syscall()`
+        //to check if the root current working directory is successfully
+        //retrieved
         assert_eq!(cage.chdir_syscall("/"), 0);
-        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
-        assert_eq!(cage.getcwd_syscall(bufptr, 1), -(Errno::ERANGE as i32));
         assert_eq!(cage.getcwd_syscall(bufptr, 2), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "/\0\0\0\0\0\0\0\0");
 
-        cage.mkdir_syscall("/subdir1", S_IRWXA);
-        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
-        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        //Now, we change to the newly created directory and check if it is
+        //successfully retrieved as a new current working directory
+        assert_eq!(cage.chdir_syscall("/newcwd1"), 0);
+        assert_eq!(cage.getcwd_syscall(bufptr, newcwdsize_u32), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "/newcwd1\0");
 
-        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::ERANGE as i32));
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_getcwd_invalid_args() {
+        //Acquiring a lock on TESTMUTEX prevents other tests from running
+        //concurrently, and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        //`/newcwd2` is a valid directory that we will create to check
+        //if calling `getcwd_syscall()` with invalid arguments
+        //correctly returns the required errors.
+        //`newcwdsize` is the size of the string needed to store the new
+        //current working directory `/newcwd1`
+        let newcwdsize = "/newcwd2\0".as_bytes().to_vec().len();
+        let newcwdsize_u32: u32 = newcwdsize as u32;
+        //Creating the new current working directory, checking if it exists
+        //and changing to it
+        cage.mkdir_syscall("/newcwd2", S_IRWXA);
+        assert_eq!(cage.access_syscall("newcwd2", F_OK), 0);
+        assert_eq!(cage.chdir_syscall("newcwd2"), 0);
+
+        //Checking if passing a valid string pointer and a size of 0 to
+        //`getcwd_syscall()` correctly results in `The size argument is zero and
+        //buf is not a null pointer` error
+        //Creating a string large enough to store the new current
+        //working directory and filling it with 0's
+        let mut buf = vec![0u8; newcwdsize];
+        let bufptr: *mut u8 = &mut buf[0];
+        assert_eq!(cage.getcwd_syscall(bufptr, 0), -(Errno::EINVAL as i32));
+
+        //Checking if passing a valid string pointer and a non-zero size smaller
+        //than the size of the current working directory plus the terminating null
+        //character to `getcwd_syscall()` correctly results in `The bufsize argument
+        //is less than the length of the absolute pathname of the working directory,
+        //including the terminating null byte` error
         assert_eq!(
-            cage.getcwd_syscall(bufptr, needed_u32 - 1),
+            cage.getcwd_syscall(bufptr, newcwdsize_u32 - 1),
             -(Errno::ERANGE as i32)
         );
-        assert_eq!(cage.getcwd_syscall(bufptr, needed_u32), 0);
-        assert_eq!(std::str::from_utf8(&buf).unwrap(), "/subdir1\0");
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -1552,8 +1598,8 @@ pub mod fs_tests {
     //their execution using a shared semaphore. The test aims to ensure:
     //   1. The semaphore is initialized correctly.
     //   2. The child process can acquire and release the semaphore.
-    //   3. The parent process can acquire and release the
-    //      semaphore after the child process exits.
+    //   3. The parent process can acquire and release the semaphore after the child
+    //      process exits.
     //   4. The semaphore can be destroyed safely.
     #[test]
     pub fn ut_lind_fs_sem_fork() {
@@ -1566,10 +1612,10 @@ pub mod fs_tests {
 
         // Create a shared memory region of 1024 bytes. This region will be
         // shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared memory
-        // and 0666 sets the access permissions of the memory segment.
+        // IPC_CREAT tells the system to create a new memory segment for the shared
+        // memory and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        
+
         // Attach shared memory for semaphore access.
         let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
         assert_ne!(shmatret, -1);
@@ -1584,7 +1630,7 @@ pub mod fs_tests {
             // Set reference to child process's cagetable (ID 2) for independent operation.
             let cage1 = interface::cagetable_getref(2);
             // Child process blocks on semaphore wait (decrementing it from 1 to 0).
-            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);            
+            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             // Simulate processing time with 40ms delay.
             interface::sleep(interface::RustDuration::from_millis(40));
             // Child process releases semaphore, signaling its availability to parent
@@ -1593,14 +1639,17 @@ pub mod fs_tests {
             cage1.exit_syscall(EXIT_SUCCESS);
         });
 
-        // Parent waits on semaphore (blocks until released by child, decrementing to 0).
+        // Parent waits on semaphore (blocks until released by child, decrementing to
+        // 0).
         assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-        // Simulate parent process processing time with 100ms delay to ensure synchronization.
+        // Simulate parent process processing time with 100ms delay to ensure
+        // synchronization.
         interface::sleep(interface::RustDuration::from_millis(100));
-        // Wait for child process to finish to prevent race conditions before destroying semaphore.
-        //Release semaphore, making it available again (value increases to 1).
-        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0); 
+        // Wait for child process to finish to prevent race conditions before destroying
+        // semaphore. Release semaphore, making it available again (value
+        // increases to 1).
+        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
         thread_child.join().unwrap();
 
         // Destroy the semaphore
@@ -1617,11 +1666,13 @@ pub mod fs_tests {
     }
 
     // This test verifies the functionality of timed semaphores in a fork scenario.
-    // It involves a parent process and a child process that synchronize their execution using a
-    //shared semaphore with a timeout. The test aims to ensure:
+    // It involves a parent process and a child process that synchronize their
+    // execution using a shared semaphore with a timeout. The test aims to
+    // ensure:
     //  1. The semaphore is initialized correctly.
     //  2. The child process can acquire and release the semaphore.
-    //  3. The parent process can acquire the semaphore using a timed wait operation with a
+    //  3. The parent process can acquire the semaphore using a timed wait operation
+    //     with a
     //  timeout, and the semaphore is acquired successfully.
     //  4. The parent process can release the semaphore.
     //  5. The semaphore can be destroyed safely.
@@ -1635,8 +1686,8 @@ pub mod fs_tests {
         let key = 31337;
         // Create a shared memory region of 1024 bytes.
         //This region will be shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared memory
-        // and 0666 sets the access permissions of the memory segment.
+        // IPC_CREAT tells the system to create a new memory segment for the shared
+        // memory and 0666 sets the access permissions of the memory segment.
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
         // Attach the shared memory region to the address space of the process
         // to make sure for both processes to access the shared semaphore.
@@ -1646,7 +1697,8 @@ pub mod fs_tests {
         let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
         assert_eq!(ret_init, 0);
         assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        // Fork process, creating a child process with its own independent cagetable (ID 2).
+        // Fork process, creating a child process with its own independent cagetable (ID
+        // 2).
         assert_eq!(cage.fork_syscall(2), 0);
         // Define the child process behavior in a separate thread
         let thread_child = interface::helper_thread(move || {
@@ -1657,7 +1709,8 @@ pub mod fs_tests {
             assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
             // Simulate some work by sleeping for 20 milliseconds.
             interface::sleep(interface::RustDuration::from_millis(20));
-            // Child process releases semaphore, signaling its availability to the parent process
+            // Child process releases semaphore, signaling its availability to the parent
+            // process
             //(value increases from 0 to 1).
             assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
             cage1.exit_syscall(EXIT_SUCCESS);
