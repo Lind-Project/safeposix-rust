@@ -6,7 +6,7 @@ pub mod net_tests {
     use libc::c_void;
     use std::mem::size_of;
     use std::sync::{Arc, Barrier};
-  
+
     #[test]
     pub fn ut_lind_net_bind() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -1618,8 +1618,9 @@ pub mod net_tests {
     #[test]
     pub fn ut_lind_net_socketpair_bad_input() {
         // test for error cases of socketpair
-        
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1657,7 +1658,13 @@ pub mod net_tests {
 
         // test for invalid flags
         assert_eq!(
-            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM | 1024, 0, &mut socketpair),
+            Cage::socketpair_syscall(
+                cage.clone(),
+                AF_UNIX,
+                SOCK_STREAM | 1024,
+                0,
+                &mut socketpair
+            ),
             -(Errno::EINVAL as i32)
         );
 
@@ -1671,7 +1678,8 @@ pub mod net_tests {
         // when cloexec flag is set, the file descriptor of the socket should
         // be automatically closed when exec_syscall is called
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
@@ -1705,7 +1713,8 @@ pub mod net_tests {
         assert_eq!(cage.exec_syscall(2), 0);
 
         // check if the file descriptor is closed in new cage
-        // EBADF is the error that is supposed to be returned when file descriptor does not exist
+        // EBADF is the error that is supposed to be returned when file descriptor does
+        // not exist
         let newcage = interface::cagetable_getref(2);
         assert_eq!(
             newcage.fstat_syscall(socketpair.sock1, &mut uselessstatdata),
@@ -1727,7 +1736,8 @@ pub mod net_tests {
         // recv_syscall, instead, EAGAIN error should be returned when there is no
         // data to receive
 
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
