@@ -847,6 +847,9 @@ impl Cage {
                         chardev_inode_obj.linkcount += 1; //add link to inode
                     }
 
+                    // The Sockets only have an inode if they are a unix type 
+                    // socket which has a corresponding inode. Regular sockets 
+                    // do not have inodes.
                     Inode::Socket(ref mut socket_inode_obj) => {
                         socket_inode_obj.linkcount += 1; //add link to inode
                     }
