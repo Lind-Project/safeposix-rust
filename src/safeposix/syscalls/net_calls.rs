@@ -2138,11 +2138,14 @@ impl Cage {
     /// the timeout expired before any file descriptors became ready.
     /// Otherwise, errors or panics are returned for different scenarios.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
     /// * EBADF - An invalid file descriptor was given in one of the sets. (e.g.
     ///   a file descriptor that was already closed.)
     /// * EINTR - A signal was caught.
     /// * EINVAL -  nfds is negative or exceeds the FD_SET_MAX_FD.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn select_syscall(
         &self,
         nfds: i32,
