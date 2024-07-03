@@ -9,6 +9,8 @@ pub mod fs_tests {
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
+    use std::io::prelude::*;
+    use std::slice;
 
     #[test]
     pub fn ut_lind_fs_simple() {
@@ -2216,6 +2218,37 @@ pub mod fs_tests {
         assert_eq!(statdata.st_size, 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    use crate::interface::IovecStruct;
+    #[test]
+    fn test_writev_syscall_stream() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a mock stream file descriptor (e.g., stdout)
+        let fd = 1; // stdout is typically file descriptor 1
+    
+        // Prepare the iovec structures
+        let hello = b"Hello, ";
+        let world = b"world!";
+        let iovecs = [
+            IovecStruct {
+                iov_base: hello.as_ptr() as *mut c_void,
+                iov_len: hello.len(),
+            },
+            IovecStruct {
+                iov_base: world.as_ptr() as *mut c_void,
+                iov_len: world.len(),
+            },
+        ];
+    
+        // Call writev_syscall
+        let bytes_written = cage.writev_syscall(fd, iovecs.as_ptr(), iovecs.len() as i32);
+        
+        // Validate the results
+        assert_eq!(bytes_written, 13, "Bytes written do not match expected value");
+    
         lindrustfinalize();
     }
 }

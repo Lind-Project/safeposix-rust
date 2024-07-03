@@ -100,6 +100,11 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
+use std::io::{self, Write, IoSlice};
+use crate::interface::log_to_stdout;
+use std::slice;
+use std::str;
+
 
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
@@ -1817,8 +1822,9 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
+
+
                 _ => {
-                    // we currently don't support writev for files/streams
                     return syscall_error(
                         Errno::EOPNOTSUPP,
                         "writev",
