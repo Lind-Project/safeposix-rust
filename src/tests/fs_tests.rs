@@ -623,18 +623,18 @@ pub mod fs_tests {
     
         // Fork the process
         let pid = unsafe { libc::fork() };
-        assert!(pid >= 0);
+        assert!(pid >= 0, "Fork failed");
     
         if pid == 0 {
             // Child process
             // Use dup2 to duplicate the file descriptor
             let new_fd = cage.dup2_syscall(fd, fd + 1);
-            assert_eq!(new_fd, fd + 1);
+            assert_eq!(new_fd, fd + 1, "dup2 failed in child process");
     
             // Write to the duplicated file descriptor
             let msg = "Hello from child";
             let write_result = cage.write_syscall(new_fd, msg.as_ptr() as *const u8, msg.len());
-            assert_eq!(write_result, msg.len() as i32);
+            assert_eq!(write_result, msg.len() as i32, "Write failed in child process");
     
             // Exit the child process
             unsafe { libc::exit(0) };
@@ -647,13 +647,13 @@ pub mod fs_tests {
             // Read the contents of the file to check if the child's write was successful
             let mut buffer = vec![0u8; 1024];
             let read_fd = cage.open_syscall(filepath, O_RDONLY, 0);
-            assert!(read_fd >= 0);
+            assert!(read_fd >= 0, "Failed to open file for reading");
     
             let read_result = cage.read_syscall(read_fd, buffer.as_mut_ptr(), buffer.len());
-            assert!(read_result > 0);
+            assert!(read_result > 0, "Read failed in parent process");
     
             let content = std::str::from_utf8(&buffer[..read_result as usize]).unwrap();
-            assert!(content.contains("Hello from child"));
+            assert!(content.contains("Hello from child"), "msg not found");
     
             // Cleanup
             assert_eq!(cage.close_syscall(read_fd), 0);
