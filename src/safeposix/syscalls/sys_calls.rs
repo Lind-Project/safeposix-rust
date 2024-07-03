@@ -237,8 +237,13 @@ impl Cage {
                         let sock_tmp = socket_filedesc_obj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
                         let socket_type = sockhandle.domain;
+                        //Here we only increment the reference for AF_UNIX socket type 
+                        //Since these are the only sockets that have an inode associated with them
                         if socket_type == AF_UNIX {
-                            // Increment the appropriate reference counter of the correct socket
+                            //Increment the appropriate reference counter of the correct socket
+                            //Each socket has two pipes associated with them - a read and write pipe 
+                            //Here we grab these two pipes and increment their references individually
+                            //And also increment the reference count of the socket as a whole
                             if let Some(sockinfo) = &sockhandle.unix_info {
                                 if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
                                     sendpipe.incr_ref(O_WRONLY);
@@ -246,25 +251,14 @@ impl Cage {
                                 if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
                                     receivepipe.incr_ref(O_RDONLY);
                                 }
-                                if let Some(uinfo) = &mut sockhandle.unix_info {
-                                    if let Inode::Socket(ref mut sock) =
-                                        *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap())
+                                if let Inode::Socket(ref mut sock) =
+                                    *(FS_METADATA.inodetable.get_mut(&sockinfo.inode).unwrap())
                                     {
                                         sock.refcount += 1;
                                     }
-                                }
                             }
                         }
                         drop(sockhandle);
-                        let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
-                        if let Some(uinfo) = &mut sockhandle.unix_info {
-                            if let Inode::Socket(ref mut sock) =
-                                *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap())
-                            {
-                                sock.refcount += 1;
-                            }
-                        }
                     }
                     _ => {}
                 }
@@ -302,6 +296,7 @@ impl Cage {
         // The child Cage object can then initialize and store the sigset appropriately when it establishes its own 
         // main thread id.
         let newsigset = interface::RustHashMap::new();
+        // Here we check if Lind is being run under the test suite or not
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // When rustposix runs independently (not as Lind paired with NaCL runtime) we do not handle signals
             // The test suite runs rustposix independently and hence we do not handle signals for the test suite
@@ -320,14 +315,15 @@ impl Cage {
             newsigset.insert(0, mainsigset);
         }
 
-        // Construct a new semaphore table in child cage which equals to the one in the parent cage
-        // 
+        // Construct a new semaphore table in child cage which equals to the one in the parent cage 
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<
             u32,
             interface::RustRfc<interface::RustSemaphore>,
         > = interface::RustHashMap::new();
         // Loop all pairs of semaphores and insert their copies into the new semaphore table
+        // Each pair consists of a key which is 32 bit unsigned integer
+        // And a Semaphore Object implemented as RustSemaphore
         for pair in semtable.iter() {
             new_semtable.insert((*pair.key()).clone(), pair.value().clone());
         }
