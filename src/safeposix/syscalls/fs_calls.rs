@@ -3527,6 +3527,7 @@ impl Cage {
 /// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
 /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
 /// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
+/// * `EBADF(9)` : If the file descriptor is invalid.
 /// ### Panics
 /// * There are no panics in this syscall.
 

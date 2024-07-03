@@ -1437,6 +1437,52 @@ pub mod fs_tests {
     }
 
     #[test]
+    fn ut_lind_fs_getdents_out_of_range_fd() {
+        // Acquire a lock on TESTMUTEX to prevent other tests from running concurrently,
+        // and also perform clean environment setup.
+        let _thelock = setup::lock_and_init();
+    
+        let cage = interface::cagetable_getref(1);
+    
+        // Allocate a buffer to store directory entries
+        let bufsize = 1024;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+    
+        // Attempt to call getdents_syscall with a file descriptor out of range
+        let result = cage.getdents_syscall(MAXFD + 1, baseptr, bufsize as u32);
+    
+        // Verify that it returns EBADF (errno for "Bad file descriptor")
+        assert_eq!(result, -(Errno::EBADF as i32));
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_getdents_non_existing_fd() {
+        // Acquire a lock on TESTMUTEX to prevent other tests from running concurrently,
+        // and also perform clean environment setup.
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Allocate a buffer to store directory entries
+        let bufsize = 1024;
+        let mut vec = vec![0u8; bufsize as usize];
+        let baseptr: *mut u8 = &mut vec[0];
+
+        // Attempt to call getdents_syscall with a non-existing file descriptor
+        let result = cage.getdents_syscall(100, baseptr, bufsize as u32);
+
+        // Verify that it returns EBADF (errno for "Bad file descriptor")
+        assert_eq!(result, -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     fn ut_lind_fs_getdents_bufsize_too_small() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
@@ -1475,8 +1521,7 @@ pub mod fs_tests {
         // Create a regular file
         let filepath = "/regularfile";
         let fd = cage.open_syscall(filepath, O_CREAT | O_WRONLY, S_IRWXA);
-        assert_ne!(fd, -(Errno::ENOENT as i32));
-
+        assert!(fd >= 0);
         // Allocate a buffer to store directory entries
         let bufsize = 1024;
         let mut vec = vec![0u8; bufsize as usize];
