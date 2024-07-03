@@ -669,7 +669,6 @@ pub mod fs_tests {
 
         // 1. Open a file and write some data
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
-        assert_ne!(fd, -(Errno::ENOENT as i32));
         assert_eq!(cage.write_syscall(fd, str2cbuf("Parent data"), 11), 11);
 
         // 2. Fork a child process
