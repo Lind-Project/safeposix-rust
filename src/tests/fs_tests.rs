@@ -5,7 +5,7 @@ pub mod fs_tests {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
-    use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
@@ -957,7 +957,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_unlink_success() {
+    pub fn ut_lind_fs_unlink_and_close_file() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -965,22 +965,54 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
         let path = "/testfile";
         // Create a file
-        let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
         let mut statdata = StatData::default();
         assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
         // Linkcount for the file should be 1 originally
         assert_eq!(statdata.st_nlink, 1);
         // Perform the unlinking of the file
         assert_eq!(cage.unlink_syscall(path), 0);
-        // Since the file is unlinked and is not referenced by any other files
-        // Its link count should reduce to 0 and hence it should get deleted
-        // from the file system.
-        // The function below should return an error denoting no such file.
+        // Once we close the file, all the existing references for it
+        // will get closed, so the file descriptor will get deleted
+        // from the system.
+        assert_eq!(cage.close_syscall(fd), 0);
+        // Inorder to verify if the file has been deleted,
+        // we will try to fetch its data but we must expect an error:
+        // (ENOENT) "Invalid File".
         assert_eq!(
             cage.stat_syscall(path, &mut statdata),
             -(Errno::ENOENT as i32)
         );
+        // Verify if the file descriptor has been deleted
+        // (EBADF) "Invalid File Descriptor".
+        assert_eq!(
+            cage.fstat_syscall(fd, &mut statdata),
+            -(Errno::EBADF as i32)
+        );
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
+    #[test]
+    pub fn ut_lind_fs_unlink_file() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let path = "/testfile";
+        // Create a file
+        let fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+        let mut statdata = StatData::default();
+        assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+        // Linkcount for the file should be 1 originally
+        assert_eq!(statdata.st_nlink, 1);
+        // Perform the unlinking of the file
+        assert_eq!(cage.unlink_syscall(path), 0);
+        // Since we are not closing the file, the reference
+        // count should be > 0, and the fd should be valid.
+        // Verify if the file descriptor is still present
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -1044,13 +1076,13 @@ pub mod fs_tests {
         let oldpath = "/testdir/olddir";
         let newpath = "/newpath";
 
-        // Create the directory for the oldpath with the parent not having read permission.
-        // Currently assigning "Write only" permissions
+        // Create the directory for the oldpath with the parent not having read
+        // permission. Currently assigning "Write only" permissions
         assert_eq!(cage.mkdir_syscall("/testdir", S_IWUSR), 0);
         let fd = cage.open_syscall(oldpath, O_CREAT | O_EXCL | O_WRONLY, S_IWUSR);
         assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
 
-        // Expect the linking to be successful, but this is a bug which must be fixed 
+        // Expect the linking to be successful, but this is a bug which must be fixed
         // as the parent directory doesn't have read permissions due to which it should
         // not be able to link the files.
         assert_eq!(cage.link_syscall(oldpath, newpath), 0);

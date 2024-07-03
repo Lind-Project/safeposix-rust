@@ -813,7 +813,7 @@ impl Cage {
 
         // TODO BUG: Man-page contains a check for the directories in the path
         // to have search/read permissions, which is not implemented in this syscall.
-          
+
         // Walk through the absolute path for the oldpath file which returns the inode
         // number of file (if it exists).
         match metawalk(trueoldpath.as_path()) {
@@ -821,7 +821,7 @@ impl Cage {
             None => syscall_error(
                 Errno::ENOENT,
                 "link",
-                "a directory component in pathname does not exist", 
+                "a directory component in pathname does not exist",
                 // Currently, we don't support the symbolic links
             ),
             // Case: Get the inode number and increment the link count of the existing
@@ -847,8 +847,8 @@ impl Cage {
                         chardev_inode_obj.linkcount += 1; //add link to inode
                     }
 
-                    // The Sockets only have an inode if they are a unix type 
-                    // socket which has a corresponding inode. Regular sockets 
+                    // The Sockets only have an inode if they are a unix type
+                    // socket which has a corresponding inode. Regular sockets
                     // do not have inodes.
                     Inode::Socket(ref mut socket_inode_obj) => {
                         socket_inode_obj.linkcount += 1; //add link to inode
@@ -884,7 +884,7 @@ impl Cage {
                                 .insert(filename, inodenum);
                             // Increment the link count of the parent inode as well because
                             // when a link is created, a new directory entry is added to
-                            // the parent directory of the new link. 
+                            // the parent directory of the new link.
                             parentdirinodeobj.linkcount += 1;
                             //drop the mutable instance of the parent inode object
                             drop(parentinodeobj);
@@ -1000,14 +1000,14 @@ impl Cage {
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
                 // For the inode object, we update 4 parameters:
-                // `reference count`: refers to the active file descriptors pointing to the
+                // reference count: refers to the active file descriptors pointing to the
                 // file.
-                // `link count`: refers to the number of hard links pointing to the file.
+                // link count: refers to the number of hard links pointing to the file.
                 // linkcount is decremented by 1 for all inode types except "Dir" type.
-                // `file object`: indicates whether the inode being unlinked has an associated
+                // file object: indicates whether the inode being unlinked has an associated
                 // file object. This is relevant for managing the physical deletion of the file
                 // data from the filesystem. It is only "true" for "File" type inode.
-                // `log`: indicates whether the FileMetaData will be updated for the inode.
+                // log: indicates whether the FileMetaData will be updated for the inode.
                 let (currefcount, curlinkcount, has_fobj, log) = match *inodeobj {
                     Inode::Dir(_) => {
                         // Unlinking of a directory is not supported
@@ -1041,22 +1041,29 @@ impl Cage {
                     return removal_result;
                 }
 
-                // When the file's link count becomes 0 and no process has the file open
-                // (reference count = 0), the space occupied by the file will be
-                // freed and the file is no longer accessible.
-                if curlinkcount == 0 && currefcount == 0 {
-                    // remove the reference of the inode from the inodetable
-                    FS_METADATA.inodetable.remove(&inodenum);
-                    // only "File" type inode has this flag set to "true",
-                    // so, the file is removed from the FileSystem
-                    if has_fobj {
-                        // FILEDATAPREFIX represents the common prefix of the name 
-                        // of the file which combined with the inode number represents
-                        // a unique entity. It stores the data of the inode object.
-                        // Since the file is of no use, we are removing its entry
-                        // from the system.
-                        let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
-                        interface::removefile(sysfilename).unwrap();
+                // When the file's link count becomes 0 (no hard links present),
+                // we check for two scenarios:
+                // If the reference count is 0 (no open file descriptors) pointing to
+                // the file, then we remove the file from filesystem and free the space.
+                // If the reference count is > 0, then file contents are not removed
+                // from the system.
+                if curlinkcount == 0 {
+                    // Remove the file from the system when no references to the file
+                    // exists.
+                    if currefcount == 0 {
+                        // remove the reference of the inode from the inodetable
+                        FS_METADATA.inodetable.remove(&inodenum);
+                        // only "File" type inode has this flag set to "true",
+                        // so, the file is removed from the FileSystem
+                        if has_fobj {
+                            // FILEDATAPREFIX represents the common prefix of the name
+                            // of the file which combined with the inode number represents
+                            // a unique entity. It stores the data of the inode object.
+                            // Since the file is of no use, we are removing its entry
+                            // from the system.
+                            let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
+                            interface::removefile(sysfilename).unwrap();
+                        }
                     }
                 }
                 // Remove any domain socket paths associated with the file
