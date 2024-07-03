@@ -12,7 +12,6 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_simple() {
-
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -142,9 +141,9 @@ pub mod fs_tests {
     pub fn ut_lind_fs_broken_close() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         //testing a muck up with the inode table where the regular close does not work as intended
-        
+
         let cage = interface::cagetable_getref(1);
 
         //write should work
@@ -481,18 +480,18 @@ pub mod fs_tests {
     fn ut_lind_fs_dup_invalid_fd() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-    
+
         // Open a file and get a valid file descriptor
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
         assert_ne!(fd, -(Errno::ENOENT as i32));
-    
+
         // Close the file descriptor, making it invalid
         assert_eq!(cage.close_syscall(fd), 0);
-    
+
         // Attempt to duplicate the invalid file descriptor
         let new_fd = cage.dup_syscall(fd, None);
         assert_eq!(new_fd, -(Errno::EBADF as i32));
-    
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -508,7 +507,7 @@ pub mod fs_tests {
             assert_ne!(fd, -(Errno::ENOENT as i32));
         }
 
-        // Attempt to duplicate a file descriptor, which should fail 
+        // Attempt to duplicate a file descriptor, which should fail
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
         assert_ne!(fd, -(Errno::ENOENT as i32));
         let new_fd = cage.dup_syscall(fd, None);
@@ -600,16 +599,16 @@ pub mod fs_tests {
             assert_ne!(fd, -(Errno::ENOENT as i32));
         }
 
-        // Attempt to duplicate a file descriptor, which should fail 
+        // Attempt to duplicate a file descriptor, which should fail
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
         assert_ne!(fd, -(Errno::ENOENT as i32));
-        let new_fd = cage.dup2_syscall(fd, 5); // Try to duplicate to an existing fd 
+        let new_fd = cage.dup2_syscall(fd, 5); // Try to duplicate to an existing fd
         assert_eq!(new_fd, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
@@ -645,7 +644,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_fcntl_invalid_args(){
+    pub fn ut_lind_fs_fcntl_invalid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -676,7 +675,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_fcntl_dup(){
+    pub fn ut_lind_fs_fcntl_dup() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -751,7 +750,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_ioctl_invalid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        
+
         let cage = interface::cagetable_getref(1);
 
         //setting up two integer values (a zero value to test clearing nonblocking I/O behavior on
@@ -806,7 +805,7 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-        }
+    }
 
     #[test]
     pub fn ut_lind_fs_fdflags() {
@@ -1544,7 +1543,6 @@ pub mod fs_tests {
     pub fn ut_lind_fs_getpid_getppid() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
 
         let cage1 = interface::cagetable_getref(1);
         let pid1 = cage1.getpid_syscall();

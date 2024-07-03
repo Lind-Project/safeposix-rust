@@ -1903,36 +1903,39 @@ impl Cage {
     /// ### Description
     /// This function duplicates a file descriptor. It creates a new file
     /// descriptor that refers to the same open file description as the original file descriptor.
-    /// * Finding the Next Available File Descriptor: If `start_desc` is provided and it is already in use, the function 
-    ///   will continue searching for the next available file descriptor starting from `start_desc`. If no file 
+    /// * Finding the Next Available File Descriptor: If `start_desc` is provided and it is already in use, the function
+    ///   will continue searching for the next available file descriptor starting from `start_desc`. If no file
     ///   descriptors are available, it will return an error (`ENFILE`).
-    /// * If `fd` is equal to `start_fd`, the function returns `start_fd` as the new file 
-    ///   descriptor. This is because in this scenario, the original and new file descriptors would point to the same 
+    /// * If `fd` is equal to `start_fd`, the function returns `start_fd` as the new file
+    ///   descriptor. This is because in this scenario, the original and new file descriptors would point to the same
     ///   file description.
-    /// * The `_dup2_helper` function is called to perform the actual file descriptor duplication, handling the 
-    ///   allocation of a new file descriptor, updating the file descriptor table, and incrementing the reference count 
+    /// * The `_dup2_helper` function is called to perform the actual file descriptor duplication, handling the
+    ///   allocation of a new file descriptor, updating the file descriptor table, and incrementing the reference count
     ///   of the file object.
-    /// * The function modifies the global `filedescriptortable` array, adding a new entry for the 
-    ///   duplicated file descriptor. It also increments the reference count of the file object associated with the 
-    ///   original file descriptor. 
-    /// * The `false` argument passed to `_dup2_helper` indicates that this call is from the `dup_syscall` function, 
+    /// * The function modifies the global `filedescriptortable` array, adding a new entry for the
+    ///   duplicated file descriptor. It also increments the reference count of the file object associated with the
+    ///   original file descriptor.
+    /// * The `false` argument passed to `_dup2_helper` indicates that this call is from the `dup_syscall` function,
     ///   not the `dup2_syscall` function.
-    ///[dup(2)](https://man7.org/linux/man-pages/man2/dup.2.html)
     ///
     /// ### Function Arguments
     /// * `fd`: The original file descriptor to duplicate.
-    /// * `start_desc`:  An optional starting file descriptor number. If provided, the new file descriptor will be 
-    ///  assigned the first available file descriptor number starting from this value. If not provided, it defaults to 
+    /// * `start_desc`:  An optional starting file descriptor number. If provided, the new file descriptor will be
+    ///  assigned the first available file descriptor number starting from this value. If not provided, it defaults to
     ///  `STARTINGFD`,which is the minimum designated file descriptor value for new file descriptors.
     ///
     /// ### Returns
     /// * The new file descriptor on success.
     /// * `EBADF`: If the original file descriptor is invalid.
     /// * `ENFILE`: If there are no available file descriptors.
-    /// 
+    ///
     /// ### Errors
     /// * `EBADF(9)`: If the original file descriptor is invalid.
     /// * `ENFILE(23)`: If there are no available file descriptors.
+    ///  ###Panics
+    /// * There are no panics for this syscall
+    ///[dup(2)](https://man7.org/linux/man-pages/man2/dup.2.html)
+
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
         //if a starting fd was passed, then use that as the starting point, but otherwise, use the designated minimum of STARTINGFD
         let start_fd = match start_desc {
@@ -1964,18 +1967,17 @@ impl Cage {
     /// ## `dup2_syscall`
     ///
     /// ### Description
-    /// This function implements the `dup2` system call, which duplicates a file descriptor and assigns it to a new file 
+    /// This function implements the `dup2` system call, which duplicates a file descriptor and assigns it to a new file
     /// descriptor number. If the new file descriptor already exists, it is closed before the duplication takes place.
-    /// * File Descriptor Reuse:  If the new file descriptor (`newfd`) is already open, the function will first close the 
-    ///   existing file descriptor silently (without returning an error) before allocating a new file descriptor and 
+    /// * File Descriptor Reuse:  If the new file descriptor (`newfd`) is already open, the function will first close the
+    ///   existing file descriptor silently (without returning an error) before allocating a new file descriptor and
     ///   updating the file descriptor table.
-    /// * If `oldfd` and `newfd` are the same, the function returns `newfd` without closing it. 
-    ///   This is because in this scenario, the original and new file descriptors would already point to the same file 
-    ///   description. 
-    /// * the global `filedescriptortable` array, replacing the entry for the 
-    ///   new file descriptor with a new entry for the duplicated file descriptor. It also increments the reference count of the 
+    /// * If `oldfd` and `newfd` are the same, the function returns `newfd` without closing it.
+    ///   This is because in this scenario, the original and new file descriptors would already point to the same file
+    ///   description.
+    /// * the global `filedescriptortable` array, replacing the entry for the
+    ///   new file descriptor with a new entry for the duplicated file descriptor. It also increments the reference count of the
     ///   file object associated with the original file descriptor.
-    ///[dup2(2)](https://linux.die.net/man/2/dup2)
     ///
     /// ### Function Arguments
     /// * `oldfd`: The original file descriptor to duplicate.
@@ -1986,6 +1988,10 @@ impl Cage {
     ///
     /// ### Errors
     /// * `EBADF(9)`: If the original file descriptor (`oldfd`) is invalid or the new file descriptor (`newfd`) number is out of range.
+    ///  ###Panics
+    /// * There are no panics for this syscall
+    ///[dup2(2)](https://linux.die.net/man/2/dup2)
+
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
@@ -2020,21 +2026,21 @@ impl Cage {
     ///
     /// ### Description
     /// This helper function performs the actual file descriptor duplication process for both `dup` and `dup2` system calls.
-    /// It handles the allocation of a new file descriptor, updates the file descriptor table, and increments the reference count of the 
+    /// It handles the allocation of a new file descriptor, updates the file descriptor table, and increments the reference count of the
     /// associated file object.
-    /// * Duplication from `dup2_syscall`: If `j` is true, the function first closes the existing file descriptor 
-    ///   at `newfd` (if any) before allocating a new file descriptor and updating the file descriptor table. 
-    /// * Duplication from `dup_syscall`: If `fromdup2` is false, the function allocates a new file descriptor, finds the 
+    /// * Duplication from `dup2_syscall`: If `fromdup2` is true, the function first closes the existing file descriptor
+    ///   at `newfd` (if any) before allocating a new file descriptor and updating the file descriptor table.
+    /// * Duplication from `dup_syscall`: If `fromdup2` is false, the function allocates a new file descriptor, finds the
     ///   first available file descriptor number starting from `newfd`, and updates the file descriptor table.
-    /// * Reference Counting: The function increments the reference count of the file object associated with the original file 
+    /// * Reference Counting: The function increments the reference count of the file object associated with the original file
     ///   descriptor. This ensures that the file object is not deleted until all its associated file descriptors are closed.
-    /// * Socket Handling: For domain sockets, the function increments the reference count of both the send and receive pipes 
+    /// * Socket Handling: For domain sockets, the function increments the reference count of both the send and receive pipes
     ///   associated with the socket.
-    /// * tream Handling: Streams are not currently supported for duplication; an error (`EACCES`) is returned.
-    /// * Unhandled File Types: If the file descriptor is associated with a file type that is not handled by the function (i.e., 
+    /// * Stream Handling: Streams are not currently supported for duplication
+    /// * Unhandled File Types: If the file descriptor is associated with a file type that is not handled by the function (i.e.,
     ///   not a File, Pipe, Socket, or Stream), the function returns an error (`EACCES`).
-    /// * The function does not handle streams and returns an error if a stream file descriptor is provided. 
-    /// * Socket Handling: If the file descriptor is associated with a socket, the function handles domain sockets differently 
+    /// * The function does not handle streams.
+    /// * Socket Handling: If the file descriptor is associated with a socket, the function handles domain sockets differently
     ///   by incrementing the reference count of both the send and receive pipes.
     /// ### Function Arguments
     /// * `self`:  A reference to the `FsCalls` struct, which contains the file descriptor table and other system-related data.
@@ -2067,7 +2073,7 @@ impl Cage {
         } else {
             let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
             if newdupfd < 0 {
-                // The function allocates a new file descriptor and updates the file descriptor table, 
+                // The function allocates a new file descriptor and updates the file descriptor table,
                 // handling the potential for file descriptor table overflow (resulting in an `ENFILE` error).
                 return syscall_error(
                     Errno::ENFILE,
@@ -2088,7 +2094,7 @@ impl Cage {
                 //the original file does not get a negative ref count
                 match *inodeobj {
                     // increments the reference count of the file object associated with the original file descriptor
-                    // to ensure that the file object is not deleted until all its associated file descriptors are closed.  
+                    // to ensure that the file object is not deleted until all its associated file descriptors are closed.
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.refcount += 1;
                     }
