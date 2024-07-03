@@ -33,6 +33,8 @@ mod setup {
 
     // Using explicit lifetime to have a safe reference to the lock in the tests.
     pub fn lock_and_init<'a>() -> std::sync::MutexGuard<'a, bool> {
+        set_panic_hook();
+
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         let thelock = TESTMUTEX.lock().unwrap();
 
@@ -86,6 +88,18 @@ mod setup {
 
         //return the lock to the caller which holds it till the end of the test.
         thelock
+    }
+
+    fn set_panic_hook() {
+        let orig_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            // this hook would be triggered whenever a panic occurs
+            // good for test cases that panicked inside the non-main thread
+            // so the trace information could be printed immediately
+            // instead of raising the error when the thread is joined, which might
+            // never happen and left the test blocking forever in some test cases
+            orig_hook(panic_info);
+        }));
     }
 }
 

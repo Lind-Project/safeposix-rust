@@ -237,8 +237,10 @@ pub fn create_unix_sockpipes() -> (
     interface::RustRfc<interface::EmulatedPipe>,
     interface::RustRfc<interface::EmulatedPipe>,
 ) {
-    let pipe1 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
-    let pipe2 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
+    let pipe1 =
+        interface::RustRfc::new(interface::EmulatedPipe::new_with_capacity(UDSOCK_CAPACITY));
+    let pipe2 =
+        interface::RustRfc::new(interface::EmulatedPipe::new_with_capacity(UDSOCK_CAPACITY));
 
     (pipe1, pipe2)
 }

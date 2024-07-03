@@ -104,6 +104,7 @@ use crate::safeposix::shm::*;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
+    ///
     /// The `open_syscall()` creates an open file description that refers to a
     /// file and a file descriptor that refers to that open file description.
     /// The file descriptor is used by other I/O functions to refer to that
@@ -114,6 +115,7 @@ impl Cage {
     /// are checked and based on them, file is updated accordingly.
 
     /// ### Function Arguments
+    ///
     /// The `open_syscall()` receives three arguments:
     /// * `path` - This argument points to a pathname naming the file. For
     ///   example: "/parentdir/file1" represents a file which will be either
@@ -129,11 +131,13 @@ impl Cage {
     ///   search permissions on the new file.
 
     /// ### Returns
+    ///
     /// Upon successful completion of this call, a file descriptor is returned
     /// which points the file which is opened. Otherwise, errors or panics
     /// are returned for different scenarios.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
+    ///
     /// * ENFILE - no available file descriptor number could be found
     /// * ENOENT - tried to open a file that did not exist
     /// * EINVAL - the input flags contain S_IFCHR flag representing a special
@@ -145,9 +149,15 @@ impl Cage {
     ///   passed
     /// * ENXIO - the file is of type UNIX domain socket
     ///
-    /// A panic occurs when there is some issue fetching the file descriptor.
+    /// ### Panics
     ///
-    /// for more detailed description of all the commands and return values, see
+    /// * If truepath.file_name() returns None or if to_str() fails, causing
+    ///   unwrap() to panic.
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
 
     // This function is used to create a new File Descriptor Object and return it.
@@ -915,9 +925,61 @@ impl Cage {
         }
     }
 
-    //------------------------------------CREAT SYSCALL------------------------------------
-
+    /// ## ------------------CREAT SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `creat_syscall()` is similar to `open_syscall()` with the "flags"
+    /// parameter for open_syscall set to representing create, truncate or write
+    /// only for the file. It simplifies the process of creating a new file or
+    /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
+    /// O_WRONLY flags.
+    /// There are generally two cases which occur when this syscall happens:
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
+    /// a new file is created at the given location and a new file descriptor is 
+    /// created and returned. 
+    /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
+    /// size gets reduced to 0, and the existing file descriptor is returned.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `creat_syscall()` receives two arguments:
+    /// * `path` - This argument points to a pathname naming the file. For
+    ///   example: "/parentdir/file1" represents a file which will be either
+    ///   opened if exists or will be created at the given path.
+    /// * `mode` - This represents the permission of the newly created file. The
+    ///   general mode used is "S_IRWXA": which represents the read, write, and
+    ///   search permissions on the new file.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, a file descriptor is returned
+    /// which points the file which is opened. Otherwise, errors or panics
+    /// are returned for different scenarios.
+    ///
+    /// ### Errors
+    ///
+    /// * ENFILE - no available file descriptor number could be found
+    /// * ENOENT - tried to open a file that did not exist
+    /// * EPERM - the mode bits for a file are not sane
+    /// * ENOTDIR - tried to create a file as a child of something that isn't a
+    ///   directory
+    /// * EEXIST - the given file already exists
+    /// * ENXIO - the file is of type UNIX domain socket
+    ///
+    /// ### Panics
+    ///
+    /// * If truepath.file_name() returns None or if to_str() fails, causing
+    ///   unwrap() to panic.
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [creat(3p)](https://man7.org/linux/man-pages/man3/creat.3p.html)
     pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
+        // These flags represent that the given file is either newly created
+        // (if it doesn't exist) or truncated to zero length (if it does exist),
+        // and it is opened for write-only access.
         self.open_syscall(path, O_CREAT | O_TRUNC | O_WRONLY, mode)
     }
 
@@ -2191,24 +2253,15 @@ impl Cage {
                         let inodenum = ui.inode;
                         if let Some(sendpipe) = ui.sendpipe.as_ref() {
                             sendpipe.decr_ref(O_WRONLY);
-                            // we're closing the last write end, lets set eof
-                            if sendpipe.get_write_ref() == 0 {
-                                sendpipe.set_eof();
-                            }
                             //last reference, lets remove it
-                            if (sendpipe.get_write_ref() as u64) + (sendpipe.get_read_ref() as u64)
-                                == 0
-                            {
+                            if sendpipe.is_pipe_closed() {
                                 ui.sendpipe = None;
                             }
                         }
                         if let Some(receivepipe) = ui.receivepipe.as_ref() {
                             receivepipe.decr_ref(O_RDONLY);
                             //last reference, lets remove it
-                            if (receivepipe.get_write_ref() as u64)
-                                + (receivepipe.get_read_ref() as u64)
-                                == 0
-                            {
+                            if receivepipe.is_pipe_closed() {
                                 ui.receivepipe = None;
                             }
                         }
@@ -2230,15 +2283,9 @@ impl Cage {
                     }
                 }
                 Pipe(ref pipe_filedesc_obj) => {
-                    let pipe = &pipe_filedesc_obj.pipe;
-                    pipe.decr_ref(pipe_filedesc_obj.flags);
-
-                    if pipe.get_write_ref() == 0
-                        && (pipe_filedesc_obj.flags & O_RDWRFLAGS) == O_WRONLY
-                    {
-                        // we're closing the last write end, lets set eof
-                        pipe.set_eof();
-                    }
+                    // lets decrease the pipe objects internal ref count for the corresponding end
+                    // depending on what flags are set
+                    pipe_filedesc_obj.pipe.decr_ref(pipe_filedesc_obj.flags);
                 }
                 File(ref normalfile_filedesc_obj) => {
                     let inodenum = normalfile_filedesc_obj.inode;
@@ -2332,7 +2379,7 @@ impl Cage {
             return inner_result;
         }
 
-        //removing inode from fd table
+        //removing descriptor from fd table
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if unlocked_fd.is_some() {
@@ -3453,20 +3500,84 @@ impl Cage {
         }
     }
 
-    //------------------PIPE SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `pipe_syscall()` creates a pipe, a unidirectional data channel that
+    /// can be used for interprocess communication.
+    ///
+    /// ### Arguments
+    ///
+    /// The `pipe_syscall()` accepts one argument:
+    /// * `pipefd` - The array pipefd is used to return two file descriptors
+    ///   referring to the ends of the pipe.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENFILE` etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, only two errors are supposrted:
+    /// * `ENFILE` - no available file descriptors
+    ///
+    /// ### Panics
+    ///
+    /// A panic can occur if there is no lock on the file descriptor index,
+    /// which should not be possible, or if somehow the match statement
+    /// finds an invalid flag
+    ///
+    /// To learn more about the syscall, flags, and error values, see
+    /// [pipe(2)](https://man7.org/linux/man-pages/man2/pipe.2.html)
     pub fn pipe_syscall(&self, pipefd: &mut PipeArray) -> i32 {
         self.pipe2_syscall(pipefd, 0)
     }
 
+    /// ### Description
+    ///
+    /// The `pipe2_syscall()` creates a pipe, a unidirectional data channel that
+    /// can be used for interprocess communication. This syscall adds
+    /// additional flags to the pipe syscall. We only implement CLOEXEC and
+    /// NONBLOCK.
+    ///
+    /// ### Arguments
+    ///
+    /// The `pip2e_syscall()` accepts two arguments:
+    /// * `pipefd` - The array pipefd is used to return two file descriptors
+    ///   referring to the ends of the pipe.
+    /// * `flags` - Flags that can be pre-set on the pipe file descriptors such
+    ///   as CLOEXEC and NONBLOCK.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENFILE` etc.
+    ///
+    /// ### Errors
+    ///
+    /// Currently, the only error supported is:
+    /// * `ENFILE` - no available file descriptors
+    ///
+    /// ### Panics
+    ///
+    /// A panic can occur if there is no lock on the file descriptor index,
+    /// which should not be possible, or if somehow the match statement
+    /// finds an invalid flag
+    ///
+    /// To learn more about the syscall, flags, and error values, see
+    /// [pipe(2)](https://man7.org/linux/man-pages/man2/pipe.2.html)
     pub fn pipe2_syscall(&self, pipefd: &mut PipeArray, flags: i32) -> i32 {
         let flagsmask = O_CLOEXEC | O_NONBLOCK;
         let actualflags = flags & flagsmask;
 
-        let pipe = interface::RustRfc::new(interface::new_pipe(PIPE_CAPACITY));
+        // lets make a standard pipe of 65,536 bytes
+        let pipe =
+            interface::RustRfc::new(interface::EmulatedPipe::new_with_capacity(PIPE_CAPACITY));
 
-        // get an fd for each end of the pipe and set flags to RD_ONLY and WR_ONLY
-        // append each to pipefds list
-
+        // now lets get an fd for each end of the pipe and set flags to RD_ONLY and
+        // WR_ONLY append each to pipefds list
         let accflags = [O_RDONLY, O_WRONLY];
         for accflag in accflags {
             let (fd, guardopt) = self.get_next_fd(None);
@@ -3475,12 +3586,16 @@ impl Cage {
             }
             let fdoption = &mut *guardopt.unwrap();
 
+            // insert this pipe descriptor into the fd slot
             let _insertval = fdoption.insert(Pipe(PipeDesc {
                 pipe: pipe.clone(),
+                // lets add the additional flags to read/write permission flag and add that to the
+                // fd
                 flags: accflag | actualflags,
                 advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
             }));
 
+            // now lets return the fd numbers in the pipefd array
             match accflag {
                 O_RDONLY => {
                     pipefd.readfd = fd;
@@ -3488,7 +3603,7 @@ impl Cage {
                 O_WRONLY => {
                     pipefd.writefd = fd;
                 }
-                _ => panic!("How did you get here."),
+                _ => panic!("Corruption: Invalid flag"),
             }
         }
 
@@ -3641,20 +3756,69 @@ impl Cage {
         }
     }
 
-    //------------------------------------GETCWD SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `getcwd_syscall()` function places an absolute pathname of the
+    /// current working directory in the string pointed to by buf.
+    ///
+    /// ### Arguments
+    ///
+    /// The `getcwd_syscall()` accepts two arguments:
+    /// * `buf` - a pointer to the string into which the current working
+    /// directory is stored
+    /// * `bufsize` - the length of the string `buf`
+    ///
+    /// ### Returns
+    ///
+    /// The standard requires returning the pointer to the string that
+    /// stores the current working directory. In the current implementation,
+    /// 0 is returned on success, while returning the pointer to the string is
+    /// handled inside glibc.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EINVAL, ERANGE, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the bufsize argument is zero and buf is not a NULL pointer.
+    /// * `ERANGE` - the bufsize argument is less than the length of the
+    /// absolute pathname of the working directory, including the
+    /// terminating null byte.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this function panics.
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [getcwd(3)](https://man7.org/linux/man-pages/man3/getcwd.3.html)
 
     pub fn getcwd_syscall(&self, buf: *mut u8, bufsize: u32) -> i32 {
-        let mut bytes: Vec<u8> = self.cwd.read().to_str().unwrap().as_bytes().to_vec();
-        bytes.push(0u8); //Adding a null terminator to the end of the string
-        let length = bytes.len();
-
-        if (bufsize as usize) < length {
-            return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+        //Here we only check if the size of the specified
+        //string is 0. Null pointers are handled beforehand
+        //by nacl and `types.rs`.
+        if (bufsize as usize) == 0 {
+            return syscall_error(Errno::EINVAL, "getcwd", "size of the specified buffer is 0");
+        } else {
+            //Cages store their current working directory as path buffers.
+            //To use the obtained directory as a string, a null terminator needs
+            //to be added to the path.
+            let mut bytes: Vec<u8> = self.cwd.read().to_str().unwrap().as_bytes().to_vec();
+            bytes.push(0u8); //Adding a null terminator to the end of the string
+            let length = bytes.len();
+            //The bufsize argument should be at least the length of the absolute
+            //pathname of the working directory, including the terminating null byte.
+            if (bufsize as usize) < length {
+                return syscall_error(Errno::ERANGE, "getcwd", "the length (in bytes) of the absolute pathname of the current working directory exceeds the given size");
+            }
+            //It is expected that only the first `bufsize` bytes of the `buf` string
+            //will be written into. The `fill()` function ensures this by taking
+            //a mutable slice of length `bufsize` to the string pointed to by `buf`
+            //and inserting the obtained current working directory into that slice,
+            //thus prohibiting writing into the remaining bytes of the string.
+            interface::fill(buf, length, &bytes);
+            //returning 0 on success
+            0
         }
-
-        interface::fill(buf, length, &bytes);
-
-        0 //getcwd has succeeded!;
     }
 
     //------------------SHMHELPERS----------------------
@@ -4281,44 +4445,49 @@ impl Cage {
     }
 
     //##------------------SEMAPHORE SYSCALLS------------------
-/*
- *  Initialize semaphore object SEM to value
- *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
- *  or shared between processes (when nonzero)
- */
-/// ## `sem_init_syscall`
-///
-/// ### Description
-/// This function initializes a semaphore object, setting its initial value and 
-///specifying whether it's shared between threads or processes.
-/// 1. Boundary Check: The function first checks if the initial value is 
-/// within the allowed range.
-/// 2. Check for Existing Semaphore: The function then checks if a semaphore 
-/// with the given handle already exists.
-/// 3. Initialize New Semaphore: If the semaphore does not exist, the function 
-/// creates a new semaphore object and inserts it into the semaphore table.
-/// 4. Add to Shared Memory Attachments (if shared): If the semaphore is shared 
-/// between processes, 
-/// the function adds it to the shared memory attachments of other processes 
-/// that have already attached to the shared memory segment.
-/// 5. The function ensures thread safety by using a unique semaphore handle and 
-/// checking for existing entries in the semaphore table before attempting to create a new one.
-/// The code also avoids inserting a semaphore into the same cage twice during the shared 
-/// memory attachment process by excluding the initial cage from the iteration loop.
-///[sem_init](https://man7.org/linux/man-pages/man3/sem_init.3.html)
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-/// * `pshared`:  Indicates whether the semaphore is shared between 
-/// threads (0) or processes (non-zero).
-/// * `value`: The initial value of the semaphore.
-///
-/// ### Returns
-/// * 0 on success.
-/// ### Errors
-/// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is already initialized.
-/// * `EINVAL (22)`: If the initial value exceeds the maximum allowable value 
-/// * 'ENOSYS(38)' : Currently not supported
-/// for a semaphore (SEM_VALUE_MAX).
+    /*
+     *  Initialize semaphore object SEM to value
+     *  pshared used to indicate whether the semaphore is shared in threads (when
+     * equals to 0)  or shared between processes (when nonzero)
+     */
+    /// ## `sem_init_syscall`
+    ///
+    /// ### Description
+    /// This function initializes a semaphore object, setting its initial value
+    /// and specifying whether it's shared between threads or processes.
+    /// 1. Boundary Check: The function first checks if the initial value is
+    /// within the allowed range.
+    /// 2. Check for Existing Semaphore: The function then checks if a semaphore
+    /// with the given handle already exists.
+    /// 3. Initialize New Semaphore: If the semaphore does not exist, the
+    ///    function
+    /// creates a new semaphore object and inserts it into the semaphore table.
+    /// 4. Add to Shared Memory Attachments (if shared): If the semaphore is
+    ///    shared
+    /// between processes,
+    /// the function adds it to the shared memory attachments of other processes
+    /// that have already attached to the shared memory segment.
+    /// 5. The function ensures thread safety by using a unique semaphore handle
+    ///    and
+    /// checking for existing entries in the semaphore table before attempting
+    /// to create a new one. The code also avoids inserting a semaphore into
+    /// the same cage twice during the shared memory attachment process by
+    /// excluding the initial cage from the iteration loop. [sem_init](https://man7.org/linux/man-pages/man3/sem_init.3.html)
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    /// * `pshared`:  Indicates whether the semaphore is shared between
+    /// threads (0) or processes (non-zero).
+    /// * `value`: The initial value of the semaphore.
+    ///
+    /// ### Returns
+    /// * 0 on success.
+    /// ### Errors
+    /// * `EBADF (9)`: If the semaphore handle is invalid or the semaphore is
+    ///   already initialized.
+    /// * `EINVAL (22)`: If the initial value exceeds the maximum allowable
+    ///   value
+    /// * 'ENOSYS(38)' : Currently not supported
+    /// for a semaphore (SEM_VALUE_MAX).
 
     pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
         // Boundary check
@@ -4329,9 +4498,10 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let is_shared = pshared != 0;
 
-        // Check if a semaphore with the given handle already exists in the semaphore table. 
-        // If it exists, the semaphore is already initialized, so an error is returned.
-        // This ensures that only new semaphores are initialized.
+        // Check if a semaphore with the given handle already exists in the semaphore
+        // table. If it exists, the semaphore is already initialized, so an
+        // error is returned. This ensures that only new semaphores are
+        // initialized.
         let semtable = &self.sem_table;
 
         if !semtable.contains_key(&sem_handle) {
@@ -4341,7 +4511,8 @@ impl Cage {
             // Insert the new semaphore into the semaphore table.
             semtable.insert(sem_handle, new_semaphore.clone());
 
-            // If the semaphore is shared, add it to the shared memory attachments of other processes.
+            // If the semaphore is shared, add it to the shared memory attachments of other
+            // processes.
             if is_shared {
                 let rev_shm = self.rev_shm.lock();
                 // if its shared and exists in an existing mapping we need to add it to other
@@ -4349,16 +4520,20 @@ impl Cage {
                 if let Some((mapaddr, shmid)) =
                     Self::search_for_addr_in_region(&rev_shm, sem_handle)
                 {
-                    let offset = mapaddr - sem_handle; 
-                    // iterate through all cages with shared memory segment attached and add semaphor in segments at attached addr + offset
-                    // offset represents the relative position of the semaphore within the shared memory region.
-                    
+                    let offset = mapaddr - sem_handle;
+                    // iterate through all cages with shared memory segment attached and add
+                    // semaphor in segments at attached addr + offset
+                    // offset represents the relative position of the semaphore within the shared
+                    // memory region.
+
                     if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
                             let cage = interface::cagetable_getref(*cageid);
-                            // Find all addresses in the shared memory region that belong to the current segment.
+                            // Find all addresses in the shared memory region that belong to the
+                            // current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
-                            // Iterate through all addresses and add the semaphore to the cage's semaphore table.
+                            // Iterate through all addresses and add the semaphore to the cage's
+                            // semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.insert(addr + offset, new_semaphore.clone());
                             }
@@ -4374,39 +4549,52 @@ impl Cage {
         return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
     }
 
-/// ## `sem_wait_syscall`
-///
-/// ### Description
-/// 1. Check for Semaphore Existence:The function first checks if the provided 
-/// semaphore handle exists in the semaphore table.
-/// 2. Acquire Semaphore: If the semaphore exists, the function attempts to acquire it using `lock`. 
-/// This operation will block the calling process until the semaphore becomes available.
-/// 3. Error Handling:If the semaphore handle is invalid, the function returns an error
-/// 4. This function allows a process to wait for a semaphore to become available. 
-/// If the semaphore is currently available (its value is greater than 0), the function will 
-/// acquire the semaphore and return 0.
-/// 5. If the semaphore is unavailable (its value is 0), the function will block the 
-/// calling process until the semaphore becomes available(its value becomes 1).
-///[sem_wait(2)](https://man7.org/linux/man-pages/man3/sem_wait.3.html)
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-///
-/// ### Returns
-/// * 0 on success.
-/// ### Errors
-/// * `EINVAL(22)`: If the semaphore handle is invalid.
-/// * 'EAGAIN(11)' & 'EINTR(4)' currently are not supported 
+    /// ## `sem_wait_syscall`
+    ///
+    /// ### Description
+    /// 1. Check for Semaphore Existence:The function first checks if the
+    ///    provided
+    /// semaphore handle exists in the semaphore table.
+    /// 2. Acquire Semaphore: If the semaphore exists, the function attempts to
+    ///    acquire it using `lock`.
+    /// This operation will block the calling process until the semaphore
+    /// becomes available.
+    /// 3. Error Handling:If the semaphore handle is invalid, the function
+    ///    returns an error
+    /// 4. This function allows a process to wait for a semaphore to become
+    ///    available.
+    /// If the semaphore is currently available (its value is greater than 0),
+    /// the function will acquire the semaphore and return 0.
+    /// 5. If the semaphore is unavailable (its value is 0), the function will
+    ///    block the
+    /// calling process until the semaphore becomes available(its value becomes
+    /// 1). [sem_wait(2)](https://man7.org/linux/man-pages/man3/sem_wait.3.html)
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    ///
+    /// ### Returns
+    /// * 0 on success.
+    /// ### Errors
+    /// * `EINVAL(22)`: If the semaphore handle is invalid.
+    /// * 'EAGAIN(11)' & 'EINTR(4)' currently are not supported
     pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
-        // Check whether the semaphore exists in the semaphore table. If found, obtain a mutable borrow to the semaphore entry.
+        // Check whether the semaphore exists in the semaphore table. If found, obtain a
+        // mutable borrow to the semaphore entry.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
-        // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads.
+            // Clone the semaphore entry to create an independent copy that we can modify
+            // without affecting other threads.
             let semaphore = sementry.clone();
-            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
-            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
+            // Release the mutable borrow on the original semaphore entry to allow other
+            // threads to access the semaphore table concurrently. Cloning and
+            // dropping the original reference lets us modify the value without deadlocking
+            // the dashmap.
             drop(sementry);
             // Acquire the semaphore. This operation will block the calling process until the 
             // semaphore becomes available. The`lock` method internally decrements the semaphore value.
+            // Acquire the semaphore. This operation will block the calling process until
+            // the semaphore becomes available. The`lock` method internally
+            // decrements the semaphore value.
             // The lock fun is located in misc.rs
             semaphore.lock();
         } else {
@@ -4416,42 +4604,49 @@ impl Cage {
         return 0;
     }
 
-/// ## `sem_post_syscall`
-///
-/// ### Description
-/// This function increments the value of a semaphore.
-///  1. Check for Semaphore Existence:The function first checks if the provided 
-/// semaphore handle exists in the semaphore table.
-///  2. Increment Semaphore Value: If the semaphore exists, the function 
-/// increments its value using `unlock`.
-///  3. Error Handling: If the semaphore handle is invalid or incrementing the semaphore
-///  would exceed the maximum value, the function returns an appropriate error code.
-/// [sem_post](https://man7.org/linux/man-pages/man3/sem_post.3.html)
-///
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-///
-/// ### Returns
-/// * 0 on success.
-///
-/// ### Errors
-/// * `EINVAL(22)`: If the semaphore handle is invalid.
-/// * `EOVERFLOW(75)`: If incrementing the semaphore would exceed the maximum allowable value.
+    /// ## `sem_post_syscall`
+    ///
+    /// ### Description
+    /// This function increments the value of a semaphore.
+    ///  1. Check for Semaphore Existence:The function first checks if the
+    ///     provided
+    /// semaphore handle exists in the semaphore table.
+    ///  2. Increment Semaphore Value: If the semaphore exists, the function
+    /// increments its value using `unlock`.
+    ///  3. Error Handling: If the semaphore handle is invalid or incrementing
+    ///     the semaphore
+    ///  would exceed the maximum value, the function returns an appropriate
+    /// error code. [sem_post](https://man7.org/linux/man-pages/man3/sem_post.3.html)
+    ///
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    ///
+    /// ### Returns
+    /// * 0 on success.
+    ///
+    /// ### Errors
+    /// * `EINVAL(22)`: If the semaphore handle is invalid.
+    /// * `EOVERFLOW(75)`: If incrementing the semaphore would exceed the
+    ///   maximum allowable value.
     pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads
+            // Clone the semaphore entry to create an independent copy that we can modify
+            // without affecting other threads
             let semaphore = sementry.clone();
-            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
-            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
+            // Release the mutable borrow on the original semaphore entry to allow other
+            // threads to access the semaphore table concurrently. Cloning and
+            // dropping the original reference lets us modify the value without deadlocking
+            // the dashmap.
             drop(sementry);
             // Increment the semaphore value.
-            //If the semaphore's value becomes greater than zero, one or more blocked threads will be woken up and 
-            // proceed to acquire the semaphore, decreasing its value.
-            // The unlock fun is located in misc.rs
+            //If the semaphore's value becomes greater than zero, one or more blocked
+            // threads will be woken up and proceed to acquire the semaphore,
+            // decreasing its value. The unlock fun is located in misc.rs
             if !semaphore.unlock() {
-                // Return an error indicating that the maximum allowable value for a semaphore would be exceeded.
+                // Return an error indicating that the maximum allowable value for a semaphore
+                // would be exceeded.
                 return syscall_error(
                     Errno::EOVERFLOW,
                     "sem_post",
@@ -4464,26 +4659,31 @@ impl Cage {
         return 0;
     }
 
-/// ## `sem_destroy_syscall`
-///
-/// ### Description
-/// This function destroys a semaphore, freeing its associated resources.
-///   1. Check for Semaphore Existence: The function first checks if the provided 
-/// semaphore handle exists in the semaphore table.
-///   2. Remove from Semaphore Table: If the semaphore exists, the function removes 
-/// it from the semaphore table.
-///   3. Remove from Shared Memory Attachments (if shared): If the semaphore is shared, the 
-/// function also removes it from the shared memory attachments of other processes.
-///   4. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///[sem_destroy](https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-///
-/// ### Returns
-/// * 0 on success.
-///
-/// ### Errors
-/// * `EINVAL(22)`: If the semaphore handle is invalid.
+    /// ## `sem_destroy_syscall`
+    ///
+    /// ### Description
+    /// This function destroys a semaphore, freeing its associated resources.
+    ///   1. Check for Semaphore Existence: The function first checks if the
+    ///      provided
+    /// semaphore handle exists in the semaphore table.
+    ///   2. Remove from Semaphore Table: If the semaphore exists, the function
+    ///      removes
+    /// it from the semaphore table.
+    ///   3. Remove from Shared Memory Attachments (if shared): If the semaphore
+    ///      is shared, the
+    /// function also removes it from the shared memory attachments of other
+    /// processes.
+    ///   4. Error Handling: If the semaphore handle is invalid, the function
+    ///      returns an error.
+    ///[sem_destroy](https://man7.org/linux/man-pages/man3/sem_destroy.3.html)
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    ///
+    /// ### Returns
+    /// * 0 on success.
+    ///
+    /// ### Errors
+    /// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
         let metadata = &SHM_METADATA;
 
@@ -4510,12 +4710,14 @@ impl Cage {
                         for cageid in segment.attached_cages.clone().into_read_only().keys() {
                             // Get a reference to the cagetable for the current cage.
                             let cage = interface::cagetable_getref(*cageid);
-                            // Find all addresses in the shared memory region that belong to the current segment.
+                            // Find all addresses in the shared memory region that belong to the
+                            // current segment.
                             let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
-                            // Iterate through all addresses and remove the semaphore from the cage's semaphore table.
+                            // Iterate through all addresses and remove the semaphore from the
+                            // cage's semaphore table.
                             for addr in addrs.iter() {
                                 cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
-                                //offset represents the relative position of the semaphore within the shared memory region.
+                                                                         //offset represents the relative position of the semaphore within the shared memory region.
                             }
                         }
                     }
@@ -4532,34 +4734,39 @@ impl Cage {
      * Take only sem_t *sem as argument, and return int *sval
      */
 
-/// ## `sem_getvalue_syscall`
-///
-/// ### Description
-/// This function implements the `sem_getvalue` system call, which retrieves the 
-/// current value of a semaphore.
-///   1. Check for Semaphore Existence: The function first checks if the provided 
-/// semaphore handle exists in the semaphore table.
-///   2. Retrieve Semaphore Value: If the semaphore exists, the function retrieves
-///  its current value and returns it.
-///   3. Error Handling: If the semaphore handle is invalid, the function returns an error.
-///[sem_getvalue(2)](https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
-///
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-///
-/// ### Returns
-/// * The current value of the semaphore on success.
-///
-/// ### Errors
-/// * `EINVAL(22)`: If the semaphore handle is invalid.
+    /// ## `sem_getvalue_syscall`
+    ///
+    /// ### Description
+    /// This function implements the `sem_getvalue` system call, which retrieves
+    /// the current value of a semaphore.
+    ///   1. Check for Semaphore Existence: The function first checks if the
+    ///      provided
+    /// semaphore handle exists in the semaphore table.
+    ///   2. Retrieve Semaphore Value: If the semaphore exists, the function
+    ///      retrieves
+    ///  its current value and returns it.
+    ///   3. Error Handling: If the semaphore handle is invalid, the function
+    ///      returns an error.
+    ///[sem_getvalue(2)](https://man7.org/linux/man-pages/man3/sem_getvalue.3.html#:~:text=sem_getvalue()%20places%20the%20current,sem_wait(3)%2C%20POSIX.)
+    ///
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    ///
+    /// ### Returns
+    /// * The current value of the semaphore on success.
+    ///
+    /// ### Errors
+    /// * `EINVAL(22)`: If the semaphore handle is invalid.
     pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
         // Check whether the semaphore exists in the semaphore table.
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
-            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
-            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
+            // Release the mutable borrow on the original semaphore entry to allow other
+            // threads to access the semaphore table concurrently. Cloning and
+            // dropping the original reference lets us modify the value without deadlocking
+            // the dashmap.
             drop(sementry);
             return semaphore.get_value();
         }
@@ -4570,27 +4777,28 @@ impl Cage {
         );
     }
 
-/// ## `sem_trywait_syscall`
-///
-/// ### Description
-/// This function implements the `sem_trywait` system call, which attempts 
-/// to acquire a semaphore without blocking.
-///   1. Check for Semaphore Existence: The function first checks if the 
-/// provided semaphore handle is valid.
-///   2. Attempt to Acquire: If the semaphore exists, the function attempts
-///  to acquire it using `trylock`.
-///   3. Error Handling: If the semaphore is unavailable or the handle is invalid,
-///  the function returns an appropriate error code.
-/// [sem_trywait(2)](https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-///
-/// ### Returns
-/// * 0 on success (semaphore acquired).
-///
-/// ### Errors
-/// * `EINVAL(22)`: If the semaphore handle is invalid.
-/// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
+    /// ## `sem_trywait_syscall`
+    ///
+    /// ### Description
+    /// This function implements the `sem_trywait` system call, which attempts
+    /// to acquire a semaphore without blocking.
+    ///   1. Check for Semaphore Existence: The function first checks if the
+    /// provided semaphore handle is valid.
+    ///   2. Attempt to Acquire: If the semaphore exists, the function attempts
+    ///  to acquire it using `trylock`.
+    ///   3. Error Handling: If the semaphore is unavailable or the handle is
+    ///      invalid,
+    ///  the function returns an appropriate error code.
+    /// [sem_trywait(2)](https://man7.org/linux/man-pages/man3/sem_trywait.3p.html)
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    ///
+    /// ### Returns
+    /// * 0 on success (semaphore acquired).
+    ///
+    /// ### Errors
+    /// * `EINVAL(22)`: If the semaphore handle is invalid.
+    /// * `EAGAIN(11)`: If the semaphore is unavailable (its value is 0).
 
     pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
         let semtable = &self.sem_table;
@@ -4598,13 +4806,17 @@ impl Cage {
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
             // Clone the semaphore entry to avoid modifying the original entry in the table.
             let semaphore = sementry.clone();
-            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
-            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
+            // Release the mutable borrow on the original semaphore entry to allow other
+            // threads to access the semaphore table concurrently. Cloning and
+            // dropping the original reference lets us modify the value without deadlocking
+            // the dashmap.
             drop(sementry);
             // Attempt to acquire the semaphore without blocking.
-            // If the semaphore is currently unavailable (value is 0), this operation will fail.
+            // If the semaphore is currently unavailable (value is 0), this operation will
+            // fail.
             if !semaphore.trylock() {
-                // Return an error indicating that the operation could not be performed without blocking.
+                // Return an error indicating that the operation could not be performed without
+                // blocking.
                 return syscall_error(
                     Errno::EAGAIN,
                     "sem_trywait",
@@ -4617,33 +4829,41 @@ impl Cage {
         // If the semaphore was successfully acquired, return 0.
         return 0;
     }
-    
-/// ## `sem_timedwait_syscall`
-///
-/// ### Description
-/// This function implements the `sem_timedwait` system call, which attempts to 
-/// acquire a semaphore with a timeout.
-///   1. Convert Timeout to Timespec: The function first converts the provided 
-/// timeout duration into a `timespec` structure, which is used by the underlying 
-/// `timedlock` function.
-///   2. Check for Semaphore Existence: The function then checks if the provided 
-/// semaphore handle exists in the semaphore table.
-///   3. Attempt to Acquire with Timeout: If the semaphore exists, the function attempts 
-/// to acquire it using `timedlock`, which will block for the specified duration.
-///   4. Error Handling: If the semaphore is unavailable, the timeout expires, 
-/// or the handle is invalid, the function returns an appropriate error code.
-///[sem_timedwait(2)](https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
-/// ### Function Arguments
-/// * `sem_handle`: A unique identifier for the semaphore.
-/// * `time`: The maximum time to wait for the semaphore to become available,
-///  expressed as a `RustDuration`.
-///
-/// ### Returns
-/// * 0 on success (semaphore acquired).
-///
-/// ### Errors
-/// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes available.
-/// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value is invalid.
+
+    /// ## `sem_timedwait_syscall`
+    ///
+    /// ### Description
+    /// This function implements the `sem_timedwait` system call, which attempts
+    /// to acquire a semaphore with a timeout.
+    ///   1. Convert Timeout to Timespec: The function first converts the
+    ///      provided
+    /// timeout duration into a `timespec` structure, which is used by the
+    /// underlying `timedlock` function.
+    ///   2. Check for Semaphore Existence: The function then checks if the
+    ///      provided
+    /// semaphore handle exists in the semaphore table.
+    ///   3. Attempt to Acquire with Timeout: If the semaphore exists, the
+    ///      function attempts
+    /// to acquire it using `timedlock`, which will block for the specified
+    /// duration.
+    ///   4. Error Handling: If the semaphore is unavailable, the timeout
+    ///      expires,
+    /// or the handle is invalid, the function returns an appropriate error
+    /// code. [sem_timedwait(2)](https://man7.org/linux/man-pages/man3/sem_timedwait.3p.html)
+    /// ### Function Arguments
+    /// * `sem_handle`: A unique identifier for the semaphore.
+    /// * `time`: The maximum time to wait for the semaphore to become
+    ///   available,
+    ///  expressed as a `RustDuration`.
+    ///
+    /// ### Returns
+    /// * 0 on success (semaphore acquired).
+    ///
+    /// ### Errors
+    /// * `ETIMEDOUT(110)`: If the timeout expires before the semaphore becomes
+    ///   available.
+    /// * `EINVAL(22)`: If the semaphore handle is invalid or the timeout value
+    ///   is invalid.
     pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
         let abstime = libc::timespec {
             tv_sec: time.as_secs() as i64,
@@ -4655,14 +4875,18 @@ impl Cage {
         let semtable = &self.sem_table;
         // Check whether semaphore exists
         if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            // Clone the semaphore entry to create an independent copy that we can modify without affecting other threads
+            // Clone the semaphore entry to create an independent copy that we can modify
+            // without affecting other threads
             let semaphore = sementry.clone();
-            // Release the mutable borrow on the original semaphore entry to allow other threads to access the semaphore table concurrently.
-            // Cloning and dropping the original reference lets us modify the value without deadlocking the dashmap.
+            // Release the mutable borrow on the original semaphore entry to allow other
+            // threads to access the semaphore table concurrently. Cloning and
+            // dropping the original reference lets us modify the value without deadlocking
+            // the dashmap.
             drop(sementry);
             // Attempt to acquire the semaphore with a timeout.
             if !semaphore.timedlock(time) {
-                // Return an error indicating that the call timed out before the semaphore could be locked.
+                // Return an error indicating that the call timed out before the semaphore could
+                // be locked.
                 return syscall_error(
                     Errno::ETIMEDOUT,
                     "sem_timedwait",
