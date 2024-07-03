@@ -662,6 +662,49 @@ pub mod fs_tests {
         }
     }
     
+    #[test]
+    fn ut_lind_fs_dup2_fork_and_reflect() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // 1. Open a file and write some data
+        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        assert_ne!(fd, -(Errno::ENOENT as i32));
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Parent data"), 11), 11);
+
+        // 2. Fork a child process
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        // 3. Child process:
+        let thread_child = interface::helper_thread(move || {
+            let cage1 = interface::cagetable_getref(2);
+
+            // Child duplicates the file descriptor to a new one
+            let new_fd = cage1.dup2_syscall(fd, 5);
+            assert_eq!(new_fd, 5);
+
+            // Child writes data to the file using the new file descriptor
+            assert_eq!(cage1.write_syscall(new_fd, str2cbuf("Child data"), 10), 10);
+
+            cage1.exit_syscall(EXIT_SUCCESS);
+        });
+
+        // 4. Wait for the child process to finish
+        thread_child.join().unwrap();
+
+        // 5. Parent process:
+        // Verify that the data written by the child is present
+        let mut buffer = sizecbuf(21);
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+        assert_eq!(cage.read_syscall(fd, buffer.as_mut_ptr(), 21), 21);
+        assert_eq!(cbuf2str(&buffer), "Parent dataChild data");
+
+        // Close the file descriptor
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
