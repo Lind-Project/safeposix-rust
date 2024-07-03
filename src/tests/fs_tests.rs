@@ -5,7 +5,7 @@ pub mod fs_tests {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
-    use crate::safeposix::{cage::*, dispatcher::*, filesystem::*};
+    use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
