@@ -1481,11 +1481,9 @@ pub mod fs_tests {
         let bufsize = 1024;
         let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
-        println!("Buffer contents: {:?}", vec);
 
         // Attempt to call getdents_syscall on the regular file descriptor
         let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
-        println!("Syscall result: {}", result);
         // Verify that it returns ENOTDIR
         assert_eq!(result, -(Errno::ENOTDIR as i32));
 

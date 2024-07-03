@@ -3499,10 +3499,21 @@ impl Cage {
 /// ## `getdents_syscall`
 ///
 /// ### Description
-/// This function implements the `getdents` system call, which reads directory entries from a directory file descriptor
+/// This function reads directory entries from a directory file descriptor
 /// and returns them in a buffer. Reading directory entries using multiple read calls can be less efficient because it
 /// involves reading the data in smaller chunks and then parsing it.
 /// getdents can often be faster by reading directory entries in a more optimized way.
+/// * The function first checks if the provided buffer size is sufficient to store at least one 
+///   `ClippedDirent` structure.
+/// * The function validates the provided file descriptor to ensure it represents a 
+///   valid file.
+/// * The function checks if the file descriptor refers to a directory.
+/// * The function iterates over the directory entries in the 
+///   `filename_to_inode_dict` of the directory inode.
+/// * For each entry, the function constructs a `ClippedDirent` structure, which 
+///   contains the inode number, offset, and record length.
+/// * It packs the constructed directory entries into the provided buffer (`dirp`).
+/// * Updates the file position to the next directory entry to be read.
 ///
 /// ### Function Arguments
 /// * `fd`: A file descriptor representing the directory to read.
@@ -3512,10 +3523,12 @@ impl Cage {
 /// ### Returns
 /// * The number of bytes written to the buffer on success.
 /// 
-/// ### Errors and Panics
+/// ### Errors
 /// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
 /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
 /// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
+/// ### Panics
+/// * There are no panics in this syscall.
 
     pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32) -> i32 {
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
@@ -3561,7 +3574,7 @@ impl Cage {
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
-
+                                // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the actual file type is not yet determined.
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
                                 temp_len =
                                     interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
@@ -3597,6 +3610,8 @@ impl Cage {
                                 count += 1;
                             }
                             // update file position
+                            // keeps track of the current position within the directory. It indicates which directory entry the 
+                            // function should read next.
                             normalfile_filedesc_obj.position = interface::rust_min(
                                 position + count,
                                 dir_inode_obj.filename_to_inode_dict.len(),
