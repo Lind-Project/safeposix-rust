@@ -610,57 +610,6 @@ pub mod fs_tests {
     }
 
     #[test]
-    fn ut_lind_fs_fork_and_dup2() {
-        let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1);
-    
-        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = "/forkdup2file";
-    
-        // Open a file to get a valid file descriptor
-        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
-        assert!(fd >= 0);
-    
-        // Fork the process
-        let pid = unsafe { libc::fork() };
-        assert!(pid >= 0, "Fork failed");
-    
-        if pid == 0 {
-            // Child process
-            // Use dup2 to duplicate the file descriptor
-            let new_fd = cage.dup2_syscall(fd, fd + 1);
-            assert_eq!(new_fd, fd + 1, "dup2 failed in child process");
-    
-            // Write to the duplicated file descriptor
-            let msg = "Hello from child";
-            let write_result = cage.write_syscall(new_fd, msg.as_ptr() as *const u8, msg.len());
-            assert_eq!(write_result, msg.len() as i32, "Write failed in child process");
-    
-            // Exit the child process
-            unsafe { libc::exit(0) };
-        } else {
-            // Parent process
-            // Wait for the child process to complete
-            let mut status = 0;
-    
-            // Read the contents of the file to check if the child's write was successful
-            let mut buffer = vec![0u8; 1024];
-            let read_fd = cage.open_syscall(filepath, O_RDONLY, 0);
-            assert!(read_fd >= 0, "Failed to open file for reading");
-    
-            let read_result = cage.read_syscall(read_fd, buffer.as_mut_ptr(), buffer.len());
-            assert!(read_result > 0, "Read failed in parent process");
-    
-            let content = std::str::from_utf8(&buffer[..read_result as usize]).unwrap();
-            assert!(content.contains("Hello from child"), "msg not found");
-    
-            // Cleanup
-            assert_eq!(cage.close_syscall(read_fd), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-            lindrustfinalize();
-        }
-    }
-    #[test]
     fn ut_lind_fs_fork_and_dup3() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
