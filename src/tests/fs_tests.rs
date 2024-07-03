@@ -613,45 +613,55 @@ pub mod fs_tests {
     fn ut_lind_fs_fork_and_dup2() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-
+    
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/forkdup2file";
+    
         // Open a file to get a valid file descriptor
-        let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert!(fd >= 0);
+    
         // Fork the process
         let pid = unsafe { libc::fork() };
         assert!(pid >= 0);
-
+    
         if pid == 0 {
             // Child process
             // Use dup2 to duplicate the file descriptor
-            let new_fd = cage.dup2_syscall(fd, 5);
-            assert_eq!(new_fd, 5);
-
-            // Write something to the new file descriptor
-            let msg = b"Hello from child process\n";
-            let write_result = cage.write_syscall(new_fd, msg.as_ptr() as *const u8, msg.len() as u32);
+            let new_fd = cage.dup2_syscall(fd, fd + 1);
+            assert_eq!(new_fd, fd + 1);
+    
+            // Write to the duplicated file descriptor
+            let msg = "Hello from child";
+            let write_result = cage.write_syscall(new_fd, msg.as_ptr() as *const u8, msg.len());
             assert_eq!(write_result, msg.len() as i32);
-
+    
             // Exit the child process
-            libc::exit(0);
+            unsafe { libc::exit(0) };
         } else {
             // Parent process
             // Wait for the child process to complete
             let mut status = 0;
             unsafe { libc::waitpid(pid, &mut status, 0) };
-
+    
             // Read the contents of the file to check if the child's write was successful
-            let mut buf = vec![0u8; 1024];
-            let read_fd = cage.open_syscall("/testfile", O_RDONLY, 0);
-            let read_result = cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len() as u32);
+            let mut buffer = vec![0u8; 1024];
+            let read_fd = cage.open_syscall(filepath, O_RDONLY, 0);
+            assert!(read_fd >= 0);
+    
+            let read_result = cage.read_syscall(read_fd, buffer.as_mut_ptr(), buffer.len());
             assert!(read_result > 0);
-
-            let content = std::str::from_utf8(&buf[..read_result as usize]).unwrap();
-            assert!(content.contains("Hello from child process"));
-
+    
+            let content = std::str::from_utf8(&buffer[..read_result as usize]).unwrap();
+            assert!(content.contains("Hello from child"));
+    
+            // Cleanup
+            assert_eq!(cage.close_syscall(read_fd), 0);
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
             lindrustfinalize();
         }
     }
+    
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
