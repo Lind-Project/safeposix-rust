@@ -699,8 +699,6 @@ pub mod fs_tests {
 
             // Cleanup
             assert_eq!(cage.close_syscall(read_fd), 0);
-            assert_eq!(cage.close_syscall(fd), 0);
-            assert_eq!(cage.rmdir_syscall(filepath), 0);
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
             lindrustfinalize();
         }
