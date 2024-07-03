@@ -641,7 +641,7 @@ pub mod fs_tests {
         } else {
             // Parent process
             // Wait for the child process to complete
-            interface::sleep(interface::RustDuration::from_millis(200)); // Wait for the child to finish
+            // interface::sleep(interface::RustDuration::from_millis(200)); // Wait for the child to finish
     
             // Read the contents of the file to check if the child's write was successful
             let mut buffer = vec![0u8; 1024];
