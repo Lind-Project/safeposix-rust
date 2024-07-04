@@ -100,6 +100,8 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
+use std::io::{self, Write, IoSlice};
+use std::slice;
 
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
@@ -1816,6 +1818,20 @@ impl Cage {
                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
                     } // Trigger SIGPIPE
                     retval
+                }
+                Stream(stream_filedesc_obj) => {
+                    // Handle streams
+                    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
+                    let mut data = Vec::new();
+                    for iovec in iovecs {
+                        let slice = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
+                        data.extend_from_slice(slice);
+                    }
+                    let written = log_to_stdout(&data);
+                    if written < 0 {
+                        return syscall_error(Errno::EIO, "writev", "Failed to write to stream");
+                    }
+                    written as i32
                 }
                 _ => {
                     // we currently don't support writev for files/streams
