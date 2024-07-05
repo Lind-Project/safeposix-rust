@@ -106,7 +106,7 @@ use std::slice;
 use std::str;
 use std::fs::File;
 use std::sync::{Arc, RwLock};
-
+use std::os::unix::io::AsRawFd;
 
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
