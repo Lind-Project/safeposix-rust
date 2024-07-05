@@ -70,7 +70,7 @@ pub struct FileDesc {
     pub inode: usize,
     pub flags: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>,
-    pub file1: Option<Arc<RwLock<File>>>,
+    pub fs_file: Option<Arc<RwLock<std::fs::File>>>,
 }
 
 #[derive(Debug, Clone)]

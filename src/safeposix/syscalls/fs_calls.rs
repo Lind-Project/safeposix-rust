@@ -188,8 +188,7 @@ impl Cage {
             inode: inodenum,
             flags: flags & allowmask,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-            file1: Some(Arc::new(RwLock::new(file1))),
-            // file: Some(Arc::new(RwLock::new(file))),
+            fs_file: Some(Arc::new(RwLock::new(file))),
         }
     }
 
@@ -1848,16 +1847,13 @@ impl Cage {
                     }
                 }
                 File(file_filedesc_obj) => {
+                    // Handle files
                     let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
-                    let io_slices: Vec<IoSlice> = iovecs
-                        .iter()
-                        .map(|iov| {
-                            IoSlice::new(unsafe {
-                                slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len)
-                            })
-                        })
+                    let io_slices: Vec<IoSlice> = iovecs.iter()
+                        .map(|iov| IoSlice::new(unsafe { slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) }))
                         .collect();
-                    let mut filehandle = file_filedesc_obj.file1.as_ref().unwrap().write().unwrap();
+    
+                    let mut filehandle = file_filedesc_obj.fs_file.as_ref().unwrap().write().unwrap(); // Renamed field
                     match filehandle.write_vectored(&io_slices) {
                         Ok(bytes_written) => bytes_written as i32,
                         Err(_) => syscall_error(Errno::EIO, "writev", "Failed to write to file"),
