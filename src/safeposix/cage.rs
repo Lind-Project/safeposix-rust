@@ -56,7 +56,7 @@ pub use crate::interface::CAGE_TABLE;
 
 #[derive(Debug, Clone)]
 pub enum FileDescriptor {
-    // File(FileDesc),
+    File(FileDesc),
     Stream(StreamDesc),
     Socket(SocketDesc),
     Pipe(PipeDesc),
