@@ -1850,12 +1850,20 @@ impl Cage {
                         .map(|iov| IoSlice::new(unsafe { slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) }))
                         .collect();
     
-                    let mut filehandle = file_filedesc_obj.file.write().unwrap();
+                    let mut filehandle = file_filedesc_obj.file.as_ref().unwrap().write().unwrap();
                     match filehandle.write_vectored(&io_slices) {
                         Ok(bytes_written) => bytes_written as i32,
                         Err(_) => syscall_error(Errno::EIO, "writev", "Failed to write to file"),
                     }
                 }
+                _ => {
+                    return syscall_error(
+                        Errno::EOPNOTSUPP,
+                        "writev",
+                        "System call not implemented for this fd type",
+                    );
+                }
+            }
 
                 _ => {
                     return syscall_error(
