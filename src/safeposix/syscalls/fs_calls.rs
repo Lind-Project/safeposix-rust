@@ -1822,7 +1822,24 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
-
+                Stream(_stream_filedesc_obj) => {
+                    // Handle streams
+                    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
+                    let mut data = Vec::new();
+                    for iovec in iovecs {
+                        let slice = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
+                        data.extend_from_slice(slice);
+                    }
+                    match std::str::from_utf8(&data) {
+                        Ok(s) => {
+                            log_to_stdout(s);
+                            data.len() as i32
+                        }
+                        Err(_) => {
+                            syscall_error(Errno::EIO, "writev", "Failed to convert data to string")
+                        }
+                    }
+                }
 
                 _ => {
                     return syscall_error(
