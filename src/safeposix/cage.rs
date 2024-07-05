@@ -208,7 +208,6 @@ pub fn init_fdtable() -> FdTable {
             stream: 0,
             flags: O_RDONLY,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-            file: Some(RwLock::new(file)),
         },
     ))));
     let stdout = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(
@@ -217,7 +216,6 @@ pub fn init_fdtable() -> FdTable {
             stream: 1,
             flags: O_WRONLY,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-            file: Some(RwLock::new(file)),
         },
     ))));
     let stderr = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(
@@ -226,7 +224,6 @@ pub fn init_fdtable() -> FdTable {
             stream: 2,
             flags: O_WRONLY,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-            file: Some(RwLock::new(file)),
         },
     ))));
     fdtable.push(stdin);
