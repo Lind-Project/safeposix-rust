@@ -172,6 +172,7 @@ impl Cage {
     // This file descriptor object is then inserted into the File Descriptor Table
     // of the associated cage in the open_syscall() function
     fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc {
+        let path = Path::new("/some/valid/path/to/file");
         let position = if 0 != flags & O_APPEND { size } else { 0 };
         let file = File::open(path).expect("Failed to open file");
         // While creating a new FileDescriptor, there are two important things that need
@@ -181,7 +182,7 @@ impl Cage {
         // function. It’s needed for managing file descriptors across different
         // processes, ensuring that they do not unintentionally remain open.
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
-        let path = Path::new("/some/valid/path/to/file");
+        
         FileDesc {
             position: position,
             inode: inodenum,
