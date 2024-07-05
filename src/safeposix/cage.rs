@@ -51,6 +51,7 @@ use std::sync::{Arc, RwLock};
 use std::io::{IoSlice, Write};
 use std::slice;
 use std::str;
+use std::path::Path;
 
 pub use crate::interface::CAGE_TABLE;
 
@@ -220,6 +221,7 @@ pub fn init_fdtable() -> FdTable {
             stream: 1,
             flags: O_WRONLY,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
+            file: Some(Arc::new(RwLock::new(File::create(dummy_path).unwrap()))),
         },
     ))));
     let stderr = interface::RustRfc::new(interface::RustLock::new(Some(FileDescriptor::Stream(
@@ -228,6 +230,7 @@ pub fn init_fdtable() -> FdTable {
             stream: 2,
             flags: O_WRONLY,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
+            file: Some(Arc::new(RwLock::new(File::create(dummy_path).unwrap()))),
         },
     ))));
     fdtable.push(stdin);
