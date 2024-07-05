@@ -172,8 +172,6 @@ impl Cage {
     // of the associated cage in the open_syscall() function
     fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc {
         let position = if 0 != flags & O_APPEND { size } else { 0 };
-        let file = File::open(path).expect("Failed to open file");
-
         // While creating a new FileDescriptor, there are two important things that need
         // to be present: O_RDWRFLAGS:- This flag determines whether the file is
         // opened for reading, writing, or both. O_CLOEXEC - This flag indicates
