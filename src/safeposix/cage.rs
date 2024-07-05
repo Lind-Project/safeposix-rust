@@ -45,8 +45,12 @@ use super::net::SocketHandle;
 pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::net_constants::*;
 pub use super::syscalls::sys_constants::*;
-use std::sync::RwLock;
+
 use std::fs::File;
+use std::sync::{Arc, RwLock};
+use std::io::{IoSlice, Write};
+use std::slice;
+use std::str;
 
 pub use crate::interface::CAGE_TABLE;
 
@@ -65,7 +69,7 @@ pub struct FileDesc {
     pub inode: usize,
     pub flags: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>,
-    pub file: Option<RwLock<File>>,
+    pub file: Option<Arc<RwLock<File>>>,
 }
 
 #[derive(Debug, Clone)]

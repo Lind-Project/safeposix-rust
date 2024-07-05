@@ -183,7 +183,7 @@ impl Cage {
             inode: inodenum,
             flags: flags & allowmask,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-            file: Some(RwLock::new(file)),
+            file: Some(Arc::new(RwLock::new(file))),
         }
     }
 
