@@ -181,6 +181,7 @@ impl Cage {
         // function. It’s needed for managing file descriptors across different
         // processes, ensuring that they do not unintentionally remain open.
         let allowmask = O_RDWRFLAGS | O_CLOEXEC;
+        let path = Path::new("/some/valid/path/to/file");
         FileDesc {
             position: position,
             inode: inodenum,
