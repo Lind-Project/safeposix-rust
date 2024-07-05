@@ -2098,6 +2098,54 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SELECT SYSCALL------------------
+    /// ### Description
+    /// The `select_syscall()` allows a program to monitor multiple file
+    /// descriptors, waiting until one or more of the file descriptors become
+    /// "ready" for some class of I/O operation (e.g., input possible).  A
+    /// file descriptor is considered ready if it is possible to perform a
+    /// corresponding I/O operation (e.g., `read_syscall()`) without blocking.
+
+    /// ### Function Arguments
+    /// The `select_syscall()` receives five arguments:
+    /// * `nfds` - This argument should be set to the highest-numbered file
+    ///   descriptor in any of the three sets, plus 1.  The indicated file
+    ///   descriptors in each set are checked, up to this limit.
+    /// * `readfds` -  The file descriptors in this set are watched to see if
+    ///   they are ready for reading.  A file descriptor is ready for reading if
+    ///   a read operation will not block; in particular, a file descriptor is
+    ///   also ready on end-of-file. After select() has returned, readfds will
+    ///   be cleared of all file descriptors except for those that are ready for
+    ///   reading.
+    /// * `writefds` - The file descriptors in this set are watched to see if
+    ///   they are ready for writing.  A file descriptor is ready for writing if
+    ///   a write operation will not block.  However, even if a file descriptor
+    ///   indicates as writable, a large write may still block. After select()
+    ///   has returned, writefds will be cleared of all file descriptors except
+    ///   for those that are ready for writing.
+    /// * `exceptfds` - currently not supported, only the validity of the fds
+    ///   will be checked
+    /// * `timeout` - The timeout argument is a RustDuration structure that
+    ///   specifies the interval that select() should block waiting for a file
+    ///   descriptor to become ready.  The call will block until either: •  a
+    ///   file descriptor becomes ready; •  the call is interrupted by a signal
+    ///   handler; or •  the timeout expires.
+
+    /// ### Returns
+    /// On success, select() and return the number of file descriptors contained
+    /// in the two returned descriptor sets (that is, the total number of
+    /// bits that are set in readfds, writefds). The return value may be zero if
+    /// the timeout expired before any file descriptors became ready.
+    /// Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - An invalid file descriptor was given in one of the sets. (e.g.
+    ///   a file descriptor that was already closed.)
+    /// * EINTR - A signal was caught.
+    /// * EINVAL -  nfds is negative or exceeds the FD_SET_MAX_FD.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn select_syscall(
         &self,
         nfds: i32,
@@ -2106,6 +2154,7 @@ impl Cage {
         exceptfds: Option<&mut interface::FdSet>,
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
+        // nfds should be in the allowed range (i.e. 0 to 1024 according to standard)
         if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
         }
@@ -2141,8 +2190,7 @@ impl Cage {
             }
 
             // 3. iterate thru exceptfds
-            // currently we don't really do select on execptfds, we just check if those fds
-            // are valid
+            // TODO: we currently don't implement exceptfds but possibly could if necessary
             if let Some(exceptfds_ref) = exceptfds.as_ref() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
@@ -2157,6 +2205,7 @@ impl Cage {
                 }
             }
 
+            // check for timeout
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
@@ -2180,6 +2229,12 @@ impl Cage {
         return retval;
     }
 
+    /// This function is used to select on readfds specifically
+    /// This function monitors all readfds to check if they are ready to read
+    /// readfds could be one of the followings:
+    /// 1. Regular files (these files are always marked as readable)
+    /// 2. Pipes
+    /// 3. Sockets
     fn select_readfds(
         &self,
         nfds: i32,
@@ -2191,11 +2246,14 @@ impl Cage {
         let mut inet_info = SelectInetInfo::new();
 
         for fd in 0..nfds {
-            // check if current i is in readfd
+            // ignore file descriptors that are not in the set
             if !readfds.is_set(fd) {
                 continue;
             }
 
+            // try to get the FileDescriptor Object from fd number
+            // if the fd exists, do further processing based on the file descriptor type
+            // otherwise, raise an error
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
@@ -2204,9 +2262,22 @@ impl Cage {
                         let mut newconnection = false;
                         match sockfdobj.domain {
                             AF_UNIX => {
+                                // sockethandle lock with read access
                                 let sock_tmp = sockfdobj.handle.clone();
                                 let sockhandle = sock_tmp.read();
                                 if sockhandle.state == ConnState::INPROGRESS {
+                                    // if connection state is INPROGRESS, in case of AF_UNIX socket,
+                                    // that would mean the socket connects in non-blocking mode
+
+                                    // BUG: current implementation of AF_UNIX socket non-blocking
+                                    // connection is not working
+                                    // correctly, according to standards, when the connection
+                                    // is ready, select should report writability instead of
+                                    // readability so the code
+                                    // here should be removed. Interestingly, since connect_tcp_unix
+                                    // hasn't changed the state to INPROGRESS, so this piece of code
+                                    // inside the if statement
+                                    // is a dead code that would never be executed currently
                                     let remotepathbuf = normpath(
                                         convpath(sockhandle.remoteaddr.unwrap().path()),
                                         self,
@@ -2219,10 +2290,15 @@ impl Cage {
                                 }
 
                                 if sockhandle.state == ConnState::LISTEN {
+                                    // if connection state is LISTEN
+                                    // then check if there are any pending connections
+
+                                    // get the path of the socket
                                     let localpathbuf = normpath(
                                         convpath(sockhandle.localaddr.unwrap().path()),
                                         self,
                                     );
+                                    // check if there is any connections associated with the path
                                     let dsconnobj =
                                         NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() {
@@ -2233,6 +2309,8 @@ impl Cage {
                                     }
                                 } else if sockhandle.state == ConnState::CONNECTED || newconnection
                                 {
+                                    // otherwise, the connection is already established
+                                    // check if the pipe has any thing
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                     let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                                     if receivepipe.check_select_read() {
@@ -2242,8 +2320,10 @@ impl Cage {
                                 }
                             }
                             AF_INET | AF_INET6 => {
-                                // here we simply record the inet fd into inet_fds and the tuple
-                                // list for using kernel_select
+                                // For AF_INET or AF_INET6 socket, currently we still rely on kernel
+                                // implementation, so here we simply
+                                // prepare the kernel fd set by translating fd into kernel fd
+                                // and will pass it to kernel_select later
                                 if sockfdobj.rawfd < 0 {
                                     continue;
                                 }
@@ -2263,6 +2343,9 @@ impl Cage {
                             }
                         }
 
+                        // newconnection seems to be used for AF_UNIX socket with INPROGRESS state
+                        // (non-blocking AF_UNIX socket connection), which is a broken feature
+                        // currently
                         if newconnection {
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
@@ -2270,19 +2353,20 @@ impl Cage {
                         }
                     }
 
-                    //we don't support selecting streams
+                    // we don't support selecting streams
                     Stream(_) => {
                         continue;
                     }
 
                     Pipe(pipefdobj) => {
+                        // check if the pipe has anything to read
                         if pipefdobj.pipe.check_select_read() {
                             new_readfds.set(fd);
                             *retval += 1;
                         }
                     }
 
-                    //these file reads never block
+                    // these file reads never block
                     _ => {
                         new_readfds.set(fd);
                         *retval += 1;
@@ -2293,7 +2377,9 @@ impl Cage {
             }
         }
 
-        // do the kernel_select for inet sockets
+        // if kernel_fds is not empty, that would mean we will need to call the
+        // kernel_select (which is calling real select syscall under the hood)
+        // for these fds for AF_INET/AF_INET6 sockets
         if !inet_info.kernel_fds.is_empty() {
             let kernel_ret = update_readfds_from_kernel_select(new_readfds, &mut inet_info, retval);
             // NOTE: we ignore the kernel_select error if some domsocks are ready
@@ -2305,6 +2391,12 @@ impl Cage {
         return 0;
     }
 
+    /// This function is used to select on writefds specifically
+    /// This function monitors all writefds to check if they are ready to write
+    /// writefds could be one of the followings:
+    /// 1. Regular files (these files are always marked as writable)
+    /// 2. Pipes
+    /// 3. Sockets
     fn select_writefds(
         &self,
         nfds: i32,
@@ -2313,23 +2405,35 @@ impl Cage {
         retval: &mut i32,
     ) -> i32 {
         for fd in 0..nfds {
-            // check if current i is in writefds
+            // ignore file descriptors that are not in the set
             if !writefds.is_set(fd) {
                 continue;
             }
 
+            // try to get the FileDescriptor Object from fd number
+            // if the fd exists, do further processing based on the file descriptor type
+            // otherwise, raise an error
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
                     Socket(ref sockfdobj) => {
-                        // check if we've made an in progress connection first
+                        // sockethandle lock with read access
                         let sock_tmp = sockfdobj.handle.clone();
                         let sockhandle = sock_tmp.read();
                         let mut newconnection = false;
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::INPROGRESS {
+                                    // if connection state is INPROGRESS, in case of AF_UNIX socket,
+                                    // that would mean the socket connects in non-blocking mode
+
+                                    // BUG: current implementation of AF_UNIX socket non-blocking
+                                    // connection is not working
+                                    // correctly, according to standards, when the connection
+                                    // is ready, select should report for writability, but current
+                                    // implementation
+                                    // does not make much sense
                                     let remotepathbuf =
                                         convpath(sockhandle.remoteaddr.unwrap().path());
                                     let dsconnobj =
@@ -2338,8 +2442,14 @@ impl Cage {
                                         newconnection = true;
                                     }
                                 }
+                                // BUG: need to check if send_pipe is ready to
+                                // write
                             }
-                            AF_INET => {
+                            AF_INET | AF_INET6 => {
+                                // For AF_INET or AF_INET6 socket, currently we still rely on kernel
+                                // implementation, so here we simply
+                                // call check_rawconnection with innersocket if connection state
+                                // is INPROGRESS (non-blocking AF_INET/AF_INET6 socket connection)
                                 if sockhandle.state == ConnState::INPROGRESS
                                     && sockhandle
                                         .innersocket
@@ -2355,30 +2465,34 @@ impl Cage {
                             }
                         }
 
+                        // non-blocking AF_INET/AF_INET6 socket connection now established
+                        // change the state to connected
                         if newconnection {
                             let mut newconnhandle = sock_tmp.write();
                             newconnhandle.state = ConnState::CONNECTED;
                         }
 
-                        //we always say sockets are writable? Even though this is not true
+                        // BUG: socket are not always writable, it could block in cases
+                        // like the kernel send buffer is full
                         new_writefds.set(fd);
                         *retval += 1;
                     }
 
-                    //we always say streams are writable?
+                    // we always say streams are writable?
                     Stream(_) => {
                         new_writefds.set(fd);
                         *retval += 1;
                     }
 
                     Pipe(pipefdobj) => {
+                        // check if the pipe has any space to write
                         if pipefdobj.pipe.check_select_write() {
                             new_writefds.set(fd);
                             *retval += 1;
                         }
                     }
 
-                    //these file writes never block
+                    // these file writes never block
                     _ => {
                         new_writefds.set(fd);
                         *retval += 1;
@@ -3080,6 +3194,56 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SOCKETPAIR SYSCALL------------------
+    /// ### Description
+    /// The `socketpair_syscall()` call creates an unnamed pair of connected
+    /// sockets in the specified domain, of the specified type, and using
+    /// the optionally specified protocol.
+    /// The file descriptors used in referencing the new sockets are returned
+    /// in sv.sock1 and sv.sock2. The two sockets are indistinguishable.
+    /// ### Function Arguments
+    /// The `socketpair_syscall()` receives four arguments:
+    /// * `domain` -  The domain argument specifies a communication domain; this
+    ///   selects the protocol family which will be used for communication.
+    ///   Currently supported domains are AF_UNIX, AF_INET and AF_INET6.
+    /// * `socktype` - specifies the communication semantics. Currently defined
+    ///   types are:
+    ///                1. SOCK_STREAM Provides sequenced, reliable, two-way,
+    ///                   connection-based byte streams.  An out-of-band data
+    ///                   transmission mechanism may be supported.
+    ///                2. SOCK_DGRAM Supports datagrams (connectionless,
+    ///                   unreliable messages of a fixed maximum length). The
+    ///                   type argument serves a second purpose: in addition to
+    ///                   specifying a socket type, it may include the bitwise
+    ///                   OR of any of the following values, to modify the
+    ///                   behavior of the socket:
+    ///                1. SOCK_NONBLOCK Set the O_NONBLOCK file status flag on
+    ///                   the open file description referred to by the new file
+    ///                   descriptor.
+    ///                2. SOCK_CLOEXEC Set the close-on-exec flag on the new
+    ///                   file descriptor.
+    /// * `protocol` - The protocol specifies a particular protocol to be used
+    ///   with the socket. Currently only support the default protocol
+    ///   (IPPROTO_TCP).
+    /// * `sv` -  The file descriptors used in referencing the new sockets are
+    ///   returned in sv.sock1 and sv.sock2. The two sockets are
+    ///   indistinguishable.
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EAFNOSUPPORT - The specified address family is not supported on this
+    ///   machine.
+    /// * EOPNOTSUPP - The specified protocol does not support creation of
+    ///   socket pairs.
+    /// * EINVAL - The specified flag is not valid
+    /// * ENFILE - no enough file descriptors can be assigned
+    ///
+    /// ### Panics
+    /// No Panic is expected for this syscall.
+
     // Because socketpair needs to spawn off a helper thread to connect the two ends
     // of the socket pair, and because that helper thread, along with the main
     // thread, need to access the cage to call methods (syscalls) of it, and because
@@ -3094,14 +3258,22 @@ impl Cage {
         protocol: i32,
         sv: &mut interface::SockPair,
     ) -> i32 {
-        let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol };
+        let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol }; // only support protocol of 0 currently
+                                                                              // BUG: current implementation of socketpair creates two sockets and bind to an
+                                                                              // unique address.
+                                                                              // But according to standard, the sockets created from socketpair should not
+                                                                              // bind to any address
+
         // firstly check the parameters
+        // socketpair should always be a AF_UNIX TCP socket
         if domain != AF_UNIX {
             return syscall_error(
                 Errno::EOPNOTSUPP,
                 "socketpair",
                 "Linux socketpair only supports AF_UNIX aka AF_LOCAL domain.",
             );
+        // socket type is stored at the lowest 3 bits
+        // so we and it with 0x7 to retrieve it
         } else if socktype & 0x7 != SOCK_STREAM || newprotocol != IPPROTO_TCP {
             return syscall_error(
                 Errno::EOPNOTSUPP,
@@ -3110,6 +3282,12 @@ impl Cage {
             );
         }
 
+        // check if socktype contains any invalid flag bits
+        if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
+            return syscall_error(Errno::EINVAL, "socket", "Invalid combination of flags");
+        }
+
+        // get the flags
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
@@ -3134,6 +3312,7 @@ impl Cage {
         let sock2fd = this._socket_inserter(Socket(sock2fdobj.clone()));
 
         // assign local addresses and connect
+        // we are not supposed to assign and bind address to socketpair sockets
         let sock1tmp = sock1fdobj.handle.clone();
         let sock2tmp = sock2fdobj.handle.clone();
         let mut sock1handle = sock1tmp.write();
@@ -3160,6 +3339,9 @@ impl Cage {
 
         sv.sock1 = sock1fd;
         sv.sock2 = sock2fd;
+
+        // since socket file should not exist in the first place
+        // the code below is supposed to be removed as well
 
         // we need to increment the refcount of the sockets we created
         // reason: in bind_inner_socket, we added entries to the inode table
