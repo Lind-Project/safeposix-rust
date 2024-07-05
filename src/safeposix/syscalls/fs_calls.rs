@@ -95,18 +95,18 @@
 use super::fs_constants::*;
 use super::sys_constants::*;
 use crate::interface;
-use crate::safeposix::cage::Errno::EINVAL;
+use crate::interface::{RustRfc, RustLock, log_to_stdout, AdvisoryLock};
 use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
 use std::io::{self, Write, IoSlice};
-use crate::interface::log_to_stdout;
 use std::slice;
 use std::str;
 use std::fs::File;
 use std::sync::{Arc, RwLock};
 use std::os::unix::io::AsRawFd;
+
 
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
