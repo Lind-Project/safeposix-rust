@@ -2286,8 +2286,8 @@ impl Cage {
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //removing the file from the metadata
-                                FS_METADATA.inodetable.remove(&inodenum);
                                 drop(inodeobj);
+                                FS_METADATA.inodetable.remove(&inodenum);
                                 log_metadata(&FS_METADATA, inodenum);
                             }
                         }
@@ -3077,6 +3077,19 @@ impl Cage {
                 syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
             }
             (Some(inodenum), Some(parent_inodenum)) => {
+                //If the parent directory of the directory that shall be removed
+                //doesn't grant write permission, the removal cannot be performed
+                if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap())
+                {
+                    // check if parent directory has write permissions
+                    if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {
+                        return syscall_error(
+                            Errno::EPERM,
+                            "rmdir",
+                            "Parent directory does not have write permission",
+                        );
+                    } 
+                }
                 //Getting a mutable reference to an inode struct that corresponds to
                 //the directory that shall be removed
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();

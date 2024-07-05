@@ -308,6 +308,10 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
             cage.unlink_syscall(path);
             return;
         } else {
+            //Parent's directory's write flag should be set before
+            //iterating through the child directories, so that they 
+            //could be removed
+            cage.chmod_syscall(path, S_IRWXA);
             //remove all children recursively
             visit_children(cage, path, None, |childcage, childpath, isdir, _| {
                 if isdir {
@@ -316,9 +320,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                     childcage.unlink_syscall(childpath);
                 }
             });
-
             //remove specified directory now that it is empty
-            cage.chmod_syscall(path, S_IRWXA);
             cage.rmdir_syscall(path);
         }
     } else {
