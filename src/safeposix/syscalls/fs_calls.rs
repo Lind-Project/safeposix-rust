@@ -172,9 +172,11 @@ impl Cage {
     // This file descriptor object is then inserted into the File Descriptor Table
     // of the associated cage in the open_syscall() function
     fn _file_initializer(&self, inodenum: usize, flags: i32, size: usize) -> FileDesc {
-        let path1 = Path::new("/some/valid/path/to/file");
-        let position = if 0 != flags & O_APPEND { size } else { 0 };
-        // let file = File::open(path1).expect("Failed to open file");
+        let position = if flags & O_APPEND != 0 {
+            file.metadata().unwrap().len() as usize
+        } else {
+            0
+        };        // let file = File::open(path1).expect("Failed to open file");
         // While creating a new FileDescriptor, there are two important things that need
         // to be present: O_RDWRFLAGS:- This flag determines whether the file is
         // opened for reading, writing, or both. O_CLOEXEC - This flag indicates
