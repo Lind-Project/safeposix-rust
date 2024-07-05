@@ -65,6 +65,7 @@ pub struct FileDesc {
     pub inode: usize,
     pub flags: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>,
+    pub file: Option<RwLock<File>>,
 }
 
 #[derive(Debug, Clone)]
@@ -73,7 +74,6 @@ pub struct StreamDesc {
     pub stream: i32, //0 for stdin, 1 for stdout, 2 for stderr
     pub flags: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>,
-    pub file: Option<RwLock<File>>,
 }
 
 #[derive(Debug, Clone)]
