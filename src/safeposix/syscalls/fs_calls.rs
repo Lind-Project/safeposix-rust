@@ -1856,14 +1856,6 @@ impl Cage {
                         Err(_) => syscall_error(Errno::EIO, "writev", "Failed to write to file"),
                     }
                 }
-                _ => {
-                    return syscall_error(
-                        Errno::EOPNOTSUPP,
-                        "writev",
-                        "System call not implemented for this fd type",
-                    );
-                }
-            }
 
                 _ => {
                     return syscall_error(
