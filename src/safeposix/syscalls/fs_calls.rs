@@ -104,7 +104,8 @@ use std::io::{self, Write, IoSlice};
 use crate::interface::log_to_stdout;
 use std::slice;
 use std::str;
-
+use crate::interface::concat_iovec_to_slice;
+use crate::interface::log_from_slice;
 
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
@@ -1822,7 +1823,10 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
-
+                Stream(_stream_filedesc_obj) => {
+                    let iovecslice = concat_iovec_to_slice(iovec, iovcnt);
+                    log_from_slice(&iovecslice)
+                }
 
                 _ => {
                     return syscall_error(

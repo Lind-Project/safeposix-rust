@@ -11,6 +11,10 @@ pub use parking_lot::{
     Condvar, Mutex, RwLock as RustLock, RwLockReadGuard as RustLockReadGuard,
     RwLockWriteGuard as RustLockWriteGuard,
 };
+use std::slice;
+use crate::safeposix::cage::syscall_error;
+use crate::safeposix::cage::Errno;
+use std::str;
 use std::cell::RefCell;
 pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::collections::VecDeque as RustDeque;
@@ -57,6 +61,27 @@ pub static mut CAGE_TABLE: Vec<Option<RustRfc<Cage>>> = Vec::new();
 pub fn check_cageid(cageid: u64) {
     if cageid >= MAXCAGEID as u64 {
         panic!("Cage ID is outside of valid range");
+    }
+}
+
+pub fn concat_iovec_to_slice(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<u8> {
+    // Safety: Caller must ensure that the iovec pointer is valid and points to a valid iovec array
+    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
+    let mut data = Vec::new();
+    for iovec in iovecs {
+        let slice = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
+        data.extend_from_slice(slice);
+    }
+    data
+}
+
+pub fn log_from_slice(data: &[u8]) -> i32 {
+    match str::from_utf8(data) {
+        Ok(s) => {
+            log_to_stdout(s);
+            data.len() as i32
+        }
+        Err(_) => syscall_error(Errno::EIO, "writev", "Failed to convert data to string"),
     }
 }
 
