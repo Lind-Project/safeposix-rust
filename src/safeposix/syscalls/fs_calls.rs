@@ -1857,7 +1857,7 @@ impl Cage {
                             })
                         })
                         .collect();
-                    let mut filehandle = file_filedesc_obj.file.as_ref().unwrap().write().unwrap();
+                    let mut filehandle = file_filedesc_obj.file1.as_ref().unwrap().write().unwrap();
                     match filehandle.write_vectored(&io_slices) {
                         Ok(bytes_written) => bytes_written as i32,
                         Err(_) => syscall_error(Errno::EIO, "writev", "Failed to write to file"),
