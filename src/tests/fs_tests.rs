@@ -2091,12 +2091,15 @@ pub mod fs_tests {
         let reader_thread = thread::spawn(move || {
             let mut buf = vec![0u8; data1.len() + data2.len()];
             let bytes_read = cage2.recv_syscall(sock2, buf.as_mut_ptr(), buf.len(), 0); // Updated this line
+            println!("Bytes read: {:?}", bytes_read);
+            println!("Data read: {:?}", &buf);
             assert_eq!(bytes_read, (data1.len() + data2.len()) as i32);
             assert_eq!(&buf, &(data1.to_string() + data2).as_bytes());
         });
 
         // Write the data to the sending socket using writev_syscall
         let bytes_written = cage.writev_syscall(socketpair.sock1, iovecs.as_ptr(), iovecs.len() as i32);
+        println!("Bytes written: {:?}", bytes_written);
         assert_eq!(bytes_written, (data1.len() + data2.len()) as i32);
 
         // Wait for the reader thread to finish
