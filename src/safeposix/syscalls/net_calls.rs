@@ -75,27 +75,29 @@ impl Cage {
         0
     }
 
-/// ## `socket_syscall`
-///
-/// ### Description
-/// This function creates a new socket, ensuring the requested domain, socket type, 
-/// and protocol are supported by SafePosix. 
-/// It validates the requested communication domain, socket type, and protocol, permitting only combinations that are known 
-/// to be safe and secure.
-///
-/// ### Function Arguments
-/// * `domain`: The communication domain for the socket. Supported values are 
-///   `PF_INET` (Internet Protocol) and `PF_UNIX` (Unix domain sockets).
-/// * `socktype`: The socket type. Supported values are `SOCK_STREAM` (stream sockets) and `SOCK_DGRAM` (datagram sockets).
-/// * `protocol`: The protocol to use for communication. This defaults to TCP for stream sockets 
-///   (`SOCK_STREAM`) and UDP for datagram sockets (`SOCK_DGRAM`).
-///
-/// ### Returns
-/// * The new file descriptor representing the socket on success.
-///
-/// ### Errors
-/// * `EOPNOTSUPP(95)`: If an unsupported combination of domain, socket type, or protocol is requested.
-/// * `EINVAL(22)`: If an invalid combination of flags is provided.
+    /// ## `socket_syscall`
+    ///
+    /// ### Description
+    /// This function creates a new socket, ensuring the requested domain, socket type, 
+    /// and protocol are supported by SafePosix. 
+    /// It validates the requested communication domain, socket type, and protocol, permitting only combinations that are known 
+    /// to be safe and secure.
+    ///
+    /// ### Function Arguments
+    /// * `domain`: The communication domain for the socket. Supported values are 
+    ///   `PF_INET` (Internet Protocol) and `PF_UNIX` (Unix domain sockets).
+    /// * `socktype`: The socket type. Supported values are `SOCK_STREAM` (stream sockets) and `SOCK_DGRAM` (datagram sockets).
+    /// * `protocol`: The protocol to use for communication. This defaults to TCP for stream sockets 
+    ///   (`SOCK_STREAM`) and UDP for datagram sockets (`SOCK_DGRAM`).
+    ///
+    /// ### Returns
+    /// * The new file descriptor representing the socket on success.
+    ///
+    /// ### Errors
+    /// * `EOPNOTSUPP(95)`: If an unsupported combination of domain, socket type, or protocol is requested.
+    /// * `EINVAL(22)`: If an invalid combination of flags is provided.
+    /// ### Panics
+    /// There are no panics in this syscall.
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
