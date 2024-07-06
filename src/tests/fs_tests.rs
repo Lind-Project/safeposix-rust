@@ -2057,6 +2057,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    use crate::tests::FileDescriptor::Socket;
     #[test]
     fn test_writev_syscall_socket() {
         let _thelock = setup::lock_and_init();
