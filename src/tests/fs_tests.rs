@@ -2226,8 +2226,7 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
-        // Create a mock stream file descriptor (e.g., stdout)
-        let fd = 1; // stdout is typically file descriptor 1
+        let fd = 1; // stdout
     
         // Prepare the iovec structures
         let hello = b"Hello, ";
@@ -2251,4 +2250,53 @@ pub mod fs_tests {
     
         lindrustfinalize();
     }
+    // Update the test case
+    #[test]
+    fn test_writev_syscall_file() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a temporary file path
+        let path = "testfile.txt";
+        // Open the file
+        let fd = cage.open_syscall(path, O_WRONLY | O_CREAT, 0o644);
+        println!("test_writev_syscall_file: File opened with fd = {}", fd);
+    
+        // Check if file opened correctly
+        assert!(fd >= 0, "Failed to open file");
+    
+        // Prepare the iovec structures
+        let hello = b"Hello, ";
+        let world = b"world!";
+        let iovecs = [
+            IovecStruct {
+                iov_base: hello.as_ptr() as *mut c_void,
+                iov_len: hello.len(),
+            },
+            IovecStruct {
+                iov_base: world.as_ptr() as *mut c_void,
+                iov_len: world.len(),
+            },
+        ];
+    
+        // Call writev_syscall
+        let bytes_written = cage.writev_syscall(fd, iovecs.as_ptr(), iovecs.len() as i32);
+        println!(
+            "test_writev_syscall_file: bytes_written = {}",
+            bytes_written
+        );
+    
+        // Validate the results
+        assert_eq!(
+            bytes_written, 13,
+            "Bytes written do not match expected value"
+        );
+    
+        cage.close_syscall(fd);
+        let _ = std::fs::remove_file(path);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    
+
 }

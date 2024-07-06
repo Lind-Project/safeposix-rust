@@ -6,6 +6,8 @@
 use dashmap::DashSet;
 use parking_lot::Mutex;
 use std::env;
+use std::io::{self, IoSlice};
+
 pub use std::ffi::CStr as RustCStr;
 use std::fs::{self, canonicalize, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -200,7 +202,32 @@ impl EmulatedFile {
 
         Ok(bytes_written)
     }
+    pub fn write_vectored_at(
+        &mut self,
+        bufs: &[IoSlice<'_>],
+        offset: usize,
+    ) -> std::io::Result<usize> {
+        let mut total_bytes_written = 0;
 
+        if let Some(f) = &self.fobj {
+            let mut file = f.lock();
+            file.seek(SeekFrom::Start(offset as u64))?;
+            for buf in bufs {
+                let bytes_written = file.write(buf)?;
+                total_bytes_written += bytes_written;
+                if bytes_written < buf.len() {
+                    break; // Stop if we wrote less than the buffer length
+                }
+            }
+        }
+
+        // Update recorded filesize if we've written past the previous filesize
+        if offset + total_bytes_written > self.filesize {
+            self.filesize = offset + total_bytes_written;
+        }
+
+        Ok(total_bytes_written)
+    }
     // Reads entire file into bytes
     pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
         match &self.fobj {

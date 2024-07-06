@@ -65,7 +65,7 @@ pub fn check_cageid(cageid: u64) {
 }
 
 pub fn concat_iovec_to_slice(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<u8> {
-    // Safety: Caller must ensure that the iovec pointer is valid and points to a valid iovec array
+    // ensure that the iovec pointer is valid and points to a valid iovec array
     let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
     let mut data = Vec::new();
     for iovec in iovecs {

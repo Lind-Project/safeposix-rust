@@ -93,6 +93,7 @@
 
 // File system related system calls
 use super::fs_constants::*;
+use std::fs::File;
 use super::sys_constants::*;
 use crate::interface;
 use crate::safeposix::cage::Errno::EINVAL;
@@ -106,7 +107,8 @@ use std::slice;
 use std::str;
 use crate::interface::concat_iovec_to_slice;
 use crate::interface::log_from_slice;
-
+use std::sync::RwLock;
+use std::sync::Arc;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
@@ -165,7 +167,6 @@ impl Cage {
     ///
     /// For more detailed description of all the commands and return values, see
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
-
     // This function is used to create a new File Descriptor Object and return it.
     // This file descriptor object is then inserted into the File Descriptor Table
     // of the associated cage in the open_syscall() function
@@ -184,9 +185,10 @@ impl Cage {
             inode: inodenum,
             flags: flags & allowmask,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
+            file: None,
         }
     }
-
+    
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         // Check that the given input path is not empty
         if path.len() == 0 {
@@ -1467,6 +1469,7 @@ impl Cage {
                             }
 
                             let newposition;
+                            //write to a file
                             if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
                                 //move position forward by the number of bytes we've written
                                 normalfile_filedesc_obj.position = position + byteswritten;
@@ -1827,6 +1830,93 @@ impl Cage {
                     let iovecslice = concat_iovec_to_slice(iovec, iovcnt);
                     log_from_slice(&iovecslice)
                 }
+                File(ref mut normalfile_filedesc_obj) => {
+                    // Check if the file is open for writing
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        return syscall_error(
+                            Errno::EBADF,
+                            "writev",
+                            "specified file not open for writing",
+                        );
+                    }
+                    // Retrieve the inode object for the file
+                    let mut inodeobj = FS_METADATA
+                        .inodetable
+                        .get_mut(&normalfile_filedesc_obj.inode)
+                        .unwrap();
+    
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            let position = normalfile_filedesc_obj.position;
+                            let filesize = normalfile_inode_obj.size;
+                            let blankbytecount = position as isize - filesize as isize;
+                            // Retrieve the file object from the file object table
+
+                            let mut fileobject = FILEOBJECTTABLE
+                                .get_mut(&normalfile_filedesc_obj.inode)
+                                .unwrap();
+    
+                            // We need to pad the file with blank bytes if we are at a position past the end of the file
+                            if blankbytecount > 0 {
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("Write of blank bytes for writev failed!");
+                                    }
+                                } else {
+                                    panic!("Write of blank bytes for writev failed!");
+                                }
+                            }
+                            // Create IoSlice objects from the raw iovec pointer
+                            let iovecs = unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
+                            let iovs: Vec<IoSlice> = iovecs.iter()
+                                .map(|iovec| {
+                                    let slice = unsafe { std::slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len as usize) };
+                                    IoSlice::new(slice)
+                                })
+                                .collect();
+    
+                            // Write to the file using the vectored IO method
+                            if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position) {
+                                // Move position forward by the number of bytes we've written
+                                normalfile_filedesc_obj.position = position + byteswritten as usize;
+                                let newposition = normalfile_filedesc_obj.position;
+    
+                                // Update file size if necessary
+                                if newposition > normalfile_inode_obj.size {
+                                    normalfile_inode_obj.size = newposition;
+                                    drop(inodeobj);
+                                    drop(fileobject);
+                                    log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
+                                }
+    
+                                byteswritten as i32
+                            } else {
+                                syscall_error(Errno::EIO, "writev", "Failed to write data to file")
+                            }
+                        }
+                        // Handle character device file
+                        Inode::CharDev(ref char_inode_obj) => {
+                            let iovecs = unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
+                            let total_len = iovecs.iter().map(|iov| iov.iov_len).sum::<usize>();
+                            let mut buffer = Vec::with_capacity(total_len);
+                            for iov in iovecs {
+                                let slice = unsafe { std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) };
+                                buffer.extend_from_slice(slice);
+                            }
+                            self._write_chr_file(&char_inode_obj, buffer.as_ptr(), buffer.len())
+                        }
+    
+                        Inode::Socket(_) => {
+                            panic!("writev(): Socket inode found on a filedesc fd")
+                        }
+    
+                        Inode::Dir(_) => syscall_error(
+                            Errno::EISDIR,
+                            "writev",
+                            "attempted to write to a directory",
+                        ),
+                    }
+                }
 
                 _ => {
                     return syscall_error(
@@ -1840,7 +1930,6 @@ impl Cage {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
         }
     }
-
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
