@@ -610,6 +610,9 @@ pub mod fs_tests {
     }
     #[test]
     fn ut_lind_fs_dup2_fork() {
+        use std::process::Command;
+        use std::os::unix::process::CommandExt;
+    
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
@@ -623,12 +626,14 @@ pub mod fs_tests {
     
         // Write to the first file descriptor
         assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
-        assert_eq!(cage.write_syscall(fd2, str2cbuf("Hello"), 5), 5);
     
         let pid = unsafe { libc::fork() };
     
         if pid == 0 {
             // Child process
+            // Close fd2 before duplicating
+            assert_eq!(cage.close_syscall(fd2), 0);
+    
             // Duplicate fd1 to fd2
             assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
     
@@ -641,20 +646,17 @@ pub mod fs_tests {
         } else {
             // Parent process
             // Wait for the child process to finish
-            let mut status = 0;
-            interface::sleep(interface::RustDuration::from_millis(100));
+            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
     
-            // Verify that fd1 contains the concatenated string "Hello World"
+            // Verify that fd2 is not affected by the child process
             let mut buffer1 = sizecbuf(11);
             assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
             assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
             assert_eq!(cbuf2str(&buffer1), "Hello World");
     
-            // Verify that fd2 contains only "Hello" as the parent process should not be affected by the child process
             let mut buffer2 = sizecbuf(5);
             assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            let read_res = cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5);
-            assert_eq!(read_res, 5, "Failed to read 5 bytes from fd2, read {}", read_res);
+            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
             assert_eq!(cbuf2str(&buffer2), "Hello");
     
             // Close the file descriptors
@@ -664,8 +666,6 @@ pub mod fs_tests {
             lindrustfinalize();
         }
     }
-    
-    
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
