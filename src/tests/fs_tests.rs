@@ -610,9 +610,6 @@ pub mod fs_tests {
     }
     #[test]
     fn ut_lind_fs_dup2_fork() {
-        use std::process::Command;
-        use std::os::unix::process::CommandExt;
-    
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
@@ -644,7 +641,8 @@ pub mod fs_tests {
         } else {
             // Parent process
             // Wait for the child process to finish
-            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+            let mut status = 0;
+            cage.waitpid_syscall(pid, &mut status, 0);
     
             // Verify that fd1 contains the concatenated string "Hello World"
             let mut buffer1 = sizecbuf(11);
