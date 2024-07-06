@@ -610,9 +610,6 @@ pub mod fs_tests {
     }
     #[test]
     fn ut_lind_fs_dup2_fork() {
-        use std::process::Command;
-        use std::os::unix::process::CommandExt;
-    
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
@@ -645,20 +642,22 @@ pub mod fs_tests {
             lindrustfinalize();
         } else {
             // Parent process
-            // **Read from fd2 before the child writes to it**
-            let mut buffer2 = sizecbuf(5);
-            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            // assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
-            assert_eq!(cbuf2str(&buffer2), "Hello");
-    
             // Wait for the child process to finish
-            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+            let mut status = 0;
+            unsafe { libc::waitpid(pid, &mut status, 0) };
     
-            // Verify that fd1 contains the concatenated string "Hello World".
+            // Verify that fd1 contains the concatenated string "Hello World"
             let mut buffer1 = sizecbuf(11);
             assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
             assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
             assert_eq!(cbuf2str(&buffer1), "Hello World");
+    
+            // Verify that fd2 still contains only "Hello"
+            let mut buffer2 = sizecbuf(5);
+            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+            let read_res = cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5);
+            assert_eq!(read_res, 5, "Failed to read 5 bytes from fd2, read {}", read_res);
+            assert_eq!(cbuf2str(&buffer2), "Hello");
     
             // Close the file descriptors
             assert_eq!(cage.close_syscall(fd1), 0);
@@ -667,6 +666,7 @@ pub mod fs_tests {
             lindrustfinalize();
         }
     }
+    
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
