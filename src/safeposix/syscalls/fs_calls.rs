@@ -1993,6 +1993,7 @@ impl Cage {
     ///[dup2(2)](https://linux.die.net/man/2/dup2)
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
+        println!("dup2_syscall called with oldfd: {}, newfd: {}", oldfd, newfd);
         //checking if the new fd is out of range
         if newfd >= MAXFD || newfd < 0 {
             return syscall_error(
@@ -2017,9 +2018,10 @@ impl Cage {
         } else {
             return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor.");
         };
-
-        //if the old fd exists, execute the helper, else return error
-        return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+        println!("Before calling _dup2_helper: oldfd: {}, newfd: {}", oldfd, newfd);
+        let result = Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+        println!("After calling _dup2_helper: result: {}", result);
+        return result;
     }
 
     /// ## `_dup2_helper`
@@ -2058,6 +2060,7 @@ impl Cage {
     /// * If the file descriptor is associated with a socket, and the inode does not match the file descriptor.
 
     pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
+        println!("_dup2_helper called with newfd: {}", newfd);
         let (dupfd, mut dupfdguard) = if fromdup2 {
             let mut fdguard = self.filedescriptortable[newfd as usize].write();
             let closebool = fdguard.is_some();
@@ -2085,7 +2088,7 @@ impl Cage {
         };
 
         let dupfdoption = &mut *dupfdguard;
-
+        println!("Before incrementing ref count: newfd: {}", newfd);
         match filedesc_enum {
             File(normalfile_filedesc_obj) => {
                 let inodenum = normalfile_filedesc_obj.inode;
@@ -2160,7 +2163,7 @@ impl Cage {
         }
 
         let _insertval = dupfdoption.insert(dupd_fd_enum);
-
+        println!("After inserting into fd table: newfd: {}", newfd);
         return dupfd;
     }
 
