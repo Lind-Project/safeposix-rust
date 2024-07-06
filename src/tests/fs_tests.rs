@@ -642,7 +642,7 @@ pub mod fs_tests {
             // Parent process
             // Wait for the child process to finish
             let mut status = 0;
-            cage.waitpid_syscall(pid, &mut status, 0);
+            interface::sleep(interface::RustDuration::from_millis(100));
     
             // Verify that fd1 contains the concatenated string "Hello World"
             let mut buffer1 = sizecbuf(11);
