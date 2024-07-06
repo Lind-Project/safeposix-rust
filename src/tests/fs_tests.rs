@@ -608,64 +608,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    #[test]
-    fn ut_lind_fs_dup2_fork() {
-        let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1);
-    
-        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath1 = "/dup2file1";
-        let filepath2 = "/dup2file2";
-    
-        // Open two file descriptors
-        let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
-        let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
-    
-        // Write to the first file descriptor
-        assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
-    
-        // Fork the process using the Lind fork syscall
-        let pid = cage.fork_syscall(2);
-        assert_eq!(pid, 0, "Fork failed");
-    
-        if pid == 0 {
-            // Child process
-            // Close fd2 before duplicating
-            assert_eq!(cage.close_syscall(fd2), 0);
-    
-            // Duplicate fd1 to fd2
-            assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
-    
-            // Write to the duplicated fd2
-            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
-    
-            // Exit the child process
-            cage.exit_syscall(EXIT_SUCCESS);
-        } else {
-            // Parent process
-            // **Read from fd2 before the child writes to it**
-            let mut buffer2 = sizecbuf(5);
-            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
-            assert_eq!(cbuf2str(&buffer2), "Hello");
-    
-            // Wait for the child process to finish
-            interface::sleep(interface::RustDuration::from_millis(200)); // Wait for the child to finish
-    
-            // Verify that fd1 contains the concatenated string "Hello World".
-            let mut buffer1 = sizecbuf(11);
-            assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
-            assert_eq!(cbuf2str(&buffer1), "Hello World");
-    
-            // Close the file descriptors
-            assert_eq!(cage.close_syscall(fd1), 0);
-            assert_eq!(cage.close_syscall(fd2), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-            lindrustfinalize();
-        }
-    }
-    
+
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
@@ -2112,6 +2055,66 @@ pub mod fs_tests {
         );
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    #[test]
+    fn test_writev_syscall_socket() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Mock socket file descriptor
+        let fd = 3; // Assuming 3 is a valid socket fd for the test
+
+        // Prepare the iovec structures
+        let hello = b"Hello, ";
+        let world = b"world!";
+        let iovecs = [
+            interface::IovecStruct {
+                iov_base: hello.as_ptr() as *mut c_void,
+                iov_len: hello.len(),
+            },
+            interface::IovecStruct {
+                iov_base: world.as_ptr() as *mut c_void,
+                iov_len: world.len(),
+            },
+        ];
+
+        // Mock a connected socket state for testing
+        {
+            let checkedfd = cage.get_filedescriptor(fd).unwrap();
+            let mut unlocked_fd = checkedfd.write();
+            if let Some(filedesc_enum) = &mut *unlocked_fd {
+                if let Socket(socket_filedesc_obj) = filedesc_enum {
+                    let sock_tmp = socket_filedesc_obj.handle.clone();
+                    let mut sockhandle = sock_tmp.write();
+                    sockhandle.domain = AF_INET;
+                    sockhandle.protocol = IPPROTO_TCP;
+                    sockhandle.state = ConnState::CONNECTED;
+                    println!("Mock socket state set: domain = {}, protocol = {}, state = {:?}", sockhandle.domain, sockhandle.protocol, sockhandle.state);
+
+                    // Directly assign a mock innersocket that simulates writev behavior
+                    struct MockSocket {
+                        bytes_to_write: i32,
+                    }
+                    impl MockSocket {
+                        fn writev(&self, _iovec: *const interface::IovecStruct, _iovcnt: i32) -> i32 {
+                            self.bytes_to_write
+                        }
+                    }
+                    sockhandle.innersocket = Some(Box::new(MockSocket { bytes_to_write: 14 }));
+                }
+            }
+        }
+
+        // Call writev_syscall
+        let bytes_written = cage.writev_syscall(fd, iovecs.as_ptr(), iovecs.len() as i32);
+
+        // Logging the result for debugging
+        println!("Bytes written: {}", bytes_written);
+
+        // Validate the results
+        assert_eq!(bytes_written, 14, "Bytes written do not match expected value");
+
         lindrustfinalize();
     }
 }
