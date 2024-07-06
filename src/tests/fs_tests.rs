@@ -638,7 +638,7 @@ pub mod fs_tests {
             assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
     
             // **Write to the duplicated fd2**
-            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
+            assert_eq!(cage.write_syscall(fd2, str2cbuf("World"), 5), 5);
     
             // Exit the child process
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
@@ -648,11 +648,11 @@ pub mod fs_tests {
             // Wait for the child process to finish
             unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
     
-            // Verify that fd1 contains the concatenated string "Hello World".
+            // Verify that fd1 contains the concatenated string "HelloWorld".
             let mut buffer1 = sizecbuf(11);
             assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
-            assert_eq!(cbuf2str(&buffer1), "Hello World");
+            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 10), 10);
+            assert_eq!(cbuf2str(&buffer1), "HelloWorld");
     
             // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
             let mut buffer2 = sizecbuf(5);
