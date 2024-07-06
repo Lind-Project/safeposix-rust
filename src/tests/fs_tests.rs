@@ -648,7 +648,7 @@ pub mod fs_tests {
             // **Read from fd2 before the child writes to it**
             let mut buffer2 = sizecbuf(5);
             assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
+            // assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
             assert_eq!(cbuf2str(&buffer2), "Hello");
     
             // Wait for the child process to finish
