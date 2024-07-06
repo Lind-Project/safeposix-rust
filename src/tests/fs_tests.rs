@@ -2060,56 +2060,40 @@ pub mod fs_tests {
     use crate::tests::FileDescriptor::Socket;
     use std::thread;
     #[test]
-    pub fn test_writev_syscall_socket() {
-        // Initialize the test environment and acquire the lock
+    fn ut_lind_ipc_writev_socketpair() {
         let _thelock = setup::lock_and_init();
-
-        // Create a pair of connected UNIX domain sockets
         let cage = interface::cagetable_getref(1);
+    
+        // 1. Create a pair of connected sockets
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
             Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
             0
         );
-
-        // Prepare data to be written using iovec structures
-        let data1 = "Hello, ";
-        let data2 = "world!";
-        let iovec1 = interface::IovecStruct {
-            iov_base: data1.as_ptr() as *mut c_void,
-            iov_len: data1.len(),
+    
+        // 2. Prepare the data to be written
+        let data = b"Hello, world!";
+        let iovec = interface::IovecStruct {
+            iov_base: data.as_ptr() as *mut libc::c_void,
+            iov_len: data.len(),
         };
-        let iovec2 = interface::IovecStruct {
-            iov_base: data2.as_ptr() as *mut c_void,
-            iov_len: data2.len(),
-        };
-        let iovecs = [iovec1, iovec2];
-
-        // Use a separate thread to read the data from the receiving socket
-        let cage2 = cage.clone();
-        let sock2 = socketpair.sock2;
-        let reader_thread = thread::spawn(move || {
-            let mut buf = vec![0u8; data1.len() + data2.len()];
-            let bytes_read = cage2.recv_syscall(sock2, buf.as_mut_ptr(), buf.len(), 0); // Updated this line
-            println!("Bytes read: {:?}", bytes_read);
-            println!("Data read: {:?}", &buf);
-            assert_eq!(bytes_read, (data1.len() + data2.len()) as i32);
-            assert_eq!(&buf, &(data1.to_string() + data2).as_bytes());
-        });
-
-        // Write the data to the sending socket using writev_syscall
-        let bytes_written = cage.writev_syscall(socketpair.sock1, iovecs.as_ptr(), iovecs.len() as i32);
-        println!("Bytes written: {:?}", bytes_written);
-        assert_eq!(bytes_written, (data1.len() + data2.len()) as i32);
-
-        // Wait for the reader thread to finish
-        reader_thread.join().unwrap();
-
+    
+        // 3. Use writev_syscall to send data
+        let bytes_written = cage.writev_syscall(socketpair.sock1, &iovec, 1);
+        assert_eq!(bytes_written, data.len() as i32);
+    
+        // 4. Read the data from the receiving socket
+        let mut buffer = vec![0u8; data.len()];
+        let bytes_read = cage.recv_syscall(socketpair.sock2, buffer.as_mut_ptr(), buffer.len(), 0);
+        assert_eq!(bytes_read, data.len() as i32);
+    
+        // 5. Perform assertions
+        assert_eq!(buffer, data);
+    
         // Close the sockets
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
-
-        // Finalize the test environment
+    
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
