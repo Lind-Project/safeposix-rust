@@ -2058,38 +2058,23 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     use crate::tests::FileDescriptor::Socket;
-
+  
     #[test]
-    pub fn ut_lind_fs_writev_socket_tcp() {
+    pub fn test_writev_syscall_socket() {
+        // Initialize the test environment and acquire the lock
         let _thelock = setup::lock_and_init();
+
+        // Create a pair of connected UNIX domain sockets
         let cage = interface::cagetable_getref(1);
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
 
-        // Step 1: Create TCP Socket
-        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        assert!(sockfd > 0, "Failed to create socket");
-
-        // Step 2: Simulate a connected TCP socket
-        {
-            let mut fs_calls = cage.filedescriptortable[sockfd as usize].write();
-            if let Some(FileDescriptor::Socket(ref mut socket_filedesc_obj)) = &mut *fs_calls {
-                // Set the socket to a connected state and initialize innersocket
-                socket_filedesc_obj.handle.write().state = ConnState::CONNECTED;
-                socket_filedesc_obj.handle.write().innersocket = Some(create_mock_innersocket());
-            }
-        }
-
-        // Verify that the socket is connected before calling writev_syscall
-        {
-            let fs_calls = cage.filedescriptortable[sockfd as usize].write();
-            if let Some(FileDescriptor::Socket(ref socket_filedesc_obj)) = &*fs_calls {
-                assert_eq!(socket_filedesc_obj.handle.read().state, ConnState::CONNECTED);
-                assert!(socket_filedesc_obj.handle.read().innersocket.is_some(), "innersocket is not initialized");
-            }
-        }
-
-        // Step 3: Prepare Iovec Structures
-        let data1 = b"Hello, ";
-        let data2 = b"world!";
+        // Prepare data to be written using iovec structures
+        let data1 = "Hello, ";
+        let data2 = "world!";
         let iovec1 = interface::IovecStruct {
             iov_base: data1.as_ptr() as *mut c_void,
             iov_len: data1.len(),
@@ -2100,18 +2085,28 @@ pub mod fs_tests {
         };
         let iovecs = [iovec1, iovec2];
 
-        // Step 4: Simulate the Write Operation
-        let bytes_written = cage.writev_syscall(sockfd, iovecs.as_ptr(), iovecs.len() as i32);
+        // Use a separate thread to read the data from the receiving socket
+        let cage2 = cage.clone();
+        let sock2 = socketpair.sock2;
+        let reader_thread = thread::spawn(move || {
+            let mut buf = vec![0u8; data1.len() + data2.len()];
+            let bytes_read = cage2.recv_syscall(sock2, buf.as_mut_ptr(), buf.len() as u32, 0);
+            assert_eq!(bytes_read, (data1.len() + data2.len()) as i32);
+            assert_eq!(&buf, &(data1.to_string() + data2).as_bytes());
+        });
 
-        // Log the result for debugging
-        println!("Bytes written: {}", bytes_written);
+        // Write the data to the sending socket using writev_syscall
+        let bytes_written = cage.writev_syscall(socketpair.sock1, iovecs.as_ptr(), iovecs.len() as i32);
+        assert_eq!(bytes_written, (data1.len() + data2.len()) as i32);
 
-        // Step 5: Assertions and Validations
-        assert_eq!(bytes_written, (data1.len() + data2.len()) as i32, "Bytes written do not match expected value");
+        // Wait for the reader thread to finish
+        reader_thread.join().unwrap();
 
-        // Close the socket
-        assert_eq!(cage.close_syscall(sockfd), 0);
+        // Close the sockets
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
+        // Finalize the test environment
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
