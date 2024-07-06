@@ -648,10 +648,10 @@ pub mod fs_tests {
             // Wait for the child process to finish
             unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
     
-            // Verify that fd1 contains the concatenated string "HelloWorld".
+            // Verify that fd1 contains the concatenated string "Hello World".
             let mut buffer1 = sizecbuf(11);
             assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 10), 10);
+            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
             assert_eq!(cbuf2str(&buffer1), "Hello World");
     
             // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
@@ -667,7 +667,6 @@ pub mod fs_tests {
             lindrustfinalize();
         }
     }
-
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
