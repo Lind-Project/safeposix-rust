@@ -2090,7 +2090,7 @@ pub mod fs_tests {
         let sock2 = socketpair.sock2;
         let reader_thread = thread::spawn(move || {
             let mut buf = vec![0u8; data1.len() + data2.len()];
-            let bytes_read = cage2.recv_syscall(sock2, buf.as_mut_ptr(), buf.len() as u32, 0);
+            let bytes_read = cage2.recv_syscall(sock2, buf.as_mut_ptr(), buf.len(), 0); // Updated this line
             assert_eq!(bytes_read, (data1.len() + data2.len()) as i32);
             assert_eq!(&buf, &(data1.to_string() + data2).as_bytes());
         });
