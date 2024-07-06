@@ -1418,7 +1418,7 @@ pub mod fs_tests {
     #[test]
     pub fn ut_lind_fs_rmdir_normal() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        //and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -1564,6 +1564,15 @@ pub mod fs_tests {
     }
 
     #[test]
+    //BUG:
+    //The correct behavior of the `rmdir_syscall()` when called on a directory
+    //whose path includes a component that does not grant search permission
+    //(the read flag) is to return with `EACCES` error.
+    //However, the `metawalkandparent())` helper function used
+    //to retrieve the inodes of the directory to be removed and its parent
+    //directory does not check for search permission. Thus, the following test
+    //will not return any errors and run normally even though the parent
+    //directory does not grand search permission.
     pub fn ut_lind_fs_search_permission_bug_with_rmdir() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         //and also performs clean env setup
@@ -1571,12 +1580,18 @@ pub mod fs_tests {
 
         let cage = interface::cagetable_getref(1);
 
+        //Creating the parent directory that does not grant search permission
+        //by excluding any read flags and specifying only write flags
+        //to be able to delete the child directory.
         let path = "/parent_dir/dir";
         assert_eq!(
             cage.mkdir_syscall("/parent_dir", S_IWUSR | S_IWGRP | S_IWOTH),
             0
         );
-        assert_eq!(cage.mkdir_syscall(path, S_IWUSR | S_IWGRP | S_IWOTH), 0);
+        //Creating the child directory with all the required flags
+        //and then deleting it. Because of the bug described above,
+        //removing the directory will not return any errors.
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
         assert_eq!(cage.rmdir_syscall(path), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);

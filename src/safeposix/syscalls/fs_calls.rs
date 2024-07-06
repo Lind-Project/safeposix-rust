@@ -3373,18 +3373,40 @@ impl Cage {
                         //have the directory open, which corresponds to a non-zero
                         //reference count 
                         let remove_inode = dir_obj.refcount == 0;
-                        //`mkdir_syscall()` sets linkcount of a new empty
-                        //directory to 3, though the standard specifies it should
-                        //2: its pathname and `.` reference to iself. Even assuming
-                        //that setting 3 as a linkcount has some reasoning, which
-                        //I don't know of, setting it to 2 now seems erroneous
+                        //Any new empty directory has a linkcount of 3.
+                        //If the refcount of the directory is 0, it means
+                        //that there are no open file descriptors for that directory,
+                        //and it can be safely removed both from the filesystem
+                        //and the parent directory's inode table.
+                        //However, if there exists an open file descriptor for that
+                        //directory, it cannot be removed from the filesystem because
+                        //otherwise, the process that has the directory open
+                        //will end up calling `close_syscall()` on a nonexistent directory.
+                        //At the same time, after `rmdir_syscall()` is called on the directory,
+                        //no new files can be created inside it, even if the directory is open 
+                        //by some process. To prevent creating new files inside the directory,
+                        //we delete its entry from the parent directory's inode table.
+                        //This way, in case there is an open file descriptor for the directory
+                        //to be removed, by deleting the directory's entry from its parent
+                        //directory's inode table and keeping the directory's entry in the
+                        //filesystem table, we both disallow the creation of any files inside
+                        //that directory and prevent the process that has the directory
+                        //open from closing a nonexistent directory.
+                        //Setting the directory's linkcount as 2 works as a flag for
+                        //the `close_syscall()` to mark the directory that needs to be
+                        //removed from the filesystem  when its last open file descriptor 
+                        //is closed because it could not be removed at the time of calling
+                        //`rmdir_syscall()` because of some open file descriptor.
                         if remove_inode {
                             dir_obj.linkcount = 2;
                         }
 
                         //The mutable reference to the inode has to be dropped because
-                        //remove() method will need to acquire an immutable reference to
-                        //the same inode to remove it from the inodetable
+                        //remove_from_parent_dir() method will need to acquire an immutable 
+                        //reference to the parent directory's inode from the filesystem's 
+                        //inodetable. The inodetable represents a Rust DashMap that deadlocks
+                        //when trying to get a reference to its entry while holding any sort 
+                        //of reference into it.
                         drop(inodeobj);
 
                         //`remove_from_parent_dir()` helper function returns 0 if an 
@@ -3401,11 +3423,12 @@ impl Cage {
                             return removal_result;
                         }
 
-                        // remove entry of corresponding inodenum from inodetable
+                        //Remove entry of corresponding inodenum from the filesystem
+                        //inodetable
                         if remove_inode {
                             FS_METADATA.inodetable.remove(&inodenum).unwrap();
                         }
-                        //log is used to store all the changes made to the filesystem. After
+                        //Log is used to store all the changes made to the filesystem. After
                         //the cage is closed, all the collected changes are serialized and
                         //the state of the underlying filsystem is persisted. This allows us
                         //to avoid serializing and persisting filesystem state after every
