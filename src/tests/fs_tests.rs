@@ -655,7 +655,7 @@ pub mod fs_tests {
             assert_eq!(cbuf2str(&buffer1), "Hello World");
     
             // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
-            let mut buffer2 = sizecbuf(5);
+            let mut buffer2 = sizecbuf(6);
             assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
             assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
             assert_eq!(cbuf2str(&buffer2), "Hello");
