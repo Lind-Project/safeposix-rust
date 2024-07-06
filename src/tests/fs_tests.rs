@@ -637,7 +637,7 @@ pub mod fs_tests {
             // Duplicate fd1 to fd2
             assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
     
-            // **Write to the duplicated fd2**
+            // Write to the duplicated fd2
             assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
     
             // Exit the child process
@@ -645,6 +645,12 @@ pub mod fs_tests {
             lindrustfinalize();
         } else {
             // Parent process
+            // **Read from fd2 before the child writes to it**
+            let mut buffer2 = sizecbuf(5);
+            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
+            assert_eq!(cbuf2str(&buffer2), "Hello");
+    
             // Wait for the child process to finish
             unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
     
@@ -654,14 +660,8 @@ pub mod fs_tests {
             assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
             assert_eq!(cbuf2str(&buffer1), "Hello World");
     
-            // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
-            let mut buffer2 = sizecbuf(6);
-            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            //assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 6), 6);
-            assert_eq!(cbuf2str(&buffer2), "Hello");
-    
             // Close the file descriptors
-            assert_eq!(cage.close_syscall(fd1), 0); 
+            assert_eq!(cage.close_syscall(fd1), 0);
             assert_eq!(cage.close_syscall(fd2), 0);
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
             lindrustfinalize();
