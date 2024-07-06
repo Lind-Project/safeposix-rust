@@ -638,7 +638,7 @@ pub mod fs_tests {
             assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
     
             // **Write to the duplicated fd2**
-            assert_eq!(cage.write_syscall(fd2, str2cbuf("World"), 5), 5);
+            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
     
             // Exit the child process
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
@@ -652,7 +652,7 @@ pub mod fs_tests {
             let mut buffer1 = sizecbuf(11);
             assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
             assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 10), 10);
-            assert_eq!(cbuf2str(&buffer1), "HelloWorld");
+            assert_eq!(cbuf2str(&buffer1), "Hello World");
     
             // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
             let mut buffer2 = sizecbuf(5);
