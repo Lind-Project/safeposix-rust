@@ -2058,7 +2058,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     use crate::tests::FileDescriptor::Socket;
-  
+    use std::thread;
     #[test]
     pub fn test_writev_syscall_socket() {
         // Initialize the test environment and acquire the lock
