@@ -1840,7 +1840,40 @@ impl Cage {
     }
 
     //------------------------------------WRITEV SYSCALL------------------------------------
-
+    /// ## `writev_syscall`
+    ///
+    /// ### Description
+    /// This function writes data to a file descriptor from multiple buffers.
+    /// Currently, it supports writing to sockets and pipes.
+    /// The function first retrieves the file descriptor object associated with the provided file descriptor
+    /// and then matches the file descriptor type and calls the appropriate write function based on the type.
+    /// * `Sockets`: The function writes data to the connected socket, handling both TCP and UDP sockets.
+    ///     * Checks if the socket is connected (either fully connected or connected for write-only).
+    ///     * If connected, calls the underlying `writev` function on the raw socket.
+    ///     * Handles errors returned by the underlying `writev` function.
+    /// * `Pipes`: The function writes data to the pipe, supporting non-blocking writes.
+    ///     * Checks if the pipe is open for writing.
+    ///     * Handles non-blocking writes.
+    ///     * Triggers `SIGPIPE` if the pipe is closed on the other end.
+    ///
+    /// ### Function Arguments
+    /// * `fd`: The file descriptor to write to.
+    /// * `iovec`: A pointer to an array of `IovecStruct` objects representing the data buffers to write.
+    /// * `iovcnt`: The number of `IovecStruct` objects in the array.
+    ///
+    /// ### Returns
+    /// * The number of bytes written on success.
+    /// * A negative value on error, with the specific error code set in `errno`.
+    ///
+    /// ### Errors
+    /// * `EBADF(9)`: The file descriptor is invalid.
+    /// * `ENOTCONN(107)`: The socket is not connected (for sockets).
+    /// * `EOPNOTSUPP(95)`: The system call is not supported for the given socket protocol.
+    /// * `EAGAIN(11)`: There is no data available right now (for pipes).
+    /// * `EPIPE(32)`: The pipe has been closed on the other end (for pipes).
+    /// ### Panics
+    /// * If an unknown error code is returned by the underlying socket writev function.
+    ///  [writev(2)](https://linux.die.net/man/2/writev)
     pub fn writev_syscall(
         &self,
         fd: i32,
@@ -1855,7 +1888,7 @@ impl Cage {
                 Socket(socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let sockhandle = sock_tmp.write();
-
+                    // Check the domain of the socket (IPv4 or IPv6)
                     match sockhandle.domain {
                         AF_INET | AF_INET6 => match sockhandle.protocol {
                             IPPROTO_TCP => {
@@ -1958,6 +1991,7 @@ impl Cage {
                     }
                 }
                 Pipe(pipe_filedesc_obj) => {
+                    // Check if the pipe is open for writing.
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1970,7 +2004,7 @@ impl Cage {
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
-
+                    // Write to the pipe using vectored I/O.
                     let retval =
                         pipe_filedesc_obj
                             .pipe
