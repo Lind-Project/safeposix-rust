@@ -2064,15 +2064,17 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
-        // Step 1: Mock a Valid Socket File Descriptor
+        // Step 1: Create TCP Socket
         let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        assert_ne!(sockfd, -(Errno::EAFNOSUPPORT as i32)); // Ensure socket creation succeeded
+        assert!(sockfd > 0, "Failed to create socket");
 
-        // Simulate a connected TCP socket
+        // Step 2: Simulate a connected TCP socket
         {
             let mut fs_calls = cage.filedescriptortable[sockfd as usize].write();
             if let Some(FileDescriptor::Socket(ref mut socket_filedesc_obj)) = &mut *fs_calls {
+                // Set the socket to a connected state and initialize innersocket
                 socket_filedesc_obj.handle.write().state = ConnState::CONNECTED;
+                socket_filedesc_obj.handle.write().innersocket = Some(create_mock_innersocket());
             }
         }
 
@@ -2081,10 +2083,11 @@ pub mod fs_tests {
             let fs_calls = cage.filedescriptortable[sockfd as usize].write();
             if let Some(FileDescriptor::Socket(ref socket_filedesc_obj)) = &*fs_calls {
                 assert_eq!(socket_filedesc_obj.handle.read().state, ConnState::CONNECTED);
+                assert!(socket_filedesc_obj.handle.read().innersocket.is_some(), "innersocket is not initialized");
             }
         }
 
-        // Step 2: Prepare Iovec Structures
+        // Step 3: Prepare Iovec Structures
         let data1 = b"Hello, ";
         let data2 = b"world!";
         let iovec1 = interface::IovecStruct {
@@ -2097,13 +2100,13 @@ pub mod fs_tests {
         };
         let iovecs = [iovec1, iovec2];
 
-        // Step 3: Simulate the Write Operation
+        // Step 4: Simulate the Write Operation
         let bytes_written = cage.writev_syscall(sockfd, iovecs.as_ptr(), iovecs.len() as i32);
 
         // Log the result for debugging
         println!("Bytes written: {}", bytes_written);
 
-        // Step 4: Assertions and Validations
+        // Step 5: Assertions and Validations
         assert_eq!(bytes_written, (data1.len() + data2.len()) as i32, "Bytes written do not match expected value");
 
         // Close the socket
