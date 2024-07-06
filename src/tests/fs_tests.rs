@@ -609,56 +609,61 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     #[test]
-    fn ut_lind_fs_fork_and_dup2() {
+    fn ut_lind_fs_dup2_fork() {
+        use std::process::Command;
+        use std::os::unix::process::CommandExt;
+    
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-
+    
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath = "/forkdup2file";
-
-        // Open a file to get a valid file descriptor
-        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
-        assert!(fd >= 0);
-
-        // Fork the process using the Lind fork syscall
-        let pid = cage.fork_syscall(2);
-        assert_eq!(pid, 0, "Fork failed");
-
+        let filepath1 = "/dup2file1";
+        let filepath2 = "/dup2file2";
+    
+        // Open two file descriptors
+        let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
+        let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
+    
+        // Write to the first file descriptor
+        assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
+    
+        let pid = unsafe { libc::fork() };
+    
         if pid == 0 {
             // Child process
-            // Use dup2 to duplicate the file descriptor
-            let new_fd = cage.dup2_syscall(fd, fd + 1);
-            assert_eq!(new_fd, fd + 1, "dup2 failed in child process");
-
-            // Write to the duplicated file descriptor
-            let msg = "Hello from child";
-            let write_result = cage.write_syscall(new_fd, msg.as_ptr() as *const u8, msg.len());
-            assert_eq!(write_result, msg.len() as i32, "Write failed in child process");
-
+            // Duplicate fd1 to fd2
+            assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
+    
+            // Write to the duplicated fd2
+            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
+    
             // Exit the child process
-            cage.exit_syscall(EXIT_SUCCESS);
+            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+            lindrustfinalize();
         } else {
             // Parent process
-            // Wait for the child process to complete
-            interface::sleep(interface::RustDuration::from_millis(200)); // Wait for the child to finish
-
-            // Read the contents of the file to check if the child's write was successful
-            let mut buffer = vec![0u8; 1024];
-            let read_fd = cage.open_syscall(filepath, O_RDONLY, 0);
-            assert!(read_fd >= 0, "Failed to open file for reading");
-
-            let read_result = cage.read_syscall(read_fd, buffer.as_mut_ptr(), buffer.len());
-            assert!(read_result > 0, "Read failed in parent process");
-
-            let content = std::str::from_utf8(&buffer[..read_result as usize]).unwrap();
-            assert!(content.contains("Hello from child"), "msg not found");
-
-            // Cleanup
-            assert_eq!(cage.close_syscall(read_fd), 0);
+            // Wait for the child process to finish
+            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+    
+            // Verify that fd2 is not affected by the child process
+            let mut buffer1 = sizecbuf(11);
+            assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
+            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
+            assert_eq!(cbuf2str(&buffer1), "Hello World");
+    
+            let mut buffer2 = sizecbuf(5);
+            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
+            assert_eq!(cbuf2str(&buffer2), "Hello");
+    
+            // Close the file descriptors
+            assert_eq!(cage.close_syscall(fd1), 0);
+            assert_eq!(cage.close_syscall(fd2), 0);
             assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
             lindrustfinalize();
         }
     }
+    
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
