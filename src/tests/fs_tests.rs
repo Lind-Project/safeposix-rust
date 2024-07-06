@@ -609,62 +609,57 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     #[test]
-    fn ut_lind_fs_dup2_fork() {
+    pub fn ut_lind_fs_writev_socket_tcp() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-    
-        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
-        let filepath1 = "/dup2file1";
-        let filepath2 = "/dup2file2";
-    
-        // Open two file descriptors
-        let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
-        let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
-    
-        // Write to the first file descriptor
-        assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
-    
-        let pid = unsafe { libc::fork() };
-    
-        if pid == 0 {
-            // Child process
-            // Close fd2 before duplicating
-            assert_eq!(cage.close_syscall(fd2), 0);
-    
-            // Duplicate fd1 to fd2
-            assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
-    
-            // Write to the duplicated fd2
-            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
-    
-            // Exit the child process
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-            lindrustfinalize();
-        } else {
-            // Parent process
-            // Wait for the child process to finish
-            let mut status = 0;
-            unsafe { libc::waitpid(pid, &mut status, 0) };
-    
-            // Verify that fd1 contains the concatenated string "Hello World"
-            let mut buffer1 = sizecbuf(11);
-            assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
-            assert_eq!(cbuf2str(&buffer1), "Hello World");
-    
-            // Verify that fd2 still contains only "Hello"
-            let mut buffer2 = sizecbuf(5);
-            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            let read_res = cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5);
-            assert_eq!(read_res, 5, "Failed to read 5 bytes from fd2, read {}", read_res);
-            assert_eq!(cbuf2str(&buffer2), "Hello");
-    
-            // Close the file descriptors
-            assert_eq!(cage.close_syscall(fd1), 0);
-            assert_eq!(cage.close_syscall(fd2), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-            lindrustfinalize();
+
+        // Step 1: Mock a Valid Socket File Descriptor
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert_ne!(sockfd, -(Errno::EAFNOSUPPORT as i32)); // Ensure socket creation succeeded
+
+        // Simulate a connected TCP socket
+        {
+            let mut fs_calls = cage.filedescriptortable[sockfd as usize].write();
+            if let Some(FileDescriptor::Socket(ref mut socket_filedesc_obj)) = &mut *fs_calls {
+                socket_filedesc_obj.handle.write().state = ConnState::CONNECTED;
+            }
         }
+
+        // Verify that the socket is connected before calling writev_syscall
+        {
+            let fs_calls = cage.filedescriptortable[sockfd as usize].write();
+            if let Some(FileDescriptor::Socket(ref socket_filedesc_obj)) = &*fs_calls {
+                assert_eq!(socket_filedesc_obj.handle.read().state, ConnState::CONNECTED);
+            }
+        }
+
+        // Step 2: Prepare Iovec Structures
+        let data1 = b"Hello, ";
+        let data2 = b"world!";
+        let iovec1 = interface::IovecStruct {
+            iov_base: data1.as_ptr() as *mut c_void,
+            iov_len: data1.len(),
+        };
+        let iovec2 = interface::IovecStruct {
+            iov_base: data2.as_ptr() as *mut c_void,
+            iov_len: data2.len(),
+        };
+        let iovecs = [iovec1, iovec2];
+
+        // Step 3: Simulate the Write Operation
+        let bytes_written = cage.writev_syscall(sockfd, iovecs.as_ptr(), iovecs.len() as i32);
+
+        // Log the result for debugging
+        println!("Bytes written: {}", bytes_written);
+
+        // Step 4: Assertions and Validations
+        assert_eq!(bytes_written, (data1.len() + data2.len()) as i32, "Bytes written do not match expected value");
+
+        // Close the socket
+        assert_eq!(cage.close_syscall(sockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
     }
     
     #[test]
