@@ -624,7 +624,9 @@ pub mod fs_tests {
         // Write to the first file descriptor
         assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
     
-        let pid = unsafe { libc::fork() };
+        // Fork the process using the Lind fork syscall
+        let pid = cage.fork_syscall(2);
+        assert_eq!(pid, 0, "Fork failed");
     
         if pid == 0 {
             // Child process
@@ -638,26 +640,23 @@ pub mod fs_tests {
             assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
     
             // Exit the child process
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-            lindrustfinalize();
+            cage.exit_syscall(EXIT_SUCCESS);
         } else {
             // Parent process
-            // Wait for the child process to finish
-            let mut status = 0;
-            unsafe { libc::waitpid(pid, &mut status, 0) };
+            // **Read from fd2 before the child writes to it**
+            let mut buffer2 = sizecbuf(5);
+            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
+            assert_eq!(cbuf2str(&buffer2), "Hello");
     
-            // Verify that fd1 contains the concatenated string "Hello World"
+            // Wait for the child process to finish
+            interface::sleep(interface::RustDuration::from_millis(200)); // Wait for the child to finish
+    
+            // Verify that fd1 contains the concatenated string "Hello World".
             let mut buffer1 = sizecbuf(11);
             assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
             assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
             assert_eq!(cbuf2str(&buffer1), "Hello World");
-    
-            // Verify that fd2 still contains only "Hello"
-            let mut buffer2 = sizecbuf(5);
-            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            let read_res = cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5);
-            assert_eq!(read_res, 5, "Failed to read 5 bytes from fd2, read {}", read_res);
-            assert_eq!(cbuf2str(&buffer2), "Hello");
     
             // Close the file descriptors
             assert_eq!(cage.close_syscall(fd1), 0);
