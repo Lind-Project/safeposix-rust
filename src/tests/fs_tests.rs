@@ -2132,60 +2132,60 @@ pub mod fs_tests {
     }
     #[test]
     fn ut_lind_fs_dup2_fork() {
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
         let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1);
+    
+        let cage1 = interface::cagetable_getref(1);
     
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath1 = "/dup2file1";
         let filepath2 = "/dup2file2";
     
         // Open two file descriptors
-        let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
-        let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
+        let fd1 = cage1.open_syscall(filepath1, flags, S_IRWXA);
+        let fd2 = cage1.open_syscall(filepath2, flags, S_IRWXA);
     
         // Write to the first file descriptor
-        assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
+        assert_eq!(cage1.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
     
         // Fork the process using the Lind fork syscall
-        let pid = unsafe { libc::fork() };
+        assert_eq!(cage1.fork_syscall(2), 0);
     
-        if pid == 0 {
-            // Child process
+        let child = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(2);
+    
             // Close fd2 before duplicating
-            assert_eq!(cage.close_syscall(fd2), 0);
+            assert_eq!(cage2.close_syscall(fd2), 0);
     
             // Duplicate fd1 to fd2
-            assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
+            assert_eq!(cage2.dup2_syscall(fd1, fd2), fd2);
     
             // Write to the duplicated fd2
-            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
+            assert_eq!(cage2.write_syscall(fd2, str2cbuf(" World"), 6), 6);
     
             // Exit the child process
-            cage.exit_syscall(EXIT_SUCCESS);
-            lindrustfinalize();
-        } else {
-            // Parent process
-            // Wait for the child process to finish
-            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
     
-            // Verify that fd1 contains the concatenated string "Hello World".
-            let mut buffer1 = sizecbuf(11);
-            assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
-            assert_eq!(cbuf2str(&buffer1), "Hello World");
+        child.join().unwrap();
     
-            // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
-            let mut buffer2 = sizecbuf(5);
-            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
-            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
-            assert_eq!(cbuf2str(&buffer2), "Hello");
+        // Verify that fd1 contains the concatenated string "Hello World".
+        let mut buffer1 = sizecbuf(11);
+        assert_eq!(cage1.lseek_syscall(fd1, 0, SEEK_SET), 0);
+        assert_eq!(cage1.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
+        assert_eq!(cbuf2str(&buffer1), "Hello World");
     
-            // Close the file descriptors
-            assert_eq!(cage.close_syscall(fd1), 0);
-            assert_eq!(cage.close_syscall(fd2), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-            lindrustfinalize();
-        }
+        // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
+        let mut buffer2 = sizecbuf(5);
+        assert_eq!(cage1.lseek_syscall(fd2, 0, SEEK_SET), 0);
+        assert_eq!(cage1.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
+        assert_eq!(cbuf2str(&buffer2), "Hello");
+    
+        // Close the file descriptors
+        assert_eq!(cage1.close_syscall(fd1), 0);
+        assert_eq!(cage1.close_syscall(fd2), 0);
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
     }
     
     
