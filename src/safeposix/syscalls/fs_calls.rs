@@ -1098,9 +1098,9 @@ impl Cage {
     /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
     /// O_WRONLY flags.
     /// There are generally two cases which occur when this syscall happens:
-    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
-    /// a new file is created at the given location and a new file descriptor is 
-    /// created and returned. 
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT
+    /// flag, a new file is created at the given location and a new file
+    /// descriptor is created and returned.
     /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
     /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
@@ -3279,12 +3279,13 @@ impl Cage {
     /// ### Arguments
     ///
     /// The `rmdir_syscall()` accepts one argument:
-    /// * `path` - the path to the directory that shall be removed. It can be either 
+    /// * `path` - the path to the directory that shall be removed. It can be
+    ///   either
     /// relative or absolute (symlinks are not supported).
     ///
     /// ### Returns
     ///
-    /// Upon successful completion, 0 is returned. 
+    /// Upon successful completion, 0 is returned.
     /// In case of a failure, an error is returned, and `errno` is set depending
     /// on the error, e.g. EACCES, ENOENT, etc.
     ///
@@ -3320,13 +3321,12 @@ impl Cage {
             (None, ..) => syscall_error(Errno::ENOENT, "rmdir", "Path does not exist"),
             //The specified directory exists, but its parent does not,
             //which means it is a root directory that cannot be removed
-            (Some(_), None) => {
-                syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
-            }
+            (Some(_), None) => syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory"),
             (Some(inodenum), Some(parent_inodenum)) => {
                 //If the parent directory of the directory that shall be removed
                 //doesn't allow write permission, the removal cannot be performed
-                if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap())
+                if let Inode::Dir(ref mut parent_dir) =
+                    *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap())
                 {
                     // check if parent directory has write permissions
                     if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {
@@ -3335,7 +3335,7 @@ impl Cage {
                             "rmdir",
                             "Parent directory does not have write permission",
                         );
-                    } 
+                    }
                 }
                 //Getting a mutable reference to an inode struct that corresponds to
                 //the directory that shall be removed
@@ -3345,7 +3345,7 @@ impl Cage {
                     //A sanity check to make sure the inode matches a directory
                     Inode::Dir(ref mut dir_obj) => {
                         //When a new empty directory is created, its linkcount
-                        //is set to 3. Thus, any empty directory should have a 
+                        //is set to 3. Thus, any empty directory should have a
                         //linkcount of 3. Otherwise, it is a non-empty directory
                         //that cannot be removed
                         if dir_obj.linkcount > 3 {
@@ -3370,9 +3370,9 @@ impl Cage {
                             );
                         }
 
-                        //The directory cannot be removed if one or more processes 
+                        //The directory cannot be removed if one or more processes
                         //have the directory open, which corresponds to a non-zero
-                        //reference count 
+                        //reference count
                         let remove_inode = dir_obj.refcount == 0;
                         //Any new empty directory has a linkcount of 3.
                         //If the refcount of the directory is 0, it means
@@ -3384,7 +3384,7 @@ impl Cage {
                         //otherwise, the process that has the directory open
                         //will end up calling `close_syscall()` on a nonexistent directory.
                         //At the same time, after `rmdir_syscall()` is called on the directory,
-                        //no new files can be created inside it, even if the directory is open 
+                        //no new files can be created inside it, even if the directory is open
                         //by some process. To prevent creating new files inside the directory,
                         //we delete its entry from the parent directory's inode table.
                         //This way, in case there is an open file descriptor for the directory
@@ -3395,7 +3395,7 @@ impl Cage {
                         //open from closing a nonexistent directory.
                         //Setting the directory's linkcount as 2 works as a flag for
                         //the `close_syscall()` to mark the directory that needs to be
-                        //removed from the filesystem  when its last open file descriptor 
+                        //removed from the filesystem  when its last open file descriptor
                         //is closed because it could not be removed at the time of calling
                         //`rmdir_syscall()` because of some open file descriptor.
                         if remove_inode {
@@ -3403,16 +3403,16 @@ impl Cage {
                         }
 
                         //The mutable reference to the inode has to be dropped because
-                        //remove_from_parent_dir() method will need to acquire an immutable 
-                        //reference to the parent directory's inode from the filesystem's 
+                        //remove_from_parent_dir() method will need to acquire an immutable
+                        //reference to the parent directory's inode from the filesystem's
                         //inodetable. The inodetable represents a Rust DashMap that deadlocks
-                        //when trying to get a reference to its entry while holding any sort 
+                        //when trying to get a reference to its entry while holding any sort
                         //of reference into it.
                         drop(inodeobj);
 
-                        //`remove_from_parent_dir()` helper function returns 0 if an 
-                        //entry corresponding to the specified directory was 
-                        //successfully removed from the filename-inode dictionary 
+                        //`remove_from_parent_dir()` helper function returns 0 if an
+                        //entry corresponding to the specified directory was
+                        //successfully removed from the filename-inode dictionary
                         //of its parent.
                         //If the parent directory does not allow write permission,
                         //`EPERM` is returned.

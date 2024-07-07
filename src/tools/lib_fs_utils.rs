@@ -309,13 +309,13 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
             return;
         } else {
             //Parent directory's write flag should be set before
-            //iterating through the child directories, so that they 
+            //iterating through the child directories, so that they
             //could be removed.
             //This is important for unit tests where a non empty
             //parent directory ends up having write flags off at
             //the end of the test. The next unit test's call to
             //`lind_deltree()` will not be able to remove the child
-            //directories if the parent directory's write flags 
+            //directories if the parent directory's write flags
             //are not set before iterating through the child
             //directories.
             cage.chmod_syscall(path, S_IRWXA);

@@ -1425,7 +1425,7 @@ pub mod fs_tests {
 
         //We create a new parent directory `/parent_dir`
         //and its child directory '/parent_dir/dir` both
-        //with the required write permission flags, thus 
+        //with the required write permission flags, thus
         //calling `rmdir_syscall()`on the child directory
         //should result in a normal behavior
         let path = "/parent_dir/dir";
@@ -1435,7 +1435,10 @@ pub mod fs_tests {
         //To check if the child directory was successfully
         //removed, we call `open_syscall()` on it, and see
         //if it correctly returns `Path does not exist` error
-        assert_eq!(cage.open_syscall(path, O_TRUNC, S_IRWXA), -(Errno::ENOENT as i32));
+        assert_eq!(
+            cage.open_syscall(path, O_TRUNC, S_IRWXA),
+            -(Errno::ENOENT as i32)
+        );
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -1502,13 +1505,16 @@ pub mod fs_tests {
 
         let cage = interface::cagetable_getref(1);
 
-        //We create a new parent directory `/parent_dir` and 
+        //We create a new parent directory `/parent_dir` and
         //its child directory '/parent_dir/dir`, thus calling `rmdir_syscall()`
         //on the parent directory should return `Directory is not empty` error
         let path = "/parent_dir/dir";
         assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
-        assert_eq!(cage.rmdir_syscall("/parent_dir"), -(Errno::ENOTEMPTY as i32));
+        assert_eq!(
+            cage.rmdir_syscall("/parent_dir"),
+            -(Errno::ENOTEMPTY as i32)
+        );
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -1524,7 +1530,7 @@ pub mod fs_tests {
 
         //We create a new parent directory `/parent_dir` with all write permission
         //flags and its child directory '/parent_dir/dir` without any write
-        //permision flags, thus calling `rmdir_syscall()`on the child directory 
+        //permision flags, thus calling `rmdir_syscall()`on the child directory
         //should return `Directory does not allow write permission` error
         //because the directory cannot be removed if it does not allow
         //write permission
@@ -1552,11 +1558,14 @@ pub mod fs_tests {
         assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
         //Now, we change the parent directories write permission flags to 0,
-        //thus calling `rmdir_syscall()`on the child directory 
+        //thus calling `rmdir_syscall()`on the child directory
         //should return `Directory does not allow write permission` error
         //because the directory cannot be removed if its parent directory
         //does not allow write permission
-        assert_eq!(cage.chmod_syscall("/parent_dir", S_IRUSR | S_IRGRP | S_IROTH), 0);
+        assert_eq!(
+            cage.chmod_syscall("/parent_dir", S_IRUSR | S_IRGRP | S_IROTH),
+            0
+        );
         assert_eq!(cage.rmdir_syscall(path), -(Errno::EPERM as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
