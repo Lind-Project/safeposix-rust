@@ -14,7 +14,6 @@ pub mod fs_tests {
     pub fn ut_lind_fs_simple() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -150,7 +149,6 @@ pub mod fs_tests {
 
         //testing a muck up with the inode table where the regular close does not work
         // as intended
-
 
         let cage = interface::cagetable_getref(1);
 
@@ -721,8 +719,8 @@ pub mod fs_tests {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
+
         let cage = interface::cagetable_getref(1);
-        
         let filefd = cage.open_syscall("/fcntl_file_2", O_CREAT | O_EXCL, S_IRWXA);
         //when presented with a nonexistent command, 'Invalid Argument' error should be
         // thrown 29 is an arbitrary number that does not correspond to any of

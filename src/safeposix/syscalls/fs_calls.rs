@@ -1983,29 +1983,7 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
-                Stream(stream_filedesc_obj) => {
-                    // Handle streams
-                    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
-                    let mut data = Vec::new();
-                    for iovec in iovecs {
-                        let slice = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
-                        data.extend_from_slice(slice);
-                    }
-                    let written = log_to_stdout(&data);
-                    if written < 0 {
-                        return syscall_error(Errno::EIO, "writev", "Failed to write to stream");
-                    }
-                    written as i32
-                }
-                _ => {
-                    // we currently don't support writev for files/streams
-                    return syscall_error(
-                        Errno::EOPNOTSUPP,
-                        "writev",
-                        "System call not implemented for this fd type",
-                    );
-                }
-            }
+
         } else {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
         }
