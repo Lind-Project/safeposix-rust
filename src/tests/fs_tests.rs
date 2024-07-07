@@ -2130,6 +2130,35 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
+        println!("dup2_syscall called with oldfd: {}, newfd: {}", oldfd, newfd);
+        if newfd >= MAXFD || newfd < 0 {
+            return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
+        }
+    
+        if newfd == oldfd {
+            return newfd;
+        }
+    
+        let checkedfd = match self.get_filedescriptor(oldfd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor."),
+        };
+    
+        let filedesc_enum = checkedfd.write();
+        let filedesc_enum = if let Some(f) = &*filedesc_enum {
+            f
+        } else {
+            return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor.");
+        };
+    
+        let result = Self::_dup2_helper(&self, filedesc_enum, newfd, true);
+        if result < 0 {
+            println!("dup2_syscall failed: result = {}", result);
+        }
+        return result;
+    }
+    
     
 
 }
