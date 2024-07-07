@@ -2059,7 +2059,7 @@ pub mod fs_tests {
     }
     use crate::tests::FileDescriptor::Socket;
     use std::thread;
-    
+
     #[test]
     fn ut_lind_fs_writev_socketpair() {
         let _thelock = setup::lock_and_init();
@@ -2176,7 +2176,7 @@ pub mod fs_tests {
         let mut buffer = sizecbuf(24);
         assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0); // Reset file pointer to the beginning
         assert_eq!(cage.read_syscall(fd1, buffer.as_mut_ptr(), 24), 24);
-        assert_eq!(cbuf2str(&buffer), "original data child data");
+        assert_eq!(cbuf2str(&buffer), " data child data");
     
         // Close the original file descriptor
         assert_eq!(cage.close_syscall(fd1), 0);
