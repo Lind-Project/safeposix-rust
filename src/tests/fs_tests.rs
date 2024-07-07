@@ -2059,7 +2059,7 @@ pub mod fs_tests {
     }
     use crate::tests::FileDescriptor::Socket;
     use std::thread;
-
+    
     #[test]
     fn ut_lind_fs_writev_socketpair() {
         let _thelock = setup::lock_and_init();
@@ -2149,7 +2149,7 @@ pub mod fs_tests {
         assert!(fd2 >= 0);
     
         // Write some data to the first file
-        assert_eq!(cage.write_syscall(fd1, str2cbuf("original data"), 13), 13);
+        assert_eq!(cage.write_syscall(fd1, str2cbuf("parent data"), 11), 11);
     
         // Fork the process
         assert_eq!(cage.fork_syscall(2), 0);
@@ -2173,10 +2173,10 @@ pub mod fs_tests {
         child.join().unwrap();
     
         // In the parent process, read the data back from the original file descriptor
-        let mut buffer = sizecbuf(24);
+        let mut buffer = sizecbuf(22);
         assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0); // Reset file pointer to the beginning
-        assert_eq!(cage.read_syscall(fd1, buffer.as_mut_ptr(), 24), 24);
-        assert_eq!(cbuf2str(&buffer), " data child data");
+        assert_eq!(cage.read_syscall(fd1, buffer.as_mut_ptr(), 22), 22);
+        assert_eq!(cbuf2str(&buffer), "parent data child data");
     
         // Close the original file descriptor
         assert_eq!(cage.close_syscall(fd1), 0);
@@ -2185,6 +2185,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
     
 
     
