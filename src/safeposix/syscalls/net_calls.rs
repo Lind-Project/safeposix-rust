@@ -845,7 +845,6 @@ impl Cage {
                         );
                     }
 
-                    // ** Why do we not use sock_tmp as the arugment instead of sockfdobj, since sock_tmp is the clone?? ** //
                     match sockhandle.protocol {
                         IPPROTO_UDP => {
                             return self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr)
@@ -991,7 +990,6 @@ impl Cage {
 
         //NET_METADATA.domsock_paths is the set of all currently bound domain sockets
         //try to get and hold reference to the key-value pair, so other process can't alter it
-        // ** How does the line below hold a reference to the key so other processes can't alter it ? ** //
         let path_ref = NET_METADATA.domsock_paths.get(&remotepathbuf);
         // if the entry doesn't exist, return an error.
         if path_ref.is_none() {
@@ -1028,6 +1026,7 @@ impl Cage {
         NET_METADATA
             .domsock_accept_table
             .insert(remotepathbuf, entry);
+        // TODO: Add logics to handle nonblocking connects here
         //Update the sock handle state to indicate that it is connected
         sockhandle.state = ConnState::CONNECTED;
         //If the socket is set to blocking mode, wait until a thread
@@ -1119,7 +1118,7 @@ impl Cage {
                 //the connection could not be established immediately. 
                 //https://www.gnu.org/software/libc/manual/html_node/Connecting.html
                 // ** Another connect call on the same socket, before the connection is completely established, 
-                //will fail with EALREADY. This doesn't seem to be implemented specifically **
+                // will fail with EALREADY. This doesn't seem to be implemented specifically **
                 Ok(i) => {
                     if i == Errno::EINPROGRESS {
                         inprogress = true;
@@ -1136,9 +1135,11 @@ impl Cage {
         sockhandle.state = ConnState::CONNECTED;
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         sockhandle.errno = 0;
-        // set the rawfd for select
-        // ** What does the above comment mean ?? ** //
-        //The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
+        // Set the rawfd for select_syscall as we cannot implement the select 
+        // logics for AF_INET socket right now, so we have to call the select 
+        // syscall from libc, which takes the rawfd as the argument instead of 
+        // the fake fd used by lind.
+        // The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
         // ** Will this ever cause issues of indexing into an fd that is already set by lind ?? ** //
         sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
         if inprogress {
