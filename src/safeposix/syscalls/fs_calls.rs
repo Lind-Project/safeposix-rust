@@ -3288,16 +3288,17 @@ impl Cage {
     /// In case of a failure, an error is returned, and `errno` is set depending
     /// on the error, e.g. EACCES, ENOENT, etc.
     ///
-    /// ### Errors and Panics
+    /// ### Errors
     ///
     /// * `ENOENT` - `path` is an empty string or names a nonexistent directory
     /// * `EBUSY` - `path` names a root directory that cannot be removed
     /// * `ENOEMPTY` - `path` names a non-empty directory,
     /// * `EPERM` - the directory to be removed or its parent directory
-    /// does not grant write permission
+    /// does not allow write permission
     /// * `ENOTDIR` - `path` is not a directory
     /// Other errors, like `EACCES`, `EINVAL`, etc. are not supported.
     ///
+    /// ### Panics
     /// A panic occurs when the directory to be removed does not have `S_IFDIR"`
     /// (directory file type flag) set or when parent inode is not a directory.
     ///
@@ -3324,7 +3325,7 @@ impl Cage {
             }
             (Some(inodenum), Some(parent_inodenum)) => {
                 //If the parent directory of the directory that shall be removed
-                //doesn't grant write permission, the removal cannot be performed
+                //doesn't allow write permission, the removal cannot be performed
                 if let Inode::Dir(ref mut parent_dir) = *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap())
                 {
                     // check if parent directory has write permissions
@@ -3360,12 +3361,12 @@ impl Cage {
                             panic!("This directory does not have its mode set to S_IFDIR");
                         }
 
-                        //The directory to be removed should grant write permission
+                        //The directory to be removed should allow write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {
                             return syscall_error(
                                 Errno::EPERM,
                                 "rmdir",
-                                "Directory does not grant write permission",
+                                "Directory does not allow write permission",
                             );
                         }
 
@@ -3413,7 +3414,7 @@ impl Cage {
                         //entry corresponding to the specified directory was 
                         //successfully removed from the filename-inode dictionary 
                         //of its parent.
-                        //If the parent directory does not grant write permission,
+                        //If the parent directory does not allow write permission,
                         //`EPERM` is returned.
                         //As a sanity check, if the parent inode specifies a
                         //non-directory type, the funciton panics
@@ -3430,7 +3431,7 @@ impl Cage {
                         }
                         //Log is used to store all the changes made to the filesystem. After
                         //the cage is closed, all the collected changes are serialized and
-                        //the state of the underlying filsystem is persisted. This allows us
+                        //the state of the underlying filesystem is persisted. This allows us
                         //to avoid serializing and persisting filesystem state after every
                         //`rmdir_syscall()`.
                         log_metadata(&FS_METADATA, parent_inodenum);
