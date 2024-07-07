@@ -2064,33 +2064,27 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
-        // 1. Create a pair of connected sockets
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
             Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
             0
         );
     
-        // 2. Prepare the data to be written
         let data = b"Hello, world!";
         let iovec = interface::IovecStruct {
             iov_base: data.as_ptr() as *mut libc::c_void,
             iov_len: data.len(),
         };
     
-        // 3. Use writev_syscall to send data
         let bytes_written = cage.writev_syscall(socketpair.sock1, &iovec, 1);
         assert_eq!(bytes_written, data.len() as i32);
     
-        // 4. Read the data from the receiving socket
         let mut buffer = vec![0u8; data.len()];
         let bytes_read = cage.recv_syscall(socketpair.sock2, buffer.as_mut_ptr(), buffer.len(), 0);
         assert_eq!(bytes_read, data.len() as i32);
     
-        // 5. Perform assertions
         assert_eq!(buffer, data);
     
-        // Close the sockets
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
     
