@@ -1,4 +1,5 @@
-//! This module handles the FilesystemMetadata struct which manages inode numbers, device ID, and inode structures, stores in lind.metadata.
+//! This module handles the FilesystemMetadata struct which manages inode
+//! numbers, device ID, and inode structures, stores in lind.metadata.
 //!
 //!  ## FS Metadata
 //!
@@ -7,9 +8,11 @@
 //! - `dev_id`: Device ID
 //! - `inodetable`: Hash map of inode numbers to `InodeEnum`
 //!
-//! `InodeEnum` represents inode structures like `File`, `CharDev`, `Socket`, and `Directory`.
+//! `InodeEnum` represents inode structures like `File`, `CharDev`, `Socket`,
+//! and `Directory`.
 //!
-//! Metadata is stored in `lind.metadata` and managed by `init_fs_metadata()` and `blank_fs_init()`.
+//! Metadata is stored in `lind.metadata` and managed by `init_fs_metadata()`
+//! and `blank_fs_init()`.
 
 // Filesystem metadata struct
 #![allow(dead_code)]
@@ -54,7 +57,8 @@ pub struct GenericInode {
     pub mode: u32,
     pub linkcount: u32,
     #[serde(skip)]
-    //skips serializing and deserializing field, will populate with u32 default of 0 (refcount should not be persisted)
+    //skips serializing and deserializing field, will populate with u32 default of 0 (refcount
+    // should not be persisted)
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
@@ -69,7 +73,8 @@ pub struct DeviceInode {
     pub mode: u32,
     pub linkcount: u32,
     #[serde(skip)]
-    //skips serializing and deserializing field, will populate with u32 default of 0 (refcount should not be persisted)
+    //skips serializing and deserializing field, will populate with u32 default of 0 (refcount
+    // should not be persisted)
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
@@ -99,7 +104,8 @@ pub struct DirectoryInode {
     pub mode: u32,
     pub linkcount: u32,
     #[serde(skip)]
-    //skips serializing and deserializing field, will populate with u32 default of 0 (refcount should not be persisted)
+    //skips serializing and deserializing field, will populate with u32 default of 0 (refcount
+    // should not be persisted)
     pub refcount: u32,
     pub atime: u64,
     pub ctime: u64,
@@ -137,9 +143,10 @@ impl FilesystemMetadata {
             size: 0,
             uid: DEFAULT_UID,
             gid: DEFAULT_GID,
-            //linkcount is how many entries the directory has (as per linux kernel), . and .. making 2 for the root directory initially,
-            //plus one to make sure it can never be removed (can be thought of as mount point link)
-            //refcount is how many open file descriptors pointing to the directory exist, 0 as no cages exist yet
+            //linkcount is how many entries the directory has (as per linux kernel), . and ..
+            // making 2 for the root directory initially, plus one to make sure it can
+            // never be removed (can be thought of as mount point link) refcount is how
+            // many open file descriptors pointing to the directory exist, 0 as no cages exist yet
             mode: S_IFDIR as u32 | S_IRWXA,
             linkcount: 3,
             refcount: 0,
@@ -176,11 +183,12 @@ impl FilesystemMetadata {
 
 pub fn format_fs() {
     let newmetadata = FilesystemMetadata::blank_fs_init();
-    //Because we keep the metadata as a synclazy, it is not possible to completely wipe it and
-    //reinstate something over it in-place. Thus we create a new file system, wipe the old one, and
-    //then persist our new one. In order to create the new one, because the FS_METADATA does not
-    //point to the same metadata that we are trying to create, we need to manually insert these
-    //rather than using system calls.
+    //Because we keep the metadata as a synclazy, it is not possible to completely
+    // wipe it and reinstate something over it in-place. Thus we create a new
+    // file system, wipe the old one, and then persist our new one. In order to
+    // create the new one, because the FS_METADATA does not point to the same
+    // metadata that we are trying to create, we need to manually insert these
+    // rather than using system calls.
 
     let mut rootinode = newmetadata.inodetable.get_mut(&1).unwrap(); //get root to populate its dict
     if let Inode::Dir(ref mut rootdir) = *rootinode {
@@ -298,7 +306,8 @@ pub fn load_fs() {
         let metadata_fileobj = interface::openmetadata(METADATAFILENAME.to_string()).unwrap();
         metadata_fileobj.close().unwrap();
 
-        // if we have a log file at this point, we need to sync it with the existing metadata
+        // if we have a log file at this point, we need to sync it with the existing
+        // metadata
         if interface::pathexists(LOGFILENAME.to_string()) {
             let log_fileobj = interface::openmetadata(LOGFILENAME.to_string()).unwrap();
             // read log file and parse count
@@ -317,7 +326,8 @@ pub fn load_fs() {
 
             // drain the vector and deserialize into pairs of inodenum + inodes,
             // if the inode exists, add it, if not, remove it
-            // keep track of the largest inodenum we see so we can update the nextinode counter
+            // keep track of the largest inodenum we see so we can update the nextinode
+            // counter
             let mut max_inodenum = FS_METADATA
                 .nextinode
                 .load(interface::RustAtomicOrdering::Relaxed);
@@ -402,7 +412,8 @@ pub fn persist_metadata(metadata: &FilesystemMetadata) {
     // Serialize metadata to string
     let metadatabytes = interface::serde_serialize_to_bytes(&metadata).unwrap();
 
-    // remove file if it exists, assigning it to nothing to avoid the compiler yelling about unused result
+    // remove file if it exists, assigning it to nothing to avoid the compiler
+    // yelling about unused result
     let _ = interface::removefile(METADATAFILENAME.to_string());
 
     // write to file
@@ -417,22 +428,30 @@ pub fn convpath(cpath: &str) -> interface::RustPathBuf {
     interface::RustPathBuf::from(cpath)
 }
 
-/// This function resolves the absolute path of a directory from its inode number in a filesystem.
-/// Here's how it operates:
+/// This function resolves the absolute path of a directory from its inode
+/// number in a filesystem. Here's how it operates:
 ///
-/// - Starts from the given inode and fetches its associated metadata from the filesystem's inode table.
+/// - Starts from the given inode and fetches its associated metadata from the
+///   filesystem's inode table.
 ///
 /// - Verifies that the inode represents a directory.
 ///
-/// - Attempts to find the parent directory by looking for the ".." entry in the current directory's entries.
+/// - Attempts to find the parent directory by looking for the ".." entry in the
+///   current directory's entries.
 ///
-/// - Retrieves the directory name associated with the current inode using the `filenamefrominode` function and prepends it to the `path_string`.
+/// - Retrieves the directory name associated with the current inode using the
+///   `filenamefrominode` function and prepends it to the `path_string`.
 ///
-/// - Continues this process recursively, updating the current inode to the parent inode, and accumulating directory names in the `path_string`.
+/// - Continues this process recursively, updating the current inode to the
+///   parent inode, and accumulating directory names in the `path_string`.
 ///
-/// - Stops when it reaches the root directory, where it prepends a "/" to the `path_string` and returns the complete path.
+/// - Stops when it reaches the root directory, where it prepends a "/" to the
+///   `path_string` and returns the complete path.
 ///
-/// This function effectively constructs the absolute path by backtracking the parent directories. However, if any issues arise during this process, such as missing metadata or inability to find the parent directory, it returns `None`.
+/// This function effectively constructs the absolute path by backtracking the
+/// parent directories. However, if any issues arise during this process, such
+/// as missing metadata or inability to find the parent directory, it returns
+/// `None`.
 pub fn pathnamefrominodenum(inodenum: usize) -> Option<String> {
     let mut path_string = String::new();
     let mut first_iteration = true;
@@ -450,7 +469,9 @@ pub fn pathnamefrominodenum(inodenum: usize) -> Option<String> {
             Inode::Dir(ref mut dir_inode) => {
                 // We try to get the parent directory inode.
                 if let Some(parent_dir_inode) = dir_inode.filename_to_inode_dict.get("..") {
-                    // If the parent node is 1 (indicating the root directory) and this is not the first iteration, this indicates that we have arrived at the root directory. Here we add a '/' to the beginning of the path string and return it.
+                    // If the parent node is 1 (indicating the root directory) and this is not the
+                    // first iteration, this indicates that we have arrived at the root directory.
+                    // Here we add a '/' to the beginning of the path string and return it.
                     if *parent_dir_inode == (1 as usize) {
                         if !first_iteration {
                             path_string.insert(0, '/');
@@ -497,7 +518,8 @@ pub fn filenamefrominode(dir_inode_no: usize, target_inode: usize) -> Option<Str
     }
 }
 
-//returns tuple consisting of inode number of file (if it exists), and inode number of parent (if it exists)
+//returns tuple consisting of inode number of file (if it exists), and inode
+// number of parent (if it exists)
 pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<usize>) {
     let mut curnode = Some(FS_METADATA.inodetable.get(&ROOTDIRECTORYINODE).unwrap());
     let mut inodeno = Some(ROOTDIRECTORYINODE);
@@ -529,7 +551,8 @@ pub fn metawalkandparent(path: &interface::RustPath) -> (Option<usize>, Option<u
                             }
 
                             //if no such child exists, update curnode, inodeno accordingly so that
-                            //we can check against none as we do at the beginning of the Normal match arm
+                            //we can check against none as we do at the beginning of the Normal
+                            // match arm
                             None => {
                                 curnode = None;
                                 None
@@ -556,7 +579,8 @@ pub fn metawalk(path: &interface::RustPath) -> Option<usize> {
     metawalkandparent(path).0
 }
 pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPathBuf {
-    //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
+    //If path is relative, prefix it with the current working directory, otherwise
+    // populate it with rootdir
     let mut newp = if origp.is_relative() {
         (**cage.cwd.read()).clone()
     } else {
@@ -628,5 +652,6 @@ pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
         }
     } else {
         panic!("Cage had a cwd which did not exist!");
-    } //we probably want to handle this case, maybe cwd should be an inode number?? Not urgent
+    } //we probably want to handle this case, maybe cwd should be an inode
+      // number?? Not urgent
 }

@@ -1,16 +1,23 @@
-//! This module handles the `Cage` struct which represents an isolated execution context. manages isolated environments with IDs, directories, and file descriptors, handling filesystem, system, and network calls.
+//! This module handles the `Cage` struct which represents an isolated execution
+//! context. manages isolated environments with IDs, directories, and file
+//! descriptors, handling filesystem, system, and network calls.
 //!
 //!  ## Cage Objects
 //!
-//! Cage objects represent isolated execution contexts and contain the following components:
+//! Cage objects represent isolated execution contexts and contain the following
+//! components:
 //!
 //! - Cage ID: An integer uniquely identifying the cage.
-//! - Current Working Directory: A string representing the current working directory of the cage.
+//! - Current Working Directory: A string representing the current working
+//!   directory of the cage.
 //! - Parent ID: An integer representing the ID of the parent cage.
-//! - File Descriptor Table: A locked hash map mapping integers to descriptor enums.
+//! - File Descriptor Table: A locked hash map mapping integers to descriptor
+//!   enums.
 //!
 //! File Descriptor Table:
-//! The file descriptor table maps file descriptor integers to their respective representations. These descriptors are implemented as an enum with the following types:
+//! The file descriptor table maps file descriptor integers to their respective
+//! representations. These descriptors are implemented as an enum with the
+//! following types:
 //! - File
 //! - Stream
 //! - Socket
@@ -20,8 +27,10 @@
 //! Each descriptor type is a struct with specific fields, detailed in cage.rs.
 //!
 //! System Calls:
-//! - Cage objects provide public methods for various system calls, categorized into filesystem-related, system-related, or network-related calls. Each system call method returns either a return code or an error code from the errno enum.
-//!
+//! - Cage objects provide public methods for various system calls, categorized
+//!   into filesystem-related, system-related, or network-related calls. Each
+//!   system call method returns either a return code or an error code from the
+//!   errno enum.
 
 #![allow(dead_code)]
 use crate::interface;
@@ -127,11 +136,13 @@ impl Cage {
             None => STARTINGFD,
         };
 
-        // let's get the next available fd number. The standard says we need to return the lowest open fd number.
+        // let's get the next available fd number. The standard says we need to return
+        // the lowest open fd number.
         for fd in start..MAXFD {
             let fdguard = self.filedescriptortable[fd as usize].try_write();
             if let Some(ref fdopt) = fdguard {
-                // we grab the lock here and if there is no occupied cage, we return the fdno and guard while keeping the fd slot locked
+                // we grab the lock here and if there is no occupied cage, we return the fdno
+                // and guard while keeping the fd slot locked
                 if fdopt.is_none() {
                     return (fd, fdguard);
                 }
@@ -226,8 +237,10 @@ pub fn create_unix_sockpipes() -> (
     interface::RustRfc<interface::EmulatedPipe>,
     interface::RustRfc<interface::EmulatedPipe>,
 ) {
-    let pipe1 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
-    let pipe2 = interface::RustRfc::new(interface::new_pipe(UDSOCK_CAPACITY));
+    let pipe1 =
+        interface::RustRfc::new(interface::EmulatedPipe::new_with_capacity(UDSOCK_CAPACITY));
+    let pipe2 =
+        interface::RustRfc::new(interface::EmulatedPipe::new_with_capacity(UDSOCK_CAPACITY));
 
     (pipe1, pipe2)
 }
