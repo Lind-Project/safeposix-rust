@@ -1983,7 +1983,15 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
-
+                _ => {
+                    // we currently don't support writev for files/streams
+                    return syscall_error(
+                        Errno::EOPNOTSUPP,
+                        "writev",
+                        "System call not implemented for this fd type",
+                    );
+                }
+            }
         } else {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
         }
