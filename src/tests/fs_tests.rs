@@ -2130,33 +2130,62 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
-        println!("dup2_syscall called with oldfd: {}, newfd: {}", oldfd, newfd);
-        if newfd >= MAXFD || newfd < 0 {
-            return syscall_error(Errno::EBADF, "dup2", "provided file descriptor is out of range");
-        }
+    #[test]
+    fn ut_lind_fs_dup2_fork() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
     
-        if newfd == oldfd {
-            return newfd;
-        }
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath1 = "/dup2file1";
+        let filepath2 = "/dup2file2";
     
-        let checkedfd = match self.get_filedescriptor(oldfd) {
-            Ok(fd) => fd,
-            Err(_) => return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor."),
-        };
+        // Open two file descriptors
+        let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
+        let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
     
-        let filedesc_enum = checkedfd.write();
-        let filedesc_enum = if let Some(f) = &*filedesc_enum {
-            f
+        // Write to the first file descriptor
+        assert_eq!(cage.write_syscall(fd1, str2cbuf("Hello"), 5), 5);
+    
+        // Fork the process using the Lind fork syscall
+        let pid = unsafe { libc::fork() };
+    
+        if pid == 0 {
+            // Child process
+            // Close fd2 before duplicating
+            assert_eq!(cage.close_syscall(fd2), 0);
+    
+            // Duplicate fd1 to fd2
+            assert_eq!(cage.dup2_syscall(fd1, fd2), fd2);
+    
+            // Write to the duplicated fd2
+            assert_eq!(cage.write_syscall(fd2, str2cbuf(" World"), 6), 6);
+    
+            // Exit the child process
+            cage.exit_syscall(EXIT_SUCCESS);
+            lindrustfinalize();
         } else {
-            return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor.");
-        };
+            // Parent process
+            // Wait for the child process to finish
+            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
     
-        let result = Self::_dup2_helper(&self, filedesc_enum, newfd, true);
-        if result < 0 {
-            println!("dup2_syscall failed: result = {}", result);
+            // Verify that fd1 contains the concatenated string "Hello World".
+            let mut buffer1 = sizecbuf(11);
+            assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
+            assert_eq!(cage.read_syscall(fd1, buffer1.as_mut_ptr(), 11), 11);
+            assert_eq!(cbuf2str(&buffer1), "Hello World");
+    
+            // Verify that fd2 still contains only "Hello" because the parent's file descriptors should be unaffected by the child's changes.
+            let mut buffer2 = sizecbuf(5);
+            assert_eq!(cage.lseek_syscall(fd2, 0, SEEK_SET), 0);
+            assert_eq!(cage.read_syscall(fd2, buffer2.as_mut_ptr(), 5), 5);
+            assert_eq!(cbuf2str(&buffer2), "Hello");
+    
+            // Close the file descriptors
+            assert_eq!(cage.close_syscall(fd1), 0);
+            assert_eq!(cage.close_syscall(fd2), 0);
+            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+            lindrustfinalize();
         }
-        return result;
     }
     
     

@@ -2020,7 +2020,9 @@ impl Cage {
         };
         println!("Before calling _dup2_helper: oldfd: {}, newfd: {}", oldfd, newfd);
         let result = Self::_dup2_helper(&self, filedesc_enum, newfd, true);
-        println!("After calling _dup2_helper: result: {}", result);
+        if result < 0 {
+            println!("dup2_syscall failed: result = {}", result);
+        }
         return result;
     }
 
