@@ -2195,7 +2195,37 @@ impl Cage {
         0 // fchdir success
     }
 
-    //------------------------------------CHDIR SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `chdir_syscall()` function changes the current working 
+    /// directory of the calling process to the directory specified 
+    /// in `path`, which can be an absolute or a relative pathname.
+    ///
+    /// ### Arguments
+    ///
+    /// The `chdir_syscall()` accepts one argument:
+    /// * `path` - the pathname, to which the current working
+    /// directory shall be changed.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOTDIR` - a component of `path` is not a directory.
+    /// * `ENOENT` - the directory specified in path does not exist.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// The function panics when the previous working directory does not 
+    /// exist or does not have the directory file type flag.
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [chdir(2)](https://man7.org/linux/man-pages/man2/chdir.2.html)
 
     pub fn chdir_syscall(&self, path: &str) -> i32 {
         let truepath = normpath(convpath(path), self);
