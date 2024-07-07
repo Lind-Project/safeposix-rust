@@ -1,5 +1,5 @@
 /* Benchmarks for the microvisor implementation.  In general, I'm not doing
- * results checking / assertations to avoid adding bias to the results.  */
+ * results checking / assertations to avoid adding bias to the results. */
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
