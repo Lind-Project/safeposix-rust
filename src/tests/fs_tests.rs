@@ -2167,7 +2167,7 @@ pub mod fs_tests {
             assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
     
-        child.join().unwrap();
+        child.join().unwrap(); // Wait for the child thread to complete
     
         // Verify that fd1 contains the concatenated string "Hello World".
         let mut buffer1 = sizecbuf(11);
@@ -2187,6 +2187,7 @@ pub mod fs_tests {
         assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
     
     
 
