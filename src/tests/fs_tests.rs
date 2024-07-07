@@ -2093,40 +2093,44 @@ pub mod fs_tests {
     }
 
     #[test]
-    fn ut_lind_fs_writev_pipe() {
+    fn ut_lind_fs_writev_pipe_closed() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-
+    
         // Create a pipe
-        let mut pipe_fds = [0; 2];
-        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
-        let read_fd = pipe_fds[0];
-        let write_fd = pipe_fds[1];
-
-        // Prepare the data to be written using an iovec structure
-        let data = b"Hello, pipe!";
-        let iovec = interface::IovecStruct {
-            iov_base: data.as_ptr() as *mut libc::c_void,
-            iov_len: data.len(),
+        let mut pipefds = PipeArray {
+            readfd: 0,
+            writefd: 0,
         };
-
-        // Write the data to the pipe using writev_syscall
-        let bytes_written = cage.writev_syscall(write_fd, &iovec, 1);
-        assert_eq!(bytes_written, data.len() as i32);
-
-        // Read the data from the pipe
-        let mut buffer = vec![0u8; data.len()];
-        let bytes_read = cage.read_syscall(read_fd, buffer.as_mut_ptr(), buffer.len());
-        assert_eq!(bytes_read, data.len() as i32);
-
-        // Verify that the data read is the same as the data written
-        assert_eq!(buffer, data);
-
-        // Close the pipe file descriptors
-        assert_eq!(cage.close_syscall(read_fd), 0);
-        assert_eq!(cage.close_syscall(write_fd), 0);
-
-        // Finalize the test environment
+        assert_eq!(cage.pipe2_syscall(&mut pipefds, 0), 0);
+    
+        // Prepare data to write
+        let data1 = b"Hello, ";
+        let data2 = b"world!";
+    
+        // Create IovecStruct objects
+        let iovec1 = interface::IovecStruct {
+            iov_base: data1.as_ptr() as *mut libc::c_void,
+            iov_len: data1.len() as isize,
+        };
+        let iovec2 = interface::IovecStruct {
+            iov_base: data2.as_ptr() as *mut libc::c_void,
+            iov_len: data2.len() as isize,
+        };
+        let iovecs = [iovec1, iovec2];
+    
+        // Close the read end of the pipe
+        assert_eq!(cage.close_syscall(pipefds.readfd), 0);
+    
+        // Attempt to write data to the closed pipe
+        let bytes_written =
+            cage.writev_syscall(pipefds.writefd, iovecs.as_ptr(), iovecs.len() as i32);
+        assert_eq!(bytes_written, -(Errno::EPIPE as i32));
+    
+        // Close both ends of the pipe
+        assert_eq!(cage.close_syscall(pipefds.readfd), 0);
+        assert_eq!(cage.close_syscall(pipefds.writefd), 0);
+    
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
