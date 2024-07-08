@@ -305,16 +305,38 @@ impl Cage {
         0
     }
 
+    /// # Description
+    /// 
+    /// The exec system call replaces the current Cage object image with a new Cage object
+    /// Exec is called immediately after a process(Cage) forks
+    /// 
+    /// ## Arguments
+    /// 
+    /// `child_cageid`: uid of the new child Cage object
+    /// 
+    /// ## Returns 
+    /// 
+    /// Returns 0 upon successfully update the current running image
+    /// 
+    /// ## Errors
+    /// 
+    /// 
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        interface::cagetable_remove(self.cageid);
+        // We remove the current running process from the cagetable
+        interface::cagetable_remove(self.cageid);   
+        // Function call to unmap shared memory mappings of the current process
+        self.unmap_shm_mappings();  
 
-        self.unmap_shm_mappings();
-
-        let mut cloexecvec = vec![];
+        // Initialize an empty vector to hold file descriptors
+        let mut cloexecvec = vec![];    
         for fd in 0..MAXFD {
+            // Get mutex of the file descriptor
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
+                // For each valid file descriptor we chech if the O_CLOEXEC flag is set or not
+                // The O_CLOEXEC flag determines whether the fd should be closed upon calling exec or
+                // not
                 if match filedesc_enum {
                     File(f) => f.flags & O_CLOEXEC,
                     Stream(s) => s.flags & O_CLOEXEC,
@@ -323,11 +345,15 @@ impl Cage {
                     Epoll(p) => p.flags & O_CLOEXEC,
                 } != 0
                 {
+                    // If the flag is set - we add the fd to our vector
                     cloexecvec.push(fd);
                 }
             }
         }
 
+        //For each fd in our close  vector list 
+        //We call the close_syscall which takes in a file decsriptor 
+        //and closes it
         for fdnum in cloexecvec {
             self.close_syscall(fdnum);
         }
