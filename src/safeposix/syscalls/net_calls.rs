@@ -2034,7 +2034,7 @@ impl Cage {
                     }
                 };
 
-                //Finalize values for the new "server "socket handle that was 
+                //Finalize values for the new "server" socket handle that was 
                 //created to connect with the peer socket
                 newsockhandle.localaddr = Some(sockhandle.localaddr.unwrap().clone());
                 newsockhandle.remoteaddr = Some(remote_addr.clone());
@@ -2054,6 +2054,17 @@ impl Cage {
         }
     }
 
+    //The function accepts a connection over the INET domain
+    //
+    //Args: sockhandle is a mut reference to a read lock on the SocketHandle of the listening socket
+    //      sockfdobj is a mut reference to the Socket Description of the listening socket
+    //      newfd is an available file descriptor
+    //      newfdoption is a mut reference to a Option<FileDescriptor> object 
+    //                  at the newfd index in the file descriptor table
+    //      addr is the address of the peer socket (i.e. the client that is connecting)
+    //
+    //upon success return newfd, the new socket file descriptor from the "server side"
+    //otherwise, return -errno with errno set to the error
     fn accept_inet(
         &self,
         sockhandle: &mut interface::RustLockReadGuard<SocketHandle>,
@@ -2063,6 +2074,8 @@ impl Cage {
         addr: &mut interface::GenSockaddr,
     ) -> i32 {
         match sockhandle.protocol {
+            //UDP sockets do not support listening as UDP is a connectionless
+            //based protocol
             IPPROTO_UDP => {
                 return syscall_error(
                     Errno::EOPNOTSUPP,
@@ -2070,7 +2083,10 @@ impl Cage {
                     "Protocol does not support listening",
                 );
             }
+            //TCP Sockets support listening as TCP is a connection
+            //based protocol
             IPPROTO_TCP => {
+                //Socket must be listening to readily accept a connection
                 if sockhandle.state != ConnState::LISTEN {
                     return syscall_error(
                         Errno::EINVAL,
@@ -2078,6 +2094,8 @@ impl Cage {
                         "Socket must be listening before accept is called",
                     );
                 }
+                //Initialize a new socket file descriptor and set necessary flags
+                //based on the listening socket
                 let mut newsockfd = self._socket_initializer(
                     sockhandle.domain,
                     sockhandle.socktype,
@@ -2087,21 +2105,32 @@ impl Cage {
                     ConnState::CONNECTED,
                 );
 
+                //we loop here so we can cancel blocking accept, 
+                //see comments below and in Socket::new in interface/comm.rs
                 loop {
-                    // we loop here so we can cancel blocking accept, see comments below and in Socket::new in interface/comm.rs
-
                     // if we got a pending connection in select/poll/whatever, return that here instead
-                    let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
-                    let porttuple =
-                        mux_port(ladr.addr().clone(), ladr.port(), sockhandle.domain, TCPPORT);
 
-                    let mut pendingvec =
-                        NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
+                    //Socket must have been populated by implicit bind
+                    let ladr = sockhandle.localaddr.unwrap().clone();
+                    //Obtain a tuple of the address, port, and port type of the listening socket
+                    //Panics if domain is not INET or INET6
+                    let porttuple = mux_port(ladr.addr().clone(), 
+                                                                         ladr.port(), 
+                                                                         sockhandle.domain, 
+                                                                         TCPPORT);
+
+                    //Check if there are any pending incoming connections to the listening socket
+                    //and grab the peer socket's raw fd and its address
+                    let mut pendingvec = NET_METADATA.pending_conn_table.get_mut(&porttuple).unwrap();
                     let pendingoption = pendingvec.pop();
                     let (acceptedresult, remote_addr) = match pendingoption {
                         Some(pendingtup) => pendingtup,
                         None => {
                             //unwrap ok because listening
+                            // ** What does the above comment refer to ?? ** //
+                            //
+                            //If the socket is blocking, call the accept syscall
+                            //from libc
                             if 0 == (sockfdobj.flags & O_NONBLOCK) {
                                 match sockhandle.domain {
                                     PF_INET => {
@@ -2112,6 +2141,9 @@ impl Cage {
                                     }
                                     _ => panic!("Unknown domain in accepting socket"),
                                 }
+                            //otherwise the socket is nonblocking so call the accept
+                            //syscall from libc and set the the raw sys fd 
+                            //of the listening socket to nonblocking
                             } else {
                                 match sockhandle.domain {
                                     PF_INET => sockhandle
@@ -2130,6 +2162,7 @@ impl Cage {
                         }
                     };
 
+                    //If the accept libc call returns with an error
                     if let Err(_) = acceptedresult {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
@@ -2138,18 +2171,20 @@ impl Cage {
                                 //the case that this recv timeout was exceeded, and we
                                 //should thus not treat this as a failure in our emulated
                                 //socket; see comment in Socket::new in interface/comm.rs
+
+                                //** What does recv timout have to do with accept?? **/
                                 if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
+                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                    // until the individual thread is signaled to kill itself
                                     if self
                                         .cancelstatus
                                         .load(interface::RustAtomicOrdering::Relaxed)
                                     {
-                                        // if the cancel status is set in the cage, we trap around a cancel point
-                                        // until the individual thread is signaled to cancel itself
                                         loop {
                                             interface::cancelpoint(self.cageid);
                                         }
                                     }
-                                    continue; // EAGAIN, try again
+                                    continue;
                                 }
 
                                 return syscall_error(
@@ -2162,9 +2197,10 @@ impl Cage {
                         };
                     }
 
-                    // if we get here we have an accepted socket
+                    //If we get here we have an accepted socket
                     let acceptedsock = acceptedresult.unwrap();
-
+                    //Set the address and the port of the new socket
+                    //created to handle the connection to the peer socket
                     let mut newaddr = sockhandle.localaddr.unwrap().clone();
                     let newport = match NET_METADATA._reserve_localport(
                         newaddr.addr(),
@@ -2186,13 +2222,13 @@ impl Cage {
                     newsockhandle.localaddr = Some(newaddr);
                     newsockhandle.remoteaddr = Some(remote_addr.clone());
 
-                    //create socket object for new connected socket
+                    //create Socket object for new connected socket
                     newsockhandle.innersocket = Some(acceptedsock);
-                    // set lock-free rawfd for select
+                    //set lock-free rawfd for select
                     newsockfd.rawfd = newsockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
                     let _insertval = newfdoption.insert(Socket(newsockfd));
-                    *addr = remote_addr; //populate addr with what address it connected to
+                    *addr = remote_addr; //populate addr with the address of the peer socket
 
                     return newfd;
                 }
