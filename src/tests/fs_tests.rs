@@ -356,7 +356,7 @@ pub mod fs_tests {
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
 
-        //Changing to a new current working directory, and then obtaining 
+        //Changing to a new current working directory, and then obtaining
         //the current working directory using `getcwd_syscall()` to see
         //if it was correctly changed
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
@@ -417,7 +417,10 @@ pub mod fs_tests {
         //returns `The directory referred to in path does not exist` error.
         //`/arbitrarypath` is a pathname that does not correspond to any existing
         //directory pathname.
-        assert_eq!(cage.chdir_syscall("/arbitrarypath"), -(Errno::ENOENT as i32));
+        assert_eq!(
+            cage.chdir_syscall("/arbitrarypath"),
+            -(Errno::ENOENT as i32)
+        );
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -441,7 +444,7 @@ pub mod fs_tests {
         let fd1 = cage.open_syscall("/subdir1", O_RDWR, S_IRWXA);
         let fd2 = cage.open_syscall("/subdir1/subdir2", O_RDWR, S_IRWXA);
 
-        //Changing to a new current working directory, and then obtaining 
+        //Changing to a new current working directory, and then obtaining
         //the current working directory using `getcwd_syscall()` to see
         //if it was correctly changed
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);

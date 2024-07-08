@@ -1098,9 +1098,9 @@ impl Cage {
     /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
     /// O_WRONLY flags.
     /// There are generally two cases which occur when this syscall happens:
-    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
-    /// a new file is created at the given location and a new file descriptor is 
-    /// created and returned. 
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT
+    /// flag, a new file is created at the given location and a new file
+    /// descriptor is created and returned.
     /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
     /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
@@ -2160,8 +2160,8 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `fchdir_syscall()` function changes the current working 
-    /// directory of the calling process to the directory specified 
+    /// The `fchdir_syscall()` function changes the current working
+    /// directory of the calling process to the directory specified
     /// by an open file descriptor `fd`.
     ///
     /// ### Arguments
@@ -2207,8 +2207,8 @@ impl Cage {
         let path_string = match &*unlocked_fd {
             Some(File(normalfile_filedesc_obj)) => {
                 let inodenum = normalfile_filedesc_obj.inode;
-                //`pathnamefrominodenum` resolves the absolute path of a directory 
-                //from its inode and returns None in case any of the path components 
+                //`pathnamefrominodenum` resolves the absolute path of a directory
+                //from its inode and returns None in case any of the path components
                 //is not a directory
                 match pathnamefrominodenum(inodenum) {
                     Some(name) => name,
@@ -2240,8 +2240,8 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `chdir_syscall()` function changes the current working 
-    /// directory of the calling process to the directory specified 
+    /// The `chdir_syscall()` function changes the current working
+    /// directory of the calling process to the directory specified
     /// in `path`, which can be an absolute or a relative pathname.
     ///
     /// ### Arguments
@@ -2285,7 +2285,8 @@ impl Cage {
         if let Some(inodenum) = metawalk(&truepath) {
             //A sanity check to make sure that the last component of the
             //specified path is indeed a directory
-            if let Inode::Dir(ref mut _dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
+            if let Inode::Dir(ref mut _dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap())
+            {
                 //Obtain the write lock on the current working directory of the cage
                 //and change it to the new directory
                 let mut cwd_container = self.cwd.write();
