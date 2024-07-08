@@ -1422,11 +1422,8 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [read(2)](https://man7.org/linux/man-pages/man2/read.2.html)
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
-        // Attempt to get the file descriptor; handle error if it does not exist
-        let checkedfd = match self.get_filedescriptor(fd) {
-            Ok(fd) => fd,
-            Err(_) => return syscall_error(Errno::EBADF, "read", "Invalid file descriptor."),
-        };
+        // Attempt to get the file descriptor
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
@@ -1638,11 +1635,8 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [pread(2)](https://man7.org/linux/man-pages/man2/pread.2.html)
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
-        // Attempt to get the file descriptor; handle error if it does not exist
-        let checkedfd = match self.get_filedescriptor(fd) {
-            Ok(fd) => fd,
-            Err(_) => return syscall_error(Errno::EBADF, "pread", "Invalid file descriptor."),
-        };
+        // Attempt to get the file descriptor
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
