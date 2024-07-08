@@ -39,7 +39,7 @@ use super::net_constants::*;
 use super::sys_constants::*;
 use crate::interface;
 use crate::safeposix::cage::{FileDescriptor::*, *};
-use crate::safeposix::filesystem::{decref_dir, metawalk, Inode, FS_METADATA};
+use crate::safeposix::filesystem::{metawalk, Inode, FS_METADATA};
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::SHM_METADATA;
 
@@ -482,7 +482,6 @@ impl Cage {
 
         //get file descriptor table into a vector
         let cwd_container = self.cwd.read();
-        decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove
         // result

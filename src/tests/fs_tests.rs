@@ -371,6 +371,27 @@ pub mod fs_tests {
     }
 
     #[test]
+    pub fn ut_lind_fs_chdir_removeddir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //testing the ability to make and change to directories
+
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir2", S_IRWXA), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        assert_eq!(cage.rmdir_syscall("/subdir1"), 0);
+        assert_eq!(cage.chdir_syscall("/subdir2"), 0);
+        //assert_eq!(cage.chdir_syscall("subdir1"), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_dir_mode() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
