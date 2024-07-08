@@ -356,6 +356,9 @@ pub mod fs_tests {
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
 
+        //Changing to a new current working directory, and then obtaining 
+        //the current working directory using `getcwd_syscall()` to see
+        //if it was correctly changed
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
         let mut buf1 = vec![0u8; 9];
         let bufptr1: *mut u8 = &mut buf1[0];
@@ -404,7 +407,7 @@ pub mod fs_tests {
 
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/TestFile1";
-        let fd1 = cage.open_syscall(filepath, flags, 0);
+        let _fd1 = cage.open_syscall(filepath, flags, 0);
 
         //Checking if passing a regular file pathname correctly
         //returns `The last component in path is not a directory` error
@@ -438,6 +441,9 @@ pub mod fs_tests {
         let fd1 = cage.open_syscall("/subdir1", O_RDWR, S_IRWXA);
         let fd2 = cage.open_syscall("/subdir1/subdir2", O_RDWR, S_IRWXA);
 
+        //Changing to a new current working directory, and then obtaining 
+        //the current working directory using `getcwd_syscall()` to see
+        //if it was correctly changed
         assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
         assert_eq!(cage.fchdir_syscall(fd1), 0);
         let mut buf1 = vec![0u8; 9];

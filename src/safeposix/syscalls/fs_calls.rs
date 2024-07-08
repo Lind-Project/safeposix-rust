@@ -2233,7 +2233,7 @@ impl Cage {
         //Obtain the write lock on the current working directory of the cage
         //and change it to the new directory
         let mut cwd_container = self.cwd.write();
-        *cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+        *cwd_container = interface::RustRfc::new(normpath(convpath(path_string.as_str()), self));
 
         0 // fchdir success
     }
@@ -2285,7 +2285,7 @@ impl Cage {
         if let Some(inodenum) = metawalk(&truepath) {
             //A sanity check to make sure that the last component of the
             //specified path is indeed a directory
-            if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
+            if let Inode::Dir(ref mut _dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
                 //Obtain the write lock on the current working directory of the cage
                 //and change it to the new directory
                 let mut cwd_container = self.cwd.write();
