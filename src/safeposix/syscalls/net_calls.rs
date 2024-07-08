@@ -1510,7 +1510,78 @@ impl Cage {
         return self.recv_common(fd, buf, buflen, flags, &mut None);
     }
 
-    //we currently ignore backlog
+    /// ### Description
+    /// 
+    /// `accept_syscall` accepts a connection on a socket 
+    /// 
+    /// ### Arguments
+    /// 
+    /// it accepts two parameters: 
+    /// * `fd` - the file descriptor that refers to the listening socket
+    /// * `addr` - the address of the peer socket (i.e. the client that is connecting)
+    ///            // ** Do we deal with the case in which addr may be NULL ?? ** //
+    /// 
+    /// ### Returns
+    /// 
+    /// for a successful call, the return value will be a file descriptor for the
+    /// accepted socket (a nonnegative integer). On error, -errno is
+    /// returned and errno is set to indicate the error
+    /// 
+    /// ### Errors
+    /// 
+    /// * EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and no 
+    ///     connections are present to be accepted.  
+    ///     POSIX.1-2001 and POSIX.1-2008
+    ///     allow either error to be returned for this case, and do
+    ///     not require these constants to have the same value, so a
+    ///     portable application should check for both possibilities.
+    /// 
+    /// * EBADF - sockfd is not an open file descriptor.
+    /// 
+    /// * ECONNABORTED - A connection has been aborted.
+    /// 
+    /// * EFAULT - The addr argument is not in a writable part of the user
+    ///            address space.
+    /// 
+    /// * EINTR - The system call was interrupted by a signal that was
+    ///           caught before a valid connection arrived; see signal(7).
+    /// 
+    /// * EINVAL - Socket is not listening for connections, or addrlen is
+    ///            invalid (e.g., is negative).
+    /// 
+    /// * EMFILE - The per-process limit on the number of open file
+    ///            descriptors has been reached.
+    /// 
+    /// * ENFILE - The system-wide limit on the total number of open files
+    ///            has been reached.
+    /// 
+    /// * ENOMEM - Not enough free memory.  This often means that the memory
+    ///            allocation is limited by the socket buffer limits, not by
+    ///            the system memory.
+    /// 
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// 
+    /// * EOPNOTSUPP - The referenced socket is not of type SOCK_STREAM.
+    /// 
+    /// * EPERM - Firewall rules forbid connection.
+    /// 
+    /// * EPROTO - Protocol error.
+    /// 
+    /// In addition, network errors for the new socket and as defined for
+    /// the protocol may be returned.  Various Linux kernels can return
+    /// other errors such as ENOSR, ESOCKTNOSUPPORT, EPROTONOSUPPORT,
+    /// ETIMEDOUT.  The value ERESTARTSYS may be seen during a trace.
+    /// 
+    /// ### Panics
+    /// 
+    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
+    /// * Unknown errno value from fcntl returned, will cause panic.
+    /// 
+    /// for more detailed description of all the commands and return values, see 
+    /// [accept(2)](https://linux.die.net/man/2/accept)
+    //
+    // ** we currently ignore backlog **
+    // ** What does the above comment mean ?? ** //
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
