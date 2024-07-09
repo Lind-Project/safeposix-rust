@@ -1441,20 +1441,20 @@ pub mod fs_tests {
         // Acquire a lock on TESTMUTEX to prevent other tests from running concurrently,
         // and also perform clean environment setup.
         let _thelock = setup::lock_and_init();
-    
+
         let cage = interface::cagetable_getref(1);
-    
+
         // Allocate a buffer to store directory entries
         let bufsize = 1024;
         let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
-    
+
         // Attempt to call getdents_syscall with a file descriptor out of range
         let result = cage.getdents_syscall(MAXFD + 1, baseptr, bufsize as u32);
-    
+
         // Verify that it returns EBADF (errno for "Bad file descriptor")
         assert_eq!(result, -(Errno::EBADF as i32));
-    
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
