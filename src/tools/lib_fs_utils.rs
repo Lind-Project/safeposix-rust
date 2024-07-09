@@ -308,6 +308,17 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
             cage.unlink_syscall(path);
             return;
         } else {
+            //Parent directory's write flag should be set before
+            //iterating through the child directories, so that they
+            //could be removed.
+            //This is important for unit tests where a non empty
+            //parent directory ends up having write flags off at
+            //the end of the test. The next unit test's call to
+            //`lind_deltree()` will not be able to remove the child
+            //directories if the parent directory's write flags
+            //are not set before iterating through the child
+            //directories.
+            cage.chmod_syscall(path, S_IRWXA);
             //remove all children recursively
             visit_children(cage, path, None, |childcage, childpath, isdir, _| {
                 if isdir {
@@ -316,9 +327,7 @@ pub fn lind_deltree(cage: &Cage, path: &str) {
                     childcage.unlink_syscall(childpath);
                 }
             });
-
             //remove specified directory now that it is empty
-            cage.chmod_syscall(path, S_IRWXA);
             cage.rmdir_syscall(path);
         }
     } else {
