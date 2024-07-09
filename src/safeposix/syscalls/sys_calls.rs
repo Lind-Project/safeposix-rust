@@ -483,34 +483,62 @@ impl Cage {
         0
     }
 
+    /// ### Description
+    /// 
+    /// The exit function causes normal process(Cage) termination
+    /// The termination entails unmapping all memory references
+    /// Removing the cage object from the cage table, closing all open files
+    /// And decrement all references to files and directories
+    /// For more information please refer [https://man7.org/linux/man-pages/man3/exit.3.html]
+    /// 
+    /// ### Arguments 
+    /// 
+    /// The exit function takes only one argument which is `status`
+    /// `status` : This is a 32 bit integer value that the function returns back 
+    /// upon sucessfully terminating the process
+    /// 
+    /// ### Returns
+    /// 
+    /// This function returns a 32 bit integer value - which represents succesful 
+    /// termination of the calling Cage object
+    /// 
+    /// ### Panics
+    /// 
+    /// While this syscall does not panic directly - it can panic if the 
+    /// `decref_dir` function panics - which occurs when the working directory
+    /// passed to it is not a valid directory or the directory did not exist at all. 
+    /// or if the cage_id passed to the remove function is not a valid cage id. 
     pub fn exit_syscall(&self, status: i32) -> i32 {
-        //flush anything left in stdout
+        //Clear all values in stdout stream
         interface::flush_stdout();
-
+        //Unmap all memory mappings for the current cage object
         self.unmap_shm_mappings();
 
-        // close fds
+        //For all file descriptors that the cage holds
         for fd in 0..MAXFD {
+            // Close the file pointed to by the file descriptor
             self._close_helper(fd);
         }
 
-        //get file descriptor table into a vector
+        //Read the current working directory (acquire a lock)
         let cwd_container = self.cwd.read();
+        //For all inodes to which the current cage object points to
+        //Decrement their reference count
         decref_dir(&*cwd_container);
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove
-        // result
+        //Remove the current cage object from the cage table
         interface::cagetable_remove(self.cageid);
 
-        // Trigger SIGCHLD
+        // Check if Lind is being run as a test suite or not
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // dont trigger SIGCHLD for test suite
+            // Trigger SIGCHILD if LIND is not run as a test suite
             if self.cageid != self.parent {
                 interface::lind_kill_from_id(self.parent, SIGCHLD);
             }
         }
 
-        //fdtable will be dropped at end of dispatcher scope because of Arc
+        // Return the status integer back to the calling function
         status
     }
 

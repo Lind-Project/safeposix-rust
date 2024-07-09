@@ -90,5 +90,14 @@ pub mod test_sys {
         assert_eq!(child_cage.cwd.read(),cage.cwd.read())
     }
 
+    pub fn ut_lind_exit() {
+        // Since exit function is heavily used and tested in other syscalls and their tests 
+        // We only perform preliminary checks for checking the sanity of this syscall
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // Call the exit call
+        assert_eq(cage.exit_syscall(EXIT_SUCCESS),EXIT_SUCCESS); 
+        lindrustfinalize(); 
+    }
 } 
 
