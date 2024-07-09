@@ -3690,7 +3690,7 @@ impl Cage {
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
-                                                          // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the actual file type is not yet determined.
+                                // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the actual file type is not yet determined.
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
                                 temp_len =
                                     interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
