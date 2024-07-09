@@ -1921,27 +1921,78 @@ pub mod net_tests {
 
         let cage = interface::cagetable_getref(1);
 
-        let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        // Following checks are inplace to ensure that the socket types are correctly defined
+        // and that the assumptions about the values of the socket types are correct across platforms.
+        // Check that SOCK_STREAM only uses the lowest 3 bits
+        assert_eq!(SOCK_STREAM & !0x7, 0);
 
-        let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
-        let sockfd4 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        // Check that SOCK_DGRAM only uses the lowest 3 bits
+        assert_eq!(SOCK_DGRAM & !0x7, 0);
 
-        //checking that the fd's are correct
-        assert!(sockfd > 0);
-        assert!(sockfd2 > 0);
-        assert!(sockfd3 > 0);
-        assert!(sockfd4 > 0);
+        // Check that SOCK_NONBLOCK does not use the lowest 3 bits
+        assert_eq!(SOCK_NONBLOCK & 0x7, 0);
+
+        // Check that SOCK_CLOEXEC does not use the lowest 3 bits
+        assert_eq!(SOCK_CLOEXEC & 0x7, 0);
 
         //let's check an illegal operation...
+        // RDM is not a valid socket type for SOCK_DGRAM (UDP) as its not implemented yet.
+        let sockfd5 = cage.socket_syscall(AF_INET, SOCK_RDM, 0);
+        assert!(sockfd5 < 0, "Expected an error, got a valid file descriptor");
+
+        //let's check an illegal operation...
+        //invalid protocol for SOCK_STREAM Type.
+        let sockfd6 = cage.socket_syscall(AF_INET, SOCK_STREAM, 999);
+        assert!(sockfd6 < 0, "Expected an error, got a valid file descriptor");
+
+        //let's check an illegal operation...
+        //invalid domain for socket
+        let sockfd7 = cage.socket_syscall(999, SOCK_STREAM, 0);
+        assert!(sockfd7 < 0, "Expected an error, got a valid file descriptor");
+
+        //let's check an illegal operation...
+        //invalid socket type flags combination
+        let sockfd8 = cage.socket_syscall(AF_INET, SOCK_STREAM | 0x100000, 0);
+        assert!(sockfd8 < 0, "Expected an error, got a valid file descriptor");
+
+        //let's check an illegal operation...
+        //invalid socket type protocol combination
+        let sockfd9 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_UDP);
+        assert!(sockfd9 < 0, "Expected an error, got a valid file descriptor");
+
+        //let's check an illegal operation...
+        //invalid socket type protocol combination
+        let sockfd10 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_TCP);
+        assert!(sockfd10 < 0, "Expected an error, got a valid file descriptor");
+
+
+        let mut sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(sockfd > 0, "Expected a valid file descriptor, got error");
+
+        let sockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        assert!(sockfd2 > 0, "Expected a valid file descriptor, got error");
+
+        let sockfd3 = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        assert!(sockfd3 > 0, "Expected a valid file descriptor, got error");
+        
+        let sockfd4 = cage.socket_syscall(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        assert!(sockfd4 > 0, "Expected a valid file descriptor, got error");
+
+
+
+
+        //let's check an illegal operation...
+        // let sockfd7 = cage.socket_syscall(AF_INET, !0b111 | 0b001, 0);
+        // assert!(sockfd7 < 0, "Expected an error, got a valid file descriptor");
+
         let sockfddomain = cage.socket_syscall(AF_UNIX, SOCK_DGRAM, 0);
-        assert!(sockfddomain > 0);
+        assert!(sockfddomain > 0, "Expected a valid file descriptor, got error");
 
         sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        assert!(sockfd > 0);
+        assert!(sockfd > 0, "Expected a valid file descriptor, got error");
 
-        assert_eq!(cage.close_syscall(sockfd), 0);
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        assert_eq!(cage.close_syscall(sockfd), 0, "Expected successful close, got error");
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS, "Expected successful exit, got error");
         lindrustfinalize();
     }
 
