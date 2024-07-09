@@ -1547,15 +1547,190 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_rmdir() {
+    pub fn ut_lind_fs_rmdir_normal() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //We create a new parent directory `/parent_dir`
+        //and its child directory '/parent_dir/dir` both
+        //with the required write permission flags, thus
+        //calling `rmdir_syscall()`on the child directory
+        //should result in a normal behavior
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(cage.rmdir_syscall(path), 0);
+        //To check if the child directory was successfully
+        //removed, we call `open_syscall()` on it, and see
+        //if it correctly returns `Path does not exist` error
+        assert_eq!(
+            cage.open_syscall(path, O_TRUNC, S_IRWXA),
+            -(Errno::ENOENT as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rmdir_empty_path() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
 
+        //Trying to remove a directory by providing an empty string
+        //should return `Given path is an empty string` error
+        assert_eq!(cage.rmdir_syscall(""), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rmdir_nonexist_dir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //We create a new parent directory `/parent_dir`
+        //However, we never create its child directory
+        //'/parent_dir/dir`, thus calling `rmdir_syscall()`
+        //on this child directory should return
+        //`Path does not exist` error
         let path = "/parent_dir/dir";
         assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.rmdir_syscall(path), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rmdir_root() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Trying to remove the root directory should return
+        //`Cannot remove root directory` error
+        assert_eq!(cage.rmdir_syscall("/"), -(Errno::EBUSY as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rmdir_nonempty_dir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //We create a new parent directory `/parent_dir` and
+        //its child directory '/parent_dir/dir`, thus calling `rmdir_syscall()`
+        //on the parent directory should return `Directory is not empty` error
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        assert_eq!(
+            cage.rmdir_syscall("/parent_dir"),
+            -(Errno::ENOTEMPTY as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rmdir_nowriteperm_child_dir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //We create a new parent directory `/parent_dir` with all write permission
+        //flags and its child directory '/parent_dir/dir` without any write
+        //permision flags, thus calling `rmdir_syscall()`on the child directory
+        //should return `Directory does not allow write permission` error
+        //because the directory cannot be removed if it does not allow
+        //write permission
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, 0), 0);
+        assert_eq!(cage.rmdir_syscall(path), -(Errno::EPERM as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rmdir_nowriteperm_parent_dir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //We create a new parent directory `/parent_dir` with all write permission
+        //flags (to be able to create its child directory) and its child directory
+        //'/parent_dir/dir` with all write permision flags.
+        let path = "/parent_dir/dir";
+        assert_eq!(cage.mkdir_syscall("/parent_dir", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        //Now, we change the parent directories write permission flags to 0,
+        //thus calling `rmdir_syscall()`on the child directory
+        //should return `Directory does not allow write permission` error
+        //because the directory cannot be removed if its parent directory
+        //does not allow write permission
+        assert_eq!(
+            cage.chmod_syscall("/parent_dir", S_IRUSR | S_IRGRP | S_IROTH),
+            0
+        );
+        assert_eq!(cage.rmdir_syscall(path), -(Errno::EPERM as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    //BUG:
+    //The correct behavior of the `rmdir_syscall()` when called on a directory
+    //whose path includes a component that does not allow search permission
+    //(the read flag) is to return with `EACCES` error.
+    //However, the `metawalkandparent())` helper function used
+    //to retrieve the inodes of the directory to be removed and its parent
+    //directory does not check for search permission. Thus, the following test
+    //will not return any errors and run normally even though the parent
+    //directory does not grand search permission.
+    pub fn ut_lind_fs_search_permission_bug_with_rmdir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating the parent directory that does not allow search permission
+        //by excluding any read flags and specifying only write flags
+        //to be able to delete the child directory.
+        let path = "/parent_dir/dir";
+        assert_eq!(
+            cage.mkdir_syscall("/parent_dir", S_IWUSR | S_IWGRP | S_IWOTH),
+            0
+        );
+        //Creating the child directory with all the required flags
+        //and then deleting it. Because of the bug described above,
+        //removing the directory will not return any errors.
         assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
         assert_eq!(cage.rmdir_syscall(path), 0);
 
