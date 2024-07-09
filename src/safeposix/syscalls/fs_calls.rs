@@ -1688,7 +1688,8 @@ impl Cage {
                         // from the `_read_chr_file` file.
                         Inode::CharDev(char_inode_obj) => {
                             // reads from character devices by matching the device number (DevNo) of
-                            // the DeviceInode.
+                            // the DeviceInode. This function returns the number of bytes read from
+                            // the character device and updates the buffer `buf` with them.
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
                         // For `Socket` type inode, a panic is returned as socket type files are not
