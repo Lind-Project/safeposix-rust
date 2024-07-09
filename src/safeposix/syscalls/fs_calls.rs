@@ -2607,7 +2607,13 @@ impl Cage {
                                 None => {}
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
-                                //removing the file from the metadata
+                                //The reference to the inode has to be dropped to avoid
+                                //deadlocking because the remove() method will need to 
+                                //acquire a reference to the same inode from the 
+                                //filesystem's inodetable. 
+                                //The inodetable represents a Rust DashMap that deadlocks
+                                //when trying to get a reference to its entry while holding any sort
+                                //of reference into it.
                                 drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
                                 log_metadata(&FS_METADATA, inodenum);
@@ -3506,7 +3512,7 @@ impl Cage {
                         //open from closing a nonexistent directory.
                         //Setting the directory's linkcount as 2 works as a flag for
                         //the `close_syscall()` to mark the directory that needs to be
-                        //removed from the filesystem  when its last open file descriptor
+                        //removed from the filesystem when its last open file descriptor
                         //is closed because it could not be removed at the time of calling
                         //`rmdir_syscall()` because of some open file descriptor.
                         if remove_inode {
