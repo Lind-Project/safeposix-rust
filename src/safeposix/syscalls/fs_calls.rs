@@ -1493,6 +1493,7 @@ impl Cage {
                         // For `Socket` type inode, a panic is returned as socket type files are not
                         // supported.
                         Inode::Socket(_) => {
+                            // Read is not supported for Socket type inodes.
                             panic!("read(): Socket inode found on a filedesc fd.")
                         }
 
@@ -1741,13 +1742,14 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `_read_chr_file()` helper function reads from character devices by
-    /// matching the device number (DevNo) of the DeviceInode. It handles
-    /// `/dev/null`, `/dev/zero`, `/dev/random`, and `/dev/urandom` by
-    /// performing the appropriate actions for each device. If the device is
-    /// unsupported, it returns an error indicating that the operation is
-    /// not supported. This function is used for interacting with special
-    /// character files in a Unix-like filesystem.
+    /// The `_read_chr_file()` helper function is used by `read_syscall()` and
+    /// `pread_syscall()` for reading from character device type files.
+    /// It reads from character devices by matching the device number (DevNo)
+    /// of the DeviceInode. It handles `/dev/null`, `/dev/zero`, `/dev/random`,
+    /// and `/dev/urandom` by performing the appropriate actions for each
+    /// device. If the device is unsupported, it returns an error indicating
+    /// that the operation is not supported. This function is used for
+    /// interacting with special character files in a Unix-like filesystem.
     ///
     /// ### Function Arguments
     ///
