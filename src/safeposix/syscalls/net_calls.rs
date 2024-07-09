@@ -3059,7 +3059,7 @@ impl Cage {
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
-                // otherwise, check for signature and loop again
+                // otherwise, check for signal and loop again
                 if interface::sigcheck() {
                     return syscall_error(Errno::EINTR, "poll", "interrupted function call");
                 }
@@ -3070,10 +3070,9 @@ impl Cage {
     }
 
     pub fn _epoll_object_allocator(&self) -> i32 {
-        // seems to only be called in functions that don't have a filedesctable lock, so
+        //seems to only be called in functions that don't have a filedesctable lock, so
         // not passing the lock.
 
-        // create a Epoll file descriptor
         let epollobjfd = Epoll(EpollDesc {
             mode: 0000,
             registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
@@ -3081,7 +3080,7 @@ impl Cage {
             errno: 0,
             flags: 0,
         });
-        // get a file descriptor
+        //get a file descriptor
         let (fd, guardopt) = self.get_next_fd(None);
         if fd < 0 {
             return fd;
@@ -3092,26 +3091,6 @@ impl Cage {
         return fd;
     }
 
-    /// ## ------------------EPOLL_CREATE SYSCALL------------------
-    /// ### Description
-    /// epoll_create_syscall creates a new epoll instance: it waits for
-    /// one of a set of file descriptors to become ready to perform I/O.
-
-    /// ### Function Arguments
-    /// The `epoll_create_syscall()` receives two arguments:
-    /// * `size` - the size argument is a legacy argument in Linux and is
-    ///   ignored, but must be greater than zero
-
-    /// ### Returns
-    /// On success, the system calls return a file descriptor (a nonnegative
-    /// integer).
-    ///
-    /// ### Errors
-    /// * ENFILE - file descriptor number reached the limit
-    /// * EINVAL - size is not positive.
-    ///
-    /// ### Panics
-    /// No panic is expected from this syscall
     pub fn epoll_create_syscall(&self, size: i32) -> i32 {
         if size <= 0 {
             return syscall_error(
@@ -3123,104 +3102,25 @@ impl Cage {
         return Self::_epoll_object_allocator(self);
     }
 
-    /// ## ------------------EPOLL_CTL SYSCALL------------------
-    /// ### Description
-    /// This system call is used to add, modify, or remove entries in the
-    /// interest list of the epoll(7) instance referred to by the file
-    /// descriptor epfd.  It requests that the operation op be performed for the
-    /// target file descriptor, fd.
-
-    /// ### Function Arguments
-    /// The `epoll_create_syscall()` receives four arguments:
-    /// * `epfd` - the epoll file descriptor to be applied the action
-    /// * `op` - the operation to be performed, valid values for the op argument
-    ///   are:
-    /// 1. EPOLL_CTL_ADD: Add an entry to the interest list of the epoll file
-    ///    descriptor, epfd. The entry includes the file descriptor, fd, a
-    ///    reference to the corresponding open file description, and the
-    ///    settings specified in event.
-    /// 2. EPOLL_CTL_MOD: Change the settings associated with fd in the interest
-    ///    list to the new settings specified in event.
-    /// 3. EPOLL_CTL_DEL: Remove (deregister) the target file descriptor fd from
-    ///    the interest list.
-    /// * `fd` - the target file descriptor to be performed by op
-    /// * `event` - The event argument describes the object linked to the file
-    ///   descriptor fd.
-
-    /// ### Returns
-    /// When successful, epoll_ctl() returns zero.
-    ///
-    /// ### Errors
-    /// * EBADF - epfd or fd is not a valid file descriptor.
-    /// * EEXIST - op was EPOLL_CTL_ADD, and the supplied file descriptor fd is
-    ///   already registered with this epoll instance.
-    /// * EINVAL - epfd is not an epoll file descriptor, or fd is the same as
-    ///   epfd, or the requested operation op is not supported by this
-    ///   interface.
-    /// * ENOENT - op was EPOLL_CTL_MOD or EPOLL_CTL_DEL, and fd is not
-    ///   registered with this epoll instance.
-    /// * EPERM - The target file fd does not support epoll.  This error can
-    ///   occur if fd refers to, for example, a regular file or a directory.
-    ///
-    /// ### Panics
-    /// No panic is expected from this syscall
+    //this one can still be optimized
     pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
-        // first check the fds are within the valid range
-        if epfd < 0 || epfd >= MAXFD {
-            return syscall_error(
-                Errno::EBADF,
-                "epoll ctl",
-                "provided epoll fd is not a valid file descriptor",
-            );
-        }
-
-        if fd < 0 || fd >= MAXFD {
-            return syscall_error(
-                Errno::EBADF,
-                "epoll ctl",
-                "provided fd is not a valid file descriptor",
-            );
-        }
-
-        // making sure that the epfd is really an epoll fd
+        //making sure that the epfd is really an epoll fd
         let checkedfd = self.get_filedescriptor(epfd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum_epollfd) = &mut *unlocked_fd {
             if let Epoll(epollfdobj) = filedesc_enum_epollfd {
-                // check if the other fd is an epoll or not...
+                //check if the other fd is an epoll or not...
                 let checkedfd = self.get_filedescriptor(fd).unwrap();
                 let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
                     if let Epoll(_) = filedesc_enum {
-                        // nested Epoll (i.e. Epoll monitoring on Epoll file descriptor)
-                        // is allowed on Linux, though we currently do not support this
-
-                        // standard says EINVAL should be returned when fd equals to epfd
-                        if fd == epfd {
-                            return syscall_error(
-                                Errno::EINVAL,
-                                "epoll ctl",
-                                "provided fd is fd is the same as epfd",
-                            );
-                        }
-
                         return syscall_error(
                             Errno::EBADF,
                             "epoll ctl",
                             "provided fd is not a valid file descriptor",
                         );
                     }
-                    if let File(_) = filedesc_enum {
-                        // according to standard, EPERM should be returned when
-                        // fd refers to a file or directory
-                        return syscall_error(
-                            Errno::EPERM,
-                            "epoll ctl",
-                            "The target file fd does not support epoll.",
-                        );
-                    }
                 } else {
-                    // fd is not an valid file descriptor
                     return syscall_error(
                         Errno::EBADF,
                         "epoll ctl",
@@ -3254,7 +3154,6 @@ impl Cage {
                         );
                     }
                     EPOLL_CTL_ADD => {
-                        //check if the fd that we are modifying exists or not
                         if epollfdobj.registered_fds.contains_key(&fd) {
                             return syscall_error(
                                 Errno::EEXIST,
@@ -3262,7 +3161,6 @@ impl Cage {
                                 "fd is already registered",
                             );
                         }
-                        // add the fd and events
                         epollfdobj.registered_fds.insert(
                             fd,
                             EpollEvent {
@@ -3276,19 +3174,17 @@ impl Cage {
                     }
                 }
             } else {
-                // epfd is not epoll object
                 return syscall_error(
-                    Errno::EINVAL,
+                    Errno::EBADF,
                     "epoll ctl",
-                    "provided epoll fd is not a valid epoll file descriptor",
+                    "provided fd is not a valid file descriptor",
                 );
             }
         } else {
-            // epfd is not a valid file descriptor
             return syscall_error(
                 Errno::EBADF,
                 "epoll ctl",
-                "provided fd is not a valid file descriptor",
+                "provided epoll fd is not a valid epoll file descriptor",
             );
         }
         return 0;
@@ -3301,20 +3197,9 @@ impl Cage {
         maxevents: i32,
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
-        // first check the fds are within the valid range
-        if epfd < 0 || epfd >= MAXFD {
-            return syscall_error(
-                Errno::EBADF,
-                "epoll ctl",
-                "provided epoll fd is not a valid file descriptor",
-            );
-        }
-
-        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(epfd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            // check if epfd is an valid Epoll object
             if let Epoll(epollfdobj) = filedesc_enum {
                 if maxevents < 0 {
                     return syscall_error(
@@ -3323,11 +3208,9 @@ impl Cage {
                         "max events argument is not a positive number",
                     );
                 }
-                // transform epoll instance into poll instance
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
                 let mut rm_fds_vec: Vec<i32> = vec![];
                 let mut num_events: usize = 0;
-                // iterate through each registered fds
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
 
@@ -3339,24 +3222,21 @@ impl Cage {
                         continue;
                     }
 
-                    // get the events to monitor
                     let events = value.events;
                     let mut structpoll = PollStruct {
                         fd: key,
                         events: 0,
                         revents: 0,
                     };
-                    // assign for each event
                     if events & EPOLLIN as u32 > 0 {
                         structpoll.events |= POLLIN;
                     }
                     if events & EPOLLOUT as u32 > 0 {
                         structpoll.events |= POLLOUT;
                     }
-                    if events & EPOLLPRI as u32 > 0 {
-                        structpoll.events |= POLLPRI;
+                    if events & EPOLLERR as u32 > 0 {
+                        structpoll.events |= POLLERR;
                     }
-                    // now PollStruct is constructed, push it to the vector
                     poll_fds_vec.push(structpoll);
                     num_events += 1;
                 }
@@ -3365,18 +3245,14 @@ impl Cage {
                     epollfdobj.registered_fds.remove(fd);
                 } // remove closed fds
 
-                // call poll_syscall
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 let pollret = Self::poll_syscall(&self, poll_fds_slice, timeout);
                 if pollret < 0 {
-                    // in case of error, return the error
                     return pollret;
                 }
                 let mut count = 0;
-                // take the min between number of events and maxevents given by user
                 let end_idx: usize = interface::rust_min(num_events, maxevents as usize);
                 for result in poll_fds_slice[..end_idx].iter() {
-                    // transform the poll result into epoll result
                     let mut poll_event = false;
                     let mut event = EpollEvent {
                         events: 0,
@@ -3409,7 +3285,6 @@ impl Cage {
                 );
             }
         } else {
-            // epfd is not a valid file descriptor
             return syscall_error(
                 Errno::EBADF,
                 "epoll wait",

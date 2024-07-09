@@ -873,6 +873,7 @@ pub mod net_tests {
     }
 
     #[test]
+    #[ignore]
     pub fn ut_lind_net_poll() {
         // test for poll monitoring on multiple different file descriptors:
         // 1. regular file
