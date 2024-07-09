@@ -100,8 +100,6 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
-use std::io::{self, Write, IoSlice};
-use std::slice;
 
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
