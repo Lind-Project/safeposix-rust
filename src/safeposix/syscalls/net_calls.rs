@@ -1512,91 +1512,79 @@ impl Cage {
 
     /// ### Description
     /// 
-    /// `accept_syscall` accepts a connection on a socket 
+    /// `listen_syscall` listen for connections on a socket
     /// 
     /// ### Arguments
     /// 
     /// it accepts two parameters: 
-    /// * `fd` - the file descriptor that refers to the listening socket
-    /// * `addr` - the address of the peer socket (i.e. the client that is connecting)
-    ///            // ** Do we deal with the case in which addr may be NULL ?? ** //
+    /// * `sockfd` - a file descriptor that refers to a socket
+    ///    of type SOCK_STREAM or SOCK_SEQPACKET.
+    /// // ** Do we deal with SOCK_SEQPACKET ?? ** //
+    /// * `backlog` - defines the maximum length to which the
+    ///   queue of pending connections for sockfd may grow.  If a
+    ///   connection request arrives when the queue is full, the client may
+    ///   receive an error with an indication of ECONNREFUSED or, if the
+    ///   underlying protocol supports retransmission, the request may be
+    ///   ignored so that a later reattempt at connection succeeds.
     /// 
     /// ### Returns
     /// 
-    /// for a successful call, the return value will be a file descriptor for the
-    /// accepted socket (a nonnegative integer). On error, -errno is
+    /// for a successful call, zero is returned. On error, -errno is
     /// returned and errno is set to indicate the error
     /// 
     /// ### Errors
     /// 
-    /// * EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and no 
-    ///     connections are present to be accepted.  
-    ///     POSIX.1-2001 and POSIX.1-2008
-    ///     allow either error to be returned for this case, and do
-    ///     not require these constants to have the same value, so a
-    ///     portable application should check for both possibilities.
+    /// * EADDRINUSE - Another socket is already listening on the same port.
     /// 
-    /// * EBADF - sockfd is not an open file descriptor.
+    /// * EADDRINUSE - (Internet domain sockets) The socket referred to by sockfd
+    ///      had not previously been bound to an address and, upon
+    ///      attempting to bind it to an ephemeral port, it was
+    ///      determined that all port numbers in the ephemeral port
+    ///      range are currently in use.  See the discussion of
+    ///      /proc/sys/net/ipv4/ip_local_port_range in ip(7).
     /// 
-    /// * ECONNABORTED - A connection has been aborted.
-    /// 
-    /// * EFAULT - The addr argument is not in a writable part of the user
-    ///            address space.
-    /// 
-    /// * EINTR - The system call was interrupted by a signal that was
-    ///           caught before a valid connection arrived; see signal(7).
-    /// 
-    /// * EINVAL - Socket is not listening for connections, or addrlen is
-    ///            invalid (e.g., is negative).
-    /// 
-    /// * EMFILE - The per-process limit on the number of open file
-    ///            descriptors has been reached.
-    /// 
-    /// * ENFILE - The system-wide limit on the total number of open files
-    ///            has been reached.
-    /// 
-    /// * ENOMEM - Not enough free memory.  This often means that the memory
-    ///            allocation is limited by the socket buffer limits, not by
-    ///            the system memory.
+    /// * EBADF - The argument sockfd is not a valid file descriptor.
     /// 
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     /// 
-    /// * EOPNOTSUPP - The referenced socket is not of type SOCK_STREAM.
-    /// 
-    /// * EPERM - Firewall rules forbid connection.
-    /// 
-    /// * EPROTO - Protocol error.
-    /// 
-    /// In addition, network errors for the new socket and as defined for
-    /// the protocol may be returned.  Various Linux kernels can return
-    /// other errors such as ENOSR, ESOCKTNOSUPPORT, EPROTONOSUPPORT,
-    /// ETIMEDOUT.  The value ERESTARTSYS may be seen during a trace.
+    /// * EOPNOTSUPP - The socket is not of a type that supports the listen()
+    ///     operation.
     /// 
     /// ### Panics
     /// 
     /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
-    /// * Unknown errno value from fcntl returned, will cause panic.
+    /// * unknown errno value from socket bind sys call from libc in the case 
+    ///   that the socket isn't assigned an address
+    /// * unknown errno value from socket listen sys call from libc
     /// 
     /// for more detailed description of all the commands and return values, see 
-    /// [accept(2)](https://linux.die.net/man/2/accept)
+    /// [listen(2)](https://linux.die.net/man/2/listen)
     //
-    // ** we currently ignore backlog **
-    // ** What does the above comment mean ?? ** //
+    // TODO: We are currently ignoring backlog 
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
+                //If the file descriptor refers to a socket
                 Socket(ref mut sockfdobj) => {
                     //get or create the socket and bind it before listening
+                    //Gain write access to the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
 
+                    //If the given socket is already listening, return with
+                    //success
                     match sockhandle.state {
                         ConnState::LISTEN => {
-                            return 0; //Already done!
+                            return 0;
                         }
 
+                        //If the given socket is connected to another socket or 
+                        //if a non blocking socket is in progress of connecting
+                        //to another socket
                         ConnState::CONNECTED
                         | ConnState::CONNRDONLY
                         | ConnState::CONNWRONLY
@@ -1608,7 +1596,11 @@ impl Cage {
                             );
                         }
 
+                        //If the given socket is not connected, it is ready
+                        //to begin listening
                         ConnState::NOTCONNECTED => {
+                            //If the given socket is not a TCP socket, then the 
+                            //socket can not listen for connections
                             if sockhandle.protocol != IPPROTO_TCP {
                                 return syscall_error(
                                     Errno::EOPNOTSUPP,
@@ -1617,12 +1609,15 @@ impl Cage {
                                 );
                             }
 
-                            // simple if it's a domain socket
+                            //If the given socket is a Unix socket, lind handles
+                            //the connection, return with success
                             if sockhandle.domain == AF_UNIX {
                                 sockhandle.state = ConnState::LISTEN;
                                 return 0;
                             }
 
+                            //If the given socket is not assigned an address,
+                            //attempt to bind the socket to an address.
                             if sockhandle.localaddr.is_none() {
                                 let shd = sockhandle.domain as i32;
                                 let ibindret = self._implicit_bind(&mut *sockhandle, shd);
@@ -1634,7 +1629,10 @@ impl Cage {
                                 }
                             }
 
-                            let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                            //The socket must have been assigned an address by implicit bind
+                            let ladr = sockhandle.localaddr.unwrap().clone();
+                            //Grab a tuple of the address, port, and port type
+                            //to be inserted into the set of listening ports
                             let porttuple = mux_port(
                                 ladr.addr().clone(),
                                 ladr.port(),
@@ -1642,10 +1640,16 @@ impl Cage {
                                 TCPPORT,
                             );
 
+                            //Set the socket connection state to listening
+                            //to readily accept connections
                             NET_METADATA.listening_port_set.insert(porttuple.clone());
                             sockhandle.state = ConnState::LISTEN;
 
-                            let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
+                            //Call listen from libc on the socket
+                            //Set the backlog to 5:
+                            //default backlog in repy for whatever reason, we replicate it
+                            //** Would we ever want to change the backlog??  **/
+                            let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5);
                             if listenret < 0 {
                                 let lr = match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => syscall_error(
@@ -1657,30 +1661,44 @@ impl Cage {
                                         panic!("Unknown errno value from socket listen returned!")
                                     }
                                 };
+                                //Remove the tuple of the address, port, and 
+                                //port type from the set of listening ports 
+                                //as we are returning from an error
+                                //** Why dont we use 'porttuple' as the argument for the key ?? */
                                 NET_METADATA.listening_port_set.remove(&mux_port(
                                     ladr.addr().clone(),
                                     ladr.port(),
                                     sockhandle.domain,
                                     TCPPORT,
                                 ));
+                                //Set the socket state to NOTCONNECTED, as
+                                //the socket is not listening
                                 sockhandle.state = ConnState::NOTCONNECTED;
                                 return lr;
                             };
 
-                            //set rawfd for select
+                            //set rawfd for select sys call
+                            //** Why is this being done in listen ?? 
+                            // We are also doing it in connect right now **/
                             sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
+                            //If listening socket is not in the table of pending 
+                            //connections, we must insert it as the key with
+                            //an empty vector as the value
+                            //We can now track incoming connections
                             if !NET_METADATA.pending_conn_table.contains_key(&porttuple) {
                                 NET_METADATA
                                     .pending_conn_table
                                     .insert(porttuple.clone(), vec![]);
                             }
 
-                            return 0;
+                            return 0; //return on success
                         }
                     }
                 }
 
+                //Otherwise, the file descriptor refers to something other 
+                //than a socket, return with error
                 _ => {
                     return syscall_error(
                         Errno::ENOTSOCK,
@@ -1689,6 +1707,7 @@ impl Cage {
                     );
                 }
             }
+        //Otherwise, file descriptor is invalid, return with error
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
