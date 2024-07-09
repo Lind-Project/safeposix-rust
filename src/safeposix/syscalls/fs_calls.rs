@@ -1099,8 +1099,8 @@ impl Cage {
     /// O_WRONLY flags.
     /// There are generally two cases which occur when this syscall happens:
     /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
-    /// a new file is created at the given location and a new file descriptor is 
-    /// created and returned. 
+    /// a new file is created at the given location and a new file descriptor is
+    /// created and returned.
     /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
     /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
@@ -3921,16 +3921,56 @@ impl Cage {
     }
 
     //------------------GETDENTS SYSCALL------------------
+    /// ## `getdents_syscall`
+    ///
+    /// ### Description
+    /// This function reads directory entries from a directory file descriptor
+    /// and returns them in a buffer. Reading directory entries using multiple read calls can be less efficient because it
+    /// involves reading the data in smaller chunks and then parsing it.
+    /// getdents can often be faster by reading directory entries in a more optimized way.
+    /// * The function first checks if the provided buffer size is sufficient to store at least one
+    ///   `ClippedDirent` structure.
+    /// * The function validates the provided file descriptor to ensure it represents a
+    ///   valid file.
+    /// * The function checks if the file descriptor refers to a directory.
+    /// * The function iterates over the directory entries in the
+    ///   `filename_to_inode_dict` of the directory inode.
+    /// * For each entry, the function constructs a `ClippedDirent` structure, which
+    ///   contains the inode number, offset, and record length.
+    /// * It packs the constructed directory entries into the provided buffer (`dirp`).
+    /// * Updates the file position to the next directory entry to be read.
+    ///
+    /// ### Function Arguments
+    /// * `fd`: A file descriptor representing the directory to read.
+    /// * `dirp`: A pointer to a buffer where the directory entries will be written.
+    /// * `bufsize`: The size of the buffer in bytes.
+    ///
+    /// ### Returns
+    /// * The number of bytes written to the buffer on success.
+    ///
+    /// ### Errors
+    /// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
+    /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
+    /// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
+    /// * `EBADF(9)` : If the file descriptor is invalid.
+    /// ### Panics
+    /// * There are no panics in this syscall.
 
     pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32) -> i32 {
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
 
         // make sure bufsize is at least greater than size of a ClippedDirent struct
+        // ClippedDirent is a simplified version of the traditional dirent structure used in POSIX systems
+        // By using a simpler structure, SafePosix can store and retrieve directory entries more efficiently,
+        // potentially improving performance compared to using the full dirent structure.
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
 
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = match self.get_filedescriptor(fd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor."),
+        };
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -3960,7 +4000,7 @@ impl Cage {
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
-
+                                // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the actual file type is not yet determined.
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
                                 temp_len =
                                     interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
@@ -3996,6 +4036,8 @@ impl Cage {
                                 count += 1;
                             }
                             // update file position
+                            // keeps track of the current position within the directory. It indicates which directory entry the
+                            // function should read next.
                             normalfile_filedesc_obj.position = interface::rust_min(
                                 position + count,
                                 dir_inode_obj.filename_to_inode_dict.len(),
