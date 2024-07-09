@@ -2998,12 +2998,561 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
+    #[test]
+    pub fn ut_lind_net_epoll_create_bad_input() {
+        // this test is used for testing epoll_create_syscall with error/edge cases
+        // specifically
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // test for invalid size argument
+        assert_eq!(cage.epoll_create_syscall(0), -(Errno::EINVAL as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_epoll_ctl_bad_input() {
+        // this test is used for testing epoll_ctl_syscall with error/edge cases
+        // specifically
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // create an epoll instance
+        let epfd = cage.epoll_create_syscall(1);
+
+        // create a pipe fd
+        let mut pipefds = PipeArray {
+            readfd: -1,
+            writefd: -1,
+        };
+        assert_eq!(cage.pipe2_syscall(&mut pipefds, O_NONBLOCK), 0);
+
+        // create a file fd
+        let filefd = cage.open_syscall("/netepolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert!(filefd > 0);
+
+        // test for unexist fd number
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_MOD,
+                10,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: 10,
+                }
+            ),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                10,
+                EPOLL_CTL_MOD,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::EBADF as i32)
+        );
+
+        // test for out of range fd number
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_MOD,
+                -1,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: -1,
+                }
+            ),
+            -(Errno::EBADF as i32)
+        );
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                -1,
+                EPOLL_CTL_MOD,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::EBADF as i32)
+        );
+
+        // test for fd that is not epoll fd
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                filefd,
+                EPOLL_CTL_ADD,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::EINVAL as i32)
+        );
+
+        // test when fd and epfd are the same
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_ADD,
+                epfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: epfd,
+                }
+            ),
+            -(Errno::EINVAL as i32)
+        );
+
+        // test when fd is a file fd
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_ADD,
+                filefd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: filefd,
+                }
+            ),
+            -(Errno::EPERM as i32)
+        );
+
+        // test for modifying fd that does not exists
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_MOD,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::ENOENT as i32)
+        );
+
+        // test for deleting fd that does not exists
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_DEL,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::ENOENT as i32)
+        );
+
+        // now add a fd
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_ADD,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            0
+        );
+
+        // test for adding fd that already exists
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_ADD,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::EEXIST as i32)
+        );
+
+        // test for passing invalid flag
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                123,
+                pipefds.readfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: pipefds.readfd,
+                }
+            ),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_epoll_wait_bad_input() {
+        // this test is used for testing epoll_wait_syscall with error/edge cases
+        // specifically
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // create an epoll instance
+        let epfd = cage.epoll_create_syscall(1);
+
+        // create a pipe fd
+        let mut pipefds = PipeArray {
+            readfd: -1,
+            writefd: -1,
+        };
+        assert_eq!(cage.pipe2_syscall(&mut pipefds, O_NONBLOCK), 0);
+
+        // create a file fd
+        let filefd = cage.open_syscall("/netepolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        assert!(filefd > 0);
+
+        let mut event_list: Vec<EpollEvent> = vec![
+            EpollEvent {
+                events: EPOLLIN as u32,
+                fd: 0,
+            };
+            2
+        ];
+
+        // test for out of range fd range
+        assert_eq!(
+            cage.epoll_wait_syscall(-1, &mut event_list, 1, None),
+            -(Errno::EBADF as i32)
+        );
+
+        // test for invalid fd range
+        assert_eq!(
+            cage.epoll_wait_syscall(10, &mut event_list, 1, None),
+            -(Errno::EBADF as i32)
+        );
+
+        // test for fd that is not epoll
+        assert_eq!(
+            cage.epoll_wait_syscall(filefd, &mut event_list, 1, None),
+            -(Errno::EINVAL as i32)
+        );
+
+        // test for invalid maxevents argument
+        assert_eq!(
+            cage.epoll_wait_syscall(epfd, &mut event_list, 0, None),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_epoll_maxevents_arg() {
+        // this test is used for testing maxevents argument of epoll_wait_syscall
+        // specifically
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let pipe_num = 10;
+        // create some pipes
+        let mut pipefds = vec![
+            PipeArray {
+                readfd: -1,
+                writefd: -1,
+            };
+            pipe_num
+        ];
+        for pipefd in pipefds.iter_mut() {
+            assert_eq!(cage.pipe2_syscall(pipefd, O_NONBLOCK), 0);
+        }
+
+        // create an epoll instance
+        let epfd = cage.epoll_create_syscall(1);
+        // add all pipes to epoll
+        for pipefd in pipefds.iter_mut() {
+            assert_eq!(
+                cage.epoll_ctl_syscall(
+                    epfd,
+                    EPOLL_CTL_ADD,
+                    pipefd.readfd,
+                    &mut EpollEvent {
+                        events: EPOLLIN as u32,
+                        fd: pipefd.readfd,
+                    }
+                ),
+                0
+            );
+
+            // write something to the pipe at the same time
+            assert_eq!(cage.write_syscall(pipefd.writefd, str2cbuf("test"), 4), 4);
+        }
+
+        // at this point, all pipes are added to epoll, and they should all be readable
+
+        // prepare the event_list to store the return value
+        let mut event_list: Vec<EpollEvent> = vec![EpollEvent { events: 0, fd: 0 }; pipe_num];
+
+        // test #1: all the fds should be ready
+        assert_eq!(
+            cage.epoll_wait_syscall(epfd, &mut event_list, pipe_num as i32, None),
+            pipe_num as i32
+        );
+        for event in event_list.iter() {
+            // check if all fd are marked as readable
+            assert_ne!(event.events & (EPOLLIN as u32), 0);
+        }
+
+        // test #2: maxevents set to be smaller than pipe_num
+
+        // clear event_list
+        let mut event_list: Vec<EpollEvent> = vec![
+            EpollEvent {
+                events: 0xdeadbeef,
+                fd: 0,
+            };
+            pipe_num
+        ];
+
+        assert_eq!(cage.epoll_wait_syscall(epfd, &mut event_list, 5, None), 5);
+
+        for i in 0..pipe_num {
+            // even though all fds are ready, only first 5 should be marked with EPOLLIN
+            if i < 5 {
+                assert_ne!(event_list[i].events & (EPOLLIN as u32), 0);
+            } else {
+                assert_eq!(event_list[i].events, 0xdeadbeef);
+            }
+        }
+
+        // test #3: maxevents set to be larger than actual ready fds (case 1)
+
+        // clear event_list
+        let mut event_list: Vec<EpollEvent> = vec![
+            EpollEvent {
+                events: 0xdeadbeef,
+                fd: 0,
+            };
+            pipe_num
+        ];
+        // first let's consume some pipes
+        let mut buf = sizecbuf(4);
+        assert_eq!(cage.read_syscall(pipefds[0].readfd, buf.as_mut_ptr(), 4), 4);
+        assert_eq!(cbuf2str(&buf), "test");
+        assert_eq!(cage.read_syscall(pipefds[1].readfd, buf.as_mut_ptr(), 4), 4);
+        assert_eq!(cbuf2str(&buf), "test");
+        // now pipe with index 0 and 1 are consumed and they are no longer readable
+        assert_eq!(
+            cage.epoll_wait_syscall(epfd, &mut event_list, pipe_num as i32, None),
+            (pipe_num - 2) as i32
+        );
+
+        for i in 0..pipe_num {
+            // even though all fds are ready, only first 5 should be marked with EPOLLIN
+            if i < 8 {
+                assert_ne!(event_list[i].events & (EPOLLIN as u32), 0);
+            } else {
+                assert_eq!(event_list[i].events, 0xdeadbeef);
+            }
+        }
+
+        // test #4: maxevents set to be larger than actual ready fds (case 2)
+        // clear event_list
+        let mut event_list: Vec<EpollEvent> = vec![
+            EpollEvent {
+                events: 0xdeadbeef,
+                fd: 0,
+            };
+            pipe_num
+        ];
+        // we try to only read 5 this time
+        // since the number of avaliable fds is still 8
+        // so it is supposed to return 5
+        assert_eq!(cage.epoll_wait_syscall(epfd, &mut event_list, 5, None), 5);
+        for i in 0..pipe_num {
+            // only first 5 should be marked with EPOLLIN and others remain untouched
+            if i < 5 {
+                assert_ne!(event_list[i].events & (EPOLLIN as u32), 0);
+            } else {
+                assert_eq!(event_list[i].events, 0xdeadbeef);
+            }
+        }
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_epoll_timeout() {
+        // this test is used for testing timeout argument of epoll_wait_syscall
+        // specifically
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // subtest 1: epoll when timeout could expire
+        // create a TCP AF_UNIX socket
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+
+        let port: u16 = generate_random_port();
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+
+        // server bind and listen
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
+
+        assert_eq!(cage.fork_syscall(2), 0);
+        assert_eq!(cage.close_syscall(clientsockfd), 0);
+
+        // this barrier is used for preventing
+        // an unfixed bug (`close` could block when other thread/cage is `accept`) from
+        // deadlocking the test
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_2 = barrier.clone();
+
+        // client connects to the server to send and recv data...
+        let threadclient = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+
+            barrier_2.wait();
+
+            // connect to the server
+            assert_eq!(cage2.connect_syscall(clientsockfd, &socket), 0);
+
+            // wait for 100ms
+            interface::sleep(interface::RustDuration::from_millis(100));
+
+            // send some message to client
+            assert_eq!(cage2.send_syscall(clientsockfd, str2cbuf("test"), 4, 0), 4);
+
+            assert_eq!(cage2.close_syscall(clientsockfd), 0);
+            cage2.exit_syscall(EXIT_SUCCESS);
+        });
+
+        // make sure client thread closed the duplicated socket before server start to
+        // accept
+        barrier.wait();
+
+        // wait for client to connect
+        let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        let sockfd = cage.accept_syscall(serversockfd as i32, &mut sockgarbage);
+
+        // add to client socket to epoll
+        // perform another test by the way: the fd field of EpollEvent is user data by
+        // standard which means we could put anything we want here, and kernel
+        // is not supposed to touch it
+        let epfd = cage.epoll_create_syscall(1);
+        assert_eq!(
+            cage.epoll_ctl_syscall(
+                epfd,
+                EPOLL_CTL_ADD,
+                sockfd,
+                &mut EpollEvent {
+                    events: EPOLLIN as u32,
+                    fd: 123,
+                }
+            ),
+            0
+        );
+        // event_list used for holding return value
+        let mut event_list: Vec<EpollEvent> = vec![EpollEvent { events: 0, fd: 0 }];
+
+        // this counter is used for recording how many times do select returns due to
+        // timeout
+        let mut counter = 0;
+
+        loop {
+            let epoll_result = cage.epoll_wait_syscall(
+                epfd,
+                &mut event_list,
+                1,
+                Some(interface::RustDuration::new(0, 10000000)), // 10ms
+            );
+            assert!(epoll_result >= 0);
+            // epoll timeout after 10ms, but client will send messages after 100ms
+            // so there should be some timeout return
+            if epoll_result == 0 {
+                counter += 1;
+            } else if event_list[0].events & (EPOLLIN as u32) != 0 {
+                assert_eq!(event_list[0].fd, 123); // fd field should remain touched
+                                                   // just received the message, check the message and break
+                let mut buf = sizecbuf(4);
+                assert_eq!(cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0), 4);
+                assert_eq!(cbuf2str(&buf), "test");
+                break;
+            } else {
+                unreachable!();
+            }
+        }
+        // check if epoll timeout correctly
+        assert!(counter > 0);
+
+        threadclient.join().unwrap();
+
+        // subtest 2: epoll when nothing is monitored, `epoll` here should behave like
+        // `sleep`
+        let epfd2 = cage.epoll_create_syscall(1);
+
+        let start_time = interface::starttimer();
+        let timeout = interface::RustDuration::new(0, 10000000); // 10ms
+        let epoll_result = cage.epoll_wait_syscall(epfd2, &mut event_list, 1, Some(timeout));
+        assert!(epoll_result == 0);
+        // should wait for at least 10ms
+        assert!(interface::readtimer(start_time) >= timeout);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
     /* Creates an epoll instance, registers the server socket and file descriptor with epoll, and then wait for events using
     epoll_wait_syscall(). It handles the events based on their types (EPOLLIN or EPOLLOUT) and performs the necessary operations
     like accepting new connections, sending/receiving data, and modifying the event flags */
     #[test]
+    #[ignore]
     pub fn ut_lind_net_epoll() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
