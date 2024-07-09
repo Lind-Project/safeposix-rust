@@ -448,12 +448,15 @@ impl Cage {
             self.close_syscall(fdnum);
         }
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its
-        // own mainthreadid
+        // We clone the parent cage's main threads and store them and index 0 
+        // This is done since there isn't a thread established for the child Cage object yet - 
+        // And there is no threadId to store it at. 
+        // The child Cage object can then initialize and store the sigset appropriately when it establishes its own 
+        // main thread id.
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
+            // When rustposix runs independently (not as Lind paired with NaCL runtime) we do not handle signals
+            // The test suite runs rustposix independently and hence we do not handle signals for the test suite
             let mainsigsetatomic = self
                 .sigset
                 .get(
@@ -468,6 +471,9 @@ impl Cage {
             newsigset.insert(0, mainsigset);
         }
 
+        // Initialize a new cage object to replace the current running image
+        // We set all the ids to -1 to indicate the loading phase
+        // We clone the fd table with the memories unmapped
         let newcage = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -489,8 +495,8 @@ impl Cage {
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
         };
-        //wasteful clone of fdtable, but mutability constraints exist
 
+        // Insert new image with updated fd tables to be inserted in the cagetable
         interface::cagetable_insert(child_cageid, newcage);
         0
     }
