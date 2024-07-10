@@ -3250,6 +3250,17 @@ impl Cage {
         maxevents: i32,
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
+        // current implementation of epoll is still based on poll_syscall,
+        // we are essentially transform the epoll input to poll input then
+        // feed into poll_syscall, and transform the poll_syscall output
+        // back to epoll result. Such method gives several issues:
+        // 1. epoll is supposed to support a brand new mode called edge-triggered
+        // mode, which only consider a fd to be ready only when new changes are made
+        // to the fd. Currently, we do not support this feature
+        // 2. several flags, such as EPOLLRDHUP, EPOLLERR, etc. are not supported
+        // since poll_syscall currently do not support for these flags, so epoll_syscall
+        // that rely on poll_syscall would subsequently not able to support them
+
         // first check the fds are within the valid range
         if epfd < 0 || epfd >= MAXFD {
             return syscall_error(
