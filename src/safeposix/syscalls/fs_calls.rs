@@ -3186,6 +3186,12 @@ impl Cage {
                 "mmap",
                 "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)",
             );
+        } else if (flags & (MAP_PRIVATE | MAP_SHARED)) == (MAP_PRIVATE | MAP_SHARED) {
+            syscall_error(
+                Errno::EINVAL,
+                "mmap",
+                "The value of flags is invalid (MAP_PRIVATE and MAP_SHARED cannot be both set)",
+            );
         }
 
         if 0 != flags & MAP_ANONYMOUS {
