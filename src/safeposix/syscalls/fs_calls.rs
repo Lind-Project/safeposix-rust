@@ -1366,17 +1366,78 @@ impl Cage {
         0 //success!
     }
 
-    //------------------------------------READ SYSCALL------------------------------------
-
+    /// ## ------------------READ SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `read_syscall()` attempts to read `count` bytes from the file
+    /// associated with the open file descriptor, `fd`, into the buffer
+    /// pointed to by `buf`. On files that support seeking (for example, a
+    /// regular file), the read operation commences at the file offset, and
+    /// the file offset is incremented by the number of bytes read. If the
+    /// file offset is at or past the end of file, no bytes are read,
+    /// and read_syscall() returns zero. If the `count` of the bytes to be read
+    /// is 0, the read_syscall() returns 0. No data transfer will occur past
+    /// the current end-of-file. If the starting position is at or after the
+    /// end-of-file, 0 will be returned The reading mechanism is different
+    /// for each type of file descriptor, which is discussed in the
+    /// implementation.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `read_syscall()` receives three arguments:
+    /// * `fd` - This argument refers to the file descriptor from which the data
+    ///   is to be read.
+    /// * `buf` - This argument refers to the mutable buffer into which the file
+    ///   data is to be stored and then returned back. This value is greater
+    ///   than or equal to zero.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   read from the file. This value should be greater than or equal to
+    ///   zero.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// read. This number will never be greater than `count`. The value returned
+    /// may be less than `count` if the number of bytes left in the file is less
+    /// than `count`, if the read_syscall() was interrupted by a signal, or if
+    /// the file is a pipe or FIFO or special file and has fewer than
+    /// `count` bytes immediately available for reading.
+    ///
+    /// ### Errors
+    ///
+    /// * EBADF - Given file descriptor in the arguments is invalid; the file is
+    ///   not opened for reading.
+    /// * EISDIR - The file descriptor opened for reading is a directory.
+    /// * EOPNOTSUPP - Reading from streams is not supported.
+    /// * EINVAL - File descriptor is attached to an object which is unsuitable
+    ///   for reading
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When the file type filedescriptor contains a Socket as an inode.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [read(2)](https://man7.org/linux/man-pages/man2/read.2.html)
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
+        // Attempt to get the file descriptor
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //delegate to pipe, stream, or socket helper if specified by file descriptor
-            // enum type (none of them are implemented yet)
+            // There are different types of file descriptors (File, Sockets, Stream, PIPE),
+            // Based on the enum type, each file descriptor has a different implementation
+            // for reading data from the file.
             match filedesc_enum {
-                //we must borrow the filedesc object as a mutable reference to update the position
+                // We must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Return an error if the file cannot be not opened for reading.
+                    // The function `is_wronly` checks for write only permissions, for a file
+                    // which if true, returns an error, else the file can be opened for reading.
                     if is_wronly(normalfile_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1385,38 +1446,55 @@ impl Cage {
                         );
                     }
 
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character if it's a character file, checking based on the type of
-                    // the inode object
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match &*inodeobj {
+                        // For `File` type inode, the reading happens from the current position
+                        // of the object pointed by `position`. The fileobject is fetched from
+                        // the FileObjectTable and we start reading into the buffer `buf` until
+                        // `count` number of bytes.
                         Inode::File(_) => {
+                            // Get the current position of the File Descriptor Object.
                             let position = normalfile_filedesc_obj.position;
+                            // Get the file object associated with the file descriptor object
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                            if let Ok(bytesread) = fileobject.readat(buf, count, position) {
-                                //move position forward by the number of bytes we've read
-
-                                normalfile_filedesc_obj.position += bytesread;
-                                bytesread as i32
-                            } else {
-                                0 //0 bytes read, but not an error value that
-                                  // can/should be passed to the user
-                            }
+                            // `readat` function reads from file at specified offset into provided
+                            // C-buffer. If successful, then the position in the file descriptor
+                            // object is updated by adding the number of bytes read (bytesread).
+                            // This ensures that the next read operation will start from the correct
+                            // position.
+                            let bytesread = fileobject.readat(buf, count, position as usize).unwrap();
+                            //move position forward by the number of bytes we've read
+                            normalfile_filedesc_obj.position += bytesread;
+                            // Return the number of bytes read.
+                            bytesread as i32
                         }
 
+                        // For `CharDev` type inode, the reading happens from the Character Device
+                        // file, with each device type returning different results returned
+                        // from the `_read_chr_file` file.
                         Inode::CharDev(char_inode_obj) => {
+                            // reads from character devices by matching the device number (DevNo) of
+                            // the DeviceInode.
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
 
+                        // A Sanity check where the File type fd should not have a `Socket` type
+                        // inode and should panic.
                         Inode::Socket(_) => {
                             panic!("read(): Socket inode found on a filedesc fd.")
                         }
 
+                        // For `Dir` type inode, an error is returned as reading from a directory is
+                        // not allowed
                         Inode::Dir(_) => syscall_error(
                             Errno::EISDIR,
                             "read",
@@ -1424,16 +1502,34 @@ impl Cage {
                         ),
                     }
                 }
+                // For `Socket` type file descriptor, a read is equivalent to a `recv_syscall` so we
+                // transfer control there. A `recv_syscall` is used for receiving message from a
+                // socket.
                 Socket(_) => {
                     drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
+                // Reading from `Stream` type file descriptors is not supported.
                 Stream(_) => syscall_error(
                     Errno::EOPNOTSUPP,
                     "read",
                     "reading from stdin not implemented yet",
                 ),
+                // Reading from `Epoll` type file descriptors is not supported.
+                Epoll(_) => syscall_error(
+                    Errno::EINVAL,
+                    "read",
+                    "fd is attached to an object which is unsuitable for reading",
+                ),
+                // The `Pipe` type file descriptor handles read through blocking and non-blocking
+                // modes differently to ensure appropriate behavior based on the flags set on the
+                // pipe. In blocking mode, the read_from_pipe function will wait until data is
+                // available to read. This means that if the pipe is empty, the read operation will
+                // block (wait) until data is written to the pipe. In non-blocking mode, the
+                // read_from_pipe function will return immediately with an EAGAIN error if there is
+                // no data available to read. This prevents the function from blocking.
                 Pipe(pipe_filedesc_obj) => {
+                    // Return an error if the pipe cannot be not opened for reading.
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1441,55 +1537,117 @@ impl Cage {
                             "specified file not open for reading",
                         );
                     }
+                    // Check if the `O_NONBLOCK` flag is set in the pipe's flags.
+                    // If `O_NONBLOCK` is set, we set nonblocking to true, indicating that the pipe
+                    // operates in non-blocking mode.
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
+
+                    // Ensures that the function keeps trying to read data until it either succeeds
+                    // or encounters a non-retryable error.
                     loop {
                         // loop over pipe reads so we can periodically check for cancellation
                         let ret = pipe_filedesc_obj
                             .pipe
                             .read_from_pipe(buf, count, nonblocking)
                             as i32;
+                        // Check if the pipe is in blocking mode and the read returned EAGAIN.
+                        // It means that no data is currently available and the read should be tried
+                        // again later.
                         if pipe_filedesc_obj.flags & O_NONBLOCK == 0
                             && ret == -(Errno::EAGAIN as i32)
                         {
+                            // Check if the cancel status is set
                             if self
                                 .cancelstatus
                                 .load(interface::RustAtomicOrdering::Relaxed)
                             {
-                                // if the cancel status is set in the cage, we trap around a cancel
-                                // point until the individual thread
-                                // is signaled to cancel itself
+                                // If the cancel status is set in the cage, we trap around a cancel
+                                // point until the individual thread is signaled to cancel itself
                                 loop {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
-                            continue; //received EAGAIN on blocking pipe, try
-                                      // again
+                            // Received `EAGAIN` and no cancellation is requested, continue the loop
+                            // to try reading from the pipe again
+                            continue;
                         }
-                        return ret; // if we get here we can return
+                        // If the read was successful, return the result
+                        return ret;
                     }
                 }
-                Epoll(_) => syscall_error(
-                    Errno::EINVAL,
-                    "read",
-                    "fd is attached to an object which is unsuitable for reading",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "read", "invalid file descriptor")
         }
     }
 
-    //------------------------------------PREAD SYSCALL------------------------------------
+    /// ## ------------------PREAD SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `pread_syscall()` attempts to read `count` bytes from the file
+    /// associated with the open file descriptor, `fd`, into the buffer
+    /// pointed to by `buf`, starting at the given `offset`. Unlike `read()`,
+    /// `pread()` does not change the file offset.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `pread_syscall()` receives four arguments:
+    /// * `fd` - This argument refers to the file descriptor from which the data
+    ///   is to be read.
+    /// * `buf` - This argument refers to the mutable buffer into which the file
+    ///   data is to be stored and then returned back. This value is greater
+    ///   than or equal to zero.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   read from the file. This value should be greater than or equal to
+    ///   zero.
+    /// * `offset` - This argument specifies the file offset at which the read
+    ///   is to begin. The file offset is not changed by this operation.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// read. This number will never be greater than `count`. The value returned
+    /// may be less than `count` if the number of bytes left in the file is less
+    /// than `count`.
+    ///
+    /// ### Errors
+    ///
+    /// * EBADF - Given file descriptor in the arguments is invalid; the file is
+    ///   not opened for reading.
+    /// * EISDIR - The file descriptor opened for reading is a directory.
+    /// * EOPNOTSUPP - Reading from streams is not supported.
+    /// * ESPIPE - The file descriptor opened for reading is either of type
+    ///   Socket, Stream, Pipe, or Epoll.
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When the file type file descriptor contains a Socket as an inode.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [pread(2)](https://man7.org/linux/man-pages/man2/pread.2.html)
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
+        // Attempt to get the file descriptor
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            // There are different types of file descriptors (File, Sockets, Stream, PIPE),
+            // Based on the enum type, each file descriptor has a different implementation
+            // for reading data from the file.
             match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Return an error if the file cannot be not opened for reading.
+                    // The function `is_wronly` checks for write only permissions, for a file
+                    // which if true, returns an error, else the file can be opened for reading.
                     if is_wronly(normalfile_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1498,34 +1656,43 @@ impl Cage {
                         );
                     }
 
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character if it's a character file, checking based on the type of
-                    // the inode object
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match &*inodeobj {
                         Inode::File(_) => {
+                            // Fetch the file object from the file object table
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                            if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
-                                bytesread as i32
-                            } else {
-                                0 //0 bytes read, but not an error value that
-                                  // can/should be passed to the user
-                            }
+                            // `readat` function reads from file at specified offset into provided
+                            // C-buffer.
+                            let bytesread = fileobject.readat(buf, count, offset as usize).unwrap();
+                            // Return the number of bytes read.
+                            bytesread as i32
                         }
 
+                        // For `CharDev` type inode, the reading happens from the Character Device
+                        // file, with each device type returning different results returned
+                        // from the `_read_chr_file` file.
                         Inode::CharDev(char_inode_obj) => {
+                            // reads from character devices by matching the device number (DevNo) of
+                            // the DeviceInode. This function returns the number of bytes read from
+                            // the character device and updates the buffer `buf` with them.
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
-
+                        // A Sanity check where the File type fd should not have a `Socket` type
+                        // inode and should panic.
                         Inode::Socket(_) => {
                             panic!("pread(): Socket inode found on a filedesc fd")
                         }
-
+                        // For `Dir` type inode, an error is returned as reading from a directory is
+                        // not allowed
                         Inode::Dir(_) => syscall_error(
                             Errno::EISDIR,
                             "pread",
@@ -1533,21 +1700,30 @@ impl Cage {
                         ),
                     }
                 }
+                // Return an error for Sockets, as they do not support the concept of seeking to a
+                // specific offset because data arrives in a continuous stream from the network.
                 Socket(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
                     "file descriptor is associated with a socket, cannot seek",
                 ),
+                // Return an error for Streams, as like sockets, streams are sequential and do not
+                // support seeking to an offset.
                 Stream(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
                     "file descriptor is associated with a stream, cannot seek",
                 ),
+                // Return an error for Pipes, as they are designed for sequential reads and writes
+                // between processes. Seeking within a pipe would not make sense because data is
+                // read in the order it was written, making pread inapplicable.
                 Pipe(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
                     "file descriptor is associated with a pipe, cannot seek",
                 ),
+                // Return an error for Epoll, as Epoll file descriptors are for event notification
+                // and do not hold any data themselves.
                 Epoll(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
@@ -1559,12 +1735,59 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    /// The `_read_chr_file()` helper function is used by `read_syscall()` and
+    /// `pread_syscall()` for reading from character device type files.
+    /// It reads from character devices by matching the device number (DevNo)
+    /// of the DeviceInode. It handles `/dev/null`, `/dev/zero`, `/dev/random`,
+    /// and `/dev/urandom` by performing the appropriate actions for each
+    /// device. If the device is unsupported, it returns an error indicating
+    /// that the operation is not supported. This function is used for
+    /// interacting with special character files in a Unix-like filesystem.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `_read_chr_file()` receives three arguments:
+    /// * `inodeobj` - This argument refers to the DeviceInode object, which
+    ///   contains metadata about the character device.
+    /// * `buf` - This argument refers to the mutable buffer into which the data
+    ///   is to be stored and then returned back.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   read from the file. This value should be greater than or equal to
+    ///   zero.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// read. This number will never be greater than `count`. The value returned
+    /// may be less than `count` if the number of bytes left in the file is less
+    /// than `count`, if the read_syscall() was interrupted by a signal, or if
+    /// the file is a pipe or FIFO or special file and has fewer than
+    /// `count` bytes immediately available for reading.
+    ///
+    /// ### Errors
+    ///
+    /// * EOPNOTSUPP - When read from the unspecified object is not permitted
+    ///
+    /// ### Panics
+    ///
+    /// * This function does not panic in any cases.
     fn _read_chr_file(&self, inodeobj: &DeviceInode, buf: *mut u8, count: usize) -> i32 {
+        // Determine which character device is being read from, based on the device
+        // number (dev) in the DeviceInode object.
         match inodeobj.dev {
-            NULLDEVNO => 0, //reading from /dev/null always reads 0 bytes
+            // reading from /dev/null always reads 0 bytes indicating an end-of-file condition.
+            NULLDEVNO => 0,
+            // reading from /dev/zero fills the buffer with zeroes
             ZERODEVNO => interface::fillzero(buf, count),
+            // reading from /dev/random fills the buffer with random bytes
             RANDOMDEVNO => interface::fillrandom(buf, count),
+            // reading from /dev/urandom also fills the buffer with random bytes
+            // Note: This might have to be changed in future.
             URANDOMDEVNO => interface::fillrandom(buf, count),
+            // for any device number not specifically handled above,
+            // we return an error
             _ => syscall_error(
                 Errno::EOPNOTSUPP,
                 "read or pread",

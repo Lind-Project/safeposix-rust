@@ -204,6 +204,9 @@ pub fn sigcheck() -> bool {
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
+    // Potential Bug: The fillrandom function is reading from the /dev/urandom
+    // file, where it should read from "/dev/random" file. And, there should be
+    // a seperate function for reading from "/dev/random" file.
     let slice = unsafe { std::slice::from_raw_parts_mut(bufptr, count) };
     let mut f = std::fs::OpenOptions::new()
         .read(true)
