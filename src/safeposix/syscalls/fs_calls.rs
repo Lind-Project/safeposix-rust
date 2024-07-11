@@ -3254,7 +3254,8 @@ impl Cage {
                 "mmap",
                 "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)",
             );
-        } else if (flags & (MAP_PRIVATE | MAP_SHARED)) == (MAP_PRIVATE | MAP_SHARED) {
+        }
+        if (flags & MAP_PRIVATE != 0) && (flags & MAP_SHARED != 0) {
             syscall_error(
                 Errno::EINVAL,
                 "mmap",
@@ -3290,16 +3291,16 @@ impl Cage {
                             //For any kind of memory mapping, the file should be
                             //opened for reading, so if it was opened for write
                             //only, the mapping should be denied
-                            if (normalfile_filedesc_obj.flags & O_RDWR == O_WRONLY) {
+                            if normalfile_filedesc_obj.flags & O_WRONLY != 0 {
                                 return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open for reading");
                             }
                             //If we want to write our changes back to the file the file needs to be open for reading and writing
-                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != O_RDWR) {
+                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR == 0) {
                                 return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
                             }
                             let filesize = normalfile_inode_obj.size;
                             //The offset cannot be negative, and we cannot read past the end of the file
-                            if off < 0 || off > filesize as i64 || (off + len) > (filesize as i64 + 1) {
+                            if off < 0 || off > filesize as i64 || (off + len as i64) > (filesize as i64 + 1) {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
                             //Because of NaCl's internal workings we must allow mappings to extend past the end of the file
