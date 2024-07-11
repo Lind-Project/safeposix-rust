@@ -354,7 +354,7 @@ pub mod fs_tests {
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
@@ -378,7 +378,7 @@ pub mod fs_tests {
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
@@ -404,7 +404,7 @@ pub mod fs_tests {
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
@@ -430,7 +430,7 @@ pub mod fs_tests {
         //making it invalid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_WRONLY;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
@@ -451,12 +451,20 @@ pub mod fs_tests {
 
         let cage = interface::cagetable_getref(1);
 
-        //Creating a regular file with a read flag but
-        //without a write flag making it invalid for 
-        //shared mapping with write protection flag.
-        let flags: i32 = O_TRUNC | O_CREAT | O_RDONLY;
+        //Creating a regular file with flags for
+        //reading and writing
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Opening a file descriptor for the same file
+        //but now with a read flag and without a write
+        //flag making it invalid for shared mapping with
+        //write protection flag.
+        let testflags: i32 = O_RDONLY;
+        let testfd = cage.open_syscall(filepath, testflags, 0);
 
         //Checking if trying to map a file that does not
         //allow writing for shared mapping with writing 
@@ -464,7 +472,7 @@ pub mod fs_tests {
         //``MAP_SHARED` was requested and PROT_WRITE is 
         //set, but fd is not open in read/write (`O_RDWR`)
         //mode` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), -(Errno::EACCES as i32));
+        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, testfd, 0), -(Errno::EACCES as i32));
         
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -482,7 +490,7 @@ pub mod fs_tests {
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
@@ -545,7 +553,7 @@ pub mod fs_tests {
         //`mmap_syscall()` correctly results in `The `fildes`
         //argument refers to a file whose type is not 
         //supported by mmap` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_SHARED, fd, 0), -(Errno::EACCES as i32));
+        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0), -(Errno::EACCES as i32));
         
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -566,7 +574,7 @@ pub mod fs_tests {
         //file is opened after it.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         assert_eq!(cage.close_syscall(fd), 0);
 
         //Checking if passing the invalid file descriptor
@@ -589,7 +597,7 @@ pub mod fs_tests {
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
-        let fd = cage.open_syscall(filepath, flags, 0);
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 

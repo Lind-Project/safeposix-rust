@@ -3245,29 +3245,29 @@ impl Cage {
         off: i64,
     ) -> i32 {
         if len == 0 {
-            syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
+            return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
         //Exactly one of the two flags (either `MAP_PRIVATE` or `MAP_SHARED`) must be set
-        if 0 == flags & (MAP_PRIVATE | MAP_SHARED) {
-            syscall_error(
+        if 0 == (flags & (MAP_PRIVATE | MAP_SHARED))  {
+            return syscall_error(
                 Errno::EINVAL,
                 "mmap",
                 "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)",
             );
         }
-        if (flags & MAP_PRIVATE != 0) && (flags & MAP_SHARED != 0) {
-            syscall_error(
+        if ((flags & MAP_PRIVATE) != 0) && ((flags & MAP_SHARED) != 0) {
+            return syscall_error(
                 Errno::EINVAL,
                 "mmap",
                 "The value of flags is invalid (MAP_PRIVATE and MAP_SHARED cannot be both set)",
             );
         }
         //The `MAP_ANONYMOUS` flag specifies that the mapping
-        //is not backed by any file, so the `fildes` and`off`
+        //is not backed by any file, so the `fildes` and `off`
         //arguments should be ignored; however, some implementations 
         //require `fildes` to be -1, which we follow for the
         //sake of portability.
-        if 0 != flags & MAP_ANONYMOUS {
+        if 0 != (flags & MAP_ANONYMOUS) {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
         //BUG
@@ -3291,11 +3291,11 @@ impl Cage {
                             //For any kind of memory mapping, the file should be
                             //opened for reading, so if it was opened for write
                             //only, the mapping should be denied
-                            if normalfile_filedesc_obj.flags & O_WRONLY != 0 {
+                            if (normalfile_filedesc_obj.flags & O_WRONLY) != 0 {
                                 return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open for reading");
                             }
                             //If we want to write our changes back to the file the file needs to be open for reading and writing
-                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR == 0) {
+                            if (flags & MAP_SHARED) != 0 && (prot & PROT_WRITE) != 0 && (normalfile_filedesc_obj.flags & O_RDWR) != O_RDWR {
                                 return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
                             }
                             let filesize = normalfile_inode_obj.size;
@@ -3377,7 +3377,7 @@ impl Cage {
 
     pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
         if len == 0 {
-            syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
+            return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
         //NaCl's munmap implementation actually just writes 
         //over the previously mapped data with PROT_NONE.
