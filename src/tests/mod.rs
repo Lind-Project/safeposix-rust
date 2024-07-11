@@ -36,9 +36,9 @@ mod setup {
         set_panic_hook();
 
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let thelock = TESTMUTEX.lock().unwrap_or_else(
-            |e| {
-            //if the lock is poisoned, we need to clear the poison and clean up references to the cage.    
+        let thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
+            //if the lock is poisoned, we need to clear the poison and clean up references
+            // to the cage.
             lindrustfinalize();
             //clear the mutex poisoning.
             TESTMUTEX.clear_poison();

@@ -631,53 +631,54 @@ pub mod fs_tests {
 
     #[test]
     fn ut_lind_fs_dup2_with_fork() {
-        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup.
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup.
         let _thelock = setup::lock_and_init();
-    
+
         let cage = interface::cagetable_getref(1);
-    
+
         let flags: i32 = O_CREAT | O_RDWR;
         let filepath1 = "/dup2file_with_fork1";
         let filepath2 = "/dup2file_with_fork2";
-    
+
         // Open file descriptors
         let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
         let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
         assert!(fd1 >= 0);
         assert!(fd2 >= 0);
-    
+
         // Write data to the first file
         assert_eq!(cage.write_syscall(fd1, str2cbuf("parent data"), 11), 11);
-    
+
         // Fork the process
         assert_eq!(cage.fork_syscall(2), 0);
-    
+
         let child = std::thread::spawn(move || {
             let cage2 = interface::cagetable_getref(2);
-    
+
             // In the child process, duplicate fd1 to fd2
             assert!(cage2.dup2_syscall(fd1, fd2) >= 0);
-    
+
             // Write new data to the duplicated file descriptor
             assert_eq!(cage2.write_syscall(fd2, str2cbuf(" child data"), 11), 11);
-    
+
             assert_eq!(cage2.close_syscall(fd2), 0);
-    
+
             assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
-    
+
         child.join().unwrap();
-    
+
         let mut buffer = sizecbuf(22);
         assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(fd1, buffer.as_mut_ptr(), 22), 22);
         assert_eq!(cbuf2str(&buffer), "parent data child data");
-    
+
         assert_eq!(cage.close_syscall(fd1), 0);
-    
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }    
+    }
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
@@ -2046,7 +2047,8 @@ pub mod fs_tests {
         // Open the directory
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
 
-        // Attempt to call `getdents_syscall` with a buffer size smaller than CLIPPED_DIRENT_SIZE
+        // Attempt to call `getdents_syscall` with a buffer size smaller than
+        // CLIPPED_DIRENT_SIZE
         let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
 
         // Assert that the return value is EINVAL (errno for "Invalid argument")
