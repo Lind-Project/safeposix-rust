@@ -3331,7 +3331,7 @@ impl Cage {
                             }
                             let filesize = normalfile_inode_obj.size;
                             //The offset cannot be negative, and we cannot read past the end of the file
-                            if off < 0 || off > filesize as i64 || (off + len as i64) > (filesize as i64 + 1) {
+                            if off < 0 || off > filesize as i64 {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
                             //Because of NaCl's internal workings we must allow mappings to extend past the end of the file
