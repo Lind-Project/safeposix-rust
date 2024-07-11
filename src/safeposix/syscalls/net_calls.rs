@@ -1518,8 +1518,8 @@ impl Cage {
     /// 
     /// it accepts two parameters: 
     /// * `sockfd` - a file descriptor that refers to a socket
-    ///    of type SOCK_STREAM or SOCK_SEQPACKET.
-    /// // ** Do we deal with SOCK_SEQPACKET ?? ** //
+    ///    of type SOCK_STREAM 
+    ///    Note, we do not implement sockets of type SOCK_SEQPACKET
     /// * `backlog` - defines the maximum length to which the
     ///   queue of pending connections for sockfd may grow.  If a
     ///   connection request arrives when the queue is full, the client may
@@ -1562,6 +1562,7 @@ impl Cage {
     //
     // TODO: We are currently ignoring backlog 
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
+        //BUG:s
         //If fd is out of range of [0,MAXFD], process will panic
         //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
@@ -1582,9 +1583,16 @@ impl Cage {
                             return 0;
                         }
 
-                        //If the given socket is connected to another socket or 
-                        //if a non blocking socket is in progress of connecting
-                        //to another socket
+                        //Possible connection states in which the socket
+                        //can not be set to listening mode:
+                        // * Connected to another socket and can send
+                        // and receive data
+                        // * Connected to another socket and can only send
+                        // data
+                        // * Connected to another socket and can only receive
+                        // data
+                        // * A non-blocking socket is in progress of connecting
+                        // to another socket
                         ConnState::CONNECTED
                         | ConnState::CONNRDONLY
                         | ConnState::CONNWRONLY
@@ -1618,6 +1626,13 @@ impl Cage {
 
                             //If the given socket is not assigned an address,
                             //attempt to bind the socket to an address.
+                            //
+                            //An implicit bind refers to the automatic binding of a socket to an address
+                            //and port by the system, without an explicit call to the bind() function by
+                            //the programmer.
+                            //
+                            //If implicit bind fails, return with the errno if known
+                            //Otherwise, panic!
                             if sockhandle.localaddr.is_none() {
                                 let shd = sockhandle.domain as i32;
                                 let ibindret = self._implicit_bind(&mut *sockhandle, shd);
@@ -1677,9 +1692,11 @@ impl Cage {
                                 return lr;
                             };
 
-                            //set rawfd for select sys call
-                            //** Why is this being done in listen ?? 
-                            // We are also doing it in connect right now **/
+                            // Set the rawfd for select_syscall as we cannot implement the select 
+                            // logics for AF_INET socket right now, so we have to call the select 
+                            // syscall from libc, which takes the rawfd as the argument instead of 
+                            // the fake fd used by lind.
+                            // The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
                             sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
                             //If listening socket is not in the table of pending 
