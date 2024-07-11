@@ -2178,8 +2178,8 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// * `ENOTDIR` - a component of `path` is not a directory.
     /// * `EBADF` - fd is not a valid file descriptor.
+    /// * `ENOTDIR` - the open file descriptor fildes does not refer to a directory.
     /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
     ///
     /// ### Panics
@@ -2277,9 +2277,11 @@ impl Cage {
         //Perfrom a walk down the file tree starting from the root directory to
         //obtain an inode number of the file whose pathname was specified.
         //`None` is returned if one of the following occurs while moving down
-        //the tree: accessing a child of a non-directory inode, accessing a
-        //child of a nonexistent parent directory, accessing a nonexistent child,
-        //accessing an unexpected component, like `.` or `..` directory reference.
+        //the tree: 
+        //1. Accessing a child of a non-directory inode 
+        //2. Accessing a child of a nonexistent parent directory
+        //3. Accessing a nonexistent child
+        //4. Accessing an unexpected component, like `.` or `..` directory reference.
         //In this case, `The file does not exist` error is returned.
         //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(&truepath) {
