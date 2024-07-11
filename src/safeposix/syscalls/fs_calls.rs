@@ -1471,14 +1471,11 @@ impl Cage {
                             // object is updated by adding the number of bytes read (bytesread).
                             // This ensures that the next read operation will start from the correct
                             // position.
-                            if let Ok(bytesread) = fileobject.readat(buf, count, position) {
-                                //move position forward by the number of bytes we've read
-                                normalfile_filedesc_obj.position += bytesread;
-                                bytesread as i32
-                            } else {
-                                0 //0 bytes read, but not an error value that
-                                  // can/should be passed to the user
-                            }
+                            let bytesread = fileobject.readat(buf, count, position as usize).unwrap();
+                            //move position forward by the number of bytes we've read
+                            normalfile_filedesc_obj.position += bytesread;
+                            // Return the number of bytes read.
+                            bytesread as i32
                         }
 
                         // For `CharDev` type inode, the reading happens from the Character Device
@@ -1518,6 +1515,12 @@ impl Cage {
                     Errno::EOPNOTSUPP,
                     "read",
                     "reading from stdin not implemented yet",
+                ),
+                // Reading from `Epoll` type file descriptors is not supported.
+                Epoll(_) => syscall_error(
+                    Errno::EINVAL,
+                    "read",
+                    "fd is attached to an object which is unsuitable for reading",
                 ),
                 // The `Pipe` type file descriptor handles read through blocking and non-blocking
                 // modes differently to ensure appropriate behavior based on the flags set on the
@@ -1576,12 +1579,6 @@ impl Cage {
                         return ret;
                     }
                 }
-                // Reading from `Epoll` type file descriptors is not supported.
-                Epoll(_) => syscall_error(
-                    Errno::EINVAL,
-                    "read",
-                    "fd is attached to an object which is unsuitable for reading",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "read", "invalid file descriptor")
@@ -1674,13 +1671,11 @@ impl Cage {
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                            // Attempt to read from the file at the specified offset
-                            if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
-                                bytesread as i32
-                            } else {
-                                0 //0 bytes read, but not an error value that
-                                  // can/should be passed to the user
-                            }
+                            // `readat` function reads from file at specified offset into provided
+                            // C-buffer.
+                            let bytesread = fileobject.readat(buf, count, offset as usize).unwrap();
+                            // Return the number of bytes read.
+                            bytesread as i32
                         }
 
                         // For `CharDev` type inode, the reading happens from the Character Device
@@ -1790,6 +1785,7 @@ impl Cage {
             // reading from /dev/random fills the buffer with random bytes
             RANDOMDEVNO => interface::fillrandom(buf, count),
             // reading from /dev/urandom also fills the buffer with random bytes
+            // Note: This might have to be changed in future.
             URANDOMDEVNO => interface::fillrandom(buf, count),
             // for any device number not specifically handled above,
             // we return an error
