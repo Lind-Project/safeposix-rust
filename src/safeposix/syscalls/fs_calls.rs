@@ -1487,10 +1487,9 @@ impl Cage {
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
 
-                        // For `Socket` type inode, a panic is returned as socket type files are not
-                        // supported.
+                        // A Sanity check where the File type fd should not have a `Socket` type
+                        // inode and should panic.
                         Inode::Socket(_) => {
-                            // Read is not supported for Socket type inodes.
                             panic!("read(): Socket inode found on a filedesc fd.")
                         }
 
@@ -1687,8 +1686,8 @@ impl Cage {
                             // the character device and updates the buffer `buf` with them.
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
-                        // For `Socket` type inode, a panic is returned as socket type files are not
-                        // supported.
+                        // A Sanity check where the File type fd should not have a `Socket` type
+                        // inode and should panic.
                         Inode::Socket(_) => {
                             panic!("pread(): Socket inode found on a filedesc fd")
                         }
