@@ -1098,9 +1098,9 @@ impl Cage {
     /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
     /// O_WRONLY flags.
     /// There are generally two cases which occur when this syscall happens:
-    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
-    /// a new file is created at the given location and a new file descriptor is
-    /// created and returned.
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT
+    /// flag, a new file is created at the given location and a new file
+    /// descriptor is created and returned.
     /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
     /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
@@ -2235,27 +2235,34 @@ impl Cage {
     ///
     /// ### Description
     /// This function duplicates a file descriptor. It creates a new file
-    /// descriptor that refers to the same open file description as the original file descriptor.
-    /// * Finding the Next Available File Descriptor: If `start_desc` is provided and it is already in use, the function
-    ///   will continue searching for the next available file descriptor starting from `start_desc`. If no file
-    ///   descriptors are available, it will return an error (`ENFILE`).
-    /// * If `fd` is equal to `start_fd`, the function returns `start_fd` as the new file
-    ///   descriptor. This is because in this scenario, the original and new file descriptors would point to the same
-    ///   file description.
-    /// * The `_dup2_helper` function is called to perform the actual file descriptor duplication, handling the
-    ///   allocation of a new file descriptor, updating the file descriptor table, and incrementing the reference count
-    ///   of the file object.
-    /// * The function modifies the global `filedescriptortable` array, adding a new entry for the
-    ///   duplicated file descriptor. It also increments the reference count of the file object associated with the
-    ///   original file descriptor.
-    /// * The `false` argument passed to `_dup2_helper` indicates that this call is from the `dup_syscall` function,
-    ///   not the `dup2_syscall` function.
+    /// descriptor that refers to the same open file description as the original
+    /// file descriptor.
+    /// * Finding the Next Available File Descriptor: If `start_desc` is
+    ///   provided and it is already in use, the function will continue
+    ///   searching for the next available file descriptor starting from
+    ///   `start_desc`. If no file descriptors are available, it will return an
+    ///   error (`ENFILE`).
+    /// * If `fd` is equal to `start_fd`, the function returns `start_fd` as the
+    ///   new file descriptor. This is because in this scenario, the original
+    ///   and new file descriptors would point to the same file description.
+    /// * The `_dup2_helper` function is called to perform the actual file
+    ///   descriptor duplication, handling the allocation of a new file
+    ///   descriptor, updating the file descriptor table, and incrementing the
+    ///   reference count of the file object.
+    /// * The function modifies the global `filedescriptortable` array, adding a
+    ///   new entry for the duplicated file descriptor. It also increments the
+    ///   reference count of the file object associated with the original file
+    ///   descriptor.
+    /// * The `false` argument passed to `_dup2_helper` indicates that this call
+    ///   is from the `dup_syscall` function, not the `dup2_syscall` function.
     ///
     /// ### Function Arguments
     /// * `fd`: The original file descriptor to duplicate.
-    /// * `start_desc`:  An optional starting file descriptor number. If provided, the new file descriptor will be
-    ///  assigned the first available file descriptor number starting from this value. If not provided, it defaults to
-    ///  `STARTINGFD`,which is the minimum designated file descriptor value for new file descriptors.
+    /// * `start_desc`:  An optional starting file descriptor number. If
+    ///   provided, the new file descriptor will be
+    ///  assigned the first available file descriptor number starting from this
+    /// value. If not provided, it defaults to  `STARTINGFD`,which is the
+    /// minimum designated file descriptor value for new file descriptors.
     ///
     /// ### Returns
     /// * The new file descriptor on success.
@@ -2301,27 +2308,33 @@ impl Cage {
     /// ## `dup2_syscall`
     ///
     /// ### Description
-    /// This function implements the `dup2` system call, which duplicates a file descriptor and assigns it to a new file
-    /// descriptor number. If the new file descriptor already exists, it is closed before the duplication takes place.
-    /// * File Descriptor Reuse:  If the new file descriptor (`newfd`) is already open, the function will first close the
-    ///   existing file descriptor silently (without returning an error) before allocating a new file descriptor and
-    ///   updating the file descriptor table.
-    /// * If `oldfd` and `newfd` are the same, the function returns `newfd` without closing it.
-    ///   This is because in this scenario, the original and new file descriptors would already point to the same file
-    ///   description.
+    /// This function implements the `dup2` system call, which duplicates a file
+    /// descriptor and assigns it to a new file descriptor number. If the
+    /// new file descriptor already exists, it is closed before the duplication
+    /// takes place.
+    /// * File Descriptor Reuse:  If the new file descriptor (`newfd`) is
+    ///   already open, the function will first close the existing file
+    ///   descriptor silently (without returning an error) before allocating a
+    ///   new file descriptor and updating the file descriptor table.
+    /// * If `oldfd` and `newfd` are the same, the function returns `newfd`
+    ///   without closing it. This is because in this scenario, the original and
+    ///   new file descriptors would already point to the same file description.
     /// * the global `filedescriptortable` array, replacing the entry for the
-    ///   new file descriptor with a new entry for the duplicated file descriptor. It also increments the reference count of the
-    ///   file object associated with the original file descriptor.
+    ///   new file descriptor with a new entry for the duplicated file
+    ///   descriptor. It also increments the reference count of the file object
+    ///   associated with the original file descriptor.
     ///
     /// ### Function Arguments
     /// * `oldfd`: The original file descriptor to duplicate.
-    /// * `newfd`: The new file descriptor number to assign to the duplicated file descriptor.
+    /// * `newfd`: The new file descriptor number to assign to the duplicated
+    ///   file descriptor.
     ///
     /// ### Returns
     /// * The new file descriptor on success.
     ///
     /// ### Errors
-    /// * `EBADF(9)`: If the original file descriptor (`oldfd`) is invalid or the new file descriptor (`newfd`) number is out of range.
+    /// * `EBADF(9)`: If the original file descriptor (`oldfd`) is invalid or
+    ///   the new file descriptor (`newfd`) number is out of range.
     ///  ###Panics
     /// * There are no panics for this syscall
     ///[dup2(2)](https://linux.die.net/man/2/dup2)
@@ -2359,28 +2372,42 @@ impl Cage {
     /// ## `_dup2_helper`
     ///
     /// ### Description
-    /// This helper function performs the actual file descriptor duplication process for both `dup` and `dup2` system calls.
-    /// It handles the allocation of a new file descriptor, updates the file descriptor table, and increments the reference count of the
-    /// associated file object.
-    /// * Duplication from `dup2_syscall`: If `fromdup2` is true, the function first closes the existing file descriptor
-    ///   at `newfd` (if any) before allocating a new file descriptor and updating the file descriptor table.
-    /// * Duplication from `dup_syscall`: If `fromdup2` is false, the function allocates a new file descriptor, finds the
-    ///   first available file descriptor number starting from `newfd`, and updates the file descriptor table.
-    /// * Reference Counting: The function increments the reference count of the file object associated with the original file
-    ///   descriptor. This ensures that the file object is not deleted until all its associated file descriptors are closed.
-    /// * Socket Handling: For domain sockets, the function increments the reference count of both the send and receive pipes
-    ///   associated with the socket.
+    /// This helper function performs the actual file descriptor duplication
+    /// process for both `dup` and `dup2` system calls. It handles the
+    /// allocation of a new file descriptor, updates the file descriptor table,
+    /// and increments the reference count of the associated file object.
+    /// * Duplication from `dup2_syscall`: If `fromdup2` is true, the function
+    ///   first closes the existing file descriptor at `newfd` (if any) before
+    ///   allocating a new file descriptor and updating the file descriptor
+    ///   table.
+    /// * Duplication from `dup_syscall`: If `fromdup2` is false, the function
+    ///   allocates a new file descriptor, finds the first available file
+    ///   descriptor number starting from `newfd`, and updates the file
+    ///   descriptor table.
+    /// * Reference Counting: The function increments the reference count of the
+    ///   file object associated with the original file descriptor. This ensures
+    ///   that the file object is not deleted until all its associated file
+    ///   descriptors are closed.
+    /// * Socket Handling: For domain sockets, the function increments the
+    ///   reference count of both the send and receive pipes associated with the
+    ///   socket.
     /// * Stream Handling: Streams are not currently supported for duplication
-    /// * Unhandled File Types: If the file descriptor is associated with a file type that is not handled by the function (i.e.,
-    ///   not a File, Pipe, Socket, or Stream), the function returns an error (`EACCES`).
+    /// * Unhandled File Types: If the file descriptor is associated with a file
+    ///   type that is not handled by the function (i.e., not a File, Pipe,
+    ///   Socket, or Stream), the function returns an error (`EACCES`).
     /// * The function does not handle streams.
-    /// * Socket Handling: If the file descriptor is associated with a socket, the function handles domain sockets differently
-    ///   by incrementing the reference count of both the send and receive pipes.
+    /// * Socket Handling: If the file descriptor is associated with a socket,
+    ///   the function handles domain sockets differently by incrementing the
+    ///   reference count of both the send and receive pipes.
     /// ### Function Arguments
-    /// * `self`:  A reference to the `FsCalls` struct, which contains the file descriptor table and other system-related data.
-    /// * `filedesc_enum`: A reference to the `FileDescriptor` object representing the file descriptor to be duplicated.
-    /// * `newfd`: The new file descriptor number to assign to the duplicated file descriptor.
-    /// * `fromdup2`: A boolean flag indicating whether the call is from `dup2_syscall` (true) or `dup_syscall` (false).
+    /// * `self`:  A reference to the `FsCalls` struct, which contains the file
+    ///   descriptor table and other system-related data.
+    /// * `filedesc_enum`: A reference to the `FileDescriptor` object
+    ///   representing the file descriptor to be duplicated.
+    /// * `newfd`: The new file descriptor number to assign to the duplicated
+    ///   file descriptor.
+    /// * `fromdup2`: A boolean flag indicating whether the call is from
+    ///   `dup2_syscall` (true) or `dup_syscall` (false).
     ///
     /// ### Returns
     /// * The new file descriptor on success.
@@ -2389,7 +2416,8 @@ impl Cage {
     /// * `ENFILE(23)`: If there are no available file descriptors.
     /// * `EACCES(13)`: If the file descriptor cannot be duplicated.
     /// ###Panics
-    /// * If the file descriptor is associated with a socket, and the inode does not match the file descriptor.
+    /// * If the file descriptor is associated with a socket, and the inode does
+    ///   not match the file descriptor.
 
     pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
         let (dupfd, mut dupfdguard) = if fromdup2 {
@@ -2408,8 +2436,9 @@ impl Cage {
         } else {
             let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
             if newdupfd < 0 {
-                // The function allocates a new file descriptor and updates the file descriptor table,
-                // handling the potential for file descriptor table overflow (resulting in an `ENFILE` error).
+                // The function allocates a new file descriptor and updates the file descriptor
+                // table, handling the potential for file descriptor table
+                // overflow (resulting in an `ENFILE` error).
                 return syscall_error(
                     Errno::ENFILE,
                     "dup2_helper",
@@ -2428,8 +2457,9 @@ impl Cage {
                 //incrementing the ref count so that when close is executed on the dup'd file
                 //the original file does not get a negative ref count
                 match *inodeobj {
-                    // increments the reference count of the file object associated with the original file descriptor
-                    // to ensure that the file object is not deleted until all its associated file descriptors are closed.
+                    // increments the reference count of the file object associated with the
+                    // original file descriptor to ensure that the file object
+                    // is not deleted until all its associated file descriptors are closed.
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.refcount += 1;
                     }
@@ -2608,12 +2638,12 @@ impl Cage {
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //The reference to the inode has to be dropped to avoid
-                                //deadlocking because the remove() method will need to 
-                                //acquire a reference to the same inode from the 
-                                //filesystem's inodetable. 
+                                //deadlocking because the remove() method will need to
+                                //acquire a reference to the same inode from the
+                                //filesystem's inodetable.
                                 //The inodetable represents a Rust DashMap that deadlocks
-                                //when trying to get a reference to its entry while holding any sort
-                                //of reference into it.
+                                //when trying to get a reference to its entry while holding any
+                                // sort of reference into it.
                                 drop(inodeobj);
                                 FS_METADATA.inodetable.remove(&inodenum);
                                 log_metadata(&FS_METADATA, inodenum);
@@ -3224,7 +3254,8 @@ impl Cage {
     /// read/write (`O_RDWR`) mode or `fildes` refers to a non-regular file.
     /// * `ENXIO` - addresses in the range [`off`, `off`+`len`) are invalid
     /// for the object specified by `fildes`.
-    /// * `EOPNOTSUPP` - Lind currently does not support mapping character files.
+    /// * `EOPNOTSUPP` - Lind currently does not support mapping character
+    ///   files.
     /// * `EBADF` - invalid file descriptor.
     /// Other errors, like `ENOMEM`, `EOVERFLOW`, etc. are not supported.
     ///
@@ -3247,8 +3278,9 @@ impl Cage {
         if len == 0 {
             return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-        //Exactly one of the two flags (either `MAP_PRIVATE` or `MAP_SHARED`) must be set
-        if 0 == (flags & (MAP_PRIVATE | MAP_SHARED))  {
+        //Exactly one of the two flags (either `MAP_PRIVATE` or `MAP_SHARED`) must be
+        // set
+        if 0 == (flags & (MAP_PRIVATE | MAP_SHARED)) {
             return syscall_error(
                 Errno::EINVAL,
                 "mmap",
@@ -3363,7 +3395,8 @@ impl Cage {
     /// ### Errors
     ///
     /// * `EINVAL` - the value of len is 0 o
-    /// Other `EINVAL` errors are returned directly from the  call to `libc_mmap`
+    /// Other `EINVAL` errors are returned directly from the  call to
+    /// `libc_mmap`
     ///
     /// ### Panics
     ///
@@ -4163,32 +4196,37 @@ impl Cage {
     ///
     /// ### Description
     /// This function reads directory entries from a directory file descriptor
-    /// and returns them in a buffer. Reading directory entries using multiple read calls can be less efficient because it
-    /// involves reading the data in smaller chunks and then parsing it.
-    /// getdents can often be faster by reading directory entries in a more optimized way.
-    /// * The function first checks if the provided buffer size is sufficient to store at least one
-    ///   `ClippedDirent` structure.
-    /// * The function validates the provided file descriptor to ensure it represents a
-    ///   valid file.
+    /// and returns them in a buffer. Reading directory entries using multiple
+    /// read calls can be less efficient because it involves reading the
+    /// data in smaller chunks and then parsing it. getdents can often be
+    /// faster by reading directory entries in a more optimized way.
+    /// * The function first checks if the provided buffer size is sufficient to
+    ///   store at least one `ClippedDirent` structure.
+    /// * The function validates the provided file descriptor to ensure it
+    ///   represents a valid file.
     /// * The function checks if the file descriptor refers to a directory.
     /// * The function iterates over the directory entries in the
     ///   `filename_to_inode_dict` of the directory inode.
-    /// * For each entry, the function constructs a `ClippedDirent` structure, which
-    ///   contains the inode number, offset, and record length.
-    /// * It packs the constructed directory entries into the provided buffer (`dirp`).
+    /// * For each entry, the function constructs a `ClippedDirent` structure,
+    ///   which contains the inode number, offset, and record length.
+    /// * It packs the constructed directory entries into the provided buffer
+    ///   (`dirp`).
     /// * Updates the file position to the next directory entry to be read.
     ///
     /// ### Function Arguments
     /// * `fd`: A file descriptor representing the directory to read.
-    /// * `dirp`: A pointer to a buffer where the directory entries will be written.
+    /// * `dirp`: A pointer to a buffer where the directory entries will be
+    ///   written.
     /// * `bufsize`: The size of the buffer in bytes.
     ///
     /// ### Returns
     /// * The number of bytes written to the buffer on success.
     ///
     /// ### Errors
-    /// * `EINVAL(22)`: If the buffer size is too small or if the file descriptor is invalid.
-    /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing directory.
+    /// * `EINVAL(22)`: If the buffer size is too small or if the file
+    ///   descriptor is invalid.
+    /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing
+    ///   directory.
     /// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
     /// * `EBADF(9)` : If the file descriptor is invalid.
     /// ### Panics
@@ -4198,9 +4236,10 @@ impl Cage {
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
 
         // make sure bufsize is at least greater than size of a ClippedDirent struct
-        // ClippedDirent is a simplified version of the traditional dirent structure used in POSIX systems
-        // By using a simpler structure, SafePosix can store and retrieve directory entries more efficiently,
-        // potentially improving performance compared to using the full dirent structure.
+        // ClippedDirent is a simplified version of the traditional dirent structure
+        // used in POSIX systems By using a simpler structure, SafePosix can
+        // store and retrieve directory entries more efficiently, potentially
+        // improving performance compared to using the full dirent structure.
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
@@ -4238,7 +4277,8 @@ impl Cage {
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
-                                // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the actual file type is not yet determined.
+                                                          // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the
+                                                          // actual file type is not yet determined.
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
                                 temp_len =
                                     interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
@@ -4274,7 +4314,8 @@ impl Cage {
                                 count += 1;
                             }
                             // update file position
-                            // keeps track of the current position within the directory. It indicates which directory entry the
+                            // keeps track of the current position within the directory. It
+                            // indicates which directory entry the
                             // function should read next.
                             normalfile_filedesc_obj.position = interface::rust_min(
                                 position + count,

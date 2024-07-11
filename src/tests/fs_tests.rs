@@ -346,9 +346,9 @@ pub mod fs_tests {
     pub fn ut_lind_fs_mmap_zerolen() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
+        let _thelock = setup::lock_and_init();
 
-        let cage = interface::cagetable_getref(1); 
+        let cage = interface::cagetable_getref(1);
 
         //Creating a regular file with `O_RDWR` flag
         //making it valid for any mapping.
@@ -356,16 +356,19 @@ pub mod fs_tests {
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9); 
- 
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
         //Checking if passing 0 as `len` to `mmap_syscall()`
         //correctly results in 'The value of len is 0` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 0, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), -(Errno::EINVAL as i32)); 
- 
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 0, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EINVAL as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-  
+
     #[test]
     pub fn ut_lind_fs_mmap_invalid_flags_none() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -386,12 +389,15 @@ pub mod fs_tests {
         //or `MAP_SHARED` flags correctly results in `The value
         //of flags is invalid (neither `MAP_PRIVATE` nor
         //`MAP_SHARED` is set)` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, 0, fd, 0), -(Errno::EINVAL as i32));
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, 0, fd, 0),
+            -(Errno::EINVAL as i32)
+        );
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_invalid_flags_both() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -412,12 +418,22 @@ pub mod fs_tests {
         //and `MAP_SHARED` flags correctly results in `The value
         //of flags is invalid (`MAP_PRIVATE` and `MAP_SHARED`
         //cannot be both set)` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_SHARED, fd, 0), -(Errno::EINVAL as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(
+                0 as *mut u8,
+                5,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_SHARED,
+                fd,
+                0
+            ),
+            -(Errno::EINVAL as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_no_read() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -425,148 +441,176 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
-  
+
         //Creating a regular file without a reading flag
         //making it invalid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_WRONLY;
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9); 
- 
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
         //Checking if trying to map a file that does not
         //allow reading correctly results in `File descriptor
         //is not open for reading` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), -(Errno::EACCES as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EACCES as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_no_write() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-  
-        let cage = interface::cagetable_getref(1); 
- 
+
+        let cage = interface::cagetable_getref(1);
+
         //Creating a regular file with flags for
         //reading and writing
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9); 
- 
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
         //Opening a file descriptor for the same file
         //but now with a read flag and without a write
         //flag making it invalid for shared mapping with
         //write protection flag.
         let testflags: i32 = O_RDONLY;
-        let testfd = cage.open_syscall(filepath, testflags, 0); 
- 
+        let testfd = cage.open_syscall(filepath, testflags, 0);
+
         //Checking if trying to map a file that does not
         //allow writing for shared mapping with writing
         //protection flag set correctly results in
         //``MAP_SHARED` was requested and PROT_WRITE is
         //set, but fd is not open in read/write (`O_RDWR`)
         //mode` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, testfd, 0), -(Errno::EACCES as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(
+                0 as *mut u8,
+                5,
+                PROT_READ | PROT_WRITE,
+                MAP_SHARED,
+                testfd,
+                0
+            ),
+            -(Errno::EACCES as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_invalid_offset_len() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
- 
-        let cage = interface::cagetable_getref(1); 
- 
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
         //Creating a regular file with `O_RDWR` flag
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9); 
- 
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
         //Checking if passing a negative offset correctly
         //results in `Addresses in the range [off,off+len)
         //are invalid for the object specified by `fildes`` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, -10), -(Errno::ENXIO as i32));
-  
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, -10),
+            -(Errno::ENXIO as i32)
+        );
+
         //Checking if passing an offset that seeks beyond the end
         //of the file correctly results in `Addresses in the
         //range [off,off+len) are invalid for the object specified
         //by `fildes`` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25), -(Errno::ENXIO as i32));
-  
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25),
+            -(Errno::ENXIO as i32)
+        );
+
         //Checking if passing an offset and length that together
         //seek beyond the end of the file correctly results in
         //`Addresses in the range [off,off+len) are invalid for
         //the object specified by `fildes`` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 7, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 7), -(Errno::ENXIO as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 7, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 7),
+            -(Errno::ENXIO as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_chardev() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
- 
-        let cage = interface::cagetable_getref(1); 
- 
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
         //Opening a character device file `/dev/zero`.
         let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
         //Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
-  
+
         //Checking if calling `mmap_syscall()` on the character device
         //file correctly results in `Lind currently does not support
         //mapping character files` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), -(Errno::EOPNOTSUPP as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_unsupported_file() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
- 
-        let cage = interface::cagetable_getref(1); 
- 
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
         //Creating a directory.
         assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
-        let fd = cage.open_syscall("/testdir", O_RDWR, S_IRWXA); 
- 
+        let fd = cage.open_syscall("/testdir", O_RDWR, S_IRWXA);
+
         //Checking if passing the created directory to
         //`mmap_syscall()` correctly results in `The `fildes`
         //argument refers to a file whose type is not
         //supported by mmap` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0), -(Errno::EACCES as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0),
+            -(Errno::EACCES as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_mmap_invalid_fildes() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
- 
-        let cage = interface::cagetable_getref(1); 
- 
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
         //Creating a regular file with `O_RDWR` flag
         //making it valid for any mapping and then
         //closing it, thereby making the obtained
@@ -575,40 +619,46 @@ pub mod fs_tests {
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
-        assert_eq!(cage.close_syscall(fd), 0); 
- 
+        assert_eq!(cage.close_syscall(fd), 0);
+
         //Checking if passing the invalid file descriptor
         //correctly results in `Invalid file descriptor` error.
-        assert_eq!(cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), -(Errno::EBADF as i32));
-       
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EBADF as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    } 
- 
+    }
+
     #[test]
     pub fn ut_lind_fs_munmap_zerolen() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
-        let _thelock = setup::lock_and_init(); 
- 
-        let cage = interface::cagetable_getref(1); 
- 
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
         //Creating a regular file with `O_RDWR` flag
         //making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
         //Writing into that file's first 9 bytes.
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9); 
- 
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
         //Checking if passing 0 as `len` to `munmap_syscall()`
         //correctly results in 'The value of len is 0` error.
-        assert_eq!(cage.munmap_syscall(0 as *mut u8, 0), -(Errno::EINVAL as i32)); 
- 
+        assert_eq!(
+            cage.munmap_syscall(0 as *mut u8, 0),
+            -(Errno::EINVAL as i32)
+        );
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
- 
+
     #[test]
     pub fn ut_lind_fs_dir_chdir() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -898,53 +948,54 @@ pub mod fs_tests {
 
     #[test]
     fn ut_lind_fs_dup2_with_fork() {
-        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup.
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup.
         let _thelock = setup::lock_and_init();
-    
+
         let cage = interface::cagetable_getref(1);
-    
+
         let flags: i32 = O_CREAT | O_RDWR;
         let filepath1 = "/dup2file_with_fork1";
         let filepath2 = "/dup2file_with_fork2";
-    
+
         // Open file descriptors
         let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
         let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
         assert!(fd1 >= 0);
         assert!(fd2 >= 0);
-    
+
         // Write data to the first file
         assert_eq!(cage.write_syscall(fd1, str2cbuf("parent data"), 11), 11);
-    
+
         // Fork the process
         assert_eq!(cage.fork_syscall(2), 0);
-    
+
         let child = std::thread::spawn(move || {
             let cage2 = interface::cagetable_getref(2);
-    
+
             // In the child process, duplicate fd1 to fd2
             assert!(cage2.dup2_syscall(fd1, fd2) >= 0);
-    
+
             // Write new data to the duplicated file descriptor
             assert_eq!(cage2.write_syscall(fd2, str2cbuf(" child data"), 11), 11);
-    
+
             assert_eq!(cage2.close_syscall(fd2), 0);
-    
+
             assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
-    
+
         child.join().unwrap();
-    
+
         let mut buffer = sizecbuf(22);
         assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(fd1, buffer.as_mut_ptr(), 22), 22);
         assert_eq!(cbuf2str(&buffer), "parent data child data");
-    
+
         assert_eq!(cage.close_syscall(fd1), 0);
-    
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }    
+    }
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
@@ -2313,7 +2364,8 @@ pub mod fs_tests {
         // Open the directory
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
 
-        // Attempt to call `getdents_syscall` with a buffer size smaller than CLIPPED_DIRENT_SIZE
+        // Attempt to call `getdents_syscall` with a buffer size smaller than
+        // CLIPPED_DIRENT_SIZE
         let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
 
         // Assert that the return value is EINVAL (errno for "Invalid argument")
