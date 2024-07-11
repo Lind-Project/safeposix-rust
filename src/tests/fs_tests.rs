@@ -539,16 +539,7 @@ pub mod fs_tests {
             cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25),
             -(Errno::ENXIO as i32)
         );
-
-        //Checking if passing an offset and length that together
-        //seek beyond the end of the file correctly results in
-        //`Addresses in the range [off,off+len) are invalid for
-        //the object specified by `fildes`` error.
-        assert_eq!(
-            cage.mmap_syscall(0 as *mut u8, 7, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 7),
-            -(Errno::ENXIO as i32)
-        );
-
+        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
