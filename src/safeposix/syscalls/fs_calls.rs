@@ -3210,15 +3210,21 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// * `EINVAL` - the bufsize argument is zero and buf is not a NULL pointer.
-    /// * `ERANGE` - the bufsize argument is less than the length of the
-    /// absolute pathname of the working directory, including the
-    /// terminating null byte.
-    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    /// * `EINVAL` - the value of len is 0 or `flags` contained neither 
+    /// `MAP_PRIVATE` nor `MAP_SHARED` or `flags` contained both
+    /// `MAP_PRIVATE` and `MAP_SHARED`.
+    /// * `EACCES` - `fildes` is not open for reading or `MAP_SHARED`
+    /// was requested and PROT_WRITE is set, but fd is not open in
+    /// read/write (`O_RDWR`) mode or `fildes` refers to a non-regular file.
+    /// * `ENXIO` - addresses in the range [`off`, `off`+`len`) are invalid
+    /// for the object specified by `fildes`. 
+    /// * `EOPNOTSUPP` - Lind currently does not support mapping character files.
+    /// * `EBADF` - invalid file descriptor.
+    /// Other errors, like `ENOMEM`, `EOVERFLOW`, etc. are not supported.
     ///
     /// ### Panics
     ///
-    /// There are no cases where this function panics.
+    /// A panic occurs when a provided file descriptor is out of bounds.
     ///
     /// To learn more about the syscall, flags, possible error values, etc., see
     /// [mmap(2)](https://man7.org/linux/man-pages/man2/mmap.2.html)
@@ -3250,10 +3256,10 @@ impl Cage {
             );
         }
         //The `MAP_ANONYMOUS` flag specifies that the mapping
-        //is not backed by any file, so the `fildes` argument
-        //should be ignored; however, some implementations 
+        //is not backed by any file, so the `fildes` and`off`
+        //arguments should be ignored; however, some implementations 
         //require `fildes` to be -1, which we follow for the
-        //sake of portability 
+        //sake of portability.
         if 0 != flags & MAP_ANONYMOUS {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
@@ -3281,21 +3287,24 @@ impl Cage {
                             if (normalfile_filedesc_obj.flags & O_RDWR == O_WRONLY) {
                                 return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open for reading");
                             }
-                            //if we want to write our changes back to the file the file needs to be open for reading and writing
-                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
+                            //If we want to write our changes back to the file the file needs to be open for reading and writing
+                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != O_RDWR) {
                                 return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
                             }
                             let filesize = normalfile_inode_obj.size;
-                            if off < 0 || off > filesize as i64 {
+                            //The offset cannot be negative, and we cannot read past the end of the file
+                            if off < 0 || off > filesize as i64 || (off + len) > (filesize as i64 + 1) {
                                 return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
                             }
-                            //because of NaCl's internal workings we must allow mappings to extend past the end of a file
+                            //Because of NaCl's internal workings we must allow mappings to extend past the end of the file
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
-                            //this is the system fd number--the number of the lind.<inodenum> file in our host system
+                            //The actual memory mapping is not emulated inside Lind, so the call to the kernell
+                            //is required. To perform this call, the file descriptor of the actual file
+                            //stored on the host machine is needed. Since Lind's emulated filesystem
+                            //does not match the underlying host's filesystem, the file descriptor 
+                            //provided to the `mmap_syscall()` cannot be used and must be converted
+                            //to the actual file descriptor stored in the host's filesystem.
                             let fobjfdno = fobj.as_fd_handle_raw_int();
-
-
                             interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
                         }
 
@@ -3317,15 +3326,60 @@ impl Cage {
         }
     }
 
-    //------------------------------------MUNMAP SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `munmap_syscall()` function shall remove any mappings 
+    /// containing any part of the address space of the process 
+    /// starting at `addr` and continuing for `len` bytes. 
+    /// Further references to these pages shall result in the 
+    /// generation of a `SIGSEGV` signal to the process. If there
+    /// are no mappings in the specified address range, then 
+    /// `munmap_syscall()` has no effect.
+    /// The current implementation of the syscall solely relies
+    /// on the inner implementation of NaCl (except for a simple
+    /// `len` argument check) by creating a new mapping in the
+    /// specified memory region by using `MAP_FIXED` with 
+    /// `PROT_NONE` flag to deny any access to the unmapped
+    /// memory region.
+    ///
+    /// ### Arguments
+    ///
+    /// The `munmap_syscall()` accepts two arguments:
+    /// * `addr` - the address starting from which the mapping
+    /// shall be removed
+    /// * `len` - specifies the length of the mapping that
+    /// shall be removed.
+    ///
+    /// ### Returns
+    ///
+    /// On success, `munmap_syscall()` returns 0.
+    /// In case of a failure, an error is returned, and `errno` 
+    /// is set to `EINVAL`.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the value of len is 0 o
+    /// Other `EINVAL` errors are returned directly from the  call to `libc_mmap`
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this function panics.
+    ///
+    /// To learn more about the syscall, flags, possible error values, etc., see
+    /// [munmap(2)](https://linux.die.net/man/2/munmap)
 
     pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
         if len == 0 {
             syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-        //NaCl's munmap implementation actually just writes over the previously mapped
-        // data with PROT_NONE This frees all of the resources except page table
-        // space, and is put inside safeposix for consistency
+        //NaCl's munmap implementation actually just writes 
+        //over the previously mapped data with PROT_NONE.
+        //This frees all of the resources except page table
+        //space, and is put inside safeposix for consistency.
+        //`MAP_FIXED` is used to precisely unmap the specified
+        //memory region, and `MAP_ANONYMOUS` is used to deny 
+        //any further access to the unmapped memory region 
+        //thereby emulating the unmapping process.
         interface::libc_mmap(
             addr,
             len,
