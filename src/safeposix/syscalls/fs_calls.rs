@@ -1098,9 +1098,9 @@ impl Cage {
     /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
     /// O_WRONLY flags.
     /// There are generally two cases which occur when this syscall happens:
-    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
-    /// a new file is created at the given location and a new file descriptor is
-    /// created and returned.
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT
+    /// flag, a new file is created at the given location and a new file
+    /// descriptor is created and returned.
     /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
     /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
@@ -1590,7 +1590,7 @@ impl Cage {
         }
     }
 
-    /// ## ------------------READ SYSCALL------------------
+    /// ## ------------------PREAD SYSCALL------------------
     /// ### Description
     ///
     /// The `pread_syscall()` attempts to read `count` bytes from the file
@@ -1617,9 +1617,7 @@ impl Cage {
     /// Upon successful completion of this call, we return the number of bytes
     /// read. This number will never be greater than `count`. The value returned
     /// may be less than `count` if the number of bytes left in the file is less
-    /// than `count`, if the `pread_syscall()` was interrupted by a signal, or
-    /// if the file is a pipe or FIFO or special file and has fewer than
-    /// `count` bytes immediately available for reading.
+    /// than `count`.
     ///
     /// ### Errors
     ///
@@ -1627,8 +1625,8 @@ impl Cage {
     ///   not opened for reading.
     /// * EISDIR - The file descriptor opened for reading is a directory.
     /// * EOPNOTSUPP - Reading from streams is not supported.
-    /// * EINVAL - File descriptor is attached to an object which is unsuitable
-    ///   for reading.
+    /// * ESPIPE - The file descriptor opened for reading is either of type
+    ///   Socket, Stream, Pipe, or Epoll.
     ///
     /// ### Panics
     ///
