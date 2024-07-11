@@ -2898,4 +2898,387 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
+    #[test]
+    pub fn ut_lind_fs_read_write_only_fd() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test to create a file with write only permissions, and check if
+        // a valid error is returned when the file is used for reading.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_WRONLY, S_IRWXA);
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.read_syscall(fd, read_buf.as_mut_ptr(), 5),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_directory() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a directory and try to read from it.
+        // We should expect an error (EISDIR) as reading from a directory is not
+        // supported.
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
+
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.read_syscall(fd, read_buf.as_mut_ptr(), 5),
+            -(Errno::EISDIR as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_epoll() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create an Epoll and try to read from it.
+        // We should expect an error (EINVAL) as reading from an Epoll is not supported.
+        let epfd = cage.epoll_create_syscall(1);
+        assert!(epfd > 0);
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.read_syscall(epfd, read_buf.as_mut_ptr(), 5),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_regular_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests two scenarios for reading from a regular file:
+        // * Reading from a file should initially start from 0 position.
+        // * Once read, the position of the seek pointer in the file descriptor should
+        // increment by the count of bytes read. If the read is performed again, then
+        // the position should continue from the point it was previously left.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Write sample data to the file.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Set the initial position to 0 in the file descriptor.
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+
+        // Read first 5 bytes from the file, and assert the result.
+        let mut read_buf1 = sizecbuf(5);
+        assert_eq!(cage.read_syscall(fd, read_buf1.as_mut_ptr(), 5), 5);
+        assert_eq!(cbuf2str(&read_buf1), "hello");
+
+        // Read next 7 bytes which should start from the previous position.
+        let mut read_buf2 = sizecbuf(7);
+        assert_eq!(cage.read_syscall(fd, read_buf2.as_mut_ptr(), 7), 7);
+        assert_eq!(cbuf2str(&read_buf2), " there!");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_chardev_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for reading from a character device type
+        // file. In this case, we are trying to read 100 bytes from the
+        // "/dev/zero" file, which should return 100 bytes of "0" filled
+        // characters.
+        let path = "/dev/zero";
+        let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
+
+        // Verify if the returned count of bytes is 100.
+        let mut read_bufzero = sizecbuf(100);
+        assert_eq!(cage.read_syscall(fd, read_bufzero.as_mut_ptr(), 100), 100);
+        // Verify if the characters present in the buffer are all "0".
+        assert_eq!(
+            cbuf2str(&read_bufzero),
+            std::iter::repeat("\0")
+                .take(100)
+                .collect::<String>()
+                .as_str()
+        );
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_sockets() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for reading data from a pair of Sockets.
+        // In this case, we create a socket pair of two sockets, and send data through
+        // one socket, and try to read it from the other one using `read_syscall()`.
+        let mut socketpair = interface::SockPair::default();
+
+        // Verify if the socketpair is formed successfully.
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        // Verify if the number of bytes sent to socket1 is correct.
+        assert_eq!(
+            cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
+            4
+        );
+        // Verify if the number of bytes received by socket2 is correct.
+        let mut buf2 = sizecbuf(4);
+        assert_eq!(cage.read_syscall(socketpair.sock2, buf2.as_mut_ptr(), 4), 4);
+        // Verify if the data received inside the buffer is correct.
+        assert_eq!(cbuf2str(&buf2), "test");
+        // Close the sockets
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_pipe_blocking_mode() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case of reading data from the pipe.
+        // We create two pipes, i.e., Read and Write and validate if the data
+        // received is correct or not.
+
+        // Create a pipe of read and write file descriptors.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        let write_fd = pipe_fds.writefd;
+
+        let write_data = "Testing";
+        let mut buf = sizecbuf(7);
+
+        // Write data to the pipe
+        assert_eq!(
+            cage.write_syscall(write_fd, write_data.as_ptr(), write_data.len()),
+            write_data.len() as i32
+        );
+
+        // Read the data from the pipe and verify its count.
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            write_data.len() as i32
+        );
+        // Verify if the data returned in the pipe buffer is correct.
+        assert_eq!(cbuf2str(&buf), write_data);
+
+        // Close the file descriptors
+        assert_eq!(cage.close_syscall(read_fd), 0);
+        assert_eq!(cage.close_syscall(write_fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_pipe_nonblocking_mode() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case of reading data from the pipe, but in
+        // non-blocking mode. We create two pipes, i.e., Read and Write and
+        // validate if the data received is correct or not.
+
+        // Create a pipe of read and write file descriptors.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        let write_fd = pipe_fds.writefd;
+
+        let write_data = "Testing";
+        let mut buf = sizecbuf(7);
+
+        // Set pipe to non-blocking mode
+        assert_eq!(cage.fcntl_syscall(read_fd, F_SETFL, O_NONBLOCK), 0);
+
+        // Read from the pipe (should return EAGAIN as there's no data yet)
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            -(Errno::EAGAIN as i32)
+        );
+
+        // Write data to the pipe
+        assert_eq!(
+            cage.write_syscall(write_fd, write_data.as_ptr(), write_data.len()),
+            write_data.len() as i32
+        );
+
+        // Read the data from the pipe and verify its count.
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            write_data.len() as i32
+        );
+        // Verify if the data returned in the pipe buffer is correct.
+        assert_eq!(cbuf2str(&buf), write_data);
+
+        // Close the file descriptors
+        assert_eq!(cage.close_syscall(read_fd), 0);
+        assert_eq!(cage.close_syscall(write_fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_write_only_fd() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test to create a file with write only permissions, and check if
+        // a valid error is returned when the file is used for reading.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_WRONLY, S_IRWXA);
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.pread_syscall(fd, read_buf.as_mut_ptr(), 5, 0),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_from_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests two scenarios for reading from a file using
+        // `pread_syscall()`.
+        // * Reading from a file from the starting position offset(0).
+        // * Reading from a file from a random position offset.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Write sample data to the file.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Set the initial position to 0 in the file descriptor.
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+
+        // Read first 5 bytes from the file, and assert the result.
+        let mut read_buf1 = sizecbuf(5);
+        assert_eq!(cage.pread_syscall(fd, read_buf1.as_mut_ptr(), 5, 0), 5);
+        assert_eq!(cbuf2str(&read_buf1), "hello");
+
+        // Read 5 bytes, but from the 6th position offset of the file.
+        let mut read_buf2 = sizecbuf(5);
+        assert_eq!(cage.pread_syscall(fd, read_buf2.as_mut_ptr(), 5, 6), 5);
+        assert_eq!(cbuf2str(&read_buf2), "there");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_from_directory() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let mut buf = sizecbuf(5);
+
+        // Test for invalid directory should fail
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+        assert_eq!(
+            cage.pread_syscall(fd, buf.as_mut_ptr(), buf.len(), 0),
+            -(Errno::EISDIR as i32)
+        );
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_invalid_types() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let mut buf = sizecbuf(5);
+
+        // Test for invalid pipe
+        // Try reading the data from the pipe and check for error.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        assert_eq!(
+            cage.pread_syscall(read_fd, buf.as_mut_ptr(), buf.len(), 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        // Test for invalid sockets
+        // Try reading the data from the socket and check for error.
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        assert_eq!(
+            cage.pread_syscall(socketpair.sock2, buf.as_mut_ptr(), 4, 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        // Test for invalid epoll
+        // Try reading the data from the epoll and check for error.
+        let epfd = cage.epoll_create_syscall(1);
+        assert_eq!(
+            cage.pread_syscall(epfd, buf.as_mut_ptr(), 5, 0),
+            -(Errno::ESPIPE as i32)
+        );
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 }
