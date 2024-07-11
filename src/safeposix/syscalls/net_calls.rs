@@ -1511,14 +1511,14 @@ impl Cage {
     }
 
     /// ### Description
-    /// 
+    ///
     /// `listen_syscall` listen for connections on a socket
-    /// 
+    ///
     /// ### Arguments
-    /// 
-    /// it accepts two parameters: 
+    ///
+    /// it accepts two parameters:
     /// * `sockfd` - a file descriptor that refers to a socket
-    ///    of type SOCK_STREAM 
+    ///    of type SOCK_STREAM
     ///    Note, we do not implement sockets of type SOCK_SEQPACKET
     /// * `backlog` - defines the maximum length to which the
     ///   queue of pending connections for sockfd may grow.  If a
@@ -1526,41 +1526,41 @@ impl Cage {
     ///   receive an error with an indication of ECONNREFUSED or, if the
     ///   underlying protocol supports retransmission, the request may be
     ///   ignored so that a later reattempt at connection succeeds.
-    /// 
+    ///
     /// ### Returns
-    /// 
+    ///
     /// for a successful call, zero is returned. On error, -errno is
     /// returned and errno is set to indicate the error
-    /// 
+    ///
     /// ### Errors
-    /// 
+    ///
     /// * EADDRINUSE - Another socket is already listening on the same port.
-    /// 
+    ///
     /// * EADDRINUSE - (Internet domain sockets) The socket referred to by sockfd
     ///      had not previously been bound to an address and, upon
     ///      attempting to bind it to an ephemeral port, it was
     ///      determined that all port numbers in the ephemeral port
     ///      range are currently in use.  See the discussion of
     ///      /proc/sys/net/ipv4/ip_local_port_range in ip(7).
-    /// 
+    ///
     /// * EBADF - The argument sockfd is not a valid file descriptor.
-    /// 
+    ///
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
-    /// 
+    ///
     /// * EOPNOTSUPP - The socket is not of a type that supports the listen()
     ///     operation.
-    /// 
+    ///
     /// ### Panics
-    /// 
+    ///
     /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
-    /// * unknown errno value from socket bind sys call from libc in the case 
+    /// * unknown errno value from socket bind sys call from libc in the case
     ///   that the socket isn't assigned an address
     /// * unknown errno value from socket listen sys call from libc
-    /// 
-    /// for more detailed description of all the commands and return values, see 
+    ///
+    /// for more detailed description of all the commands and return values, see
     /// [listen(2)](https://linux.die.net/man/2/listen)
     //
-    // TODO: We are currently ignoring backlog 
+    // TODO: We are currently ignoring backlog
     pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
         //BUG:s
         //If fd is out of range of [0,MAXFD], process will panic
@@ -1607,7 +1607,7 @@ impl Cage {
                         //If the given socket is not connected, it is ready
                         //to begin listening
                         ConnState::NOTCONNECTED => {
-                            //If the given socket is not a TCP socket, then the 
+                            //If the given socket is not a TCP socket, then the
                             //socket can not listen for connections
                             if sockhandle.protocol != IPPROTO_TCP {
                                 return syscall_error(
@@ -1676,8 +1676,8 @@ impl Cage {
                                         panic!("Unknown errno value from socket listen returned!")
                                     }
                                 };
-                                //Remove the tuple of the address, port, and 
-                                //port type from the set of listening ports 
+                                //Remove the tuple of the address, port, and
+                                //port type from the set of listening ports
                                 //as we are returning from an error
                                 //** Why dont we use 'porttuple' as the argument for the key ?? */
                                 NET_METADATA.listening_port_set.remove(&mux_port(
@@ -1692,14 +1692,14 @@ impl Cage {
                                 return lr;
                             };
 
-                            // Set the rawfd for select_syscall as we cannot implement the select 
-                            // logics for AF_INET socket right now, so we have to call the select 
-                            // syscall from libc, which takes the rawfd as the argument instead of 
+                            // Set the rawfd for select_syscall as we cannot implement the select
+                            // logics for AF_INET socket right now, so we have to call the select
+                            // syscall from libc, which takes the rawfd as the argument instead of
                             // the fake fd used by lind.
                             // The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
                             sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
-                            //If listening socket is not in the table of pending 
+                            //If listening socket is not in the table of pending
                             //connections, we must insert it as the key with
                             //an empty vector as the value
                             //We can now track incoming connections
@@ -1714,7 +1714,7 @@ impl Cage {
                     }
                 }
 
-                //Otherwise, the file descriptor refers to something other 
+                //Otherwise, the file descriptor refers to something other
                 //than a socket, return with error
                 _ => {
                     return syscall_error(

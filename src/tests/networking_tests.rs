@@ -670,7 +670,7 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
-    //We try to queue more than 5 connections, as the 
+    //We try to queue more than 5 connections, as the
     //backlog is set to 5. We expect only the first 5 queues to return
     //with success.
     //Currently, the 6th connection returns with EINPROGRESS, while
@@ -719,7 +719,7 @@ pub mod net_tests {
         assert_eq!(cage.connect_syscall(clientsockfd3, &socket), -115);
         assert_eq!(cage.connect_syscall(clientsockfd4, &socket), -115);
         assert_eq!(cage.connect_syscall(clientsockfd5, &socket), -115);
-        assert_eq!(cage.connect_syscall(clientsockfd6, &socket), -111); 
+        assert_eq!(cage.connect_syscall(clientsockfd6, &socket), -111);
 
         assert_eq!(cage.close_syscall(serversockfd), 0);
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
