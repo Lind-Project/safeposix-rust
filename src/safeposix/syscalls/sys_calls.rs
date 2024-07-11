@@ -508,6 +508,10 @@ impl Cage {
     /// `decref_dir` function panics - which occurs when the working directory
     /// passed to it is not a valid directory or the directory did not exist at all. 
     /// or if the cage_id passed to the remove function is not a valid cage id. 
+    /// 
+    /// ### Errors
+    /// 
+    /// This function has no scenario where it returns an error
     pub fn exit_syscall(&self, status: i32) -> i32 {
         //Clear all values in stdout stream
         interface::flush_stdout();
@@ -531,8 +535,10 @@ impl Cage {
         interface::cagetable_remove(self.cageid);
 
         // Check if Lind is being run as a test suite or not
+        // We do this since we only want to 
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // Trigger SIGCHILD if LIND is not run as a test suite
+            // SIGCHILD is simply a response that the parent recieves when it's child process terminates
             if self.cageid != self.parent {
                 interface::lind_kill_from_id(self.parent, SIGCHLD);
             }
