@@ -416,8 +416,7 @@ pub mod fs_tests {
        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
  
     #[test]
     pub fn ut_lind_fs_mmap_no_read() {
@@ -477,8 +476,7 @@ pub mod fs_tests {
        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
  
     #[test]
     pub fn ut_lind_fs_mmap_invalid_offset_len() {
@@ -515,8 +513,7 @@ pub mod fs_tests {
        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
  
     #[test]
     pub fn ut_lind_fs_mmap_chardev() {
@@ -538,8 +535,7 @@ pub mod fs_tests {
        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
  
     #[test]
     pub fn ut_lind_fs_mmap_unsupported_file() {
@@ -561,8 +557,7 @@ pub mod fs_tests {
        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
  
     #[test]
     pub fn ut_lind_fs_mmap_invalid_fildes() {
@@ -588,8 +583,7 @@ pub mod fs_tests {
        
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }
- 
+    } 
  
     #[test]
     pub fn ut_lind_fs_munmap_zerolen() {
@@ -615,7 +609,6 @@ pub mod fs_tests {
         lindrustfinalize();
     }
  
-
     #[test]
     pub fn ut_lind_fs_dir_chdir() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
