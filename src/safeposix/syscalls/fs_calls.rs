@@ -1148,12 +1148,46 @@ impl Cage {
     }
 
     //------------------------------------STAT SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `stat_syscall` retrieves file information for the file specified by
+    /// `path` and populates the provided `statbuf` with this information.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `path` - A string slice that specifies the file path for which status
+    ///   information is to be retrieved.
+    /// * `statbuf` - A mutable reference to a `StatData` struct where the file
+    ///   status will be stored.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0. On error, a negative
+    /// errno is returned to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The file specified by `path` does not exist or the path is
+    ///   invalid.
+    ///
+    /// ### Panics
+    ///
+    /// * If the inode number retrieved from `metawalk` does not exist in
+    ///   `FS_METADATA.inodetable`.
+    /// * If `statbuf` is incorrectly populated, causing potential runtime
+    ///   issues.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the stat man page [here](https://man7.org/linux/man-pages/man2/stat.2.html).
 
     pub fn stat_syscall(&self, path: &str, statbuf: &mut StatData) -> i32 {
+        //convert the path to an absolute path of type `PathBuf`
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
+            // can panic if inode does not exist in inode table
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
             //populate those fields in statbuf which depend on things other than the inode
@@ -1182,6 +1216,8 @@ impl Cage {
         }
     }
 
+    // helper function to populate information of generic inode objects (for example
+    // a file) into the statbuf
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1193,6 +1229,8 @@ impl Cage {
         statbuf.st_blocks = 0;
     }
 
+    // helper function to populate information of socket inode object into the
+    // statbuf
     fn _istat_helper_sock(inodeobj: &SocketInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1204,6 +1242,8 @@ impl Cage {
         statbuf.st_blocks = 0;
     }
 
+    // helper function to populate information of directory inode object into the
+    // statbuf
     fn _istat_helper_dir(inodeobj: &DirectoryInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1215,6 +1255,8 @@ impl Cage {
         statbuf.st_blocks = 0;
     }
 
+    // helper function to populate information of device inode object into the
+    // statbuf
     fn _istat_helper_chr_file(inodeobj: &DeviceInode, statbuf: &mut StatData) {
         statbuf.st_dev = 5;
         statbuf.st_mode = inodeobj.mode;
