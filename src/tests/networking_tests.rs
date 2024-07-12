@@ -680,7 +680,7 @@ pub mod net_tests {
         let cage = interface::cagetable_getref(1);
 
         // error case 1: invalid file descriptor
-        // constrcut a PollStruct with invalid fd (10)
+        // contruct a PollStruct with invalid fd (10)
         let mut polled = vec![interface::PollStruct {
             fd: 10,
             events: POLLIN,
@@ -693,7 +693,7 @@ pub mod net_tests {
         assert_eq!(polled[0].revents, POLLNVAL);
 
         // error case 2: negative file descriptor should be ignored
-        // constrcut a PollStruct with negative fd
+        // contruct a PollStruct with negative fd
         let mut polled = vec![interface::PollStruct {
             fd: -1,
             events: POLLIN,
@@ -721,7 +721,7 @@ pub mod net_tests {
             writefd: -1,
         };
         assert_eq!(cage.pipe2_syscall(&mut pipefds, O_NONBLOCK), 0);
-        // constrcut a PollStruct with three PollStruct:
+        // contruct a PollStruct with three PollStruct:
         // 1. normal file with non-zero revents, test for revents when the fd is ready
         // 2. negative fd with non-zero revents, even this fd should be ignored, its
         //    revents should still be cleared
@@ -764,7 +764,7 @@ pub mod net_tests {
         let cage = interface::cagetable_getref(1);
 
         // subtest 1: poll when timeout could expire
-        // create a TCP AF_UNIX socket
+        // create a TCP AF_INET socket
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         assert!(serversockfd > 0);

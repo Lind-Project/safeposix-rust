@@ -2898,24 +2898,26 @@ impl Cage {
 
     /// ## ------------------POLL SYSCALL------------------
     /// ### Description
-    /// poll_syscall performs a similar task to poll_syscall: it waits for
+    /// poll_syscall performs a similar task to select_syscall: it waits for
     /// one of a set of file descriptors to become ready to perform I/O.
 
     /// ### Function Arguments
     /// The `poll_syscall()` receives two arguments:
     /// * `fds` - The set of file descriptors to be monitored is specified in
     ///   the fds argument, which is an array of PollStruct structures
-    ///   containing three fields: fd, events and revents. The field fd contains
-    ///   a file descriptor for an open file. If this field is negative, then
-    ///   the corresponding events field is ignored and the revents field
-    ///   returns zero. The field events is an input parameter, a bit mask
-    ///   specifying the events the application is interested in for the file
-    ///   descriptor fd. The bits returned in revents can include any of those
-    ///   specified in events, or POLLNVAL. The bits that may be set/returned in
-    ///   events and revents are: 1. POLLIN: There is data to read. 2. POLLPRI:
-    ///   There is some exceptional condition on the file descriptor, currently
-    ///   not supported 3. POLLOUT: Writing is now possible, though a write
-    ///   larger than the available space in a socket or pipe will still block
+    ///   containing three fields: fd, events and revents. events and revents
+    ///   are requested events and returned events, respectively. The field fd
+    ///   contains a file descriptor for an open file. If this field is
+    ///   negative, then the corresponding events field is ignored and the
+    ///   revents field returns zero. The field events is an input parameter, a
+    ///   bit mask specifying the events the application is interested in for
+    ///   the file descriptor fd. The bits returned in revents can include any
+    ///   of those specified in events, or POLLNVAL. The bits that may be
+    ///   set/returned in events and revents are: 1. POLLIN: There is data to
+    ///   read. 2. POLLPRI: There is some exceptional condition on the file
+    ///   descriptor, currently not supported 3. POLLOUT: Writing is now
+    ///   possible, though a write larger than the available space in a socket
+    ///   or pipe will still block
     ///   4. POLLNVAL: Invalid request: fd not open (only returned in revents;
     ///   ignored in events).
     /// * `timeout` - The timeout argument is a RustDuration structure that
@@ -2942,6 +2944,8 @@ impl Cage {
         fds: &mut [PollStruct],
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
+        // timeout is supposed to be in milliseconds
+
         // current implementation of poll_syscall is based on select_syscall
         // which gives several issues:
         // 1. according to standards, select_syscall should only support file descriptor
