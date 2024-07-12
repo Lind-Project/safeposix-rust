@@ -3002,6 +3002,8 @@ pub mod net_tests {
     pub fn ut_lind_net_epoll_create_bad_input() {
         // this test is used for testing epoll_create_syscall with error/edge cases
         // specifically
+        // following tests are performed:
+        // 1. test for errno with invalid size argument
 
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -3020,6 +3022,18 @@ pub mod net_tests {
     pub fn ut_lind_net_epoll_ctl_bad_input() {
         // this test is used for testing epoll_ctl_syscall with error/edge cases
         // specifically
+        // following tests are performed:
+        // 1. test for errno with invalid fd number
+        // 2. test for errno with invalid epfd number
+        // 3. test for errno with out of range fd number
+        // 4. test for errno with out of range epfd number
+        // 5. test for errno when epfd is not epoll instance
+        // 6. test for errno when epfd and fd are the same
+        // 7. test for errno when fd is a file fd
+        // 8. test for errno when trying to modify a fd that does not added to set
+        // 9. test for errno when trying to delete a fd that does not added to set
+        // 10. test for errno when trying to add a fd that already added to the set
+        // 11. test for errno when passing invalid flag
 
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -3214,6 +3228,11 @@ pub mod net_tests {
     pub fn ut_lind_net_epoll_wait_bad_input() {
         // this test is used for testing epoll_wait_syscall with error/edge cases
         // specifically
+        // following tests are performed:
+        // 1. test for errno with out of range fd number
+        // 2. test for errno with invalid fd number
+        // 3. test for errno when fd is not an epoll instance
+        // 4. test for errno with invalid maxevents argument
 
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -3414,6 +3433,9 @@ pub mod net_tests {
     pub fn ut_lind_net_epoll_timeout() {
         // this test is used for testing timeout argument of epoll_wait_syscall
         // specifically
+        // following tests are performed:
+        // 1. test for epoll_wait when timeout could expire
+        // 2. test for epoll_wait when not fd is monitored but timeout is set
 
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup

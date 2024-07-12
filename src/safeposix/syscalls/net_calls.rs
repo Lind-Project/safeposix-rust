@@ -2996,10 +2996,11 @@ impl Cage {
     /// ## ------------------EPOLL_CREATE SYSCALL------------------
     /// ### Description
     /// epoll_create_syscall creates a new epoll instance: it waits for
-    /// one of a set of file descriptors to become ready to perform I/O.
+    /// one of the file descriptors from the sets to become ready to perform
+    /// I/O.
 
     /// ### Function Arguments
-    /// The `epoll_create_syscall()` receives two arguments:
+    /// The `epoll_create_syscall()` receives one argument:
     /// * `size` - the size argument is a legacy argument in Linux and is
     ///   ignored, but must be greater than zero
 
@@ -3028,7 +3029,7 @@ impl Cage {
     /// ### Description
     /// This system call is used to add, modify, or remove entries in the
     /// interest list of the epoll instance referred to by the file
-    /// descriptor epfd.  It requests that the operation op be performed for the
+    /// descriptor epfd.  It requests the operation op to be performed for the
     /// target file descriptor, fd.
 
     /// ### Function Arguments
@@ -3092,7 +3093,7 @@ impl Cage {
                 // standard says EINVAL should be returned when fd equals to epfd
                 // must check before trying to get the read lock of fd
                 // otherwise deadlock would occur (trying to get read lock while the
-                // same fd is already hold with write hold)
+                // same fd is already hold with write lock)
                 if fd == epfd {
                     return syscall_error(
                         Errno::EINVAL,
@@ -3126,7 +3127,7 @@ impl Cage {
                         );
                     }
                 } else {
-                    // fd is not an valid file descriptor
+                    // fd is not a valid file descriptor
                     return syscall_error(
                         Errno::EBADF,
                         "epoll ctl",
@@ -3218,7 +3219,8 @@ impl Cage {
 
     /// ### Function Arguments
     /// The `epoll_wait_syscall()` receives four arguments:
-    /// * `epfd` - the epoll file descriptor to be applied the action
+    /// * `epfd` - the epoll file descriptor on which the action is to be
+    ///   performed
     /// * `events` - The buffer of array of EpollEvent used to store returned
     ///   information from the ready list about file descriptors in the interest
     ///   list that have some events available
@@ -3251,21 +3253,21 @@ impl Cage {
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
         // current implementation of epoll is still based on poll_syscall,
-        // we are essentially transform the epoll input to poll input then
-        // feed into poll_syscall, and transform the poll_syscall output
+        // we are essentially transforming the epoll input to poll input then
+        // feeding into poll_syscall, and transforming the poll_syscall output
         // back to epoll result. Such method gives several issues:
         // 1. epoll is supposed to support a brand new mode called edge-triggered
-        // mode, which only consider a fd to be ready only when new changes are made
+        // mode, which only considers a fd to be ready only when new changes are made
         // to the fd. Currently, we do not support this feature
         // 2. several flags, such as EPOLLRDHUP, EPOLLERR, etc. are not supported
-        // since poll_syscall currently do not support for these flags, so epoll_syscall
-        // that rely on poll_syscall would subsequently not able to support them
+        // since poll_syscall currently does not support these flags, so epoll_syscall
+        // that relies on poll_syscall, as a consequence, does not support them
 
         // first check the fds are within the valid range
         if epfd < 0 || epfd >= MAXFD {
             return syscall_error(
                 Errno::EBADF,
-                "epoll ctl",
+                "epoll wait",
                 "provided epoll fd is not a valid file descriptor",
             );
         }
@@ -3274,7 +3276,7 @@ impl Cage {
         let checkedfd = self.get_filedescriptor(epfd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            // check if epfd is an valid Epoll object
+            // check if epfd is a valid Epoll object
             if let Epoll(epollfdobj) = filedesc_enum {
                 // maxevents should be larger than 0
                 if maxevents <= 0 {
@@ -3332,7 +3334,7 @@ impl Cage {
                     return pollret;
                 }
                 // the counter is used for making sure the number of returned ready fds
-                // is smaller or equal than maxevents
+                // is smaller than or equal to maxevents
                 let mut count = 0;
                 for result in poll_fds_slice.iter() {
                     // transform the poll result into epoll result
