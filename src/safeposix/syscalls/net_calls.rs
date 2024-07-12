@@ -322,8 +322,7 @@ impl Cage {
                 //Failure occured upon setting a socket option
                 //Possible failures can be read at the man page linked above
                 //
-                // TODO: Possibly add errors instead of having a single panic for all errors ???
-                // ** //
+                //TODO: Possibly add errors instead of having a single panic for all errors
                 if sockret < 0 {
                     panic!("Cannot handle failure in setsockopt on socket creation");
                 }
@@ -385,8 +384,9 @@ impl Cage {
     /// * ENOMEM - Insufficient kernel memory was available.
     /// * ENOTDIR - A component of the path prefix is not a directory.
     /// * EROFS - The socket inode would reside on a read-only filesystem.
-    // ** should this comment be left ?? : we assume we've converted into a
-    // RustSockAddr in the dispatcher
+    //
+    // ** Should this comment be left ??: 
+    //    we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
@@ -485,7 +485,7 @@ impl Cage {
                 if let Inode::Dir(ref mut dir) =
                     *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                 {
-                    //Add file type flags and user read,write,execute permission flags ***
+                    //Add file type flags and user read,write,execute permission flags
                     let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
                     //Add file type constant of a socket
                     let effective_mode = S_IFSOCK as u32 | mode;
@@ -642,7 +642,7 @@ impl Cage {
         }
     }
     
-    // ** Why is this its own function? it seems incredibly similar to assign_new_addr ** //
+    //Assign address in unix domain
     fn assign_new_addr_unix(sockhandle: &SocketHandle) -> interface::GenSockaddr {
         //If the socket handle has a local address set, return a clone of the addr. 
         //This is because we do not want to assign a new address to a socket that is already assigned one
@@ -682,7 +682,7 @@ impl Cage {
         } else {
             let mut newremote: interface::GenSockaddr;
             //This is the specified behavior for the berkeley sockets API
-            //** Let's try to get a link to the berkeley sockets API ??? ** //
+            //Learn more about BSD at https://web.mit.edu/macdev/Development/MITSupportLib/SocketsLib/Documentation/sockets.html
             match domain {
                 AF_UNIX => {
                     //path will be in the format of /sockID, where ID is of type
@@ -699,12 +699,13 @@ impl Cage {
                 }
                 AF_INET => {
                     //Initialize and assign values to the remote address for a connection
+                    //if a process binds to 0.0.0.0, all incoming connection to 
+                    //this machine are forwarded to this process
                     newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
                     let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
                     newremote.set_addr(addr);
                     newremote.set_family(AF_INET as u16);
                     //Arguments being passed in ...
-                    // ** Why are we setting an addr to default and then cloning it ?? ** //
                     //port is set to 0 to use any available port
                     //Possible protocols are IPPROTO_UDP and IPPROTO_TCP
                     //Will panic for unknown protocols 
@@ -723,12 +724,13 @@ impl Cage {
                 }
                 AF_INET6 => {
                     //Initialize and assign values to the remote address for a connection
+                    //if a process binds to [0; 16] all incoming connection to 
+                    //this machine are forwarded to this process
                     newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
                     let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
                     newremote.set_addr(addr);
                     newremote.set_family(AF_INET6 as u16);
                     //Arguments being passed in ...
-                    // ** Why are we setting an addr to default and then cloning it ?? ** //
                     //port is set to 0 to use any available port
                     //Possible protocols are IPPROTO_UDP and IPPROTO_TCP
                     //Will panic for unknown protocols 
@@ -903,9 +905,6 @@ impl Cage {
                 //Note, assign_new_addr expects a reference to SocketHandle, but sockhandle is a mut reference.
                 //This is why we need to dereference and reference the sockhandle pointer
                 //An error occurs if the sockhandle domain is not AF_UNIX, AF_INET, AF_INET6
-                //
-                // ** The function assign_new_addr calls the new address a remote addr 
-                // but here we are assigning it to localaddr. The variable names are a bit confusing **/
                 let localaddr = match Self::assign_new_addr(
                     &*sockhandle,
                     sockhandle.domain,
@@ -917,8 +916,11 @@ impl Cage {
 
                 //Set up the connection with the local address
                 let bindret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
-                // udp now connected so lets set rawfd for select
-                // ** What does it mean to set rawfd for select in the comment above?? ** //
+                // Set the rawfd for select_syscall as we cannot implement the select
+                // logics for AF_INET socket right now, so we have to call the select
+                // syscall from libc, which takes the rawfd as the argument instead of
+                // the fake fd used by lind.
+                // The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
                 sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 return bindret;
             }
@@ -1035,7 +1037,7 @@ impl Cage {
             connvar.unwrap().wait();
         }
         //return 0 to indicate success in the connection
-        return 0; //** Would a Rustacean use the key word return or simply put 0 ??? **/
+        return 0; //successfull TCP connection over Unix domain
     }
 
     //The function sets up a connection on a TCP socket with an inet address family
@@ -1140,7 +1142,6 @@ impl Cage {
         // syscall from libc, which takes the rawfd as the argument instead of 
         // the fake fd used by lind.
         // The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
-        // ** Will this ever cause issues of indexing into an fd that is already set by lind ?? ** //
         sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
         if inprogress {
             sockhandle.state = ConnState::INPROGRESS;
@@ -1150,7 +1151,7 @@ impl Cage {
                 "The libc call to connect is in progress.",
             );
         } else {
-            return 0;
+            return 0; //successfull TCP connection over INET domain
         }
     }
 
