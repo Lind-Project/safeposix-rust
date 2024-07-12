@@ -212,7 +212,7 @@ impl Cage {
                     );
                 }
                 match domain {// Handles different communication domains in this case PF_INET/PF_UNIX 
-                    PF_INET | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
+                    PF_INET | PF_INET6 | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
                         //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same
                         //https://man7.org/linux/man-pages/man2/socket.2.html
                         let sockfdobj = self._socket_initializer(
@@ -254,7 +254,7 @@ impl Cage {
                 // that applications not creating other socket types which may lead to security issues. 
                 //By using the match statement,  SafePOSIX ensures that only these approved socket types are allowed.
                 match domain {// Handles different communication domains in this case PF_INET/PF_UNIX 
-                    PF_INET | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
+                    PF_INET | PF_INET6 | PF_UNIX => {// Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
                         //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same 
                         //https://man7.org/linux/man-pages/man2/socket.2.html
                         let sockfdobj = self._socket_initializer(
