@@ -248,7 +248,7 @@ impl Cage {
                     Socket(socket_filedesc_obj) => {
                         // Check if it is a domain socket
                         let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
+                        let sockhandle = sock_tmp.write();
                         let socket_type = sockhandle.domain;
                         //Here we only increment the reference for AF_UNIX socket type
                         //Since these are the only sockets that have an inode associated with them
