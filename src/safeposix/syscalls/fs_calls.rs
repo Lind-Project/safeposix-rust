@@ -5083,25 +5083,53 @@ impl Cage {
         shmid 
     }
 
-    //------------------SHMAT SYSCALL------------------
 
+    /// ### Description
+    /// 
+    /// The `shmat_syscall` maps the shared memory segment associated with the shared memory 
+    /// identifer onto the address space of the calling Cage object. The address to which the
+    /// segment is mapped is given by the `shmaddr` parameter of this function.
+    /// 
+    /// ### Arguments
+    /// 
+    /// `shmid` : identifier of the memory segment to be mapped
+    /// `shmaddr` : Address in the address space of the calling Cage where the segment is to be mapped
+    /// `shmflag` : Flag which indicates if the memory segment to be mapped is readonly or not
+    /// 
+    /// ### Returns 
+    /// 
+    /// Returns the address at which the memory segment has been mapped into
+    /// 
+    /// ### Errors 
+    /// 
+    /// * `EINVAL` : If the shmid passed as an argument is an invalid identifier
+    /// 
+    /// ### Panics
+    /// 
+    /// Currently there are no scenarios where the function panics
+    /// 
+    /// For more information - refer the documentation at [https://man7.org/linux/man-pages/man3/shmat.3p.html]
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
+        // Get shm table
         let metadata = &SHM_METADATA;
         let prot: i32;
+        // Check if the shmid passed points to a valid table entry
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+            // Check if the readonly flag is set or not
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             } else {
                 prot = PROT_READ | PROT_WRITE;
             }
+            // Aquire a mutex lock on the reverse memory mappings
             let mut rev_shm = self.rev_shm.lock();
+            // Push a reverse mapping of shmaddr -> shmid the processes's reverse mapping table
             rev_shm.push((shmaddr as u32, shmid));
             drop(rev_shm);
 
-            // update semaphores
+            // Clone semaphores that the memory segment holds into the current calling process
             if !segment.semaphor_offsets.is_empty() {
-                // lets just look at the first cage in the set, since we only need to grab the
-                // ref from one
+                // Since all processes that share this segment hold all the semaphores - we only need to grab them from one cage
                 if let Some(cageid) = segment
                     .attached_cages
                     .clone()
@@ -5109,9 +5137,13 @@ impl Cage {
                     .keys()
                     .next()
                 {
+                    // Get the first cage associated with the memory segment
                     let cage2 = interface::cagetable_getref(*cageid);
+                    // Get the reverse memory mappings
                     let cage2_rev_shm = cage2.rev_shm.lock();
-                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
+                    // Find all addresses associated with the shmid of the memory segment
+                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid);
+                    
                     for offset in segment.semaphor_offsets.iter() {
                         let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
                         self.sem_table.insert(shmaddr as u32 + *offset, sementry);
