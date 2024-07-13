@@ -39,7 +39,7 @@ use super::net_constants::*;
 use super::sys_constants::*;
 use crate::interface;
 use crate::safeposix::cage::{FileDescriptor::*, *};
-use crate::safeposix::filesystem::{decref_dir, metawalk, Inode, FS_METADATA};
+use crate::safeposix::filesystem::{metawalk, Inode, FS_METADATA};
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::SHM_METADATA;
 
@@ -529,8 +529,6 @@ impl Cage {
         //For all inodes to which the current cage object points to
         //Decrement their reference count
         decref_dir(&*cwd_container);
-
-        //may not be removable in case of lindrustfinalize, we don't unwrap the remove
         //Remove the current cage object from the cage table
         interface::cagetable_remove(self.cageid);
 
