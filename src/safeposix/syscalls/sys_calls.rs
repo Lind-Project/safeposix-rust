@@ -524,9 +524,6 @@ impl Cage {
             self._close_helper(fd);
         }
 
-        //Read the current working directory (acquire a lock)
-        let cwd_container = self.cwd.read();
-        //For all inodes to which the current cage object points to
         //Remove the current cage object from the cage table
         interface::cagetable_remove(self.cageid);
 
