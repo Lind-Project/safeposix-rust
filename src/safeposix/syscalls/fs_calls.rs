@@ -2381,15 +2381,59 @@ impl Cage {
         }
     }
 
-    //------------------------------------FCHDIR SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `fchdir_syscall()` function changes the current working
+    /// directory of the calling process to the directory specified
+    /// by an open file descriptor `fd`.
+    ///
+    /// ### Arguments
+    ///
+    /// The `fchdir_syscall()` accepts one argument:
+    /// * `fd` - an open file descriptor that specifies the directory
+    /// to which we want to change the current working directory.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENOTDIR`, `EBADF`, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - fd is not a valid file descriptor.
+    /// * `ENOTDIR` - the open file descriptor fildes does not refer to a directory.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on which
+    /// causes a panic.
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [fchdir(2)](https://linux.die.net/man/2/fchdir)
 
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
-
+        //If a table descriptor entry corresponds to a file, we check if it is
+        //a directory file type. If it is not, we return `A component of path is
+        //not a directory` error.
+        //If it is one of the special file types, we return `Cannot change working
+        //directory on this file descriptor` error.
+        //Finally, if it does not correspond to any file type, we return `Invalid file
+        //descriptor` error.
         let path_string = match &*unlocked_fd {
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
             Some(File(normalfile_filedesc_obj)) => {
                 let inodenum = normalfile_filedesc_obj.inode;
+                //`pathnamefrominodenum` resolves the absolute path of a directory
+                //from its inode and returns None in case any of the path components
+                //is not a directory
                 match pathnamefrominodenum(inodenum) {
                     Some(name) => name,
                     None => {
@@ -2403,31 +2447,76 @@ impl Cage {
             }
             Some(_) => {
                 return syscall_error(
-                    Errno::EACCES,
+                    Errno::ENOTDIR,
                     "fchdir",
-                    "cannot change working directory on this file descriptor",
+                    "the file descriptor does not refer to a directory",
                 )
-            }
-            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+            },
         };
-
+        //Obtain the write lock on the current working directory of the cage
+        //and change it to the new directory
         let mut cwd_container = self.cwd.write();
-
-        *cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+        *cwd_container = interface::RustRfc::new(normpath(convpath(path_string.as_str()), self));
 
         0 // fchdir success
     }
 
-    //------------------------------------CHDIR SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `chdir_syscall()` function changes the current working
+    /// directory of the calling process to the directory specified
+    /// in `path`, which can be an absolute or a relative pathname.
+    ///
+    /// ### Arguments
+    ///
+    /// The `chdir_syscall()` accepts one argument:
+    /// * `path` - the pathname, to which the current working
+    /// directory shall be changed.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOTDIR` - a component of `path` is not a directory.
+    /// * `ENOENT` - the directory specified in path does not exist.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// * when the previous working directory does not exist or does not
+    /// have the directory file type flag, the function panics
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [chdir(2)](https://man7.org/linux/man-pages/man2/chdir.2.html)
 
     pub fn chdir_syscall(&self, path: &str) -> i32 {
+        //Convert the provided pathname into an absolute path without `.` or `..`
+        //components.
         let truepath = normpath(convpath(path), self);
-        //Walk the file tree to get inode from path
+        //Perfrom a walk down the file tree starting from the root directory to
+        //obtain an inode number of the file whose pathname was specified.
+        //`None` is returned if one of the following occurs while moving down
+        //the tree: 
+        //1. Accessing a child of a non-directory inode 
+        //2. Accessing a child of a nonexistent parent directory
+        //3. Accessing a nonexistent child
+        //4. Accessing an unexpected component, like `.` or `..` directory reference.
+        //In this case, `The file does not exist` error is returned.
+        //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(&truepath) {
-            if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
-                //increment refcount of new cwd inode to ensure that you can't remove a
-                // directory while it is the cwd of a cage
-                dir.refcount += 1;
+            //A sanity check to make sure that the last component of the
+            //specified path is indeed a directory
+            if let Inode::Dir(ref mut _dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap())
+            {
+                //Obtain the write lock on the current working directory of the cage
+                //and change it to the new directory
+                let mut cwd_container = self.cwd.write();
+                *cwd_container = interface::RustRfc::new(truepath);
+                0 //chdir has succeeded!;
             } else {
                 return syscall_error(
                     Errno::ENOTDIR,
@@ -2442,15 +2531,6 @@ impl Cage {
                 "the directory referred to in path does not exist",
             );
         }
-        //at this point, syscall isn't an error
-        let mut cwd_container = self.cwd.write();
-
-        //decrement refcount of previous cwd's inode, to allow it to be removed if no
-        // cage has it as cwd
-        decref_dir(&*cwd_container);
-
-        *cwd_container = interface::RustRfc::new(truepath);
-        0 //chdir has succeeded!;
     }
 
     ///##------------------------------------DUP & DUP2 SYSCALLS------------------------------------
