@@ -3541,6 +3541,9 @@ impl Cage {
                         .unwrap();
                     //Confirm inode type is mappable
                     match &*inodeobj {
+                        Inode::CharDev(_chardev_inode_obj) => {
+                            syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
+                        }
                         Inode::File(normalfile_inode_obj) => {
                             //For any kind of memory mapping, the file should be
                             //opened for reading, so if it was opened for write
@@ -3567,9 +3570,6 @@ impl Cage {
                             //to the actual file descriptor stored in the host's filesystem.
                             let fobjfdno = fobj.as_fd_handle_raw_int();
                             interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
-                        }
-                        Inode::CharDev(_chardev_inode_obj) => {
-                            syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
                         }
                         _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
                     }
@@ -3617,7 +3617,7 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// * `EINVAL` - the value of len is 0 o
+    /// * `EINVAL` - the value of len is 0
     /// Other `EINVAL` errors are returned directly from the  call to
     /// `libc_mmap`
     ///
