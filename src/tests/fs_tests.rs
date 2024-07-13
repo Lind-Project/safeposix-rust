@@ -651,28 +651,151 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_dir_chdir() {
+    pub fn ut_lind_fs_chdir_valid_args() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
 
-        //testing the ability to make and change to directories
+        //Testing the ability to make and change to directories
+        //using absolute and relative and `..` reference
 
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
-        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2/subdir3", 0), 0);
 
-        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
+        //Changing to a new current working directory, and then obtaining
+        //the current working directory using `getcwd_syscall()` to see
+        //if it was correctly changed
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        let mut buf1 = vec![0u8; 9];
+        let bufptr1: *mut u8 = &mut buf1[0];
+        assert_eq!(cage.getcwd_syscall(bufptr1, 9), 0);
+        assert_eq!(std::str::from_utf8(&buf1).unwrap(), "/subdir1\0");
+
+        assert_eq!(cage.chdir_syscall("/subdir1/subdir2"), 0);
+        assert_eq!(cage.chdir_syscall(".."), 0);
+        let mut buf1 = vec![0u8; 9];
+        let bufptr1: *mut u8 = &mut buf1[0];
+        assert_eq!(cage.getcwd_syscall(bufptr1, 9), 0);
+        assert_eq!(std::str::from_utf8(&buf1).unwrap(), "/subdir1\0");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_chdir_removeddir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Checking if removing the current working directory
+        //works correctly
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir2", S_IRWXA), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        assert_eq!(cage.rmdir_syscall("/subdir1"), 0);
+        assert_eq!(cage.chdir_syscall("/subdir2"), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_chdir_invalid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/TestFile1";
+        let _fd1 = cage.open_syscall(filepath, flags, 0);
+
+        //Checking if passing a regular file pathname correctly
+        //returns `The last component in path is not a directory` error
+        assert_eq!(cage.chdir_syscall("/TestFile1"), -(Errno::ENOTDIR as i32));
+
+        //Checking if a nonexistent pathname correctly
+        //returns `The directory referred to in path does not exist` error.
+        //`/arbitrarypath` is a pathname that does not correspond to any existing
+        //directory pathname.
+        assert_eq!(
+            cage.chdir_syscall("/arbitrarypath"),
+            -(Errno::ENOENT as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_fchdir_valid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Testing the ability to make and change to directories
+        //using file descriptors
+
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
+
+        //Retrieving a valid directory file descriptor
+        let fd1 = cage.open_syscall("/subdir1", O_RDWR, S_IRWXA);
+        let fd2 = cage.open_syscall("/subdir1/subdir2", O_RDWR, S_IRWXA);
+
+        //Changing to a new current working directory, and then obtaining
+        //the current working directory using `getcwd_syscall()` to see
+        //if it was correctly changed
+        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
+        assert_eq!(cage.fchdir_syscall(fd1), 0);
+        let mut buf1 = vec![0u8; 9];
+        let bufptr1: *mut u8 = &mut buf1[0];
+        assert_eq!(cage.getcwd_syscall(bufptr1, 9), 0);
+        assert_eq!(std::str::from_utf8(&buf1).unwrap(), "/subdir1\0");
 
         assert_eq!(cage.access_syscall("subdir2", F_OK), 0);
-        assert_eq!(cage.chdir_syscall(".."), 0);
+        assert_eq!(cage.fchdir_syscall(fd2), 0);
+        let mut buf2 = vec![0u8; 17];
+        let bufptr2: *mut u8 = &mut buf2[0];
+        assert_eq!(cage.getcwd_syscall(bufptr2, 17), 0);
+        assert_eq!(std::str::from_utf8(&buf2).unwrap(), "/subdir1/subdir2\0");
 
-        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
-        assert_eq!(cage.chdir_syscall("/subdir1/subdir2/subdir3"), 0);
-        assert_eq!(cage.access_syscall("../../../subdir1", F_OK), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_fchdir_invalid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/TestFile1";
+        let fd1 = cage.open_syscall(filepath, flags, 0);
+
+        //Checking if passing a regular file descriptor correctly
+        //returns `The last component in path is not a directory` error
+        assert_eq!(cage.fchdir_syscall(fd1), -(Errno::ENOTDIR as i32));
+
+        //Checking if passing an invalid file descriptor correctly
+        //results in `Invalid file descriptor` error
+        //Since the file corresponding to file descriptor `fd1` is closed,
+        //and no other file is opened after that, `fd1` file descriptor
+        //should be invalid
+        assert_eq!(cage.close_syscall(fd1), 0);
+        assert_eq!(cage.fchdir_syscall(fd1), -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
