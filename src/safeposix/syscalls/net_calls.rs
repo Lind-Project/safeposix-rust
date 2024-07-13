@@ -3244,7 +3244,7 @@ impl Cage {
     ///
     /// ### Panics
     /// * when maxevents is larger than the size of events, index_out_of_bounds
-    ///   error would be raised
+    ///   panic may occur
     pub fn epoll_wait_syscall(
         &self,
         epfd: i32,
@@ -3309,12 +3309,15 @@ impl Cage {
                         revents: 0,
                     };
                     // check for each supported event
+                    // EPOLLIN: if the fd is ready to read
                     if events & EPOLLIN as u32 > 0 {
                         structpoll.events |= POLLIN;
                     }
+                    // EPOLLOUT: if the fd is ready to write
                     if events & EPOLLOUT as u32 > 0 {
                         structpoll.events |= POLLOUT;
                     }
+                    // EPOLLPRI: if the fd has any exception?
                     if events & EPOLLPRI as u32 > 0 {
                         structpoll.events |= POLLPRI;
                     }
@@ -3338,7 +3341,7 @@ impl Cage {
                 let mut count = 0;
                 for result in poll_fds_slice.iter() {
                     // transform the poll result into epoll result
-                    // poll_event is used for marking if the fd is ready
+                    // poll_event is used for marking if the fd is ready for something
                     let mut poll_event = false;
                     let mut event = EpollEvent {
                         events: 0,
