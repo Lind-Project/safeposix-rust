@@ -2423,7 +2423,7 @@ impl Cage {
         //If a table descriptor entry corresponds to a file, we check if it is
         //a directory file type. If it is not, we return `A component of path is
         //not a directory` error.
-        //If it is one of the special file types, wwe return `Cannot change working
+        //If it is one of the special file types, we return `Cannot change working
         //directory on this file descriptor` error.
         //Finally, if it does not correspond to any file type, we return `Invalid file
         //descriptor` error.
