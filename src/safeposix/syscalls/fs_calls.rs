@@ -2428,6 +2428,7 @@ impl Cage {
         //Finally, if it does not correspond to any file type, we return `Invalid file
         //descriptor` error.
         let path_string = match &*unlocked_fd {
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
             Some(File(normalfile_filedesc_obj)) => {
                 let inodenum = normalfile_filedesc_obj.inode;
                 //`pathnamefrominodenum` resolves the absolute path of a directory
@@ -2450,8 +2451,7 @@ impl Cage {
                     "fchdir",
                     "the file descriptor does not refer to a directory",
                 )
-            }
-            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+            },
         };
         //Obtain the write lock on the current working directory of the cage
         //and change it to the new directory
