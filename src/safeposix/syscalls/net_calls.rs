@@ -403,9 +403,6 @@ impl Cage {
     /// * ENOMEM - Insufficient kernel memory was available.
     /// * ENOTDIR - A component of the path prefix is not a directory.
     /// * EROFS - The socket inode would reside on a read-only filesystem.
-    //
-    // ** Should this comment be left ??:
-    //    we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
@@ -691,11 +688,6 @@ impl Cage {
     //Return a new address based on the domain of the socket handle
     //If a socket handle contains a local address, return a clone of the local
     // address
-
-    //** I've seen checks previously that make sure the input domain matches the
-    //** domain
-    // of the sockhandle. Possibly consider adding it in the function at the
-    // beginning? **/
     fn assign_new_addr(
         sockhandle: &SocketHandle,
         domain: i32,
