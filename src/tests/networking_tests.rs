@@ -538,7 +538,10 @@ pub mod net_tests {
     //Test connect sys call using AF_INET6/IPv6 address family and UDP socket type
     //Currently failing as IPv6 is not implemented via gen_netdevs
     pub fn ut_lind_net_connect_basic_udp_ipv6() {
-        lindrustinit(0);
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        
         let cage = interface::cagetable_getref(1);
 
         //Initialize initial socket fd and remote socket to connect to
