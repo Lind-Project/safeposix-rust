@@ -314,7 +314,7 @@ impl Cage {
     pub fn force_innersocket(sockhandle: &mut SocketHandle) {
         //The innersocket is an Option wrapped around the raw sys fd
         //Depending on domain, innersocket may or may not be necessary
-        //Ex: Unix sockets do not have a kernal fd
+        //Ex: Unix sockets do not have a kernel fd
         //If innersocket is not available, then create a socket and insert its
         //fd into innersocket
         if let None = sockhandle.innersocket {
@@ -974,7 +974,7 @@ impl Cage {
                 // syscall from libc, which takes the rawfd as the argument instead of
                 // the fake fd used by lind.
                 // The raw fd of the socket is the set to be the same as the fd set by the
-                // kernal in the libc connect call
+                // kernel in the libc connect call
                 sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 return bindret;
             }
@@ -1203,7 +1203,7 @@ impl Cage {
         // syscall from libc, which takes the rawfd as the argument instead of
         // the fake fd used by lind.
         // The raw fd of the socket is the set to be the same as the fd set by the
-        // kernal in the libc connect call
+        // kernel in the libc connect call
         sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
         if inprogress {
             sockhandle.state = ConnState::INPROGRESS;
