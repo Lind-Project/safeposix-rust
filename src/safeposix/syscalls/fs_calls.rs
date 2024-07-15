@@ -3504,7 +3504,70 @@ impl Cage {
         }
     }
 
-    //------------------------------------MMAP SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `mmap_syscall()` function creates a new mapping in the
+    /// virtual address space of the calling process.
+    ///
+    /// ### Arguments
+    ///
+    /// The `mmap_syscall()` accepts six arguments:
+    /// * `addr` - the starting address for the new mapping. If `addr`
+    /// is NULL, then the kernel chooses the (page-aligned) address at
+    /// which to create the mapping. If addr is not NULL, then the
+    /// kernel takes it as a hint about where to place the mapping.
+    /// * `len` - specifies the length of the mapping (which must be
+    /// greater than 0).
+    /// * `prot` - describes the desired memory protection of the
+    /// mapping, which must not conflict with the open mode of the file.
+    /// It is either `PROT_NONE` or the bitwise OR of one or more of the
+    /// following flags: `PROT_EXEC` (Pages may be executed), `PROT_READ`
+    /// (Pages may be read), `PROT_WRITE` (Pages may be written), `PROT_NONE`
+    /// (Pages may not be accessed).
+    /// * `flags` - determines whether updates to the mapping are visible
+    /// to other processes mapping the same region, and whether updates are
+    /// carried through to the underlying file. This behavior is determined
+    /// by including exactly one of the following values in flags: `MAP_SHARED`
+    /// (Share this mapping. Updates to the mapping are visible to other
+    /// processes mapping the same region, and in the case of file-backed
+    /// mappings are carried through to the underlying file) or `MAP_PRIVATE`
+    /// (Create a private copy-on-write mapping. Updates to the mapping are
+    /// not visible to other processes mapping the same file, and are not
+    /// carried through to the underlying file). `MAP_SHARED_VALIDATE` and
+    /// other flags are not validated in the current implementation but
+    /// are supported by the underlying `libc_mmap()` syscall.
+    /// * `filedes` - a file descriptor specifying the file that shall be
+    /// mapped.
+    /// * `off` - designates the offset in the file from which the mapping
+    /// should start.
+    ///
+    /// ### Returns
+    ///
+    /// On success, `mmap_syscall()` returns a pointer to the mapped area.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EINVAL, ERANGE, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the value of len is 0 or `flags` contained neither
+    /// `MAP_PRIVATE` nor `MAP_SHARED` or `flags` contained both
+    /// `MAP_PRIVATE` and `MAP_SHARED`.
+    /// * `EACCES` - `fildes` is not open for reading or `MAP_SHARED`
+    /// was requested and PROT_WRITE is set, but fd is not open in
+    /// read/write (`O_RDWR`) mode or `fildes` refers to a non-regular file.
+    /// * `ENXIO` - addresses in the range [`off`, `off`+`len`) are invalid
+    /// for the object specified by `fildes`.
+    /// * `EOPNOTSUPP` - Lind currently does not support mapping character
+    ///   files.
+    /// * `EBADF` - invalid file descriptor.
+    /// Other errors, like `ENOMEM`, `EOVERFLOW`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// A panic occurs when a provided file descriptor is out of bounds.
+    ///
+    /// To learn more about the syscall, flags, possible error values, etc., see
+    /// [mmap(2)](https://man7.org/linux/man-pages/man2/mmap.2.html)
 
     pub fn mmap_syscall(
         &self,
@@ -3516,57 +3579,78 @@ impl Cage {
         off: i64,
     ) -> i32 {
         if len == 0 {
-            syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
+            return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-
-        if 0 == flags & (MAP_PRIVATE | MAP_SHARED) {
-            syscall_error(
+        //Exactly one of the two flags (either `MAP_PRIVATE` or `MAP_SHARED`) must be
+        // set
+        if 0 == (flags & (MAP_PRIVATE | MAP_SHARED)) {
+            return syscall_error(
                 Errno::EINVAL,
                 "mmap",
                 "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)",
             );
         }
-
-        if 0 != flags & MAP_ANONYMOUS {
+        if ((flags & MAP_PRIVATE) != 0) && ((flags & MAP_SHARED) != 0) {
+            return syscall_error(
+                Errno::EINVAL,
+                "mmap",
+                "The value of flags is invalid (MAP_PRIVATE and MAP_SHARED cannot be both set)",
+            );
+        }
+        //The `MAP_ANONYMOUS` flag specifies that the mapping
+        //is not backed by any file, so the `fildes` and `off`
+        //arguments should be ignored; however, some implementations
+        //require `fildes` to be -1, which we follow for the
+        //sake of portability.
+        if 0 != (flags & MAP_ANONYMOUS) {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
-
+        //BUG
+        //If the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fildes).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //confirm fd type is mappable
+            //The current implementation supports only regular files
             match filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
-
-                    //confirm inode type is mappable
+                    //Confirm inode type is mappable
                     match &*inodeobj {
-                        Inode::File(normalfile_inode_obj) => {
-                            //if we want to write our changes back to the file the file needs to be open for reading and writing
-                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
-                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
-                            }
-                            let filesize = normalfile_inode_obj.size;
-                            if off < 0 || off > filesize as i64 {
-                                return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
-                            }
-                            //because of NaCl's internal workings we must allow mappings to extend past the end of a file
-                            let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
-                            //this is the system fd number--the number of the lind.<inodenum> file in our host system
-                            let fobjfdno = fobj.as_fd_handle_raw_int();
-
-
-                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
-                        }
-
                         Inode::CharDev(_chardev_inode_obj) => {
                             syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
                         }
-
+                        Inode::File(normalfile_inode_obj) => {
+                            //For any kind of memory mapping, the file should be
+                            //opened for reading, so if it was opened for write
+                            //only, the mapping should be denied
+                            if (normalfile_filedesc_obj.flags & O_WRONLY) != 0 {
+                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open for reading");
+                            }
+                            //If we want to write our changes back to the file the file needs to be open for reading and writing
+                            if (flags & MAP_SHARED) != 0 && (prot & PROT_WRITE) != 0 && (normalfile_filedesc_obj.flags & O_RDWR) != O_RDWR {
+                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
+                            }
+                            let filesize = normalfile_inode_obj.size;
+                            //The offset cannot be negative, and we cannot read past the end of the file
+                            if off < 0 || off > filesize as i64 {
+                                return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
+                            }
+                            //Because of NaCl's internal workings we must allow mappings to extend past the end of the file
+                            let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+                            //The actual memory mapping is not emulated inside Lind, so the call to the kernel
+                            //is required. To perform this call, the file descriptor of the actual file
+                            //stored on the host machine is needed. Since Lind's emulated filesystem
+                            //does not match the underlying host's filesystem, the file descriptor
+                            //provided to the `mmap_syscall()` cannot be used and must be converted
+                            //to the actual file descriptor stored in the host's filesystem.
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
+                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
+                        }
                         _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
                     }
                 }
@@ -3581,15 +3665,61 @@ impl Cage {
         }
     }
 
-    //------------------------------------MUNMAP SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `munmap_syscall()` function shall remove any mappings
+    /// containing any part of the address space of the process
+    /// starting at `addr` and continuing for `len` bytes.
+    /// Further references to these pages shall result in the
+    /// generation of a `SIGSEGV` signal to the process. If there
+    /// are no mappings in the specified address range, then
+    /// `munmap_syscall()` has no effect.
+    /// The current implementation of the syscall solely relies
+    /// on the inner implementation of NaCl (except for a simple
+    /// `len` argument check) by creating a new mapping in the
+    /// specified memory region by using `MAP_FIXED` with
+    /// `PROT_NONE` flag to deny any access to the unmapped
+    /// memory region.
+    ///
+    /// ### Arguments
+    ///
+    /// The `munmap_syscall()` accepts two arguments:
+    /// * `addr` - the address starting from which the mapping
+    /// shall be removed
+    /// * `len` - specifies the length of the mapping that
+    /// shall be removed.
+    ///
+    /// ### Returns
+    ///
+    /// On success, `munmap_syscall()` returns 0.
+    /// In case of a failure, an error is returned, and `errno`
+    /// is set to `EINVAL`.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the value of len is 0
+    /// Other `EINVAL` errors are returned directly from the  call to
+    /// `libc_mmap`
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this function panics.
+    ///
+    /// To learn more about the syscall, flags, possible error values, etc., see
+    /// [munmap(2)](https://linux.die.net/man/2/munmap)
 
     pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
         if len == 0 {
-            syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
+            return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-        //NaCl's munmap implementation actually just writes over the previously mapped
-        // data with PROT_NONE This frees all of the resources except page table
-        // space, and is put inside safeposix for consistency
+        //NaCl's munmap implementation actually just writes
+        //over the previously mapped data with PROT_NONE.
+        //This frees all of the resources except page table
+        //space, and is put inside safeposix for consistency.
+        //`MAP_FIXED` is used to precisely unmap the specified
+        //memory region, and `MAP_ANONYMOUS` is used to deny
+        //any further access to the unmapped memory region
+        //thereby emulating the unmapping process.
         interface::libc_mmap(
             addr,
             len,
