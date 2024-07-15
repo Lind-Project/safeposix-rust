@@ -3305,7 +3305,7 @@ impl Cage {
                             }
                             //Because of NaCl's internal workings we must allow mappings to extend past the end of the file
                             let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            //The actual memory mapping is not emulated inside Lind, so the call to the kernell
+                            //The actual memory mapping is not emulated inside Lind, so the call to the kernel
                             //is required. To perform this call, the file descriptor of the actual file
                             //stored on the host machine is needed. Since Lind's emulated filesystem
                             //does not match the underlying host's filesystem, the file descriptor 
