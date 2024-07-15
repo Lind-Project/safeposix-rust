@@ -343,28 +343,459 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_dir_chdir() {
+    pub fn ut_lind_fs_mmap_zerolen() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
 
-        //testing the ability to make and change to directories
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if passing 0 as `len` to `mmap_syscall()`
+        //correctly results in 'The value of len is 0` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 0, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_invalid_flags_none() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if not passing any of the two `MAP_PRIVATE`
+        //or `MAP_SHARED` flags correctly results in `The value
+        //of flags is invalid (neither `MAP_PRIVATE` nor
+        //`MAP_SHARED` is set)` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, 0, fd, 0),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_invalid_flags_both() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if passing both `MAP_PRIVATE`
+        //and `MAP_SHARED` flags correctly results in `The value
+        //of flags is invalid (`MAP_PRIVATE` and `MAP_SHARED`
+        //cannot be both set)` error.
+        assert_eq!(
+            cage.mmap_syscall(
+                0 as *mut u8,
+                5,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_SHARED,
+                fd,
+                0
+            ),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_no_read() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file without a reading flag
+        //making it invalid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_WRONLY;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if trying to map a file that does not
+        //allow reading correctly results in `File descriptor
+        //is not open for reading` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EACCES as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_no_write() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file with flags for
+        //reading and writing
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Opening a file descriptor for the same file
+        //but now with a read flag and without a write
+        //flag making it invalid for shared mapping with
+        //write protection flag.
+        let testflags: i32 = O_RDONLY;
+        let testfd = cage.open_syscall(filepath, testflags, 0);
+
+        //Checking if trying to map a file that does not
+        //allow writing for shared mapping with writing
+        //protection flag set correctly results in
+        //``MAP_SHARED` was requested and PROT_WRITE is
+        //set, but fd is not open in read/write (`O_RDWR`)
+        //mode` error.
+        assert_eq!(
+            cage.mmap_syscall(
+                0 as *mut u8,
+                5,
+                PROT_READ | PROT_WRITE,
+                MAP_SHARED,
+                testfd,
+                0
+            ),
+            -(Errno::EACCES as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_invalid_offset_len() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if passing a negative offset correctly
+        //results in `Addresses in the range [off,off+len)
+        //are invalid for the object specified by `fildes`` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, -10),
+            -(Errno::ENXIO as i32)
+        );
+
+        //Checking if passing an offset that seeks beyond the end
+        //of the file correctly results in `Addresses in the
+        //range [off,off+len) are invalid for the object specified
+        //by `fildes`` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25),
+            -(Errno::ENXIO as i32)
+        );
+        
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_chardev() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Opening a character device file `/dev/zero`.
+        let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if calling `mmap_syscall()` on the character device
+        //file correctly results in `Lind currently does not support
+        //mapping character files` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_unsupported_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a directory.
+        assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
+        let fd = cage.open_syscall("/testdir", O_RDWR, S_IRWXA);
+
+        //Checking if passing the created directory to
+        //`mmap_syscall()` correctly results in `The `fildes`
+        //argument refers to a file whose type is not
+        //supported by mmap` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0),
+            -(Errno::EACCES as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mmap_invalid_fildes() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping and then
+        //closing it, thereby making the obtained
+        //filede scriptor invalid because no other
+        //file is opened after it.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        //Checking if passing the invalid file descriptor
+        //correctly results in `Invalid file descriptor` error.
+        assert_eq!(
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_munmap_zerolen() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+
+        //Checking if passing 0 as `len` to `munmap_syscall()`
+        //correctly results in 'The value of len is 0` error.
+        assert_eq!(
+            cage.munmap_syscall(0 as *mut u8, 0),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_chdir_valid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Testing the ability to make and change to directories
+        //using absolute and relative and `..` reference
 
         assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
-        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2/subdir3", 0), 0);
 
-        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
+        //Changing to a new current working directory, and then obtaining
+        //the current working directory using `getcwd_syscall()` to see
+        //if it was correctly changed
         assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        let mut buf1 = vec![0u8; 9];
+        let bufptr1: *mut u8 = &mut buf1[0];
+        assert_eq!(cage.getcwd_syscall(bufptr1, 9), 0);
+        assert_eq!(std::str::from_utf8(&buf1).unwrap(), "/subdir1\0");
+
+        assert_eq!(cage.chdir_syscall("/subdir1/subdir2"), 0);
+        assert_eq!(cage.chdir_syscall(".."), 0);
+        let mut buf1 = vec![0u8; 9];
+        let bufptr1: *mut u8 = &mut buf1[0];
+        assert_eq!(cage.getcwd_syscall(bufptr1, 9), 0);
+        assert_eq!(std::str::from_utf8(&buf1).unwrap(), "/subdir1\0");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_chdir_removeddir() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Checking if removing the current working directory
+        //works correctly
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir2", S_IRWXA), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), 0);
+        assert_eq!(cage.rmdir_syscall("/subdir1"), 0);
+        assert_eq!(cage.chdir_syscall("/subdir2"), 0);
+        assert_eq!(cage.chdir_syscall("subdir1"), -(Errno::ENOENT as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_chdir_invalid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/TestFile1";
+        let _fd1 = cage.open_syscall(filepath, flags, 0);
+
+        //Checking if passing a regular file pathname correctly
+        //returns `The last component in path is not a directory` error
+        assert_eq!(cage.chdir_syscall("/TestFile1"), -(Errno::ENOTDIR as i32));
+
+        //Checking if a nonexistent pathname correctly
+        //returns `The directory referred to in path does not exist` error.
+        //`/arbitrarypath` is a pathname that does not correspond to any existing
+        //directory pathname.
+        assert_eq!(
+            cage.chdir_syscall("/arbitrarypath"),
+            -(Errno::ENOENT as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_fchdir_valid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Testing the ability to make and change to directories
+        //using file descriptors
+
+        assert_eq!(cage.mkdir_syscall("/subdir1", S_IRWXA), 0);
+        assert_eq!(cage.mkdir_syscall("/subdir1/subdir2", S_IRWXA), 0);
+
+        //Retrieving a valid directory file descriptor
+        let fd1 = cage.open_syscall("/subdir1", O_RDWR, S_IRWXA);
+        let fd2 = cage.open_syscall("/subdir1/subdir2", O_RDWR, S_IRWXA);
+
+        //Changing to a new current working directory, and then obtaining
+        //the current working directory using `getcwd_syscall()` to see
+        //if it was correctly changed
+        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
+        assert_eq!(cage.fchdir_syscall(fd1), 0);
+        let mut buf1 = vec![0u8; 9];
+        let bufptr1: *mut u8 = &mut buf1[0];
+        assert_eq!(cage.getcwd_syscall(bufptr1, 9), 0);
+        assert_eq!(std::str::from_utf8(&buf1).unwrap(), "/subdir1\0");
 
         assert_eq!(cage.access_syscall("subdir2", F_OK), 0);
-        assert_eq!(cage.chdir_syscall(".."), 0);
+        assert_eq!(cage.fchdir_syscall(fd2), 0);
+        let mut buf2 = vec![0u8; 17];
+        let bufptr2: *mut u8 = &mut buf2[0];
+        assert_eq!(cage.getcwd_syscall(bufptr2, 17), 0);
+        assert_eq!(std::str::from_utf8(&buf2).unwrap(), "/subdir1/subdir2\0");
 
-        assert_eq!(cage.access_syscall("subdir1", F_OK), 0);
-        assert_eq!(cage.chdir_syscall("/subdir1/subdir2/subdir3"), 0);
-        assert_eq!(cage.access_syscall("../../../subdir1", F_OK), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_fchdir_invalid_args() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        //and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/TestFile1";
+        let fd1 = cage.open_syscall(filepath, flags, 0);
+
+        //Checking if passing a regular file descriptor correctly
+        //returns `The last component in path is not a directory` error
+        assert_eq!(cage.fchdir_syscall(fd1), -(Errno::ENOTDIR as i32));
+
+        //Checking if passing an invalid file descriptor correctly
+        //results in `Invalid file descriptor` error
+        //Since the file corresponding to file descriptor `fd1` is closed,
+        //and no other file is opened after that, `fd1` file descriptor
+        //should be invalid
+        assert_eq!(cage.close_syscall(fd1), 0);
+        assert_eq!(cage.fchdir_syscall(fd1), -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -631,53 +1062,54 @@ pub mod fs_tests {
 
     #[test]
     fn ut_lind_fs_dup2_with_fork() {
-        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup.
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup.
         let _thelock = setup::lock_and_init();
-    
+
         let cage = interface::cagetable_getref(1);
-    
+
         let flags: i32 = O_CREAT | O_RDWR;
         let filepath1 = "/dup2file_with_fork1";
         let filepath2 = "/dup2file_with_fork2";
-    
+
         // Open file descriptors
         let fd1 = cage.open_syscall(filepath1, flags, S_IRWXA);
         let fd2 = cage.open_syscall(filepath2, flags, S_IRWXA);
         assert!(fd1 >= 0);
         assert!(fd2 >= 0);
-    
+
         // Write data to the first file
         assert_eq!(cage.write_syscall(fd1, str2cbuf("parent data"), 11), 11);
-    
+
         // Fork the process
         assert_eq!(cage.fork_syscall(2), 0);
-    
+
         let child = std::thread::spawn(move || {
             let cage2 = interface::cagetable_getref(2);
-    
+
             // In the child process, duplicate fd1 to fd2
             assert!(cage2.dup2_syscall(fd1, fd2) >= 0);
-    
+
             // Write new data to the duplicated file descriptor
             assert_eq!(cage2.write_syscall(fd2, str2cbuf(" child data"), 11), 11);
-    
+
             assert_eq!(cage2.close_syscall(fd2), 0);
-    
+
             assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
-    
+
         child.join().unwrap();
-    
+
         let mut buffer = sizecbuf(22);
         assert_eq!(cage.lseek_syscall(fd1, 0, SEEK_SET), 0);
         assert_eq!(cage.read_syscall(fd1, buffer.as_mut_ptr(), 22), 22);
         assert_eq!(cbuf2str(&buffer), "parent data child data");
-    
+
         assert_eq!(cage.close_syscall(fd1), 0);
-    
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
-    }    
+    }
 
     #[test]
     pub fn ut_lind_fs_fcntl_valid_args() {
@@ -2046,7 +2478,8 @@ pub mod fs_tests {
         // Open the directory
         let fd = cage.open_syscall("/getdents", O_RDWR, S_IRWXA);
 
-        // Attempt to call `getdents_syscall` with a buffer size smaller than CLIPPED_DIRENT_SIZE
+        // Attempt to call `getdents_syscall` with a buffer size smaller than
+        // CLIPPED_DIRENT_SIZE
         let result = cage.getdents_syscall(fd, baseptr, bufsize as u32);
 
         // Assert that the return value is EINVAL (errno for "Invalid argument")
@@ -2893,6 +3326,389 @@ pub mod fs_tests {
         // Validate the size of the file to be 0 now as should be truncated
         assert_eq!(statdata.st_size, 0);
 
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_write_only_fd() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test to create a file with write only permissions, and check if
+        // a valid error is returned when the file is used for reading.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_WRONLY, S_IRWXA);
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.read_syscall(fd, read_buf.as_mut_ptr(), 5),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_directory() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a directory and try to read from it.
+        // We should expect an error (EISDIR) as reading from a directory is not
+        // supported.
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
+
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.read_syscall(fd, read_buf.as_mut_ptr(), 5),
+            -(Errno::EISDIR as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_epoll() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create an Epoll and try to read from it.
+        // We should expect an error (EINVAL) as reading from an Epoll is not supported.
+        let epfd = cage.epoll_create_syscall(1);
+        assert!(epfd > 0);
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.read_syscall(epfd, read_buf.as_mut_ptr(), 5),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_regular_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests two scenarios for reading from a regular file:
+        // * Reading from a file should initially start from 0 position.
+        // * Once read, the position of the seek pointer in the file descriptor should
+        // increment by the count of bytes read. If the read is performed again, then
+        // the position should continue from the point it was previously left.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Write sample data to the file.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Set the initial position to 0 in the file descriptor.
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+
+        // Read first 5 bytes from the file, and assert the result.
+        let mut read_buf1 = sizecbuf(5);
+        assert_eq!(cage.read_syscall(fd, read_buf1.as_mut_ptr(), 5), 5);
+        assert_eq!(cbuf2str(&read_buf1), "hello");
+
+        // Read next 7 bytes which should start from the previous position.
+        let mut read_buf2 = sizecbuf(7);
+        assert_eq!(cage.read_syscall(fd, read_buf2.as_mut_ptr(), 7), 7);
+        assert_eq!(cbuf2str(&read_buf2), " there!");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_chardev_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for reading from a character device type
+        // file. In this case, we are trying to read 100 bytes from the
+        // "/dev/zero" file, which should return 100 bytes of "0" filled
+        // characters.
+        let path = "/dev/zero";
+        let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
+
+        // Verify if the returned count of bytes is 100.
+        let mut read_bufzero = sizecbuf(100);
+        assert_eq!(cage.read_syscall(fd, read_bufzero.as_mut_ptr(), 100), 100);
+        // Verify if the characters present in the buffer are all "0".
+        assert_eq!(
+            cbuf2str(&read_bufzero),
+            std::iter::repeat("\0")
+                .take(100)
+                .collect::<String>()
+                .as_str()
+        );
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_sockets() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for reading data from a pair of Sockets.
+        // In this case, we create a socket pair of two sockets, and send data through
+        // one socket, and try to read it from the other one using `read_syscall()`.
+        let mut socketpair = interface::SockPair::default();
+
+        // Verify if the socketpair is formed successfully.
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        // Verify if the number of bytes sent to socket1 is correct.
+        assert_eq!(
+            cage.send_syscall(socketpair.sock1, str2cbuf("test"), 4, 0),
+            4
+        );
+        // Verify if the number of bytes received by socket2 is correct.
+        let mut buf2 = sizecbuf(4);
+        assert_eq!(cage.read_syscall(socketpair.sock2, buf2.as_mut_ptr(), 4), 4);
+        // Verify if the data received inside the buffer is correct.
+        assert_eq!(cbuf2str(&buf2), "test");
+        // Close the sockets
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_pipe_blocking_mode() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case of reading data from the pipe.
+        // We create two pipes, i.e., Read and Write and validate if the data
+        // received is correct or not.
+
+        // Create a pipe of read and write file descriptors.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        let write_fd = pipe_fds.writefd;
+
+        let write_data = "Testing";
+        let mut buf = sizecbuf(7);
+
+        // Write data to the pipe
+        assert_eq!(
+            cage.write_syscall(write_fd, write_data.as_ptr(), write_data.len()),
+            write_data.len() as i32
+        );
+
+        // Read the data from the pipe and verify its count.
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            write_data.len() as i32
+        );
+        // Verify if the data returned in the pipe buffer is correct.
+        assert_eq!(cbuf2str(&buf), write_data);
+
+        // Close the file descriptors
+        assert_eq!(cage.close_syscall(read_fd), 0);
+        assert_eq!(cage.close_syscall(write_fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_read_from_pipe_nonblocking_mode() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case of reading data from the pipe, but in
+        // non-blocking mode. We create two pipes, i.e., Read and Write and
+        // validate if the data received is correct or not.
+
+        // Create a pipe of read and write file descriptors.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        let write_fd = pipe_fds.writefd;
+
+        let write_data = "Testing";
+        let mut buf = sizecbuf(7);
+
+        // Set pipe to non-blocking mode
+        assert_eq!(cage.fcntl_syscall(read_fd, F_SETFL, O_NONBLOCK), 0);
+
+        // Read from the pipe (should return EAGAIN as there's no data yet)
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            -(Errno::EAGAIN as i32)
+        );
+
+        // Write data to the pipe
+        assert_eq!(
+            cage.write_syscall(write_fd, write_data.as_ptr(), write_data.len()),
+            write_data.len() as i32
+        );
+
+        // Read the data from the pipe and verify its count.
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            write_data.len() as i32
+        );
+        // Verify if the data returned in the pipe buffer is correct.
+        assert_eq!(cbuf2str(&buf), write_data);
+
+        // Close the file descriptors
+        assert_eq!(cage.close_syscall(read_fd), 0);
+        assert_eq!(cage.close_syscall(write_fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_write_only_fd() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test to create a file with write only permissions, and check if
+        // a valid error is returned when the file is used for reading.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_WRONLY, S_IRWXA);
+        let mut read_buf = sizecbuf(5);
+        assert_eq!(
+            cage.pread_syscall(fd, read_buf.as_mut_ptr(), 5, 0),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_from_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests two scenarios for reading from a file using
+        // `pread_syscall()`.
+        // * Reading from a file from the starting position offset(0).
+        // * Reading from a file from a random position offset.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Write sample data to the file.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello there!"), 12), 12);
+
+        // Set the initial position to 0 in the file descriptor.
+        assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+
+        // Read first 5 bytes from the file, and assert the result.
+        let mut read_buf1 = sizecbuf(5);
+        assert_eq!(cage.pread_syscall(fd, read_buf1.as_mut_ptr(), 5, 0), 5);
+        assert_eq!(cbuf2str(&read_buf1), "hello");
+
+        // Read 5 bytes, but from the 6th position offset of the file.
+        let mut read_buf2 = sizecbuf(5);
+        assert_eq!(cage.pread_syscall(fd, read_buf2.as_mut_ptr(), 5, 6), 5);
+        assert_eq!(cbuf2str(&read_buf2), "there");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_from_directory() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let mut buf = sizecbuf(5);
+
+        // Test for invalid directory should fail
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+        assert_eq!(
+            cage.pread_syscall(fd, buf.as_mut_ptr(), buf.len(), 0),
+            -(Errno::EISDIR as i32)
+        );
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pread_invalid_types() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let mut buf = sizecbuf(5);
+
+        // Test for invalid pipe
+        // Try reading the data from the pipe and check for error.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        assert_eq!(
+            cage.pread_syscall(read_fd, buf.as_mut_ptr(), buf.len(), 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        // Test for invalid sockets
+        // Try reading the data from the socket and check for error.
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        assert_eq!(
+            cage.pread_syscall(socketpair.sock2, buf.as_mut_ptr(), 4, 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        // Test for invalid epoll
+        // Try reading the data from the epoll and check for error.
+        let epfd = cage.epoll_create_syscall(1);
+        assert_eq!(
+            cage.pread_syscall(epfd, buf.as_mut_ptr(), 5, 0),
+            -(Errno::ESPIPE as i32)
+        );
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
