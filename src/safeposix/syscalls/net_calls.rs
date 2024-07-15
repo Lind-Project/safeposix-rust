@@ -3342,6 +3342,9 @@ impl Cage {
                 for result in poll_fds_slice.iter() {
                     // transform the poll result into epoll result
                     // poll_event is used for marking if the fd is ready for something
+
+                    // events are requested events for poll
+                    // revents are the returned events and all results are stored here
                     let mut poll_event = false;
                     let mut event = EpollEvent {
                         events: 0,

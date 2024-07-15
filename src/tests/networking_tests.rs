@@ -3813,7 +3813,7 @@ pub mod net_tests {
         // acting as the server and processing the request
         // Server loop to handle connections and I/O
         // Check for any activity in any of the Input sockets
-        for counter in 0..600 {
+        for _counter in 0..600 {
             // epoll call
             let num_events = cage.epoll_wait_syscall(
                 epfd,
