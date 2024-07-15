@@ -6,7 +6,9 @@ pub mod test_sys {
     use super::super::*;
     use crate::interface;
     use crate::safeposix::syscalls::sys_calls::*;
+    use crate::safeposix::{cage::*, dispatcher::*, filesystem};
 
+    #[test]
     pub fn test_sys() {
         ut_lind_getpid(); 
         ut_lind_getppid(); 
@@ -17,6 +19,7 @@ pub mod test_sys {
         ut_lind_fork();
     } 
 
+    #[test]
     pub fn ut_lind_getpid() {
         lindrustinit(0); 
         let cage =  interface::cagetable_getref(1); 
@@ -24,6 +27,7 @@ pub mod test_sys {
         lindrustfinalize();
     } 
 
+    #[test]
     pub fn ut_lind_getppid() {
         lindrustinit(0); 
         let cage = interface::cagetable_getref(1); 
@@ -34,45 +38,51 @@ pub mod test_sys {
         
     } 
 
+    #[test]
     pub fn ut_lind_getuid() {
         lindrustinit(0);
         // The first call to geteuid always returns -1
+        let cage = interface::cagetable_getref(1);
         assert_eq!(cage.getuid_syscall(),-1);
         // Subsequent calls return the default value
-        assert_eq!(cage.getuid_syscall(),DEFAULT_UID);
+        assert_eq!(cage.getuid_syscall(),DEFAULT_UID as i32);
         lindrustfinalize()
     }
 
+    #[test]
     pub fn ut_lind_geteuid() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         // The first call to geteuid always returns -1
         assert_eq!(cage.geteuid_syscall(),-1);
         // Subsequent calls return the default value
-        assert_eq!(cage.geteuid_syscall(),DEFAULT_UID);
+        assert_eq!(cage.geteuid_syscall(),DEFAULT_UID as i32);
         lindrustfinalize()
     }
 
+    #[test]
     pub fn ut_lind_getgid() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         // The first call to geteuid always returns -1
         assert_eq!(cage.getgid_syscall(),-1);
         // Subsequent calls return the default value
-        assert_eq!(cage.getgid_syscall(),DEFAULT_GID);
+        assert_eq!(cage.getgid_syscall(),DEFAULT_GID as i32);
         lindrustfinalize()
     } 
 
+    #[test]
     pub fn ut_lind_getegid() {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         // The first call to geteuid always returns -1
         assert_eq!(cage.getegid_syscall(),-1);
         // Subsequent calls return the default value
-        assert_eq!(cage.getegid_syscall(),DEFAULT_GID);
+        assert_eq!(cage.getegid_syscall(),DEFAULT_GID as i32);
         lindrustfinalize()
     } 
 
+    #[test]
     pub fn ut_lind_fork() {
         // Since the fork syscall is heavily tested in relation to other syscalls
         // we only perform simple checks for testing the sanity of the fork syscall
@@ -85,11 +95,12 @@ pub mod test_sys {
         // Assert the parent value is the the id of the first cage object
         assert_eq!(child_cage.getpid_syscall(),1);
         // Assert that the cage id of the child is the value passed in the original fork syscall
-        assert_eq!(child_cage.getuid(),2);
+        assert_eq!(child_cage.getuid_syscall(),2);
         // Assert that the cwd is the same as the parent cage object
-        assert_eq!(child_cage.cwd.read(),cage.cwd.read())
+        let child_cwd = child_cage.cwd.read();
+        let parent_cwd = cage.cwd.read();
+        assert_eq!(child_cwd.to_str(),parent_cwd.to_str());
     }
-
     pub fn ut_lind_exit() {
         // Since exit function is heavily used and tested in other syscalls and their tests 
         // We only perform preliminary checks for checking the sanity of this syscall
@@ -98,8 +109,19 @@ pub mod test_sys {
         lindrustinit(0);
         let cage = interface::cagetable_getref(1);
         // Call the exit call
-        assert_eq(cage.exit_syscall(EXIT_SUCCESS),EXIT_SUCCESS); 
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS),EXIT_SUCCESS); 
         lindrustfinalize(); 
     }
+    #[test]
+    pub fn ut_lind_exec() {
+        lindrustinit(0);
+        let cage1 = interface::cagetable_getref(1);
+        // Spawn a new child
+        cage1.fork_syscall(2);
+        let cage2 = interface::cagetable_getref(2);
+        // Spawn exec and check if it returns 1
+        assert_eq!(cage2.exec_syscall(2),0);
+        lindrustfinalize();
+    }   
 } 
 
