@@ -3174,17 +3174,31 @@ impl Cage {
     }
 
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getsockopt",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
+        // try to get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
+                // we are using an i32 to store all the options together
+                // so we are using i-th bit to store i-th option
                 let optbit = 1 << optname;
                 let sock_tmp = sockfdobj.handle.clone();
                 let mut sockhandle = sock_tmp.write();
                 match level {
+                    // a few UDP options are avaliable in Linux
+                    // though we do not support them for now
                     SOL_UDP => {
                         return syscall_error(
-                            Errno::EOPNOTSUPP,
+                            Errno::ENOPROTOOPT,
                             "getsockopt",
                             "UDP is not supported for getsockopt",
                         );
@@ -3192,17 +3206,30 @@ impl Cage {
                     SOL_TCP => {
                         // Checking the tcp_options here
                         // Currently only support TCP_NODELAY option for SOL_TCP
+
+                        // TCP_NODELAY: If set, disable the Nagle algorithm. This means that
+                        // segments are always sent as soon as possible, even if
+                        // there is only a small amount of data. When not set, data
+                        // is buffered until there is a sufficient amount to send
+                        // out, thereby avoiding the frequent sending of small
+                        // packets, which results in poor utilization of the network.
+                        // This option is overridden by TCP_CORK; however, setting
+                        // this option forces an explicit flush of pending output,
+                        // even if TCP_CORK is currently set.
                         if optname == TCP_NODELAY {
                             let optbit = 1 << optname;
                             if optbit & sockhandle.tcp_options == optbit {
+                                // if the bit is set, set optval to 1
                                 *optval = 1;
                             } else {
+                                // otherwise, set optval to 0
                                 *optval = 0;
                             }
                             return 0;
                         }
+                        // other TCP options are not supported yet
                         return syscall_error(
-                            Errno::EOPNOTSUPP,
+                            Errno::ENOPROTOOPT,
                             "getsockopt",
                             "TCP options not remembered by getsockopt",
                         );
@@ -3210,46 +3237,59 @@ impl Cage {
                     SOL_SOCKET => {
                         // checking the socket_options here
                         match optname {
-                            //indicate whether we are accepting connections or not in the moment
+                            // indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
                                 if sockhandle.state == ConnState::LISTEN {
+                                    // if in LISTEN state, set optval to 1
                                     *optval = 1;
                                 } else {
+                                    // otherwise, set optval to 0
                                     *optval = 0;
                                 }
                             }
-                            //if the option is a stored binary option, just return it...
+                            // these options are stored inside the socket_options
+                            // so we just retrieve it and set to optval
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT
                             | SO_REUSEADDR => {
                                 if sockhandle.socket_options & optbit == optbit {
+                                    // if the bit is set, set optval to 1
                                     *optval = 1;
                                 } else {
+                                    // otherwise, set optval to 0
                                     *optval = 0;
                                 }
                             }
-                            //handling the ignored buffer settings:
+                            // sndbuf, rcvbuf, socktype are stored in a dedicated field
+                            // so retrieve it directly and set the optval to it
                             SO_SNDBUF => {
                                 *optval = sockhandle.sndbuf;
                             }
                             SO_RCVBUF => {
                                 *optval = sockhandle.rcvbuf;
                             }
-                            //returning the type if asked
                             SO_TYPE => {
                                 *optval = sockhandle.socktype;
                             }
-                            //should always be true
+                            // If SO_OOBINLINE is enabled, out-of-band data is directly
+                            // placed into the receive data stream.  Otherwise, out-of-
+                            // band data is passed only when the MSG_OOB flag is set
+                            // during receiving.
+                            // currently we do not support changing this value
+                            // so it should always be 1
                             SO_OOBINLINE => {
                                 *optval = 1;
                             }
+                            // Get and clear the pending socket error. This socket
+                            // option is read-only.
                             SO_ERROR => {
                                 let tmp = sockhandle.errno;
                                 sockhandle.errno = 0;
                                 *optval = tmp;
                             }
                             _ => {
+                                // we do not support other options currently
                                 return syscall_error(
-                                    Errno::EOPNOTSUPP,
+                                    Errno::ENOPROTOOPT,
                                     "getsockopt",
                                     "unknown optname passed into syscall",
                                 );
@@ -3257,6 +3297,7 @@ impl Cage {
                         }
                     }
                     _ => {
+                        // we do not support other levels yet
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "getsockopt",
@@ -3265,6 +3306,7 @@ impl Cage {
                     }
                 }
             } else {
+                // the file descriptor is not socket fd
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockopt",
@@ -3272,6 +3314,7 @@ impl Cage {
                 );
             }
         } else {
+            // the file descriptor does not exist
             return syscall_error(
                 Errno::EBADF,
                 "getsockopt",
@@ -3282,6 +3325,15 @@ impl Cage {
     }
 
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "setsockopt",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
