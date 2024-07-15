@@ -539,7 +539,7 @@ pub mod fs_tests {
             cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25),
             -(Errno::ENXIO as i32)
         );
-        
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
