@@ -3062,11 +3062,11 @@ pub mod net_tests {
 
     #[test]
     pub fn ut_lind_net_gethostname() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
-        //Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
+        // Assuming DEFAULT_HOSTNAME == "Lind" and change of hostname is not allowed
 
         let cage = interface::cagetable_getref(1);
 
@@ -3098,6 +3098,38 @@ pub mod net_tests {
         let bufptr: *mut u8 = &mut buf[0];
         assert_eq!(cage.gethostname_syscall(bufptr, 2), 0);
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "Li");
+
+        let mut buf = vec![0u8; 2];
+        let bufptr: *mut u8 = &mut buf[0];
+        assert_eq!(cage.gethostname_syscall(bufptr, 0), 0);
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), "\0\0");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_getifaddrs() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // get the address
+        let mut buf = vec![0u8; 200];
+        let bufptr: *mut u8 = &mut buf[0];
+        // not enough space would cause EOPNOTSUPP error
+        assert_eq!(
+            cage.getifaddrs_syscall(bufptr, 1),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+        assert_eq!(cage.getifaddrs_syscall(bufptr, 200), 0);
+        // split the address string into vector
+        let result = std::str::from_utf8(&buf).unwrap().replace("\0", "");
+        let addrs = result.trim().split("\n").collect::<Vec<&str>>();
+        // we should have some addresses returned
+        assert!(addrs.len() > 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
