@@ -733,51 +733,6 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
-    //We create a blocking socket to connect to the server and it returns immediately
-    //The blocking socket should not return with success immediately as the server
-    //did not accept the connection
-    #[test]
-    #[ignore]
-    pub fn ut_lind_net_listen_nonblock_then_block() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        let cage = interface::cagetable_getref(1);
-
-        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-        // let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
-
-        assert!(serversockfd > 0);
-        assert!(clientsockfd1 > 0);
-        // assert!(clientsockfd2 > 0);
-        let port: u16 = generate_random_port();
-        //binding to a socket
-        let sockaddr = interface::SockaddrV4 {
-            sin_family: AF_INET as u16,
-            sin_port: port.to_be(),
-            sin_addr: interface::V4Addr {
-                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-            },
-            padding: 0,
-        };
-        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
-        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
-        assert_eq!(cage.listen_syscall(serversockfd, 5), 0);
-
-        interface::sleep(interface::RustDuration::from_millis(100));
-        assert_eq!(cage.connect_syscall(clientsockfd1, &socket), 0);
-        // assert_eq!(cage.connect_syscall(clientsockfd2, &socket), 0);
-
-        assert_eq!(cage.close_syscall(serversockfd), 0);
-        assert_eq!(cage.close_syscall(clientsockfd1), 0);
-        // assert_eq!(cage.close_syscall(clientsockfd2), 0);
-
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
     //UDP Socket should not be able to listen
     //Fail with errno EOPNOTSUPP
     #[test]

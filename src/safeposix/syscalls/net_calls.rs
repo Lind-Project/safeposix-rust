@@ -1517,15 +1517,14 @@ impl Cage {
     /// ### Arguments
     ///
     /// it accepts two parameters:
-    /// * `sockfd` - a file descriptor that refers to a socket
-    ///    of type SOCK_STREAM
-    ///    Note, we do not implement sockets of type SOCK_SEQPACKET
-    /// * `backlog` - defines the maximum length to which the
-    ///   queue of pending connections for sockfd may grow.  If a
-    ///   connection request arrives when the queue is full, the client may
-    ///   receive an error with an indication of ECONNREFUSED or, if the
-    ///   underlying protocol supports retransmission, the request may be
-    ///   ignored so that a later reattempt at connection succeeds.
+    /// * `sockfd` - a file descriptor that refers to a socket of type
+    ///   SOCK_STREAM Note, we do not implement sockets of type SOCK_SEQPACKET
+    /// * `backlog` - defines the maximum length to which the queue of pending
+    ///   connections for sockfd may grow.  If a connection request arrives when
+    ///   the queue is full, the client may receive an error with an indication
+    ///   of ECONNREFUSED or, if the underlying protocol supports
+    ///   retransmission, the request may be ignored so that a later reattempt
+    ///   at connection succeeds.
     ///
     /// ### Returns
     ///
@@ -1536,23 +1535,23 @@ impl Cage {
     ///
     /// * EADDRINUSE - Another socket is already listening on the same port.
     ///
-    /// * EADDRINUSE - (Internet domain sockets) The socket referred to by sockfd
-    ///      had not previously been bound to an address and, upon
-    ///      attempting to bind it to an ephemeral port, it was
-    ///      determined that all port numbers in the ephemeral port
-    ///      range are currently in use.  See the discussion of
-    ///      /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    /// * EADDRINUSE - (Internet domain sockets) The socket referred to by
+    ///   sockfd had not previously been bound to an address and, upon
+    ///   attempting to bind it to an ephemeral port, it was determined that all
+    ///   port numbers in the ephemeral port range are currently in use.  See
+    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
     ///
     /// * EBADF - The argument sockfd is not a valid file descriptor.
     ///
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     ///
     /// * EOPNOTSUPP - The socket is not of a type that supports the listen()
-    ///     operation.
+    ///   operation.
     ///
     /// ### Panics
     ///
-    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
+    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will
+    ///   cause a panic.
     /// * unknown errno value from socket bind sys call from libc in the case
     ///   that the socket isn't assigned an address
     /// * unknown errno value from socket listen sys call from libc
@@ -1627,9 +1626,10 @@ impl Cage {
                             //If the given socket is not assigned an address,
                             //attempt to bind the socket to an address.
                             //
-                            //An implicit bind refers to the automatic binding of a socket to an address
-                            //and port by the system, without an explicit call to the bind() function by
-                            //the programmer.
+                            //An implicit bind refers to the automatic binding of a socket to an
+                            // address and port by the system, without
+                            // an explicit call to the bind() function by
+                            // the programmer.
                             //
                             //If implicit bind fails, return with the errno if known
                             //Otherwise, panic!
@@ -1679,13 +1679,8 @@ impl Cage {
                                 //Remove the tuple of the address, port, and
                                 //port type from the set of listening ports
                                 //as we are returning from an error
-                                //** Why dont we use 'porttuple' as the argument for the key ?? */
-                                NET_METADATA.listening_port_set.remove(&mux_port(
-                                    ladr.addr().clone(),
-                                    ladr.port(),
-                                    sockhandle.domain,
-                                    TCPPORT,
-                                ));
+                                NET_METADATA.listening_port_set.remove(&porttuple);
+                                
                                 //Set the socket state to NOTCONNECTED, as
                                 //the socket is not listening
                                 sockhandle.state = ConnState::NOTCONNECTED;
@@ -1696,7 +1691,8 @@ impl Cage {
                             // logics for AF_INET socket right now, so we have to call the select
                             // syscall from libc, which takes the rawfd as the argument instead of
                             // the fake fd used by lind.
-                            // The raw fd of the socket is the set to be the same as the fd set by the kernal in the libc connect call
+                            // The raw fd of the socket is the set to be the same as the fd set by
+                            // the kernal in the libc connect call
                             sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
                             //If listening socket is not in the table of pending
