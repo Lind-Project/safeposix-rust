@@ -1865,6 +1865,13 @@ impl Cage {
             // Based on the enum type, each file descriptor has a different implementation
             // for writing data to the file.
             match filedesc_enum {
+                // Writing to `Epoll` type file descriptors is not supported.
+                Epoll(_) => syscall_error(
+                    Errno::EINVAL,
+                    "write",
+                    "fd is attached to an object which is unsuitable for writing",
+                ),
+
                 // We must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     // Return an error if the file cannot be opened for writing.
@@ -1887,6 +1894,14 @@ impl Cage {
 
                     // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match *inodeobj {
+                        // For `Dir` type inode, an error is returned as writing to a directory is
+                        // not allowed.
+                        Inode::Dir(_) => syscall_error(
+                            Errno::EISDIR,
+                            "write",
+                            "attempted to write to a directory",
+                        ),
+
                         // For `File` type inode, the writing happens at the current position
                         // of the object pointed by `position`. The fileobject is fetched from
                         // the FileObjectTable and we start writing from the buffer `buf` until
@@ -1956,14 +1971,6 @@ impl Cage {
                         Inode::Socket(_) => {
                             panic!("write(): Socket inode found on a filedesc fd")
                         }
-
-                        // For `Dir` type inode, an error is returned as writing to a directory is
-                        // not allowed.
-                        Inode::Dir(_) => syscall_error(
-                            Errno::EISDIR,
-                            "write",
-                            "attempted to write to a directory",
-                        ),
                     }
                 }
 
@@ -2028,13 +2035,6 @@ impl Cage {
                     }
                     retval
                 }
-
-                // Writing to `Epoll` type file descriptors is not supported.
-                Epoll(_) => syscall_error(
-                    Errno::EINVAL,
-                    "write",
-                    "fd is attached to an object which is unsuitable for writing",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
@@ -2098,6 +2098,35 @@ impl Cage {
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             // Match the type of file descriptor (File, Sockets, Stream, Pipe, Epoll)
             match filedesc_enum {
+                // Return an error for Sockets, as they do not support the concept of seeking to a
+                // specific offset because data arrives in a continuous stream from the network.
+                Socket(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with a socket, cannot seek",
+                ),
+                // Return an error for Streams, as like sockets, streams are sequential and do not
+                // support seeking to an offset.
+                Stream(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with a stream, cannot seek",
+                ),
+                // Return an error for Pipes, as they are designed for sequential reads and writes
+                // between processes. Seeking within a pipe would not make sense because data is
+                // read in the order it was written, making pwrite inapplicable.
+                Pipe(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with a pipe, cannot seek",
+                ),
+                // Return an error for Epoll, as Epoll file descriptors are for event notification
+                // and do not hold any data themselves.
+                Epoll(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with an epollfd, cannot seek",
+                ),
                 // We must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
                     // Return an error if the file cannot be not opened for writing.
@@ -2118,6 +2147,14 @@ impl Cage {
 
                     // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match *inodeobj {
+                        // For `Dir` type inode, an error is returned as writing to a directory is
+                        // not allowed
+                        Inode::Dir(_) => syscall_error(
+                            Errno::EISDIR,
+                            "pwrite",
+                            "attempted to write to a directory",
+                        ),
+
                         Inode::File(ref mut normalfile_inode_obj) => {
                             // Calculate the number of blank bytes needed to pad the file
                             // if the current offset is past the end of the file, because
@@ -2181,45 +2218,8 @@ impl Cage {
                         Inode::Socket(_) => {
                             panic!("pwrite: socket fd and inode don't match types")
                         }
-
-                        // For `Dir` type inode, an error is returned as writing to a directory is
-                        // not allowed
-                        Inode::Dir(_) => syscall_error(
-                            Errno::EISDIR,
-                            "pwrite",
-                            "attempted to write to a directory",
-                        ),
                     }
                 }
-                // Return an error for Sockets, as they do not support the concept of seeking to a
-                // specific offset because data arrives in a continuous stream from the network.
-                Socket(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with a socket, cannot seek",
-                ),
-                // Return an error for Streams, as like sockets, streams are sequential and do not
-                // support seeking to an offset.
-                Stream(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with a stream, cannot seek",
-                ),
-                // Return an error for Pipes, as they are designed for sequential reads and writes
-                // between processes. Seeking within a pipe would not make sense because data is
-                // read in the order it was written, making pwrite inapplicable.
-                Pipe(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with a pipe, cannot seek",
-                ),
-                // Return an error for Epoll, as Epoll file descriptors are for event notification
-                // and do not hold any data themselves.
-                Epoll(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with an epollfd, cannot seek",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "pwrite", "invalid file descriptor")
