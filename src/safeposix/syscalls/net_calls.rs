@@ -1279,13 +1279,6 @@ impl Cage {
                             "An address with an invalid family for the given domain was specified",
                         );
                     }
-                    if (flags & !MSG_NOSIGNAL) != 0 {
-                        return syscall_error(
-                            Errno::EOPNOTSUPP,
-                            "sendto",
-                            "The flags are not understood!",
-                        );
-                    }
 
                     if sockhandle.state != ConnState::NOTCONNECTED {
                         return syscall_error(
@@ -1373,7 +1366,7 @@ impl Cage {
     /// ### Arguments
     ///
     /// it accepts two parameters:
-    /// * `fd` - the file descriptor that refers to the listening socket
+    /// * `fd` - the file descriptor of the sending socket
     /// * `buf` - the message is found in buf
     /// * `buflen` - the len of the message found in buf
     /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
@@ -1457,7 +1450,7 @@ impl Cage {
     ///
     /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
-    /// * Unknown errno value from fcntl returned, will cause panic.
+    /// * Unknown errno value from sendto returned, will cause panic.
     ///
     /// for more detailed description of all the commands and return values, see
     /// [send(2)](https://linux.die.net/man/2/send)
@@ -1475,21 +1468,6 @@ impl Cage {
                     //Grab a write guard to the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
                     let sockhandle = sock_tmp.write();
-
-                    //** Seems like a BUG:
-                    //The current conditional statement checks if theres
-                    //a flag besides MSG_NOSIGNAL, and if so, return
-                    //that the flag is not supported
-                    //Why would only 1 flag be supported? */
-                    //If the flags given as an argument includes a flag that
-                    //is not MSG_NOSIGNAL, return with error
-                    if (flags & !MSG_NOSIGNAL) != 0 {
-                        return syscall_error(
-                            Errno::EOPNOTSUPP,
-                            "send",
-                            "The flags are not understood!",
-                        );
-                    }
 
                     //Pattern match based on the domain of the socket
                     //Lind handles UNIX sockets internally,
@@ -1509,6 +1487,9 @@ impl Cage {
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
+                                        //Otherwise, return with an error as
+                                        //TCP sockets taht aren't connected
+                                        //can't send messages
                                         return syscall_error(
                                             Errno::ENOTCONN,
                                             "writev",
@@ -1529,14 +1510,9 @@ impl Cage {
                                     }
                                     let retval = match sockinfo.sendpipe.as_ref() {
                                         //sendpipe is available in unix socket info
+                                        //it is needed to send the message found in buf
+                                        //to the connected socket
                                         Some(sendpipe) => {
-                                            //write_to_pipe writes a specified number of bytes
-                                            // starting at the given
-                                            // pointer to a circular buffer. Upon successful
-                                            // completion, the amount of bytes written is returned.
-                                            // In case of a failure, an error is returned to the
-                                            // calling syscall.
-                                            // Refer to src/interface/pipe.rs for errors
                                             sendpipe.write_to_pipe(buf, buflen, nonblocking) as i32
                                         }
                                         //sendpipe is not available in unix socket info
@@ -1545,12 +1521,27 @@ impl Cage {
                                             return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
                                         }
                                     };
+                                    //In the case that the write_to_pipe call returns EPIPE,
+                                    // meaning The local end has been shut down on a connection
+                                    // oriented socket. In this case, the process will also receive
+                                    // a SIGPIPE unless
+                                    // MSG_NOSIGNAL is set.
                                     if retval == -(Errno::EPIPE as i32) {
+                                        // The default action for SIGPIPE is to terminate the
+                                        // process without a core dump. This simplifies error
+                                        // handling in programs that
+                                        // are meant to run as part of a shell pipeline: reading
+                                        // input, transforming it, and then writing it to another
+                                        // process. SIGPIPE allows the program to skip error
+                                        // handling and blindly write data until it’s killed
+
+                                        //TODO only send kill if MSG_NOSIGNAL not set
                                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
                                     } // Trigger SIGPIPE
-                                    retval //return number of bytes written to
-                                           // buf
+                                    retval //return number of bytes sent
                                 }
+                                //If PROTOCOL is not TCP
+                                // ** Why is this the case for unix ?? **//
                                 _ => {
                                     return syscall_error(
                                         Errno::EOPNOTSUPP,
@@ -1560,69 +1551,101 @@ impl Cage {
                                 }
                             }
                         }
-                        // for inet
-                        AF_INET | AF_INET6 => match sockhandle.protocol {
-                            IPPROTO_TCP => {
-                                if (sockhandle.state != ConnState::CONNECTED)
-                                    && (sockhandle.state != ConnState::CONNWRONLY)
-                                {
-                                    return syscall_error(
-                                        Errno::ENOTCONN,
-                                        "send",
-                                        "The descriptor is not connected",
-                                    );
-                                }
-
-                                //because socket must be connected it must have an inner socket
-                                let retval = sockhandle
-                                    .innersocket
-                                    .as_ref()
-                                    .unwrap()
-                                    .sendto(buf, buflen, None);
-                                if retval < 0 {
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {
-                                            return syscall_error(
-                                                i,
-                                                "send",
-                                                "The libc call to sendto failed!",
-                                            );
-                                        }
-                                        Err(()) => panic!(
-                                            "Unknown errno value from socket sendto returned!"
-                                        ),
-                                    };
-                                } else {
-                                    return retval;
-                                }
-                            }
-
-                            IPPROTO_UDP => {
-                                let remoteaddr = match &sockhandle.remoteaddr {
-                                    Some(x) => x.clone(),
-                                    None => {
+                        //Pattern match based on the socket protocol
+                        AF_INET | AF_INET6 => {
+                            match sockhandle.protocol {
+                                //For a TCP socket to be able to send here we
+                                //either need to be fully connected, or connected for write
+                                // only
+                                IPPROTO_TCP => {
+                                    if (sockhandle.state != ConnState::CONNECTED)
+                                        && (sockhandle.state != ConnState::CONNWRONLY)
+                                    {
+                                        //Otherwise, return with an error as
+                                        //TCP sockets taht aren't connected
+                                        //can't send messages
                                         return syscall_error(
                                             Errno::ENOTCONN,
                                             "send",
                                             "The descriptor is not connected",
                                         );
                                     }
-                                };
-                                drop(unlocked_fd);
-                                drop(sockhandle);
-                                //send from a udp socket is just shunted off to sendto with the
-                                // remote address set
-                                return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
-                            }
 
-                            _ => {
-                                return syscall_error(
-                                    Errno::EOPNOTSUPP,
-                                    "send",
-                                    "Unkown protocol in send",
-                                );
+                                    //We passed the above check so the TCP socket must be connected
+                                    //Hence, it must have a valid inner socket/raw sys fd
+                                    //Call sendto from libc to send the buff
+                                    let retval = sockhandle
+                                        .innersocket
+                                        .as_ref()
+                                        .unwrap()
+                                        .sendto(buf, buflen, None);
+                                    //If the call to sendto from libc return
+                                    //-1, indicating an error, retrieve the err
+                                    //and return appropriately
+                                    //Otherwise, return the number of bytes
+                                    //written to the connected socket
+                                    if retval < 0 {
+                                        match Errno::from_discriminant(interface::get_errno()) {
+                                            Ok(i) => {
+                                                return syscall_error(
+                                                    i,
+                                                    "send",
+                                                    "The libc call to sendto failed!",
+                                                );
+                                            }
+                                            Err(()) => panic!(
+                                                "Unknown errno value from socket sendto returned!"
+                                            ),
+                                        };
+                                    } else {
+                                        return retval; //return the number of
+                                                       // bytes written to the
+                                                       // connected socket
+                                    }
+                                }
+
+                                //For INET sockets following the UDP protocol,
+                                //we don't need to check for connection status
+                                //as UDP is connection-less. This lets us grab
+                                //the remote address of the socket and send the
+                                //message in buf to it by calling sendto_syscall
+                                IPPROTO_UDP => {
+                                    let remoteaddr = match &sockhandle.remoteaddr {
+                                        Some(x) => x.clone(),
+                                        None => {
+                                            return syscall_error(
+                                                Errno::ENOTCONN,
+                                                "send",
+                                                "The descriptor is not connected",
+                                            );
+                                        }
+                                    };
+                                    //** Why is it necessary to drop here?? */
+                                    drop(unlocked_fd);
+                                    drop(sockhandle);
+                                    //remote address is set in sendto from libc
+                                    //as UDP socket is connection-less
+                                    return self.sendto_syscall(
+                                        fd,
+                                        buf,
+                                        buflen,
+                                        flags,
+                                        &remoteaddr,
+                                    ); //return the number of bytes written to the connected socket
+                                    //** TODO: Add error checking on the return value */
+                                }
+
+                                //Protcol besides UDP and TCP are not supported
+                                //for INET sockets in lind
+                                _ => {
+                                    return syscall_error(
+                                        Errno::EOPNOTSUPP,
+                                        "send",
+                                        "Unkown protocol in send",
+                                    );
+                                }
                             }
-                        },
+                        }
                         //If the domain of the socket is not UNIX or INET
                         //lind does not support it
                         _ => {

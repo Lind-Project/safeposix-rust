@@ -1660,6 +1660,165 @@ pub mod net_tests {
     }
 
     #[test]
+    //The connection between the client and the server ends early as the
+    //server socket fd is closed. The expected behavior is that errno is set
+    //to EBADF from the recvfrom_syscall
+    pub fn ut_lind_net_send_close_server_socket_early() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        //making sure that the assigned fd's are valid
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+        let port: u16 = generate_random_port();
+        //binding to a socket
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
+
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            interface::sleep(interface::RustDuration::from_millis(100));
+            let port: u16 = generate_random_port();
+
+            //Address of the socket to be accepted
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4 {
+                sin_family: AF_INET as u16,
+                sin_port: port.to_be(),
+                sin_addr: interface::V4Addr {
+                    s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+                },
+                padding: 0,
+            }); //127.0.0.1
+            let sockfd = cage2.accept_syscall(serversockfd, &mut socket2);
+            //really can only make sure that the fd is valid
+            assert!(sockfd > 0);
+
+            //process the first test...
+            //Writing 100, read 100
+            let mut buf = sizecbuf(100);
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 100, 0, &mut Some(&mut socket2)),
+                100
+            ); //reading the input message
+
+            interface::sleep(interface::RustDuration::from_millis(500));
+
+            assert_eq!(cage2.close_syscall(sockfd), 0);
+
+            //attempt to process the second test...
+            //Writing 100, read 100
+            buf = sizecbuf(100);
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 100, 0, &mut Some(&mut socket2)),
+                -(Errno::EBADF as i32)
+            ); //reading the input message
+
+            interface::sleep(interface::RustDuration::from_millis(500));
+
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        //connect to the server
+        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+
+        //send the data with delays so that the server can process the information
+        // cleanly
+        assert_eq!(
+            cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
+            100
+        );
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        assert_eq!(
+            cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
+            100
+        );
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    //The client does not have a peer address set. The expected behavior is that
+    // errno is set to ENOTCONN from the send_syscall
+    pub fn ut_lind_net_send_no_peer_address() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let serverfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        let clientfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+
+        //making sure that the assigned fd's are valid
+        assert!(serverfd > 0);
+        assert!(clientfd > 0);
+        let port: u16 = generate_random_port();
+        //binding to a socket
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        //starting a new cage to handle server side connection
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            assert_eq!(cage2.bind_syscall(serverfd, &socket), 0);
+
+            interface::sleep(interface::RustDuration::from_millis(30));
+
+            assert_eq!(cage2.close_syscall(serverfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        interface::sleep(interface::RustDuration::from_millis(50));
+        let buf2 = str2cbuf("test");
+        assert_eq!(
+            cage.send_syscall(clientfd, buf2, 4, 0),
+            -(Errno::ENOTCONN as i32)
+        );
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.close_syscall(clientfd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_net_select_badinput() {
         // this test is used for testing select with error cases
 
