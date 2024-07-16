@@ -3363,14 +3363,48 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETPEERNAME SYSCALL------------------
+    /// ### Description
+    /// The `getpeername_syscall()` returns the address of the peer connected to
+    /// the socket fd, in the buffer pointed to by ret_addr
+
+    /// ### Function Arguments
+    /// The `getpeername_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The socket is not connected.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getpeername.2.html
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getpeername",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
-                //if the socket is not connected, then we should return an error
+                // get the read lock of sockhandle
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // if the socket is not connected, then we should return an error
                 if sockhandle.remoteaddr == None {
                     return syscall_error(
                         Errno::ENOTCONN,
@@ -3378,9 +3412,11 @@ impl Cage {
                         "the socket is not connected",
                     );
                 }
+                // we just return the remoteaddr stored in sockhandle
                 *ret_addr = sockhandle.remoteaddr.unwrap();
                 return 0;
             } else {
+                // if the fd is not socket object
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getpeername",
@@ -3388,6 +3424,7 @@ impl Cage {
                 );
             }
         } else {
+            // if the fd is not valid
             return syscall_error(
                 Errno::EBADF,
                 "getpeername",
@@ -3396,15 +3433,53 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETSOCKNAME SYSCALL------------------
+    /// ### Description
+    /// The `getsockname_syscall()` returns the current address to which the
+    /// socket fd is bound, in the buffer pointed to by ret_addr.
+
+    /// ### Function Arguments
+    /// The `getsockname_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getsockname.2.html
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getsockname",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
+                // must be a socket file descriptor
+
+                // get the read lock of socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
                 if sockhandle.domain == AF_UNIX {
+                    // in case of AF_UNIX socket
                     if sockhandle.localaddr == None {
+                        // if hasn't bind to any address
+                        // return an empty address
                         let null_path: &[u8] = &[];
                         *ret_addr = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                             sockhandle.domain as u16,
@@ -3412,13 +3487,16 @@ impl Cage {
                         ));
                         return 0;
                     }
-                    //if the socket is not none, then return the socket
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 } else {
+                    // in case of AF_INET/AF_INET6
                     if sockhandle.localaddr == None {
-                        //sets the address to 0.0.0.0 if the address is not initialized yet
-                        //setting the family as well based on the domain
+                        // for ipv4, sets the address to 0.0.0.0 if the address is not initialized
+                        // yet for ipv6, sets the address to 0:0:0:0:0:0:0:0
+                        // (::) if the address is not initialized yet
+                        // setting the family as well based on the domain
                         let addr = match sockhandle.domain {
                             AF_INET => interface::GenIpaddr::V4(interface::V4Addr::default()),
                             AF_INET6 => interface::GenIpaddr::V6(interface::V6Addr::default()),
@@ -3427,14 +3505,18 @@ impl Cage {
                             }
                         };
                         ret_addr.set_addr(addr);
+                        // sets port to 0 as well
                         ret_addr.set_port(0);
+                        // sets the family
                         ret_addr.set_family(sockhandle.domain as u16);
                         return 0;
                     }
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 }
             } else {
+                // the fd is not a socket
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockname",
@@ -3442,6 +3524,7 @@ impl Cage {
                 );
             }
         } else {
+            // invalid fd
             return syscall_error(
                 Errno::EBADF,
                 "getsockname",
