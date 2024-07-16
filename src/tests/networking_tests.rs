@@ -534,7 +534,7 @@ pub mod net_tests {
     }
 
     #[test]
-    pub fn ut_lind_net_getpeername_bad_input() {
+    pub fn ut_lind_net_getpeername() {
         // this test is used for testing getpeername with invalid input
 
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
