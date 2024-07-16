@@ -3533,9 +3533,32 @@ impl Cage {
         }
     }
 
-    //we only return the default host name because we do not allow for the user to
-    // change the host name right now
+    /// ## ------------------GETHOSTNAME SYSCALL------------------
+    /// ### Description
+    /// The `gethostname_syscall()` returns the null-terminated hostname in the
+    /// character array name, which has length bytes.  If the null-terminated
+    /// hostname is too large to fit, then the name is truncated, and no error
+    /// is returned
+
+    /// ### Function Arguments
+    /// The `gethostname_syscall()` receives two arguments:
+    /// * `address_ptr` -  The buffer to hold the returned host name
+    /// * `length` - The length of the buffer
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EINVAL - length is negative
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man2/gethostname.2.html
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
+        // we only return the default host name because we do not allow for the user to
+        // change the host name right now
         if length < 0 {
             return syscall_error(
                 Errno::EINVAL,
@@ -3544,15 +3567,19 @@ impl Cage {
             );
         }
 
+        // DEFAULT_HOSTNAME is "Lind"
+        // we convert the string to vector with a null terminator
         let mut bytes: Vec<u8> = DEFAULT_HOSTNAME.as_bytes().to_vec();
         bytes.push(0u8); //Adding a null terminator to the end of the string
         let name_length = bytes.len();
 
+        // take the min between name_length and length from argument
         let mut len = name_length;
         if (length as usize) < len {
             len = length as usize;
         }
 
+        // fill up the address_ptr
         interface::fill(address_ptr, len, &bytes);
 
         return 0;
@@ -4334,9 +4361,32 @@ impl Cage {
         return 0;
     }
 
-    // all this does is send the net_devs data in a string to libc, where we will
-    // later parse and alloc into getifaddrs structs
+    /// ## ------------------GETIFADDRS SYSCALL------------------
+    /// ### Description
+    /// The `getifaddrs_syscall()` function creates a linked list of structures
+    /// describing the network interfaces of the local system, and stores the
+    /// address of the first item of the list in buf.
+
+    /// ### Function Arguments
+    /// The `getifaddrs_syscall()` receives two arguments:
+    /// * `buf` -  The buffer to hold the returned address
+    /// * `count` - The length of the buffer
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EOPNOTSUPP - buf length is too small to hold the return value
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
+        // all this does is returning the net_devs data in a string, where we will later
+        // parse and alloc into getifaddrs structs in libc
+
         if NET_IFADDRS_STR.len() < count {
             interface::fill(
                 buf,
