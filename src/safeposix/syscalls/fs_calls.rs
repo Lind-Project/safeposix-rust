@@ -1098,9 +1098,9 @@ impl Cage {
     /// truncating an existing one by combining the O_CREAT, O_TRUNC, and
     /// O_WRONLY flags.
     /// There are generally two cases which occur when this syscall happens:
-    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT flag,
-    /// a new file is created at the given location and a new file descriptor is
-    /// created and returned.
+    /// Case 1: If the file to be opened doesn't exist, then due to O_CREAT
+    /// flag, a new file is created at the given location and a new file
+    /// descriptor is created and returned.
     /// Case 2: If the file already exists, then due to O_TRUNC flag, the file
     /// size gets reduced to 0, and the existing file descriptor is returned.
     ///
@@ -1366,17 +1366,78 @@ impl Cage {
         0 //success!
     }
 
-    //------------------------------------READ SYSCALL------------------------------------
-
+    /// ## ------------------READ SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `read_syscall()` attempts to read `count` bytes from the file
+    /// associated with the open file descriptor, `fd`, into the buffer
+    /// pointed to by `buf`. On files that support seeking (for example, a
+    /// regular file), the read operation commences at the file offset, and
+    /// the file offset is incremented by the number of bytes read. If the
+    /// file offset is at or past the end of file, no bytes are read,
+    /// and read_syscall() returns zero. If the `count` of the bytes to be read
+    /// is 0, the read_syscall() returns 0. No data transfer will occur past
+    /// the current end-of-file. If the starting position is at or after the
+    /// end-of-file, 0 will be returned The reading mechanism is different
+    /// for each type of file descriptor, which is discussed in the
+    /// implementation.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `read_syscall()` receives three arguments:
+    /// * `fd` - This argument refers to the file descriptor from which the data
+    ///   is to be read.
+    /// * `buf` - This argument refers to the mutable buffer into which the file
+    ///   data is to be stored and then returned back. This value is greater
+    ///   than or equal to zero.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   read from the file. This value should be greater than or equal to
+    ///   zero.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// read. This number will never be greater than `count`. The value returned
+    /// may be less than `count` if the number of bytes left in the file is less
+    /// than `count`, if the read_syscall() was interrupted by a signal, or if
+    /// the file is a pipe or FIFO or special file and has fewer than
+    /// `count` bytes immediately available for reading.
+    ///
+    /// ### Errors
+    ///
+    /// * EBADF - Given file descriptor in the arguments is invalid; the file is
+    ///   not opened for reading.
+    /// * EISDIR - The file descriptor opened for reading is a directory.
+    /// * EOPNOTSUPP - Reading from streams is not supported.
+    /// * EINVAL - File descriptor is attached to an object which is unsuitable
+    ///   for reading
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When the file type filedescriptor contains a Socket as an inode.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [read(2)](https://man7.org/linux/man-pages/man2/read.2.html)
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
+        // Attempt to get the file descriptor
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //delegate to pipe, stream, or socket helper if specified by file descriptor
-            // enum type (none of them are implemented yet)
+            // There are different types of file descriptors (File, Sockets, Stream, PIPE),
+            // Based on the enum type, each file descriptor has a different implementation
+            // for reading data from the file.
             match filedesc_enum {
-                //we must borrow the filedesc object as a mutable reference to update the position
+                // We must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Return an error if the file cannot be not opened for reading.
+                    // The function `is_wronly` checks for write only permissions, for a file
+                    // which if true, returns an error, else the file can be opened for reading.
                     if is_wronly(normalfile_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1385,38 +1446,55 @@ impl Cage {
                         );
                     }
 
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character if it's a character file, checking based on the type of
-                    // the inode object
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match &*inodeobj {
+                        // For `File` type inode, the reading happens from the current position
+                        // of the object pointed by `position`. The fileobject is fetched from
+                        // the FileObjectTable and we start reading into the buffer `buf` until
+                        // `count` number of bytes.
                         Inode::File(_) => {
+                            // Get the current position of the File Descriptor Object.
                             let position = normalfile_filedesc_obj.position;
+                            // Get the file object associated with the file descriptor object
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                            if let Ok(bytesread) = fileobject.readat(buf, count, position) {
-                                //move position forward by the number of bytes we've read
-
-                                normalfile_filedesc_obj.position += bytesread;
-                                bytesread as i32
-                            } else {
-                                0 //0 bytes read, but not an error value that
-                                  // can/should be passed to the user
-                            }
+                            // `readat` function reads from file at specified offset into provided
+                            // C-buffer. If successful, then the position in the file descriptor
+                            // object is updated by adding the number of bytes read (bytesread).
+                            // This ensures that the next read operation will start from the correct
+                            // position.
+                            let bytesread = fileobject.readat(buf, count, position as usize).unwrap();
+                            //move position forward by the number of bytes we've read
+                            normalfile_filedesc_obj.position += bytesread;
+                            // Return the number of bytes read.
+                            bytesread as i32
                         }
 
+                        // For `CharDev` type inode, the reading happens from the Character Device
+                        // file, with each device type returning different results returned
+                        // from the `_read_chr_file` file.
                         Inode::CharDev(char_inode_obj) => {
+                            // reads from character devices by matching the device number (DevNo) of
+                            // the DeviceInode.
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
 
+                        // A Sanity check where the File type fd should not have a `Socket` type
+                        // inode and should panic.
                         Inode::Socket(_) => {
                             panic!("read(): Socket inode found on a filedesc fd.")
                         }
 
+                        // For `Dir` type inode, an error is returned as reading from a directory is
+                        // not allowed
                         Inode::Dir(_) => syscall_error(
                             Errno::EISDIR,
                             "read",
@@ -1424,16 +1502,34 @@ impl Cage {
                         ),
                     }
                 }
+                // For `Socket` type file descriptor, a read is equivalent to a `recv_syscall` so we
+                // transfer control there. A `recv_syscall` is used for receiving message from a
+                // socket.
                 Socket(_) => {
                     drop(unlocked_fd);
                     self.recv_common(fd, buf, count, 0, &mut None)
                 }
+                // Reading from `Stream` type file descriptors is not supported.
                 Stream(_) => syscall_error(
                     Errno::EOPNOTSUPP,
                     "read",
                     "reading from stdin not implemented yet",
                 ),
+                // Reading from `Epoll` type file descriptors is not supported.
+                Epoll(_) => syscall_error(
+                    Errno::EINVAL,
+                    "read",
+                    "fd is attached to an object which is unsuitable for reading",
+                ),
+                // The `Pipe` type file descriptor handles read through blocking and non-blocking
+                // modes differently to ensure appropriate behavior based on the flags set on the
+                // pipe. In blocking mode, the read_from_pipe function will wait until data is
+                // available to read. This means that if the pipe is empty, the read operation will
+                // block (wait) until data is written to the pipe. In non-blocking mode, the
+                // read_from_pipe function will return immediately with an EAGAIN error if there is
+                // no data available to read. This prevents the function from blocking.
                 Pipe(pipe_filedesc_obj) => {
+                    // Return an error if the pipe cannot be not opened for reading.
                     if is_wronly(pipe_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1441,55 +1537,117 @@ impl Cage {
                             "specified file not open for reading",
                         );
                     }
+                    // Check if the `O_NONBLOCK` flag is set in the pipe's flags.
+                    // If `O_NONBLOCK` is set, we set nonblocking to true, indicating that the pipe
+                    // operates in non-blocking mode.
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
+
+                    // Ensures that the function keeps trying to read data until it either succeeds
+                    // or encounters a non-retryable error.
                     loop {
                         // loop over pipe reads so we can periodically check for cancellation
                         let ret = pipe_filedesc_obj
                             .pipe
                             .read_from_pipe(buf, count, nonblocking)
                             as i32;
+                        // Check if the pipe is in blocking mode and the read returned EAGAIN.
+                        // It means that no data is currently available and the read should be tried
+                        // again later.
                         if pipe_filedesc_obj.flags & O_NONBLOCK == 0
                             && ret == -(Errno::EAGAIN as i32)
                         {
+                            // Check if the cancel status is set
                             if self
                                 .cancelstatus
                                 .load(interface::RustAtomicOrdering::Relaxed)
                             {
-                                // if the cancel status is set in the cage, we trap around a cancel
-                                // point until the individual thread
-                                // is signaled to cancel itself
+                                // If the cancel status is set in the cage, we trap around a cancel
+                                // point until the individual thread is signaled to cancel itself
                                 loop {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
-                            continue; //received EAGAIN on blocking pipe, try
-                                      // again
+                            // Received `EAGAIN` and no cancellation is requested, continue the loop
+                            // to try reading from the pipe again
+                            continue;
                         }
-                        return ret; // if we get here we can return
+                        // If the read was successful, return the result
+                        return ret;
                     }
                 }
-                Epoll(_) => syscall_error(
-                    Errno::EINVAL,
-                    "read",
-                    "fd is attached to an object which is unsuitable for reading",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "read", "invalid file descriptor")
         }
     }
 
-    //------------------------------------PREAD SYSCALL------------------------------------
+    /// ## ------------------PREAD SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `pread_syscall()` attempts to read `count` bytes from the file
+    /// associated with the open file descriptor, `fd`, into the buffer
+    /// pointed to by `buf`, starting at the given `offset`. Unlike `read()`,
+    /// `pread()` does not change the file offset.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `pread_syscall()` receives four arguments:
+    /// * `fd` - This argument refers to the file descriptor from which the data
+    ///   is to be read.
+    /// * `buf` - This argument refers to the mutable buffer into which the file
+    ///   data is to be stored and then returned back. This value is greater
+    ///   than or equal to zero.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   read from the file. This value should be greater than or equal to
+    ///   zero.
+    /// * `offset` - This argument specifies the file offset at which the read
+    ///   is to begin. The file offset is not changed by this operation.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// read. This number will never be greater than `count`. The value returned
+    /// may be less than `count` if the number of bytes left in the file is less
+    /// than `count`.
+    ///
+    /// ### Errors
+    ///
+    /// * EBADF - Given file descriptor in the arguments is invalid; the file is
+    ///   not opened for reading.
+    /// * EISDIR - The file descriptor opened for reading is a directory.
+    /// * EOPNOTSUPP - Reading from streams is not supported.
+    /// * ESPIPE - The file descriptor opened for reading is either of type
+    ///   Socket, Stream, Pipe, or Epoll.
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When the file type file descriptor contains a Socket as an inode.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [pread(2)](https://man7.org/linux/man-pages/man2/pread.2.html)
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
+        // Attempt to get the file descriptor
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            // There are different types of file descriptors (File, Sockets, Stream, PIPE),
+            // Based on the enum type, each file descriptor has a different implementation
+            // for reading data from the file.
             match filedesc_enum {
                 //we must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Return an error if the file cannot be not opened for reading.
+                    // The function `is_wronly` checks for write only permissions, for a file
+                    // which if true, returns an error, else the file can be opened for reading.
                     if is_wronly(normalfile_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1498,34 +1656,43 @@ impl Cage {
                         );
                     }
 
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character if it's a character file, checking based on the type of
-                    // the inode object
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match &*inodeobj {
                         Inode::File(_) => {
+                            // Fetch the file object from the file object table
                             let fileobject =
                                 FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
 
-                            if let Ok(bytesread) = fileobject.readat(buf, count, offset as usize) {
-                                bytesread as i32
-                            } else {
-                                0 //0 bytes read, but not an error value that
-                                  // can/should be passed to the user
-                            }
+                            // `readat` function reads from file at specified offset into provided
+                            // C-buffer.
+                            let bytesread = fileobject.readat(buf, count, offset as usize).unwrap();
+                            // Return the number of bytes read.
+                            bytesread as i32
                         }
 
+                        // For `CharDev` type inode, the reading happens from the Character Device
+                        // file, with each device type returning different results returned
+                        // from the `_read_chr_file` file.
                         Inode::CharDev(char_inode_obj) => {
+                            // reads from character devices by matching the device number (DevNo) of
+                            // the DeviceInode. This function returns the number of bytes read from
+                            // the character device and updates the buffer `buf` with them.
                             self._read_chr_file(&char_inode_obj, buf, count)
                         }
-
+                        // A Sanity check where the File type fd should not have a `Socket` type
+                        // inode and should panic.
                         Inode::Socket(_) => {
                             panic!("pread(): Socket inode found on a filedesc fd")
                         }
-
+                        // For `Dir` type inode, an error is returned as reading from a directory is
+                        // not allowed
                         Inode::Dir(_) => syscall_error(
                             Errno::EISDIR,
                             "pread",
@@ -1533,21 +1700,30 @@ impl Cage {
                         ),
                     }
                 }
+                // Return an error for Sockets, as they do not support the concept of seeking to a
+                // specific offset because data arrives in a continuous stream from the network.
                 Socket(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
                     "file descriptor is associated with a socket, cannot seek",
                 ),
+                // Return an error for Streams, as like sockets, streams are sequential and do not
+                // support seeking to an offset.
                 Stream(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
                     "file descriptor is associated with a stream, cannot seek",
                 ),
+                // Return an error for Pipes, as they are designed for sequential reads and writes
+                // between processes. Seeking within a pipe would not make sense because data is
+                // read in the order it was written, making pread inapplicable.
                 Pipe(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
                     "file descriptor is associated with a pipe, cannot seek",
                 ),
+                // Return an error for Epoll, as Epoll file descriptors are for event notification
+                // and do not hold any data themselves.
                 Epoll(_) => syscall_error(
                     Errno::ESPIPE,
                     "pread",
@@ -1559,12 +1735,59 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    /// The `_read_chr_file()` helper function is used by `read_syscall()` and
+    /// `pread_syscall()` for reading from character device type files.
+    /// It reads from character devices by matching the device number (DevNo)
+    /// of the DeviceInode. It handles `/dev/null`, `/dev/zero`, `/dev/random`,
+    /// and `/dev/urandom` by performing the appropriate actions for each
+    /// device. If the device is unsupported, it returns an error indicating
+    /// that the operation is not supported. This function is used for
+    /// interacting with special character files in a Unix-like filesystem.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `_read_chr_file()` receives three arguments:
+    /// * `inodeobj` - This argument refers to the DeviceInode object, which
+    ///   contains metadata about the character device.
+    /// * `buf` - This argument refers to the mutable buffer into which the data
+    ///   is to be stored and then returned back.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   read from the file. This value should be greater than or equal to
+    ///   zero.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// read. This number will never be greater than `count`. The value returned
+    /// may be less than `count` if the number of bytes left in the file is less
+    /// than `count`, if the read_syscall() was interrupted by a signal, or if
+    /// the file is a pipe or FIFO or special file and has fewer than
+    /// `count` bytes immediately available for reading.
+    ///
+    /// ### Errors
+    ///
+    /// * EOPNOTSUPP - When read from the unspecified object is not permitted
+    ///
+    /// ### Panics
+    ///
+    /// * This function does not panic in any cases.
     fn _read_chr_file(&self, inodeobj: &DeviceInode, buf: *mut u8, count: usize) -> i32 {
+        // Determine which character device is being read from, based on the device
+        // number (dev) in the DeviceInode object.
         match inodeobj.dev {
-            NULLDEVNO => 0, //reading from /dev/null always reads 0 bytes
+            // reading from /dev/null always reads 0 bytes indicating an end-of-file condition.
+            NULLDEVNO => 0,
+            // reading from /dev/zero fills the buffer with zeroes
             ZERODEVNO => interface::fillzero(buf, count),
+            // reading from /dev/random fills the buffer with random bytes
             RANDOMDEVNO => interface::fillrandom(buf, count),
+            // reading from /dev/urandom also fills the buffer with random bytes
+            // Note: This might have to be changed in future.
             URANDOMDEVNO => interface::fillrandom(buf, count),
+            // for any device number not specifically handled above,
+            // we return an error
             _ => syscall_error(
                 Errno::EOPNOTSUPP,
                 "read or pread",
@@ -2158,15 +2381,59 @@ impl Cage {
         }
     }
 
-    //------------------------------------FCHDIR SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `fchdir_syscall()` function changes the current working
+    /// directory of the calling process to the directory specified
+    /// by an open file descriptor `fd`.
+    ///
+    /// ### Arguments
+    ///
+    /// The `fchdir_syscall()` accepts one argument:
+    /// * `fd` - an open file descriptor that specifies the directory
+    /// to which we want to change the current working directory.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. `ENOTDIR`, `EBADF`, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - fd is not a valid file descriptor.
+    /// * `ENOTDIR` - the open file descriptor fildes does not refer to a directory.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on which
+    /// causes a panic.
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [fchdir(2)](https://linux.die.net/man/2/fchdir)
 
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
-
+        //If a table descriptor entry corresponds to a file, we check if it is
+        //a directory file type. If it is not, we return `A component of path is
+        //not a directory` error.
+        //If it is one of the special file types, we return `Cannot change working
+        //directory on this file descriptor` error.
+        //Finally, if it does not correspond to any file type, we return `Invalid file
+        //descriptor` error.
         let path_string = match &*unlocked_fd {
+            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
             Some(File(normalfile_filedesc_obj)) => {
                 let inodenum = normalfile_filedesc_obj.inode;
+                //`pathnamefrominodenum` resolves the absolute path of a directory
+                //from its inode and returns None in case any of the path components
+                //is not a directory
                 match pathnamefrominodenum(inodenum) {
                     Some(name) => name,
                     None => {
@@ -2180,31 +2447,76 @@ impl Cage {
             }
             Some(_) => {
                 return syscall_error(
-                    Errno::EACCES,
+                    Errno::ENOTDIR,
                     "fchdir",
-                    "cannot change working directory on this file descriptor",
+                    "the file descriptor does not refer to a directory",
                 )
-            }
-            None => return syscall_error(Errno::EBADF, "fchdir", "invalid file descriptor"),
+            },
         };
-
+        //Obtain the write lock on the current working directory of the cage
+        //and change it to the new directory
         let mut cwd_container = self.cwd.write();
-
-        *cwd_container = interface::RustRfc::new(convpath(path_string.as_str()));
+        *cwd_container = interface::RustRfc::new(normpath(convpath(path_string.as_str()), self));
 
         0 // fchdir success
     }
 
-    //------------------------------------CHDIR SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `chdir_syscall()` function changes the current working
+    /// directory of the calling process to the directory specified
+    /// in `path`, which can be an absolute or a relative pathname.
+    ///
+    /// ### Arguments
+    ///
+    /// The `chdir_syscall()` accepts one argument:
+    /// * `path` - the pathname, to which the current working
+    /// directory shall be changed.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, zero is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOTDIR` - a component of `path` is not a directory.
+    /// * `ENOENT` - the directory specified in path does not exist.
+    /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// * when the previous working directory does not exist or does not
+    /// have the directory file type flag, the function panics
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [chdir(2)](https://man7.org/linux/man-pages/man2/chdir.2.html)
 
     pub fn chdir_syscall(&self, path: &str) -> i32 {
+        //Convert the provided pathname into an absolute path without `.` or `..`
+        //components.
         let truepath = normpath(convpath(path), self);
-        //Walk the file tree to get inode from path
+        //Perfrom a walk down the file tree starting from the root directory to
+        //obtain an inode number of the file whose pathname was specified.
+        //`None` is returned if one of the following occurs while moving down
+        //the tree: 
+        //1. Accessing a child of a non-directory inode 
+        //2. Accessing a child of a nonexistent parent directory
+        //3. Accessing a nonexistent child
+        //4. Accessing an unexpected component, like `.` or `..` directory reference.
+        //In this case, `The file does not exist` error is returned.
+        //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(&truepath) {
-            if let Inode::Dir(ref mut dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap()) {
-                //increment refcount of new cwd inode to ensure that you can't remove a
-                // directory while it is the cwd of a cage
-                dir.refcount += 1;
+            //A sanity check to make sure that the last component of the
+            //specified path is indeed a directory
+            if let Inode::Dir(ref mut _dir) = *(FS_METADATA.inodetable.get_mut(&inodenum).unwrap())
+            {
+                //Obtain the write lock on the current working directory of the cage
+                //and change it to the new directory
+                let mut cwd_container = self.cwd.write();
+                *cwd_container = interface::RustRfc::new(truepath);
+                0 //chdir has succeeded!;
             } else {
                 return syscall_error(
                     Errno::ENOTDIR,
@@ -2219,18 +2531,53 @@ impl Cage {
                 "the directory referred to in path does not exist",
             );
         }
-        //at this point, syscall isn't an error
-        let mut cwd_container = self.cwd.write();
-
-        //decrement refcount of previous cwd's inode, to allow it to be removed if no
-        // cage has it as cwd
-        decref_dir(&*cwd_container);
-
-        *cwd_container = interface::RustRfc::new(truepath);
-        0 //chdir has succeeded!;
     }
 
-    //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
+    ///##------------------------------------DUP & DUP2 SYSCALLS------------------------------------
+    /// ## `dup_syscall`
+    ///
+    /// ### Description
+    /// This function duplicates a file descriptor. It creates a new file
+    /// descriptor that refers to the same open file description as the original
+    /// file descriptor.
+    /// * Finding the Next Available File Descriptor: If `start_desc` is
+    ///   provided and it is already in use, the function will continue
+    ///   searching for the next available file descriptor starting from
+    ///   `start_desc`. If no file descriptors are available, it will return an
+    ///   error (`ENFILE`).
+    /// * If `fd` is equal to `start_fd`, the function returns `start_fd` as the
+    ///   new file descriptor. This is because in this scenario, the original
+    ///   and new file descriptors would point to the same file description.
+    /// * The `_dup2_helper` function is called to perform the actual file
+    ///   descriptor duplication, handling the allocation of a new file
+    ///   descriptor, updating the file descriptor table, and incrementing the
+    ///   reference count of the file object.
+    /// * The function modifies the global `filedescriptortable` array, adding a
+    ///   new entry for the duplicated file descriptor. It also increments the
+    ///   reference count of the file object associated with the original file
+    ///   descriptor.
+    /// * The `false` argument passed to `_dup2_helper` indicates that this call
+    ///   is from the `dup_syscall` function, not the `dup2_syscall` function.
+    ///
+    /// ### Function Arguments
+    /// * `fd`: The original file descriptor to duplicate.
+    /// * `start_desc`:  An optional starting file descriptor number. If
+    ///   provided, the new file descriptor will be
+    ///  assigned the first available file descriptor number starting from this
+    /// value. If not provided, it defaults to  `STARTINGFD`,which is the
+    /// minimum designated file descriptor value for new file descriptors.
+    ///
+    /// ### Returns
+    /// * The new file descriptor on success.
+    /// * `EBADF`: If the original file descriptor is invalid.
+    /// * `ENFILE`: If there are no available file descriptors.
+    ///
+    /// ### Errors
+    /// * `EBADF(9)`: If the original file descriptor is invalid.
+    /// * `ENFILE(23)`: If there are no available file descriptors.
+    ///  ###Panics
+    /// * There are no panics for this syscall
+    ///[dup(2)](https://man7.org/linux/man-pages/man2/dup.2.html)
 
     pub fn dup_syscall(&self, fd: i32, start_desc: Option<i32>) -> i32 {
         //if a starting fd was passed, then use that as the starting point, but
@@ -2245,7 +2592,11 @@ impl Cage {
         } //if the file descriptors are equal, return the new one
 
         // get the filedesc_enum
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Attempt to get the file descriptor; handle error if it does not exist
+        let checkedfd = match self.get_filedescriptor(fd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "dup", "Invalid old file descriptor."),
+        };
         let filedesc_enum = checkedfd.write();
         let filedesc_enum = if let Some(f) = &*filedesc_enum {
             f
@@ -2256,6 +2607,40 @@ impl Cage {
         //checking whether the fd exists in the file table
         return Self::_dup2_helper(&self, filedesc_enum, start_fd, false);
     }
+
+    /// ## `dup2_syscall`
+    ///
+    /// ### Description
+    /// This function implements the `dup2` system call, which duplicates a file
+    /// descriptor and assigns it to a new file descriptor number. If the
+    /// new file descriptor already exists, it is closed before the duplication
+    /// takes place.
+    /// * File Descriptor Reuse:  If the new file descriptor (`newfd`) is
+    ///   already open, the function will first close the existing file
+    ///   descriptor silently (without returning an error) before allocating a
+    ///   new file descriptor and updating the file descriptor table.
+    /// * If `oldfd` and `newfd` are the same, the function returns `newfd`
+    ///   without closing it. This is because in this scenario, the original and
+    ///   new file descriptors would already point to the same file description.
+    /// * the global `filedescriptortable` array, replacing the entry for the
+    ///   new file descriptor with a new entry for the duplicated file
+    ///   descriptor. It also increments the reference count of the file object
+    ///   associated with the original file descriptor.
+    ///
+    /// ### Function Arguments
+    /// * `oldfd`: The original file descriptor to duplicate.
+    /// * `newfd`: The new file descriptor number to assign to the duplicated
+    ///   file descriptor.
+    ///
+    /// ### Returns
+    /// * The new file descriptor on success.
+    ///
+    /// ### Errors
+    /// * `EBADF(9)`: If the original file descriptor (`oldfd`) is invalid or
+    ///   the new file descriptor (`newfd`) number is out of range.
+    ///  ###Panics
+    /// * There are no panics for this syscall
+    ///[dup2(2)](https://linux.die.net/man/2/dup2)
 
     pub fn dup2_syscall(&self, oldfd: i32, newfd: i32) -> i32 {
         //checking if the new fd is out of range
@@ -2272,7 +2657,10 @@ impl Cage {
         } //if the file descriptors are equal, return the new one
 
         // get the filedesc_enum
-        let checkedfd = self.get_filedescriptor(oldfd).unwrap();
+        let checkedfd = match self.get_filedescriptor(oldfd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "dup2", "Invalid old file descriptor."),
+        };
         let filedesc_enum = checkedfd.write();
         let filedesc_enum = if let Some(f) = &*filedesc_enum {
             f
@@ -2283,6 +2671,56 @@ impl Cage {
         //if the old fd exists, execute the helper, else return error
         return Self::_dup2_helper(&self, filedesc_enum, newfd, true);
     }
+
+    /// ## `_dup2_helper`
+    ///
+    /// ### Description
+    /// This helper function performs the actual file descriptor duplication
+    /// process for both `dup` and `dup2` system calls. It handles the
+    /// allocation of a new file descriptor, updates the file descriptor table,
+    /// and increments the reference count of the associated file object.
+    /// * Duplication from `dup2_syscall`: If `fromdup2` is true, the function
+    ///   first closes the existing file descriptor at `newfd` (if any) before
+    ///   allocating a new file descriptor and updating the file descriptor
+    ///   table.
+    /// * Duplication from `dup_syscall`: If `fromdup2` is false, the function
+    ///   allocates a new file descriptor, finds the first available file
+    ///   descriptor number starting from `newfd`, and updates the file
+    ///   descriptor table.
+    /// * Reference Counting: The function increments the reference count of the
+    ///   file object associated with the original file descriptor. This ensures
+    ///   that the file object is not deleted until all its associated file
+    ///   descriptors are closed.
+    /// * Socket Handling: For domain sockets, the function increments the
+    ///   reference count of both the send and receive pipes associated with the
+    ///   socket.
+    /// * Stream Handling: Streams are not currently supported for duplication
+    /// * Unhandled File Types: If the file descriptor is associated with a file
+    ///   type that is not handled by the function (i.e., not a File, Pipe,
+    ///   Socket, or Stream), the function returns an error (`EACCES`).
+    /// * The function does not handle streams.
+    /// * Socket Handling: If the file descriptor is associated with a socket,
+    ///   the function handles domain sockets differently by incrementing the
+    ///   reference count of both the send and receive pipes.
+    /// ### Function Arguments
+    /// * `self`:  A reference to the `FsCalls` struct, which contains the file
+    ///   descriptor table and other system-related data.
+    /// * `filedesc_enum`: A reference to the `FileDescriptor` object
+    ///   representing the file descriptor to be duplicated.
+    /// * `newfd`: The new file descriptor number to assign to the duplicated
+    ///   file descriptor.
+    /// * `fromdup2`: A boolean flag indicating whether the call is from
+    ///   `dup2_syscall` (true) or `dup_syscall` (false).
+    ///
+    /// ### Returns
+    /// * The new file descriptor on success.
+    ///
+    /// ### Errors
+    /// * `ENFILE(23)`: If there are no available file descriptors.
+    /// * `EACCES(13)`: If the file descriptor cannot be duplicated.
+    /// ###Panics
+    /// * If the file descriptor is associated with a socket, and the inode does
+    ///   not match the file descriptor.
 
     pub fn _dup2_helper(&self, filedesc_enum: &FileDescriptor, newfd: i32, fromdup2: bool) -> i32 {
         let (dupfd, mut dupfdguard) = if fromdup2 {
@@ -2301,6 +2739,9 @@ impl Cage {
         } else {
             let (newdupfd, guardopt) = self.get_next_fd(Some(newfd));
             if newdupfd < 0 {
+                // The function allocates a new file descriptor and updates the file descriptor
+                // table, handling the potential for file descriptor table
+                // overflow (resulting in an `ENFILE` error).
                 return syscall_error(
                     Errno::ENFILE,
                     "dup2_helper",
@@ -2319,6 +2760,9 @@ impl Cage {
                 //incrementing the ref count so that when close is executed on the dup'd file
                 //the original file does not get a negative ref count
                 match *inodeobj {
+                    // increments the reference count of the file object associated with the
+                    // original file descriptor to ensure that the file object
+                    // is not deleted until all its associated file descriptors are closed.
                     Inode::File(ref mut normalfile_inode_obj) => {
                         normalfile_inode_obj.refcount += 1;
                     }
@@ -2496,9 +2940,15 @@ impl Cage {
                                 None => {}
                             }
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
-                                //removing the file from the metadata
-                                FS_METADATA.inodetable.remove(&inodenum);
+                                //The reference to the inode has to be dropped to avoid
+                                //deadlocking because the remove() method will need to
+                                //acquire a reference to the same inode from the
+                                //filesystem's inodetable.
+                                //The inodetable represents a Rust DashMap that deadlocks
+                                //when trying to get a reference to its entry while holding any
+                                // sort of reference into it.
                                 drop(inodeobj);
+                                FS_METADATA.inodetable.remove(&inodenum);
                                 log_metadata(&FS_METADATA, inodenum);
                             }
                         }
@@ -3054,7 +3504,70 @@ impl Cage {
         }
     }
 
-    //------------------------------------MMAP SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `mmap_syscall()` function creates a new mapping in the
+    /// virtual address space of the calling process.
+    ///
+    /// ### Arguments
+    ///
+    /// The `mmap_syscall()` accepts six arguments:
+    /// * `addr` - the starting address for the new mapping. If `addr`
+    /// is NULL, then the kernel chooses the (page-aligned) address at
+    /// which to create the mapping. If addr is not NULL, then the
+    /// kernel takes it as a hint about where to place the mapping.
+    /// * `len` - specifies the length of the mapping (which must be
+    /// greater than 0).
+    /// * `prot` - describes the desired memory protection of the
+    /// mapping, which must not conflict with the open mode of the file.
+    /// It is either `PROT_NONE` or the bitwise OR of one or more of the
+    /// following flags: `PROT_EXEC` (Pages may be executed), `PROT_READ`
+    /// (Pages may be read), `PROT_WRITE` (Pages may be written), `PROT_NONE`
+    /// (Pages may not be accessed).
+    /// * `flags` - determines whether updates to the mapping are visible
+    /// to other processes mapping the same region, and whether updates are
+    /// carried through to the underlying file. This behavior is determined
+    /// by including exactly one of the following values in flags: `MAP_SHARED`
+    /// (Share this mapping. Updates to the mapping are visible to other
+    /// processes mapping the same region, and in the case of file-backed
+    /// mappings are carried through to the underlying file) or `MAP_PRIVATE`
+    /// (Create a private copy-on-write mapping. Updates to the mapping are
+    /// not visible to other processes mapping the same file, and are not
+    /// carried through to the underlying file). `MAP_SHARED_VALIDATE` and
+    /// other flags are not validated in the current implementation but
+    /// are supported by the underlying `libc_mmap()` syscall.
+    /// * `filedes` - a file descriptor specifying the file that shall be
+    /// mapped.
+    /// * `off` - designates the offset in the file from which the mapping
+    /// should start.
+    ///
+    /// ### Returns
+    ///
+    /// On success, `mmap_syscall()` returns a pointer to the mapped area.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EINVAL, ERANGE, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the value of len is 0 or `flags` contained neither
+    /// `MAP_PRIVATE` nor `MAP_SHARED` or `flags` contained both
+    /// `MAP_PRIVATE` and `MAP_SHARED`.
+    /// * `EACCES` - `fildes` is not open for reading or `MAP_SHARED`
+    /// was requested and PROT_WRITE is set, but fd is not open in
+    /// read/write (`O_RDWR`) mode or `fildes` refers to a non-regular file.
+    /// * `ENXIO` - addresses in the range [`off`, `off`+`len`) are invalid
+    /// for the object specified by `fildes`.
+    /// * `EOPNOTSUPP` - Lind currently does not support mapping character
+    ///   files.
+    /// * `EBADF` - invalid file descriptor.
+    /// Other errors, like `ENOMEM`, `EOVERFLOW`, etc. are not supported.
+    ///
+    /// ### Panics
+    ///
+    /// A panic occurs when a provided file descriptor is out of bounds.
+    ///
+    /// To learn more about the syscall, flags, possible error values, etc., see
+    /// [mmap(2)](https://man7.org/linux/man-pages/man2/mmap.2.html)
 
     pub fn mmap_syscall(
         &self,
@@ -3066,57 +3579,78 @@ impl Cage {
         off: i64,
     ) -> i32 {
         if len == 0 {
-            syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
+            return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-
-        if 0 == flags & (MAP_PRIVATE | MAP_SHARED) {
-            syscall_error(
+        //Exactly one of the two flags (either `MAP_PRIVATE` or `MAP_SHARED`) must be
+        // set
+        if 0 == (flags & (MAP_PRIVATE | MAP_SHARED)) {
+            return syscall_error(
                 Errno::EINVAL,
                 "mmap",
                 "The value of flags is invalid (neither MAP_PRIVATE nor MAP_SHARED is set)",
             );
         }
-
-        if 0 != flags & MAP_ANONYMOUS {
+        if ((flags & MAP_PRIVATE) != 0) && ((flags & MAP_SHARED) != 0) {
+            return syscall_error(
+                Errno::EINVAL,
+                "mmap",
+                "The value of flags is invalid (MAP_PRIVATE and MAP_SHARED cannot be both set)",
+            );
+        }
+        //The `MAP_ANONYMOUS` flag specifies that the mapping
+        //is not backed by any file, so the `fildes` and `off`
+        //arguments should be ignored; however, some implementations
+        //require `fildes` to be -1, which we follow for the
+        //sake of portability.
+        if 0 != (flags & MAP_ANONYMOUS) {
             return interface::libc_mmap(addr, len, prot, flags, -1, 0);
         }
-
+        //BUG
+        //If the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fildes).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //confirm fd type is mappable
+            //The current implementation supports only regular files
             match filedesc_enum {
                 File(ref mut normalfile_filedesc_obj) => {
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
-
-                    //confirm inode type is mappable
+                    //Confirm inode type is mappable
                     match &*inodeobj {
-                        Inode::File(normalfile_inode_obj) => {
-                            //if we want to write our changes back to the file the file needs to be open for reading and writing
-                            if (flags & MAP_SHARED != 0) && (flags & PROT_WRITE != 0) && (normalfile_filedesc_obj.flags & O_RDWR != 0) {
-                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
-                            }
-                            let filesize = normalfile_inode_obj.size;
-                            if off < 0 || off > filesize as i64 {
-                                return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
-                            }
-                            //because of NaCl's internal workings we must allow mappings to extend past the end of a file
-                            let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
-                            //we cannot mmap a rust file in quite the right way so we retrieve the fd number from it
-                            //this is the system fd number--the number of the lind.<inodenum> file in our host system
-                            let fobjfdno = fobj.as_fd_handle_raw_int();
-
-
-                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
-                        }
-
                         Inode::CharDev(_chardev_inode_obj) => {
                             syscall_error(Errno::EOPNOTSUPP, "mmap", "lind currently does not support mapping character files")
                         }
-
+                        Inode::File(normalfile_inode_obj) => {
+                            //For any kind of memory mapping, the file should be
+                            //opened for reading, so if it was opened for write
+                            //only, the mapping should be denied
+                            if (normalfile_filedesc_obj.flags & O_WRONLY) != 0 {
+                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open for reading");
+                            }
+                            //If we want to write our changes back to the file the file needs to be open for reading and writing
+                            if (flags & MAP_SHARED) != 0 && (prot & PROT_WRITE) != 0 && (normalfile_filedesc_obj.flags & O_RDWR) != O_RDWR {
+                                return syscall_error(Errno::EACCES, "mmap", "file descriptor is not open RDWR, but MAP_SHARED and PROT_WRITE are set");
+                            }
+                            let filesize = normalfile_inode_obj.size;
+                            //The offset cannot be negative, and we cannot read past the end of the file
+                            if off < 0 || off > filesize as i64 {
+                                return syscall_error(Errno::ENXIO, "mmap", "Addresses in the range [off,off+len) are invalid for the object specified by fildes.");
+                            }
+                            //Because of NaCl's internal workings we must allow mappings to extend past the end of the file
+                            let fobj = FILEOBJECTTABLE.get(&normalfile_filedesc_obj.inode).unwrap();
+                            //The actual memory mapping is not emulated inside Lind, so the call to the kernel
+                            //is required. To perform this call, the file descriptor of the actual file
+                            //stored on the host machine is needed. Since Lind's emulated filesystem
+                            //does not match the underlying host's filesystem, the file descriptor
+                            //provided to the `mmap_syscall()` cannot be used and must be converted
+                            //to the actual file descriptor stored in the host's filesystem.
+                            let fobjfdno = fobj.as_fd_handle_raw_int();
+                            interface::libc_mmap(addr, len, prot, flags, fobjfdno, off)
+                        }
                         _ => {syscall_error(Errno::EACCES, "mmap", "the fildes argument refers to a file whose type is not supported by mmap")}
                     }
                 }
@@ -3131,15 +3665,61 @@ impl Cage {
         }
     }
 
-    //------------------------------------MUNMAP SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// The `munmap_syscall()` function shall remove any mappings
+    /// containing any part of the address space of the process
+    /// starting at `addr` and continuing for `len` bytes.
+    /// Further references to these pages shall result in the
+    /// generation of a `SIGSEGV` signal to the process. If there
+    /// are no mappings in the specified address range, then
+    /// `munmap_syscall()` has no effect.
+    /// The current implementation of the syscall solely relies
+    /// on the inner implementation of NaCl (except for a simple
+    /// `len` argument check) by creating a new mapping in the
+    /// specified memory region by using `MAP_FIXED` with
+    /// `PROT_NONE` flag to deny any access to the unmapped
+    /// memory region.
+    ///
+    /// ### Arguments
+    ///
+    /// The `munmap_syscall()` accepts two arguments:
+    /// * `addr` - the address starting from which the mapping
+    /// shall be removed
+    /// * `len` - specifies the length of the mapping that
+    /// shall be removed.
+    ///
+    /// ### Returns
+    ///
+    /// On success, `munmap_syscall()` returns 0.
+    /// In case of a failure, an error is returned, and `errno`
+    /// is set to `EINVAL`.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - the value of len is 0
+    /// Other `EINVAL` errors are returned directly from the  call to
+    /// `libc_mmap`
+    ///
+    /// ### Panics
+    ///
+    /// There are no cases where this function panics.
+    ///
+    /// To learn more about the syscall, flags, possible error values, etc., see
+    /// [munmap(2)](https://linux.die.net/man/2/munmap)
 
     pub fn munmap_syscall(&self, addr: *mut u8, len: usize) -> i32 {
         if len == 0 {
-            syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
+            return syscall_error(Errno::EINVAL, "mmap", "the value of len is 0");
         }
-        //NaCl's munmap implementation actually just writes over the previously mapped
-        // data with PROT_NONE This frees all of the resources except page table
-        // space, and is put inside safeposix for consistency
+        //NaCl's munmap implementation actually just writes
+        //over the previously mapped data with PROT_NONE.
+        //This frees all of the resources except page table
+        //space, and is put inside safeposix for consistency.
+        //`MAP_FIXED` is used to precisely unmap the specified
+        //memory region, and `MAP_ANONYMOUS` is used to deny
+        //any further access to the unmapped memory region
+        //thereby emulating the unmapping process.
         interface::libc_mmap(
             addr,
             len,
@@ -3271,27 +3851,83 @@ impl Cage {
         0
     }
 
-    //------------------RMDIR SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `rmdir_syscall()` deletes a directory whose name is given by `path`.
+    /// The directory shall be removed only if it is an empty directory.
+    ///
+    /// ### Arguments
+    ///
+    /// The `rmdir_syscall()` accepts one argument:
+    /// * `path` - the path to the directory that shall be removed. It can be
+    ///   either
+    /// relative or absolute (symlinks are not supported).
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, 0 is returned.
+    /// In case of a failure, an error is returned, and `errno` is set depending
+    /// on the error, e.g. EACCES, ENOENT, etc.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - `path` is an empty string or names a nonexistent directory
+    /// * `EBUSY` - `path` names a root directory that cannot be removed
+    /// * `ENOEMPTY` - `path` names a non-empty directory,
+    /// * `EPERM` - the directory to be removed or its parent directory
+    /// does not allow write permission
+    /// * `ENOTDIR` - `path` is not a directory
+    /// Other errors, like `EACCES`, `EINVAL`, etc. are not supported.
+    ///
+    /// ### Panics
+    /// A panic occurs when the directory to be removed does not have `S_IFDIR"`
+    /// (directory file type flag) set or when parent inode is not a directory.
+    ///
+    /// To learn more about the syscall, error values, etc.,
+    /// see [rmdir(3)](https://linux.die.net/man/3/rmdir)
 
     pub fn rmdir_syscall(&self, path: &str) -> i32 {
         if path.len() == 0 {
-            return syscall_error(Errno::ENOENT, "rmdir", "Given path is null");
+            return syscall_error(Errno::ENOENT, "rmdir", "Given path is an empty string");
         }
+        //Convert the provided pathname into an absolute path without `.` or `..`
+        //components.
         let truepath = normpath(convpath(path), self);
 
-        // try to get inodenum of input path and its parent
+        //Perfrom a walk down the file tree starting from the root directory to
+        //obtain an inode number of the file whose pathname was specified and
+        //its parent directory's inode.
         match metawalkandparent(truepath.as_path()) {
             (None, ..) => syscall_error(Errno::ENOENT, "rmdir", "Path does not exist"),
-            (Some(_), None) => {
-                // path exists but parent does not => path is root dir
-                syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory")
-            }
+            //The specified directory exists, but its parent does not,
+            //which means it is a root directory that cannot be removed
+            (Some(_), None) => syscall_error(Errno::EBUSY, "rmdir", "Cannot remove root directory"),
             (Some(inodenum), Some(parent_inodenum)) => {
+                //If the parent directory of the directory that shall be removed
+                //doesn't allow write permission, the removal cannot be performed
+                if let Inode::Dir(ref mut parent_dir) =
+                    *(FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap())
+                {
+                    // check if parent directory has write permissions
+                    if parent_dir.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {
+                        return syscall_error(
+                            Errno::EPERM,
+                            "rmdir",
+                            "Parent directory does not have write permission",
+                        );
+                    }
+                }
+                //Getting a mutable reference to an inode struct that corresponds to
+                //the directory that shall be removed
                 let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
                 match &mut *inodeobj {
-                    // make sure inode matches a directory
+                    //A sanity check to make sure the inode matches a directory
                     Inode::Dir(ref mut dir_obj) => {
+                        //When a new empty directory is created, its linkcount
+                        //is set to 3. Thus, any empty directory should have a
+                        //linkcount of 3. Otherwise, it is a non-empty directory
+                        //that cannot be removed
                         if dir_obj.linkcount > 3 {
                             return syscall_error(
                                 Errno::ENOTEMPTY,
@@ -3299,36 +3935,85 @@ impl Cage {
                                 "Directory is not empty",
                             );
                         }
+                        //A sanity check to make sure that the correct directory
+                        //file type flag is set
                         if !is_dir(dir_obj.mode) {
                             panic!("This directory does not have its mode set to S_IFDIR");
                         }
 
-                        // check if dir has write permission
+                        //The directory to be removed should allow write permission
                         if dir_obj.mode as u32 & (S_IWOTH | S_IWGRP | S_IWUSR) == 0 {
                             return syscall_error(
                                 Errno::EPERM,
                                 "rmdir",
-                                "Directory does not have write permission",
+                                "Directory does not allow write permission",
                             );
                         }
 
+                        //The directory cannot be removed if one or more processes
+                        //have the directory open, which corresponds to a non-zero
+                        //reference count
                         let remove_inode = dir_obj.refcount == 0;
+                        //Any new empty directory has a linkcount of 3.
+                        //If the refcount of the directory is 0, it means
+                        //that there are no open file descriptors for that directory,
+                        //and it can be safely removed both from the filesystem
+                        //and the parent directory's inode table.
+                        //However, if there exists an open file descriptor for that
+                        //directory, it cannot be removed from the filesystem because
+                        //otherwise, the process that has the directory open
+                        //will end up calling `close_syscall()` on a nonexistent directory.
+                        //At the same time, after `rmdir_syscall()` is called on the directory,
+                        //no new files can be created inside it, even if the directory is open
+                        //by some process. To prevent creating new files inside the directory,
+                        //we delete its entry from the parent directory's inode table.
+                        //This way, in case there is an open file descriptor for the directory
+                        //to be removed, by deleting the directory's entry from its parent
+                        //directory's inode table and keeping the directory's entry in the
+                        //filesystem table, we both disallow the creation of any files inside
+                        //that directory and prevent the process that has the directory
+                        //open from closing a nonexistent directory.
+                        //Setting the directory's linkcount as 2 works as a flag for
+                        //the `close_syscall()` to mark the directory that needs to be
+                        //removed from the filesystem when its last open file descriptor
+                        //is closed because it could not be removed at the time of calling
+                        //`rmdir_syscall()` because of some open file descriptor.
                         if remove_inode {
                             dir_obj.linkcount = 2;
-                        } // linkcount for an empty directory after rmdir must be 2
+                        }
+
+                        //The mutable reference to the inode has to be dropped because
+                        //remove_from_parent_dir() method will need to acquire an immutable
+                        //reference to the parent directory's inode from the filesystem's
+                        //inodetable. The inodetable represents a Rust DashMap that deadlocks
+                        //when trying to get a reference to its entry while holding any sort
+                        //of reference into it.
                         drop(inodeobj);
 
+                        //`remove_from_parent_dir()` helper function returns 0 if an
+                        //entry corresponding to the specified directory was
+                        //successfully removed from the filename-inode dictionary
+                        //of its parent.
+                        //If the parent directory does not allow write permission,
+                        //`EPERM` is returned.
+                        //As a sanity check, if the parent inode specifies a
+                        //non-directory type, the funciton panics
                         let removal_result =
                             Self::remove_from_parent_dir(parent_inodenum, &truepath);
                         if removal_result != 0 {
                             return removal_result;
                         }
 
-                        // remove entry of corresponding inodenum from inodetable
+                        //Remove entry of corresponding inodenum from the filesystem
+                        //inodetable
                         if remove_inode {
                             FS_METADATA.inodetable.remove(&inodenum).unwrap();
                         }
-
+                        //Log is used to store all the changes made to the filesystem. After
+                        //the cage is closed, all the collected changes are serialized and
+                        //the state of the underlying filesystem is persisted. This allows us
+                        //to avoid serializing and persisting filesystem state after every
+                        //`rmdir_syscall()`.
                         log_metadata(&FS_METADATA, parent_inodenum);
                         log_metadata(&FS_METADATA, inodenum);
                         0 // success
@@ -3810,16 +4495,62 @@ impl Cage {
     }
 
     //------------------GETDENTS SYSCALL------------------
+    /// ## `getdents_syscall`
+    ///
+    /// ### Description
+    /// This function reads directory entries from a directory file descriptor
+    /// and returns them in a buffer. Reading directory entries using multiple
+    /// read calls can be less efficient because it involves reading the
+    /// data in smaller chunks and then parsing it. getdents can often be
+    /// faster by reading directory entries in a more optimized way.
+    /// * The function first checks if the provided buffer size is sufficient to
+    ///   store at least one `ClippedDirent` structure.
+    /// * The function validates the provided file descriptor to ensure it
+    ///   represents a valid file.
+    /// * The function checks if the file descriptor refers to a directory.
+    /// * The function iterates over the directory entries in the
+    ///   `filename_to_inode_dict` of the directory inode.
+    /// * For each entry, the function constructs a `ClippedDirent` structure,
+    ///   which contains the inode number, offset, and record length.
+    /// * It packs the constructed directory entries into the provided buffer
+    ///   (`dirp`).
+    /// * Updates the file position to the next directory entry to be read.
+    ///
+    /// ### Function Arguments
+    /// * `fd`: A file descriptor representing the directory to read.
+    /// * `dirp`: A pointer to a buffer where the directory entries will be
+    ///   written.
+    /// * `bufsize`: The size of the buffer in bytes.
+    ///
+    /// ### Returns
+    /// * The number of bytes written to the buffer on success.
+    ///
+    /// ### Errors
+    /// * `EINVAL(22)`: If the buffer size is too small or if the file
+    ///   descriptor is invalid.
+    /// * `ENOTDIR(20)`: If the file descriptor does not refer to a existing
+    ///   directory.
+    /// * `ESPIPE(29)`: If the file descriptor does not refer to a file.
+    /// * `EBADF(9)` : If the file descriptor is invalid.
+    /// ### Panics
+    /// * There are no panics in this syscall.
 
     pub fn getdents_syscall(&self, fd: i32, dirp: *mut u8, bufsize: u32) -> i32 {
         let mut vec: Vec<(interface::ClippedDirent, Vec<u8>)> = Vec::new();
 
         // make sure bufsize is at least greater than size of a ClippedDirent struct
+        // ClippedDirent is a simplified version of the traditional dirent structure
+        // used in POSIX systems By using a simpler structure, SafePosix can
+        // store and retrieve directory entries more efficiently, potentially
+        // improving performance compared to using the full dirent structure.
         if bufsize <= interface::CLIPPED_DIRENT_SIZE {
             return syscall_error(Errno::EINVAL, "getdents", "Result buffer is too small.");
         }
 
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = match self.get_filedescriptor(fd) {
+            Ok(fd) => fd,
+            Err(_) => return syscall_error(Errno::EBADF, "getdents", "Invalid file descriptor."),
+        };
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -3849,7 +4580,8 @@ impl Cage {
                                 // convert filename to a filename vector of u8
                                 let mut vec_filename: Vec<u8> = filename.as_bytes().to_vec();
                                 vec_filename.push(b'\0'); // make filename null-terminated
-
+                                                          // Push DT_UNKNOWN as d_type. This is a placeholder for now, as the
+                                                          // actual file type is not yet determined.
                                 vec_filename.push(DT_UNKNOWN); // push DT_UNKNOWN as d_type (for now)
                                 temp_len =
                                     interface::CLIPPED_DIRENT_SIZE + vec_filename.len() as u32; // get length of current filename vector for padding calculation
@@ -3885,6 +4617,9 @@ impl Cage {
                                 count += 1;
                             }
                             // update file position
+                            // keeps track of the current position within the directory. It
+                            // indicates which directory entry the
+                            // function should read next.
                             normalfile_filedesc_obj.position = interface::rust_min(
                                 position + count,
                                 dir_inode_obj.filename_to_inode_dict.len(),

@@ -39,7 +39,7 @@ use super::net_constants::*;
 use super::sys_constants::*;
 use crate::interface;
 use crate::safeposix::cage::{FileDescriptor::*, *};
-use crate::safeposix::filesystem::{decref_dir, metawalk, Inode, FS_METADATA};
+use crate::safeposix::filesystem::{metawalk, Inode, FS_METADATA};
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::SHM_METADATA;
 
@@ -90,14 +90,17 @@ impl Cage {
     ///
     /// ### Errors
     ///    
-    /// There are 2 scenarios where the call to `fork_syscall` might return an error
+    /// There are 2 scenarios where the call to `fork_syscall` might return an
+    /// error
     ///
     /// * When the RawMutex::create() call fails to create a new Mutex object
-    /// * When the RawCondvar::create() call fails to create a new Condition Variable object
+    /// * When the RawCondvar::create() call fails to create a new Condition
+    ///   Variable object
     ///
     /// ### Returns
     ///
-    /// On success it returns a value of 0, and the new child Cage object is added to Cagetable
+    /// On success it returns a value of 0, and the new child Cage object is
+    /// added to Cagetable
     ///
     /// ### Panics
     ///
@@ -107,23 +110,27 @@ impl Cage {
     /// [fork(2)](https://man7.org/linux/man-pages/man2/fork.2.html)
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        //Create a new mutex table that replicates the mutex table of the parent (calling) Cage object
-        //Since the child process inherits all the locks that the parent process holds,
+        //Create a new mutex table that replicates the mutex table of the parent
+        // (calling) Cage object Since the child process inherits all the locks
+        // that the parent process holds,
         let mutextable = self.mutex_table.read();
         // Initialize the child object's mutex table
         let mut new_mutex_table = vec![];
         //Loop through each element in the mutex table
-        //Each entry in the mutex table represents a `lock` which the parent process holds
-        //Copying them into the child's Cage exhibits the inheritance of the lock
+        //Each entry in the mutex table represents a `lock` which the parent process
+        // holds Copying them into the child's Cage exhibits the inheritance of
+        // the lock
         for elem in mutextable.iter() {
             if elem.is_some() {
-                //If the mutex is `Some` - we create a new mutex and store it in the child's mutex table
-                //The create method returns a new struct obejct that represents a Mutex
+                //If the mutex is `Some` - we create a new mutex and store it in the child's
+                // mutex table The create method returns a new struct obejct
+                // that represents a Mutex
                 let new_mutex_result = interface::RawMutex::create();
                 match new_mutex_result {
                     // If the mutex creation is successful we push it on the child's table
                     Ok(new_mutex) => new_mutex_table.push(Some(interface::RustRfc::new(new_mutex))),
-                    // If the mutex creation returns an error, we abort the system call and return the appropriate error
+                    // If the mutex creation returns an error, we abort the system call and return
+                    // the appropriate error
                     Err(_) => {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
@@ -140,17 +147,19 @@ impl Cage {
                     }
                 }
             } else {
-                // If the mutex is `None` - we mimic the same behavior in the child's mutex table
+                // If the mutex is `None` - we mimic the same behavior in the child's mutex
+                // table
                 new_mutex_table.push(None);
             }
         }
         drop(mutextable);
 
         //Construct a replica of the condition variables table in the child cage object
-        //This table stores condition variables - which are special variables that the process
-        //uses to determine whether certain conditions have been met or not. Threads use condition variables
-        //to stop or resume their operation depending on the value of these variables.
-        //Read the CondVar table of the calling process
+        //This table stores condition variables - which are special variables that the
+        // process uses to determine whether certain conditions have been met or
+        // not. Threads use condition variables to stop or resume their
+        // operation depending on the value of these variables. Read the CondVar
+        // table of the calling process
         let cvtable = self.cv_table.read();
         // Initialize the table for the child process
         let mut new_cv_table = vec![];
@@ -158,10 +167,12 @@ impl Cage {
         for elem in cvtable.iter() {
             if elem.is_some() {
                 //Create a condvar to store in the child's Cage object
-                //Returns the condition variable struct object which implements theb signal, wait, broadcast and timed_wait methods
+                //Returns the condition variable struct object which implements theb signal,
+                // wait, broadcast and timed_wait methods
                 let new_cv_result = interface::RawCondvar::create();
                 match new_cv_result {
-                    // If the result of the creation of the RawCondVar is successful - push it onto the child's mutex table
+                    // If the result of the creation of the RawCondVar is successful - push it onto
+                    // the child's mutex table
                     Ok(new_cv) => new_cv_table.push(Some(interface::RustRfc::new(new_cv))),
                     // If the creation was unsucessful - return an Error
                     Err(_) => {
@@ -180,15 +191,16 @@ impl Cage {
                     }
                 }
             } else {
-                // If the value is None - mimic the behavior in the child's condition variable table
+                // If the value is None - mimic the behavior in the child's condition variable
+                // table
                 new_cv_table.push(None);
             }
         }
         drop(cvtable);
 
         //Clone the file descriptor table in the child's Cage object
-        //Each entry in the file descriptor table points to an open file description which
-        //in turn references the actual inodes of the files on disk
+        //Each entry in the file descriptor table points to an open file description
+        // which in turn references the actual inodes of the files on disk
         let newfdtable = init_fdtable();
         //Loop from 0 to maximum value of file descriptor index
         for fd in 0..MAXFD {
@@ -209,8 +221,9 @@ impl Cage {
                         if let Some(inodenum) = inodenum_option {
                             let mut inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
                             //Since the child Cage also inherits the parent's fd table
-                            //We increment the reference count on the actual inodes of the files on disk
-                            //Since the child Cage is a new process that also references those files
+                            //We increment the reference count on the actual inodes of the files on
+                            // disk Since the child Cage is a new
+                            // process that also references those files
                             match *inode {
                                 Inode::File(ref mut f) => {
                                     f.refcount += 1;
@@ -235,15 +248,16 @@ impl Cage {
                     Socket(socket_filedesc_obj) => {
                         // Check if it is a domain socket
                         let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
+                        let sockhandle = sock_tmp.write();
                         let socket_type = sockhandle.domain;
                         //Here we only increment the reference for AF_UNIX socket type
                         //Since these are the only sockets that have an inode associated with them
                         if socket_type == AF_UNIX {
                             //Increment the appropriate reference counter of the correct socket
-                            //Each socket has two pipes associated with them - a read and write pipe
-                            //Here we grab these two pipes and increment their references individually
-                            //And also increment the reference count of the socket as a whole
+                            //Each socket has two pipes associated with them - a read and write
+                            // pipe Here we grab these two pipes and
+                            // increment their references individually
+                            // And also increment the reference count of the socket as a whole
                             if let Some(sockinfo) = &sockhandle.unix_info {
                                 if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
                                     sendpipe.incr_ref(O_WRONLY);
@@ -272,10 +286,10 @@ impl Cage {
         //We read the current working directory of the parent Cage object
         let cwd_container = self.cwd.read();
         //We try to resolve the inode of the current working directory - if the
-        //resolution is successful we update the reference count of the current working directory
-        //since the newly created Child cage object also references the same directory
-        //If the resolution is not successful - the code panics since the cwd's inode cannot be resolved
-        //correctly
+        //resolution is successful we update the reference count of the current working
+        // directory since the newly created Child cage object also references
+        // the same directory If the resolution is not successful - the code
+        // panics since the cwd's inode cannot be resolved correctly
         if let Some(cwdinodenum) = metawalk(&cwd_container) {
             if let Inode::Dir(ref mut cwddir) =
                 *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap())
@@ -289,15 +303,16 @@ impl Cage {
         }
 
         // We clone the parent cage's main threads and store them and index 0
-        // This is done since there isn't a thread established for the child Cage object yet -
-        // And there is no threadId to store it at.
-        // The child Cage object can then initialize and store the sigset appropriately when it establishes its own
-        // main thread id.
+        // This is done since there isn't a thread established for the child Cage object
+        // yet - And there is no threadId to store it at.
+        // The child Cage object can then initialize and store the sigset appropriately
+        // when it establishes its own main thread id.
         let newsigset = interface::RustHashMap::new();
         // Here we check if Lind is being run under the test suite or not
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // When rustposix runs independently (not as Lind paired with NaCL runtime) we do not handle signals
-            // The test suite runs rustposix independently and hence we do not handle signals for the test suite
+            // When rustposix runs independently (not as Lind paired with NaCL runtime) we
+            // do not handle signals The test suite runs rustposix independently
+            // and hence we do not handle signals for the test suite
             let mainsigsetatomic = self
                 .sigset
                 .get(
@@ -313,20 +328,22 @@ impl Cage {
             newsigset.insert(0, mainsigset);
         }
 
-        // Construct a new semaphore table in child cage which equals to the one in the parent cage
+        // Construct a new semaphore table in child cage which equals to the one in the
+        // parent cage
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<
             u32,
             interface::RustRfc<interface::RustSemaphore>,
         > = interface::RustHashMap::new();
-        // Loop all pairs of semaphores and insert their copies into the new semaphore table
-        // Each pair consists of a key which is 32 bit unsigned integer
+        // Loop all pairs of semaphores and insert their copies into the new semaphore
+        // table Each pair consists of a key which is 32 bit unsigned integer
         // And a Semaphore Object implemented as RustSemaphore
         for pair in semtable.iter() {
             new_semtable.insert((*pair.key()).clone(), pair.value().clone());
         }
 
-        // Create a new cage object using the cloned tables and the child id passed as a parameter
+        // Create a new cage object using the cloned tables and the child id passed as a
+        // parameter
         let cageobj = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -466,34 +483,61 @@ impl Cage {
         0
     }
 
+    /// ### Description
+    /// 
+    /// The exit function causes normal process(Cage) termination
+    /// The termination entails unmapping all memory references
+    /// Removing the cage object from the cage table, closing all open files
+    /// And decrement all references to files and directories
+    /// For more information please refer [https://man7.org/linux/man-pages/man3/exit.3.html]
+    /// 
+    /// ### Arguments 
+    /// 
+    /// The exit function takes only one argument which is `status`
+    /// `status` : This is a 32 bit integer value that the function returns back 
+    /// upon sucessfully terminating the process
+    /// 
+    /// ### Returns
+    /// 
+    /// This function returns a 32 bit integer value - which represents succesful 
+    /// termination of the calling Cage object
+    /// 
+    /// ### Panics
+    /// 
+    /// While this syscall does not panic directly - it can panic if the 
+    /// `decref_dir` function panics - which occurs when the working directory
+    /// passed to it is not a valid directory or the directory did not exist at all. 
+    /// or if the cage_id passed to the remove function is not a valid cage id. 
+    /// 
+    /// ### Errors
+    /// 
+    /// This function has no scenario where it returns an error
     pub fn exit_syscall(&self, status: i32) -> i32 {
-        //flush anything left in stdout
+        //Clear all values in stdout stream
         interface::flush_stdout();
-
+        //Unmap all memory mappings for the current cage object
         self.unmap_shm_mappings();
 
-        // close fds
+        //For all file descriptors that the cage holds
         for fd in 0..MAXFD {
+            // Close the file pointed to by the file descriptor
             self._close_helper(fd);
         }
 
-        //get file descriptor table into a vector
-        let cwd_container = self.cwd.read();
-        decref_dir(&*cwd_container);
-
-        //may not be removable in case of lindrustfinalize, we don't unwrap the remove
-        // result
+        //Remove the current cage object from the cage table
         interface::cagetable_remove(self.cageid);
 
-        // Trigger SIGCHLD
+        // Check if Lind is being run as a test suite or not
+        // We do this since we only want to 
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // dont trigger SIGCHLD for test suite
+            // Trigger SIGCHILD if LIND is not run as a test suite
+            // SIGCHILD is simply a response that the parent recieves when it's child process terminates
             if self.cageid != self.parent {
                 interface::lind_kill_from_id(self.parent, SIGCHLD);
             }
         }
 
-        //fdtable will be dropped at end of dispatcher scope because of Arc
+        // Return the status integer back to the calling function
         status
     }
 
