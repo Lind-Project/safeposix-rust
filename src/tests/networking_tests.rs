@@ -2,7 +2,6 @@
 pub mod net_tests {
     use super::super::*;
     use crate::interface;
-    use crate::interface::errnos::{syscall_error, Errno};
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use libc::c_void;
     use std::mem::size_of;
@@ -755,12 +754,30 @@ pub mod net_tests {
         assert_eq!(cage.listen_syscall(serversockfd, 5), 0);
 
         interface::sleep(interface::RustDuration::from_millis(100));
-        assert_eq!(cage.connect_syscall(clientsockfd1, &socket), -115); //EINPROGRESS
-        assert_eq!(cage.connect_syscall(clientsockfd2, &socket), -115);
-        assert_eq!(cage.connect_syscall(clientsockfd3, &socket), -115);
-        assert_eq!(cage.connect_syscall(clientsockfd4, &socket), -115);
-        assert_eq!(cage.connect_syscall(clientsockfd5, &socket), -115);
-        assert_eq!(cage.connect_syscall(clientsockfd6, &socket), -111);
+        assert_eq!(
+            cage.connect_syscall(clientsockfd1, &socket),
+            -(Errno::EINPROGRESS as i32)
+        );
+        assert_eq!(
+            cage.connect_syscall(clientsockfd2, &socket),
+            -(Errno::EINPROGRESS as i32)
+        );
+        assert_eq!(
+            cage.connect_syscall(clientsockfd3, &socket),
+            -(Errno::EINPROGRESS as i32)
+        );
+        assert_eq!(
+            cage.connect_syscall(clientsockfd4, &socket),
+            -(Errno::EINPROGRESS as i32)
+        );
+        assert_eq!(
+            cage.connect_syscall(clientsockfd5, &socket),
+            -(Errno::EINPROGRESS as i32)
+        );
+        assert_eq!(
+            cage.connect_syscall(clientsockfd6, &socket),
+            -(Errno::ECONNREFUSED as i32)
+        );
 
         assert_eq!(cage.close_syscall(serversockfd), 0);
         assert_eq!(cage.close_syscall(clientsockfd1), 0);
@@ -2857,7 +2874,6 @@ pub mod net_tests {
     }
 
     #[test]
-    #[ignore]
     pub fn ut_lind_net_dns_rootserver_ping() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup

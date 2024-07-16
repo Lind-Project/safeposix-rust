@@ -1879,7 +1879,7 @@ impl Cage {
     /// [listen(2)](https://linux.die.net/man/2/listen)
     //
     // TODO: We are currently ignoring backlog
-    pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
+    pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
         //BUG:s
         //If fd is out of range of [0,MAXFD], process will panic
         //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
@@ -1935,6 +1935,7 @@ impl Cage {
                                 );
                             }
 
+                            //TODO: Implement backlog for UNIX
                             //If the given socket is a Unix socket, lind handles
                             //the connection, return with success
                             if sockhandle.domain == AF_UNIX {
@@ -1980,10 +1981,8 @@ impl Cage {
                             sockhandle.state = ConnState::LISTEN;
 
                             //Call listen from libc on the socket
-                            //Set the backlog to 5:
-                            //default backlog in repy for whatever reason, we replicate it
-                            //** Would we ever want to change the backlog??  **/
-                            let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5);
+                            let listenret =
+                                sockhandle.innersocket.as_ref().unwrap().listen(backlog);
                             if listenret < 0 {
                                 let lr = match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => syscall_error(
@@ -1999,7 +1998,7 @@ impl Cage {
                                 //port type from the set of listening ports
                                 //as we are returning from an error
                                 NET_METADATA.listening_port_set.remove(&porttuple);
-                                
+
                                 //Set the socket state to NOTCONNECTED, as
                                 //the socket is not listening
                                 sockhandle.state = ConnState::NOTCONNECTED;
