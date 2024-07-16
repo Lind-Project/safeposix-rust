@@ -534,7 +534,48 @@ pub mod net_tests {
     }
 
     #[test]
-    pub fn ut_lind_net_getpeername() {
+    #[ignore]
+    //Test connect sys call using AF_INET6/IPv6 address family and UDP socket type
+    //Currently failing as IPv6 is not implemented via gen_netdevs
+    pub fn ut_lind_net_connect_basic_udp_ipv6() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        //Initialize initial socket fd and remote socket to connect to
+        let sockfd = cage.socket_syscall(AF_INET6, SOCK_DGRAM, 0);
+        let port: u16 = generate_random_port();
+        let mut socket = interface::GenSockaddr::V6(interface::SockaddrV6 {
+            sin6_family: AF_INET6 as u16,
+            sin6_port: port.to_be(),
+            sin6_addr: interface::V6Addr {
+                s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            },
+            sin6_flowinfo: 0,
+            sin6_scope_id: 0,
+        }); //::1 LOCALHOST
+        assert_eq!(cage.connect_syscall(sockfd, &socket), 0);
+
+        //Change the port and retarget the socket
+        let port: u16 = generate_random_port();
+        socket = interface::GenSockaddr::V6(interface::SockaddrV6 {
+            sin6_family: AF_INET6 as u16,
+            sin6_port: port.to_be(),
+            sin6_addr: interface::V6Addr {
+                s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            },
+            sin6_flowinfo: 0,
+            sin6_scope_id: 0,
+        }); //::1 LOCALHOST
+        assert_eq!(cage.connect_syscall(sockfd, &socket), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_net_getpeername_bad_input() {
         // this test is used for testing getpeername with invalid input
 
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
