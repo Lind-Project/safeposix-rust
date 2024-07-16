@@ -1804,9 +1804,13 @@ impl Cage {
     /// pointed to by `buf` to the file associated with the open file
     /// descriptor, `fd`. The number of bytes written may be less than count
     /// if, for example, there is insufficient space on the underlying
-    /// physical medium. On files that support seeking (for example, a
-    /// regular file), the write operation commences at the file offset, and
-    /// the file offset is incremented by the number of bytes written.
+    /// physical medium, or when the syscall gets interrupted by a signal,
+    /// which we have not implemented yet. On files that support seeking
+    /// (for example, a regular file), the write operation commences at the
+    /// file offset, and the file offset is incremented by the number of bytes
+    /// written. For files that do not support seeking, writing starts from the
+    /// logical end of the file (for pipes and streams) or is handled based on
+    /// the specific characteristics of the file type (for character devices).
     ///
     /// ### Function Arguments
     ///
@@ -1946,8 +1950,9 @@ impl Cage {
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
-                        // A Sanity check where the File type fd should not have a `Socket` type
-                        // inode and should panic.
+                        // A Sanity check is added to make sure that there is no such case when the
+                        // fd type is "File" and the inode type is "Socket". This state is ideally
+                        // not possible, so we panic in such cases.
                         Inode::Socket(_) => {
                             panic!("write(): Socket inode found on a filedesc fd")
                         }
@@ -2018,6 +2023,7 @@ impl Cage {
 
                     // If the write fails with `EPIPE`, send a `SIGPIPE` signal to the process.
                     if retval == -(Errno::EPIPE as i32) {
+                        // BUG: Need to add the check for processing a signal.
                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
                     }
                     retval
@@ -2143,21 +2149,8 @@ impl Cage {
 
                             // Write `count` bytes from `buf` to the file at `position` using
                             // `writeat` function, which returns the number of bytes written.
-                            let newposition;
-                            let retval = if let Ok(byteswritten) =
-                                fileobject.writeat(buf, count, position)
-                            {
-                                // Move position forward by the number of bytes we've written
-                                newposition = position + byteswritten;
-                                byteswritten as i32
-                            } else {
-                                newposition = position;
-                                0 // 0 bytes written, but not an error value
-                                  // that
-                                  // can/should be passed to the user.
-                                  // We still may need to update file size from
-                                  // blank bytes write, so we don't bail out.
-                            };
+                            let retval = fileobject.writeat(buf, count, position).unwrap();
+                            let newposition = position + retval;
 
                             // Update the file size once data is written to the file
                             if newposition > filesize {
@@ -2170,7 +2163,7 @@ impl Cage {
                             }
 
                             // Return the final value of the bytes written in the file
-                            retval
+                            retval as i32
                         }
 
                         // For `CharDev` type inode, the writing happens to the Character Device
@@ -2182,8 +2175,9 @@ impl Cage {
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
-                        // A Sanity check where the File type fd should not have a `Socket` type
-                        // inode and should panic.
+                        // A Sanity check is added to make sure that there is no such case when the
+                        // fd type is "File" and the inode type is "Socket". This state is ideally
+                        // not possible, so we panic in such cases.
                         Inode::Socket(_) => {
                             panic!("pwrite: socket fd and inode don't match types")
                         }
@@ -2239,7 +2233,8 @@ impl Cage {
     /// device files. Depending on the specific character device being
     /// written to, the function may either succeed without performing any
     /// action or return an error indicating that writing to the specified
-    /// device is not supported.
+    /// device is not supported. This function is currently referenced in
+    /// "write" and "pwrite" syscalls.
     ///
     /// ### Function Arguments
     ///
@@ -2269,11 +2264,19 @@ impl Cage {
     /// This function does not cause any panics.
     fn _write_chr_file(&self, inodeobj: &DeviceInode, _buf: *const u8, count: usize) -> i32 {
         // Writes to any of these device files transparently succeed while doing
-        // nothing.
+        // nothing. The data passed to them for writing is simply discarded.
         match inodeobj.dev {
+            // Represented by "/dev/null", it is a virtual null device used to discard any output
+            // redirected to it.
             NULLDEVNO => count as i32,
+            // Represented by "/dev/zero", it provides as many null bytes (zero value) as are read
+            // from it.
             ZERODEVNO => count as i32,
+            // Represented by "/dev/random", it provides random output.
             RANDOMDEVNO => count as i32,
+            // Represented by "/dev/urandom", it also provides random output.
+            // Writes behave identically for both random and urandom devices and will not block.
+            // Currently, we are not doing anything on "write" for these devices.
             URANDOMDEVNO => count as i32,
             // For other devices, return an error indicating the operation is not supported.
             _ => syscall_error(
