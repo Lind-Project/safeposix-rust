@@ -3067,6 +3067,8 @@ impl Cage {
                 if interface::sigcheck() {
                     return syscall_error(Errno::EINTR, "poll", "interrupted function call");
                 }
+                // We yield on each loop to make the file descriptor monitoring more efficient
+                // and not occupy too much time
                 interface::lind_yield();
             }
         }
