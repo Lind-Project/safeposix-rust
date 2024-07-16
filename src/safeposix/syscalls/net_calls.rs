@@ -1503,9 +1503,9 @@ impl Cage {
                                 // ** Why isn't the protocol 0?? */
                                 // ** If this is fine, why don't we handle UDP sockets ?? //
                                 IPPROTO_TCP => {
-                                    //For a TCP socket
-                                    //to be able to send here we either need to be fully connected,
-                                    //or connected for write only
+                                    //For a TCP socket to be able to send here we
+                                    //either need to be fully connected, or connected for write
+                                    // only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1517,14 +1517,30 @@ impl Cage {
                                     }
                                     // get the socket pipe, write to it, and return bytes written
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    //When the message does not fit into the send buffer of the
+                                    // socket, send() normally
+                                    // blocks, unless the socket has been placed in
+                                    // nonblocking I/O mode.  In nonblocking mode it would fail with
+                                    // the error EAGAIN or
+                                    // EWOULDBLOCK in this case.
                                     let mut nonblocking = false;
                                     if sockfdobj.flags & O_NONBLOCK != 0 {
                                         nonblocking = true;
                                     }
                                     let retval = match sockinfo.sendpipe.as_ref() {
+                                        //sendpipe is available in unix socket info
                                         Some(sendpipe) => {
+                                            //write_to_pipe writes a specified number of bytes
+                                            // starting at the given
+                                            // pointer to a circular buffer. Upon successful
+                                            // completion, the amount of bytes written is returned.
+                                            // In case of a failure, an error is returned to the
+                                            // calling syscall.
+                                            // Refer to src/interface/pipe.rs for errors
                                             sendpipe.write_to_pipe(buf, buflen, nonblocking) as i32
                                         }
+                                        //sendpipe is not available in unix socket info
+                                        //transmission of data is not possible so return with error
                                         None => {
                                             return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
                                         }
@@ -1532,7 +1548,8 @@ impl Cage {
                                     if retval == -(Errno::EPIPE as i32) {
                                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
                                     } // Trigger SIGPIPE
-                                    retval
+                                    retval //return number of bytes written to
+                                           // buf
                                 }
                                 _ => {
                                     return syscall_error(
