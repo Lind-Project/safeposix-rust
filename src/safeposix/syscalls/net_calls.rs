@@ -3014,6 +3014,8 @@ impl Cage {
     ///
     /// ### Panics
     /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/epoll_create.2.html
     pub fn epoll_create_syscall(&self, size: i32) -> i32 {
         if size <= 0 {
             return syscall_error(
@@ -3066,6 +3068,8 @@ impl Cage {
     ///
     /// ### Panics
     /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
     pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
         // first check the fds are within the valid range
         if epfd < 0 || epfd >= MAXFD {
@@ -3098,7 +3102,7 @@ impl Cage {
                     return syscall_error(
                         Errno::EINVAL,
                         "epoll ctl",
-                        "provided fd is fd is the same as epfd",
+                        "provided fd is the same as epfd",
                     );
                 }
 
@@ -3106,25 +3110,29 @@ impl Cage {
                 let checkedfd = self.get_filedescriptor(fd).unwrap();
                 let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
-                    if let Epoll(_) = filedesc_enum {
-                        // nested Epoll (i.e. Epoll monitoring on Epoll file descriptor)
-                        // is allowed on Linux with some restrictions, though we currently do not
-                        // support this
+                    match filedesc_enum {
+                        Epoll(_) => {
+                            // nested Epoll (i.e. Epoll monitoring on Epoll file descriptor)
+                            // is allowed on Linux with some restrictions, though we currently do
+                            // not support this
 
-                        return syscall_error(
-                            Errno::EBADF,
-                            "epoll ctl",
-                            "provided fd is not a valid file descriptor",
-                        );
-                    }
-                    if let File(_) = filedesc_enum {
-                        // according to standard, EPERM should be returned when
-                        // fd refers to a file or directory
-                        return syscall_error(
-                            Errno::EPERM,
-                            "epoll ctl",
-                            "The target file fd does not support epoll.",
-                        );
+                            return syscall_error(
+                                Errno::EBADF,
+                                "epoll ctl",
+                                "provided fd is not a valid file descriptor",
+                            );
+                        }
+                        File(_) => {
+                            // according to standard, EPERM should be returned when
+                            // fd refers to a file or directory
+                            return syscall_error(
+                                Errno::EPERM,
+                                "epoll ctl",
+                                "The target file fd does not support epoll.",
+                            );
+                        }
+                        // other file descriptors are valid
+                        _ => {}
                     }
                 } else {
                     // fd is not a valid file descriptor
@@ -3245,6 +3253,8 @@ impl Cage {
     /// ### Panics
     /// * when maxevents is larger than the size of events, index_out_of_bounds
     ///   panic may occur
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/epoll_wait.2.html
     pub fn epoll_wait_syscall(
         &self,
         epfd: i32,
