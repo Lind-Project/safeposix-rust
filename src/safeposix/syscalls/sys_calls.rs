@@ -484,33 +484,34 @@ impl Cage {
     }
 
     /// ### Description
-    /// 
+    ///
     /// The exit function causes normal process(Cage) termination
     /// The termination entails unmapping all memory references
     /// Removing the cage object from the cage table, closing all open files
     /// And decrement all references to files and directories
     /// For more information please refer [https://man7.org/linux/man-pages/man3/exit.3.html]
-    /// 
-    /// ### Arguments 
-    /// 
+    ///
+    /// ### Arguments
+    ///
     /// The exit function takes only one argument which is `status`
-    /// `status` : This is a 32 bit integer value that the function returns back 
+    /// `status` : This is a 32 bit integer value that the function returns back
     /// upon sucessfully terminating the process
-    /// 
+    ///
     /// ### Returns
-    /// 
-    /// This function returns a 32 bit integer value - which represents succesful 
-    /// termination of the calling Cage object
-    /// 
+    ///
+    /// This function returns a 32 bit integer value - which represents
+    /// succesful termination of the calling Cage object
+    ///
     /// ### Panics
-    /// 
-    /// While this syscall does not panic directly - it can panic if the 
+    ///
+    /// While this syscall does not panic directly - it can panic if the
     /// `decref_dir` function panics - which occurs when the working directory
-    /// passed to it is not a valid directory or the directory did not exist at all. 
-    /// or if the cage_id passed to the remove function is not a valid cage id. 
-    /// 
+    /// passed to it is not a valid directory or the directory did not exist at
+    /// all. or if the cage_id passed to the remove function is not a valid
+    /// cage id.
+    ///
     /// ### Errors
-    /// 
+    ///
     /// This function has no scenario where it returns an error
     pub fn exit_syscall(&self, status: i32) -> i32 {
         //Clear all values in stdout stream
@@ -528,10 +529,11 @@ impl Cage {
         interface::cagetable_remove(self.cageid);
 
         // Check if Lind is being run as a test suite or not
-        // We do this since we only want to 
+        // We do this since we only want to
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // Trigger SIGCHILD if LIND is not run as a test suite
-            // SIGCHILD is simply a response that the parent recieves when it's child process terminates
+            // SIGCHILD is simply a response that the parent recieves when it's child
+            // process terminates
             if self.cageid != self.parent {
                 interface::lind_kill_from_id(self.parent, SIGCHLD);
             }

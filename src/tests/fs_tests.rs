@@ -539,7 +539,7 @@ pub mod fs_tests {
             cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25),
             -(Errno::ENXIO as i32)
         );
-        
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -3709,6 +3709,330 @@ pub mod fs_tests {
             cage.pread_syscall(epfd, buf.as_mut_ptr(), 5, 0),
             -(Errno::ESPIPE as i32)
         );
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_write_read_only_fd() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test to write to a file with read only permissions, and check if
+        // a valid error is returned when the file is used for writing.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_RDONLY, S_IRWXA);
+        assert!(fd >= 0);
+
+        let write_data = "hello";
+        assert_eq!(
+            cage.write_syscall(fd, write_data.as_ptr(), write_data.len()),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_write_to_directory() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a directory and try to write to it.
+        // We should expect an error (EISDIR) as writing to a directory is not
+        // supported.
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_WRONLY, S_IRWXA);
+
+        let write_data = "hello";
+        assert_eq!(
+            cage.write_syscall(fd, write_data.as_ptr(), write_data.len()),
+            -(Errno::EISDIR as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_write_to_epoll() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create an Epoll and try to write to it.
+        // We should expect an error (EINVAL) as writing to an Epoll is not supported.
+        let epfd = cage.epoll_create_syscall(1);
+        assert!(epfd > 0);
+        let write_data = "hello";
+        assert_eq!(
+            cage.write_syscall(epfd, write_data.as_ptr(), write_data.len()),
+            -(Errno::EINVAL as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_write_to_regular_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests writing to a regular file.
+        // * Writing data to a file should start from position 0.
+        // * Once written, the position of the seek pointer in the file descriptor
+        // should increment by the count of bytes written. If write is performed again,
+        // then the position should continue from the point it was previously left.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        let mut statdata = StatData::default();
+
+        // Write sample data to the file, and verify the number of bytes returned
+        let write_data1 = "hello";
+        assert_eq!(
+            cage.write_syscall(fd, write_data1.as_ptr(), write_data1.len()),
+            5
+        );
+
+        // Verify the size of the file
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
+        assert_eq!(statdata.st_size, 5);
+
+        // Write additional data to the file.
+        let write_data2 = " there!";
+        assert_eq!(
+            cage.write_syscall(fd, write_data2.as_ptr(), write_data2.len()),
+            7
+        );
+
+        // Verify the updated size of the file
+        assert_eq!(cage.fstat_syscall(fd, &mut statdata), 0);
+        assert_eq!(statdata.st_size, 12);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_write_to_chardev_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for writing to a character device type
+        // file. In this case, we are trying to write 100 bytes to the
+        // "/dev/null" file, which should succeed without doing anything.
+        let path = "/dev/null";
+        let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
+
+        // Verify if the returned count of bytes is 100.
+        let write_data = "0".repeat(100);
+        assert_eq!(cage.write_syscall(fd, write_data.as_ptr(), 100), 100);
+
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_write_to_sockets() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for writing data to a pair of Sockets.
+        // In this case, we create a socket pair of two sockets, and send data through
+        // one socket, and try to read it from the other one.
+        let mut socketpair = interface::SockPair::default();
+
+        // Verify if the socketpair is formed successfully.
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        // Verify if the number of bytes sent to socket1 is correct.
+        let write_data = "test";
+        assert_eq!(
+            cage.write_syscall(socketpair.sock1, write_data.as_ptr(), 4),
+            4
+        );
+
+        // Verify if the number of bytes received by socket2 is correct.
+        let mut buf2 = sizecbuf(4);
+        assert_eq!(cage.read_syscall(socketpair.sock2, buf2.as_mut_ptr(), 4), 4);
+        // Verify if the data received inside the buffer is correct.
+        assert_eq!(cbuf2str(&buf2), "test");
+
+        // Close the sockets
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pwrite_read_only_fd() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test to write to a file with read only permissions, and check if
+        // a valid error is returned when the file is used for writing.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_RDONLY, S_IRWXA);
+        assert!(fd >= 0);
+
+        let write_data = "hello";
+        assert_eq!(
+            cage.pwrite_syscall(fd, write_data.as_ptr(), write_data.len(), 0),
+            -(Errno::EBADF as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pwrite_to_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests two scenarios for writing to a file using
+        // `pwrite_syscall()`.
+        // * Writing to a file from the starting position offset(0).
+        // * Writing to a file from a random position offset, which should
+        // pad the file with additional "\0" bytes.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Write sample data to the file and verify the number of bytes returned.
+        let write_data1 = "hello";
+        assert_eq!(cage.pwrite_syscall(fd, write_data1.as_ptr(), 5, 0), 5);
+
+        // Write additional data to the file starting from the 6th position offset.
+        let write_data2 = "there!";
+        assert_eq!(cage.pwrite_syscall(fd, write_data2.as_ptr(), 6, 6), 6);
+
+        // Read back the data to verify, but since we are changing the offset to
+        // a larger number than the file size, it should pad the file with "\0" values.
+        // Verify if the file contains the paded bytes as well.
+        let mut read_buf = sizecbuf(12);
+        assert_eq!(cage.pread_syscall(fd, read_buf.as_mut_ptr(), 12, 0), 12);
+        assert_eq!(cbuf2str(&read_buf), "hello\0there!");
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pwrite_to_directory() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a directory and try to write to it.
+        // We should expect an error (EISDIR) as writing to a directory is not
+        // supported.
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_WRONLY, S_IRWXA);
+
+        let write_data = "hello";
+        assert_eq!(
+            cage.pwrite_syscall(fd, write_data.as_ptr(), write_data.len(), 0),
+            -(Errno::EISDIR as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pwrite_invalid_types() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Test for invalid pipe
+        // Try writing the data to the pipe and check for error.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let write_fd = pipe_fds.writefd;
+        let write_data = "hello";
+        assert_eq!(
+            cage.pwrite_syscall(write_fd, write_data.as_ptr(), write_data.len(), 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        // Test for invalid sockets
+        // Try writing the data to the socket and check for error.
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+        assert_eq!(
+            cage.pwrite_syscall(socketpair.sock2, write_data.as_ptr(), 4, 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        // Test for invalid epoll
+        // Try writing the data to the epoll and check for error.
+        let epfd = cage.epoll_create_syscall(1);
+        assert_eq!(
+            cage.pwrite_syscall(epfd, write_data.as_ptr(), 5, 0),
+            -(Errno::ESPIPE as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_pwrite_to_chardev_file() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // This test mainly tests the case for writing to a character device type
+        // file. In this case, we are trying to write 100 bytes to the
+        // "/dev/null" file, which should succeed without doing anything.
+        let path = "/dev/null";
+        let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
+
+        // Verify if the returned count of bytes is 100.
+        let write_data = "0".repeat(100);
+        assert_eq!(cage.pwrite_syscall(fd, write_data.as_ptr(), 100, 0), 100);
+
+        assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
