@@ -1476,8 +1476,12 @@ impl Cage {
                     let sock_tmp = sockfdobj.handle.clone();
                     let sockhandle = sock_tmp.write();
 
-                    //** Check if this is a bug */
-                    //If the flags given as an argument includes a flag that 
+                    //** Seems like a BUG:
+                    //The current conditional statement checks if theres
+                    //a flag besides MSG_NOSIGNAL, and if so, return
+                    //that the flag is not supported
+                    //Why would only 1 flag be supported? */
+                    //If the flags given as an argument includes a flag that
                     //is not MSG_NOSIGNAL, return with error
                     if (flags & !MSG_NOSIGNAL) != 0 {
                         return syscall_error(
@@ -1488,15 +1492,20 @@ impl Cage {
                     }
 
                     //Pattern match based on the domain of the socket
-                    //Lind handles the send syscall of UNIX sockets internally,
+                    //Lind handles UNIX sockets internally,
                     //but will call send from libc for INET sockets
                     let socket_type = sockhandle.domain;
                     match socket_type {
                         AF_UNIX => {
+                            //Pattern match based on the socket protocol
                             match sockhandle.protocol {
+                                //TCP socket
+                                // ** Why isn't the protocol 0?? */
+                                // ** If this is fine, why don't we handle UDP sockets ?? //
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected,
-                                    // or connected for write only
+                                    //For a TCP socket
+                                    //to be able to send here we either need to be fully connected,
+                                    //or connected for write only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1608,7 +1617,7 @@ impl Cage {
                         }
                     }
                 }
-                //If the file descriptor does not refer to a socket, 
+                //If the file descriptor does not refer to a socket,
                 //return with error
                 _ => {
                     return syscall_error(
