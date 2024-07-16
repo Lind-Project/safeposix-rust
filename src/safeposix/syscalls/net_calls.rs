@@ -2114,9 +2114,10 @@ impl Cage {
     ///
     /// ### Returns
     ///
-    /// for a successful call, the return value will be a file descriptor for the
-    /// accepted socket (a nonnegative integer). On error, a negative error
-    /// number is returned, with the errorno set to represent the corresponding error
+    /// for a successful call, the return value will be a file descriptor for
+    /// the accepted socket (a nonnegative integer). On error, a negative
+    /// error number is returned, with the errorno set to represent the
+    /// corresponding error
     ///
     /// ### Errors
     ///
@@ -2132,23 +2133,23 @@ impl Cage {
     /// * ECONNABORTED - A connection has been aborted.
     ///
     /// * EFAULT - The addr argument is not in a writable part of the user
-    ///            address space.
+    ///   address space.
     ///
-    /// * EINTR - The system call was interrupted by a signal that was
-    ///           caught before a valid connection arrived; see signal(7).
+    /// * EINTR - The system call was interrupted by a signal that was caught
+    ///   before a valid connection arrived; see signal(7).
     ///
     /// ** EINVAL - Socket is not listening for connections, or addrlen is
     ///            invalid (e.g., is negative).
     ///
-    /// * EMFILE - The per-process limit on the number of open file
-    ///            descriptors has been reached.
+    /// * EMFILE - The per-process limit on the number of open file descriptors
+    ///   has been reached.
     ///
-    /// * ENFILE - The system-wide limit on the total number of open files
-    ///            has been reached.
+    /// * ENFILE - The system-wide limit on the total number of open files has
+    ///   been reached.
     ///
     /// * ENOMEM - Not enough free memory.  This often means that the memory
-    ///            allocation is limited by the socket buffer limits, not by
-    ///            the system memory.
+    ///   allocation is limited by the socket buffer limits, not by the system
+    ///   memory.
     ///
     /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     ///
@@ -2167,7 +2168,8 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will cause a panic.
+    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will
+    ///   cause a panic.
     /// * Unknown errno value from fcntl returned, will cause panic.
     ///
     /// for more detailed description of all the commands and return values, see
@@ -2189,7 +2191,8 @@ impl Cage {
             let newfdoption: &mut Option<FileDescriptor> = &mut *guardopt.unwrap();
 
             //Pattern match such that FileDescriptor object must be the Socket variant
-            //Otherwise, return with an err as the fd refers to something other than a socket
+            //Otherwise, return with an err as the fd refers to something other than a
+            // socket
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
                     //Clone the socket handle as it may be in use by other threads and
@@ -2242,15 +2245,16 @@ impl Cage {
 
     //The function accepts a connection over the Unix domain
     //
-    //Args: sockhandle is a mut reference to a read lock on the SocketHandle of the listening socket
-    //      sockfdobj is a mut reference to the Socket Description of the listening socket
-    //      newfd is an available file descriptor
-    //      newfdoption is a mut reference to a Option<FileDescriptor> object
-    //                  at the newfd index in the file descriptor table
-    //      addr is the address of the incoming connection's socket
+    //Args: sockhandle is a mut reference to a read lock on the SocketHandle of the
+    // listening socket      sockfdobj is a mut reference to the Socket
+    // Description of the listening socket      newfd is an available file
+    // descriptor      newfdoption is a mut reference to a
+    // Option<FileDescriptor> object                  at the newfd index in the
+    // file descriptor table      addr is the address of the incoming
+    // connection's socket
     //
-    //upon success return newfd, the new socket file descriptor from the "server side"
-    //otherwise, return -errno with errno set to the error
+    //upon success return newfd, the new socket file descriptor from the "server
+    // side" otherwise, return -errno with errno set to the error
     fn accept_unix(
         &self,
         sockhandle: &mut interface::RustLockReadGuard<SocketHandle>,
@@ -2390,15 +2394,16 @@ impl Cage {
 
     //The function accepts a connection over the INET domain
     //
-    //Args: sockhandle is a mut reference to a read lock on the SocketHandle of the listening socket
-    //      sockfdobj is a mut reference to the Socket Description of the listening socket
-    //      newfd is an available file descriptor
-    //      newfdoption is a mut reference to a Option<FileDescriptor> object
-    //                  at the newfd index in the file descriptor table
-    //      addr is the address of the incoming connection's socket
+    //Args: sockhandle is a mut reference to a read lock on the SocketHandle of the
+    // listening socket      sockfdobj is a mut reference to the Socket
+    // Description of the listening socket      newfd is an available file
+    // descriptor      newfdoption is a mut reference to a
+    // Option<FileDescriptor> object                  at the newfd index in the
+    // file descriptor table      addr is the address of the incoming
+    // connection's socket
     //
-    //upon success return newfd, the new socket file descriptor from the "server side"
-    //otherwise, return -errno with errno set to the error
+    //upon success return newfd, the new socket file descriptor from the "server
+    // side" otherwise, return -errno with errno set to the error
     fn accept_inet(
         &self,
         sockhandle: &mut interface::RustLockReadGuard<SocketHandle>,
@@ -2442,7 +2447,8 @@ impl Cage {
                 //we loop here so we can cancel blocking accept,
                 //see comments below and in Socket::new in interface/comm.rs
                 loop {
-                    // if we got a pending connection in select/poll/whatever, return that here instead
+                    // if we got a pending connection in select/poll/whatever, return that here
+                    // instead
 
                     //Socket must have been populated by implicit bind
                     let ladr = sockhandle.localaddr.unwrap().clone();
@@ -2459,9 +2465,6 @@ impl Cage {
                     let (acceptedresult, remote_addr) = match pendingoption {
                         Some(pendingtup) => pendingtup,
                         None => {
-                            //unwrap ok because listening
-                            // ** What does the above comment refer to ?? ** //
-                            //
                             //If the socket is blocking, call the accept syscall
                             //from libc
                             if 0 == (sockfdobj.flags & O_NONBLOCK) {
@@ -2474,9 +2477,10 @@ impl Cage {
                                     }
                                     _ => panic!("Unknown domain in accepting socket"),
                                 }
-                            //otherwise the socket is nonblocking so call the accept
-                            //syscall from libc and set the the raw sys fd
-                            //of the listening socket to nonblocking
+                            //otherwise the socket is nonblocking so call the
+                            // nonblocking accept syscall from libc and
+                            // set the the raw sys fd of the listening socket to
+                            // nonblocking
                             } else {
                                 match sockhandle.domain {
                                     PF_INET => sockhandle
@@ -2501,13 +2505,12 @@ impl Cage {
                             Ok(i) => {
                                 //We have the socket timeout set to every one second, so
                                 //if our blocking socket ever returns EAGAIN, it must be
-                                //the case that this recv timeout was exceeded, and we
+                                //the case that this timeout was exceeded, and we
                                 //should thus not treat this as a failure in our emulated
                                 //socket; see comment in Socket::new in interface/comm.rs
-
-                                //** What does recv timout have to do with accept?? **/
                                 if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
-                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                    // if the cancel status is set in the cage, we trap around a
+                                    // cancel point
                                     // until the individual thread is signaled to kill itself
                                     if self
                                         .cancelstatus
