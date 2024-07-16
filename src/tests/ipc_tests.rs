@@ -9,28 +9,30 @@ pub mod ipc_tests {
     use std::time::Instant;
 
     #[test]
-    pub fn ut_lind_ipc_pipe() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+    pub fn ut_lind_ipc_pipe_simple() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
-
+        // lets test transferring 1GB of data through the pipe in 128KB chunks
         let byte_chunk: usize = 131072; // 128 KB
-        let num_writes: usize = 8192; // 8 KB
-
-        
+        let num_writes: usize = 8192; // iterations 1GB/128KB
 
         let cage1 = interface::cagetable_getref(1);
 
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
         let mut pipefds = PipeArray {
             readfd: -1,
             writefd: -1,
         };
         assert_eq!(cage1.pipe_syscall(&mut pipefds), 0);
-        assert_eq!(cage1.fork_syscall(2), 0);
+        assert_eq!(cage1.fork_syscall(3), 0);
 
         let sender = std::thread::spawn(move || {
-            let cage2 = interface::cagetable_getref(2);
+            let cage2 = interface::cagetable_getref(3);
 
+            // dup our pipe write end to stdout and close unused pipe ends
             assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
             assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
             assert_eq!(cage2.close_syscall(pipefds.readfd), 0);
@@ -41,6 +43,7 @@ pub mod ipc_tests {
             let mut bufptr = buf.as_mut_ptr();
             let mut buflen: usize = 0;
 
+            // lets read in 128KB chunks until bytes read becomes 0 signaling EOF
             while bytes_read != 0 {
                 bytes_read = cage2.read_syscall(0, bufptr, byte_chunk) as usize;
                 unsafe {
@@ -54,15 +57,15 @@ pub mod ipc_tests {
             assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         });
 
+        // dup our pipe read end to stdout and close unused pipe ends
         assert_eq!(cage1.close_syscall(pipefds.readfd), 0);
         assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
         assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
 
+        // lets now write those chunks to the pipe
         for _i in 0..num_writes {
             let mut buf: Vec<u8> = vec!['A' as u8; byte_chunk];
-            let bufptr = buf.as_mut_ptr();
-            buf.resize(byte_chunk, 0);
-            cage1.write_syscall(1, bufptr, byte_chunk);
+            cage1.write_syscall(1, buf.as_mut_ptr(), byte_chunk);
         }
 
         assert_eq!(cage1.close_syscall(1), 0);
@@ -76,16 +79,15 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_domain_socket() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
 
         //bind net zero test reformatted for domain sockets
 
         let clientsockfilename = "/client.sock";
         let serversockfilename = "/server.sock";
 
-        
         let cage = interface::cagetable_getref(1);
 
         //both the server and the socket are run from this file
@@ -109,11 +111,12 @@ pub mod ipc_tests {
         assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
 
         //forking the cage to get another cage with the same information
-        assert_eq!(cage.fork_syscall(2), 0);
+        assert_eq!(cage.fork_syscall(3), 0);
 
-        //creating a thread for the server so that the information can be sent between the two threads
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
         let thread = interface::helper_thread(move || {
-            let cage2 = interface::cagetable_getref(2);
+            let cage2 = interface::cagetable_getref(3);
             let mut socket2 = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                 AF_UNIX as u16,
                 "".as_bytes(),
@@ -268,7 +271,8 @@ pub mod ipc_tests {
 
         assert_eq!(cage.connect_syscall(clientsockfd, &serversocket), 0);
 
-        //send the data with delays so that the server can process the information cleanly
+        //send the data with delays so that the server can process the information
+        // cleanly
         assert_eq!(
             cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
             100
@@ -306,11 +310,10 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_socketpair() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
-        
-        
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
@@ -351,11 +354,10 @@ pub mod ipc_tests {
 
     #[test]
     pub fn ut_lind_ipc_writev() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently, and also performs clean env setup
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
-        
-        
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
@@ -409,6 +411,223 @@ pub mod ipc_tests {
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_ipc_pipe2_nonblock() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage1 = interface::cagetable_getref(1);
+
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
+        let mut pipefds = PipeArray {
+            readfd: -1,
+            writefd: -1,
+        };
+        assert_eq!(cage1.pipe2_syscall(&mut pipefds, O_NONBLOCK), 0);
+        assert_eq!(cage1.fork_syscall(3), 0);
+
+        // dup our pipe read end to stdout and close unused pipe ends
+        assert_eq!(cage1.close_syscall(pipefds.readfd), 0);
+        assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
+        assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
+
+        // lets write to half the pipe capacity
+        let writesize1: usize = 32768; // 32KB
+        let mut buf1: Vec<u8> = vec!['A' as u8; writesize1];
+        assert_eq!(
+            cage1.write_syscall(1, buf1.as_mut_ptr(), writesize1),
+            writesize1 as i32
+        );
+
+        // now lets try to write to the whole pipe capacity before we've read anything
+        let room = PIPE_CAPACITY - writesize1;
+
+        let writesize2: usize = 65536; // 64KB
+        let mut buf2: Vec<u8> = vec!['B' as u8; writesize2];
+        // we expect to only write half - 32KB
+        let expected_partial_write = writesize2 - room;
+
+        assert_eq!(
+            cage1.write_syscall(1, buf2.as_mut_ptr(), writesize2),
+            expected_partial_write as i32
+        );
+
+        // now if we try to write anything the pipe is full so we expect EAGAIN
+        let writesize3: usize = 4096; // 4KB KB
+        let mut buf3: Vec<u8> = vec!['B' as u8; writesize3];
+        assert_eq!(
+            cage1.write_syscall(1, buf3.as_mut_ptr(), writesize3),
+            -(Errno::EAGAIN as i32)
+        );
+
+        assert_eq!(cage1.close_syscall(1), 0);
+
+        let sender = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(3);
+
+            // dup our pipe read end to stdout and close unused pipe ends
+            assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
+            assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
+            assert_eq!(cage2.close_syscall(pipefds.readfd), 0);
+
+            let bytes_to_read = 65536;
+            let mut buf: Vec<u8> = Vec::with_capacity(bytes_to_read);
+
+            // ok now lets read everything
+            assert_eq!(
+                cage2.read_syscall(0, buf.as_mut_ptr(), bytes_to_read),
+                bytes_to_read as i32
+            );
+            // we've close the write ends so now we expect 0, signifying EOF
+            assert_eq!(
+                cage2.read_syscall(0, buf.as_mut_ptr(), bytes_to_read),
+                0 as i32
+            );
+
+            assert_eq!(cage2.close_syscall(0), 0);
+
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        sender.join().unwrap();
+
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_ipc_pipe2_wouldblock() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage1 = interface::cagetable_getref(1);
+
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
+        let mut pipefds = PipeArray {
+            readfd: -1,
+            writefd: -1,
+        };
+        assert_eq!(cage1.pipe2_syscall(&mut pipefds, O_NONBLOCK), 0);
+        assert_eq!(cage1.fork_syscall(3), 0);
+
+        // dup our pipe read end to stdout and close unused pipe ends
+        assert_eq!(cage1.close_syscall(pipefds.readfd), 0);
+        assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
+        assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
+
+        // lets write one byte more than the last page boundary of the pipe
+        let writesize1: usize = 61441;
+        let mut buf1: Vec<u8> = vec!['A' as u8; writesize1];
+        assert_eq!(
+            cage1.write_syscall(1, buf1.as_mut_ptr(), writesize1),
+            writesize1 as i32
+        );
+
+        // now if we try to write anything we expect EAGAIN because there isnt a page of
+        // room
+        let writesize2: usize = 4; // 4 bytes
+        let mut buf2: Vec<u8> = vec!['B' as u8; writesize2];
+        assert_eq!(
+            cage1.write_syscall(1, buf2.as_mut_ptr(), writesize2),
+            -(Errno::EAGAIN as i32)
+        );
+
+        assert_eq!(cage1.close_syscall(1), 0);
+
+        let sender = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(3);
+
+            // dup our pipe read end to stdout and close unused pipe ends
+            assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
+            assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
+            assert_eq!(cage2.close_syscall(pipefds.readfd), 0);
+
+            let bytes_to_read = 65536;
+            let mut buf: Vec<u8> = Vec::with_capacity(bytes_to_read);
+
+            // ok now lets read everything
+            assert_eq!(
+                cage2.read_syscall(0, buf.as_mut_ptr(), bytes_to_read),
+                writesize1 as i32
+            );
+            // we've close the write ends so now we expect 0, signifying EOF
+            assert_eq!(
+                cage2.read_syscall(0, buf.as_mut_ptr(), bytes_to_read),
+                0 as i32
+            );
+
+            assert_eq!(cage2.close_syscall(0), 0);
+
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        sender.join().unwrap();
+
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_ipc_pipe_rw_zero() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage1 = interface::cagetable_getref(1);
+
+        // lets create a blank pipefd array, setting fds to -1 here before they can be
+        // populated by the pipe call
+        let mut pipefds = PipeArray {
+            readfd: -1,
+            writefd: -1,
+        };
+
+        // now setup the pipe and fork
+
+        assert_eq!(cage1.pipe_syscall(&mut pipefds), 0);
+        assert_eq!(cage1.fork_syscall(3), 0);
+
+        let sender = std::thread::spawn(move || {
+            let cage2 = interface::cagetable_getref(3);
+
+            // dup our pipe write end to stdout and close unused pipe ends
+            assert_eq!(cage2.close_syscall(pipefds.writefd), 0);
+            assert_eq!(cage2.dup2_syscall(pipefds.readfd, 0), 0);
+            assert_eq!(cage2.close_syscall(pipefds.readfd), 0);
+
+            // now lets check reading a length of 0, should return 0
+            let mut buf: Vec<u8> = Vec::new();
+            assert_eq!(cage2.read_syscall(0, buf.as_mut_ptr(), 0), 0 as i32);
+
+            assert_eq!(cage2.close_syscall(0), 0);
+
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        // dup our pipe read end to stdout and close unused pipe ends
+        assert_eq!(cage1.close_syscall(pipefds.readfd), 0);
+        assert_eq!(cage1.dup2_syscall(pipefds.writefd, 1), 1);
+        assert_eq!(cage1.close_syscall(pipefds.writefd), 0);
+
+        // now lets check writing a length of 0, should return 0
+        let mut buf: Vec<u8> = Vec::new();
+        assert_eq!(cage1.write_syscall(1, buf.as_mut_ptr(), 0), 0 as i32);
+
+        assert_eq!(cage1.close_syscall(1), 0);
+
+        sender.join().unwrap();
+
+        assert_eq!(cage1.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+
         lindrustfinalize();
     }
 }

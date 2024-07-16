@@ -10,6 +10,11 @@ pub mod test_sys {
     pub fn test_sys() {
         ut_lind_getpid(); 
         ut_lind_getppid(); 
+        ut_lind_getegid();
+        ut_lind_getuid();
+        ut_lind_geteuid();
+        ut_lind_getgid();
+        ut_lind_fork();
     } 
 
     pub fn ut_lind_getpid() {
@@ -68,5 +73,33 @@ pub mod test_sys {
         lindrustfinalize()
     } 
 
+    pub fn ut_lind_fork() {
+        // Since the fork syscall is heavily tested in relation to other syscalls
+        // we only perform simple checks for testing the sanity of the fork syscall
+        lindrustinit(0); 
+        let cage = interface::cagetable_getref(1); 
+        // Spawn a new child object using the fork syscall 
+        cage.fork_syscall(2); 
+        // Search for the new cage object with cage_id = 2
+        let child_cage = interface::cagetable_getref(2); 
+        // Assert the parent value is the the id of the first cage object
+        assert_eq!(child_cage.getpid_syscall(),1);
+        // Assert that the cage id of the child is the value passed in the original fork syscall
+        assert_eq!(child_cage.getuid(),2);
+        // Assert that the cwd is the same as the parent cage object
+        assert_eq!(child_cage.cwd.read(),cage.cwd.read())
+    }
+
+    pub fn ut_lind_exit() {
+        // Since exit function is heavily used and tested in other syscalls and their tests 
+        // We only perform preliminary checks for checking the sanity of this syscall
+        // We don't check for cases such as exiting a cage twice - since the exiting process 
+        // is handled by the NaCl runtime - and it ensures that a cage does not exit twice
+        lindrustinit(0);
+        let cage = interface::cagetable_getref(1);
+        // Call the exit call
+        assert_eq(cage.exit_syscall(EXIT_SUCCESS),EXIT_SUCCESS); 
+        lindrustfinalize(); 
+    }
 } 
 

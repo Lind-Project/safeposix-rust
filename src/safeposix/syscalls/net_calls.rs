@@ -2,14 +2,19 @@
 //!
 //! ## Notes:
 //!
-//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
-//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
-//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
+//! - These calls are implementations of the [`Cage`] struct in the
+//!   [`safeposix`](crate::safeposix) crate. See the
+//!   [`safeposix`](crate::safeposix) crate for more information.
+//! They have been structed as different modules for better maintainability and
+//! related functions. since they are tied to the `Cage` struct This module's
+//! rustdoc may turn up empty, thus they have been explicitly listed below for
+//! documentation purposes.
 //!
 //!
 //! ## Networking System Calls
 //!
-//! This module contains all networking system calls that are being emulated/faked in Lind.
+//! This module contains all networking system calls that are being
+//! emulated/faked in Lind.
 //!
 //! - [socket_syscall](crate::safeposix::cage::Cage::socket_syscall)
 //! - [force_innersocket](crate::safeposix::cage::Cage::force_innersocket)
@@ -43,7 +48,8 @@
 
 #![allow(dead_code)]
 // Network related system calls
-// outlines and implements all of the networking system calls that are being emulated/faked in Lind
+// outlines and implements all of the networking system calls that are being
+// emulated/faked in Lind
 
 use super::fs_constants::*;
 use super::net_constants::*;
@@ -66,12 +72,12 @@ impl Cage {
         conn: ConnState,
     ) -> SocketDesc {
         //For blocking sockets, operations wait until completed.
-        //For non-blocking sockets, operations return immediately, even if the requested operation is not completed.
-        //To further understand blocking, refer to https://www.scottklement.com/rpg/socktut/nonblocking.html
+        //For non-blocking sockets, operations return immediately, even if the
+        // requested operation is not completed. To further understand blocking, refer to https://www.scottklement.com/rpg/socktut/nonblocking.html
         //
-        //O_CLOEXEC flag closes the fd pointing to the socket on the execution of a new program
-        //This flag is neccessary upon setting the fd to avoid race condition described in
-        //https://man7.org/linux/man-pages/man2/open.2.html under the O_CLOEXEC section
+        //O_CLOEXEC flag closes the fd pointing to the socket on the execution of a new
+        // program This flag is neccessary upon setting the fd to avoid race
+        // condition described in https://man7.org/linux/man-pages/man2/open.2.html under the O_CLOEXEC section
         let flags = if nonblocking { O_NONBLOCK } else { 0 } | if cloexec { O_CLOEXEC } else { 0 };
 
         let sockfd = SocketDesc {
@@ -82,7 +88,8 @@ impl Cage {
                 domain, socktype, protocol, conn, flags,
             ))),
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-        }; //currently on failure to create handle we create successfully but it's corrupted, change?
+        }; //currently on failure to create handle we create successfully but it's
+           // corrupted, change?
 
         return sockfd;
     }
@@ -104,9 +111,10 @@ impl Cage {
     }
 
     //An implicit bind refers to the automatic binding of a socket to an address
-    //and port by the system, without an explicit call to the bind() function by the
-    //programmer. This typically happens when the socket is used for client-side
-    //operations, such as when it initiates a connection to a server.
+    //and port by the system, without an explicit call to the bind() function by
+    // the programmer. This typically happens when the socket is used for
+    // client-side operations, such as when it initiates a connection to a
+    // server.
     fn _implicit_bind(&self, sockhandle: &mut SocketHandle, domain: i32) -> i32 {
         if sockhandle.localaddr.is_none() {
             //Assign a new local address to the socket handle
@@ -144,12 +152,60 @@ impl Cage {
         0
     }
 
+    /// ## `socket_syscall`
+    ///
+    /// ### Description
+    /// This function creates a new socket, ensuring the requested domain,
+    /// socket type, and protocol are supported by SafePosix.
+    /// It validates the requested communication domain, socket type, and
+    /// protocol, permitting only combinations that are known to be safe and
+    /// secure.
+    ///
+    /// ### Function Arguments
+    /// * `domain`: The communication domain for the socket. Supported values
+    ///   are `PF_INET` (Internet Protocol) and `PF_UNIX` (Unix domain sockets).
+    /// * `socktype`: The socket type. Supported values are `SOCK_STREAM`
+    ///   (stream sockets) and `SOCK_DGRAM` (datagram sockets).
+    /// * `protocol`: The protocol to use for communication. This defaults to
+    ///   TCP for stream sockets (`SOCK_STREAM`) and UDP for datagram sockets
+    ///   (`SOCK_DGRAM`).
+    ///
+    /// ### Returns
+    /// * The new file descriptor representing the socket on success.
+    ///
+    /// ### Errors
+    /// * `EOPNOTSUPP(95)`: If an unsupported combination of domain, socket
+    ///   type, or protocol is requested.
+    /// * `EINVAL(22)`: If an invalid combination of flags is provided.
+    /// ### Panics
+    /// There are no panics in this syscall.
     pub fn socket_syscall(&self, domain: i32, socktype: i32, protocol: i32) -> i32 {
         let real_socktype = socktype & 0x7; //get the type without the extra flags, it's stored in the last 3 bits
-        let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
+        let nonblocking = (socktype & SOCK_NONBLOCK) != 0; // Checks if the socket should be non-blocking.
+                                                           //Check blocking status for storage in the file descriptor, we'll need this for
+                                                           // calls that don't access the kernel
+                                                           // socket, unix sockets, and properly directing kernel calls for recv and accept
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
+        // Checks if the 'close-on-exec' flag is set. This flag ensures the socket is
+        // automatically closed if the current process executes another program,
+        // preventing unintended inheritance of the socket by the new program.
 
+        // additional flags are not supported
+        // filtering out any socktypes with unexpected flags set.
+        // This is important as we dont want to pass down any flags that are not
+        // supported by SafePOSIX. which may potentially cause issues with the
+        // underlying libc call. or the socket creation process. leading to
+        // unexpected behavior.
+        if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
+            return syscall_error(Errno::EOPNOTSUPP, "socket", "Invalid combination of flags");
+        }
+        //SafePOSIX intentionally supports only a restricted subset of socket types .
+        // This is to make sure that applications not creating other socket
+        // types which may lead to security issues. By using the match
+        // statement, SafePOSIX ensures that only these approved socket types are
+        // allowed.
         match real_socktype {
+            // Handles different socket types SOCK_STREAM or SOCK_DGRAM in this cases
             SOCK_STREAM => {
                 //SOCK_STREAM defaults to TCP for protocol, otherwise protocol is unsupported
                 let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol };
@@ -162,7 +218,11 @@ impl Cage {
                     );
                 }
                 match domain {
-                    PF_INET | PF_UNIX => {
+                    // Handles different communication domains in this case PF_INET/PF_UNIX
+                    PF_INET | PF_INET6 | PF_UNIX => {
+                        // Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
+                        //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same
+                        //https://man7.org/linux/man-pages/man2/socket.2.html
                         let sockfdobj = self._socket_initializer(
                             domain,
                             socktype,
@@ -171,14 +231,22 @@ impl Cage {
                             cloexec,
                             ConnState::NOTCONNECTED,
                         );
+                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a
+                        // helper function that encapsulates the internal
+                        // details of socket creation and initialization.
                         return self._socket_inserter(Socket(sockfdobj));
+                        // Inserts the newly created socket descriptor into the
+                        // cage's file descriptor table,
+                        // making it accessible to the application.Returns the
+                        // file descriptor representing the socket.
                     }
                     _ => {
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "socket",
                             "trying to use an unimplemented domain",
-                        );
+                        ); // Returns an error if an unsupported domain is
+                           // requested.
                     }
                 }
             }
@@ -194,8 +262,17 @@ impl Cage {
                         "The only SOCK_DGRAM implemented is UDP. Unknown protocol input.",
                     );
                 }
+                // SafePOSIX intentionally supports only a restricted subset of socket types .
+                // This is to make sure that applications not creating other
+                // socket types which may lead to security issues. By using the
+                // match statement,  SafePOSIX ensures that only these approved socket types are
+                // allowed.
                 match domain {
-                    PF_INET | PF_UNIX => {
+                    // Handles different communication domains in this case PF_INET/PF_UNIX
+                    PF_INET | PF_INET6 | PF_UNIX => {
+                        // Internet Protocol (PF_INET) and Unix Domain Sockets (PF_UNIX)
+                        //PR_INET / AF_INET and PF_UNIX / AF_UNIX are the same
+                        //https://man7.org/linux/man-pages/man2/socket.2.html
                         let sockfdobj = self._socket_initializer(
                             domain,
                             socktype,
@@ -204,7 +281,14 @@ impl Cage {
                             cloexec,
                             ConnState::NOTCONNECTED,
                         );
+                        // Creates a SafePOSIX socket descriptor using '_socket_initializer', a
+                        // helper function that encapsulates the internal
+                        // details of socket creation and initialization.
                         return self._socket_inserter(Socket(sockfdobj));
+                        // Inserts the newly created socket descriptor into the
+                        // cage's file descriptor table,making it accessible to
+                        // the application. Returns the
+                        // file descriptor (an integer) representing the socket.
                     }
                     _ => {
                         return syscall_error(
@@ -221,7 +305,7 @@ impl Cage {
                     Errno::EOPNOTSUPP,
                     "socket",
                     "trying to use an unimplemented socket type",
-                );
+                ); // Returns an error if an unsupported domain is requested.
             }
         }
     }
@@ -230,13 +314,13 @@ impl Cage {
     pub fn force_innersocket(sockhandle: &mut SocketHandle) {
         //The innersocket is an Option wrapped around the raw sys fd
         //Depending on domain, innersocket may or may not be necessary
-        //Ex: Unix sockets do not have a kernal fd
+        //Ex: Unix sockets do not have a kernel fd
         //If innersocket is not available, then create a socket and insert its
         //fd into innersocket
         if let None = sockhandle.innersocket {
             //Create a new socket, as no sockhandle exists
-            //Socket creation rarely fails except for invalid parameters or extremely low-resources conditions
-            //Upon failure, process will panic
+            //Socket creation rarely fails except for invalid parameters or extremely
+            // low-resources conditions Upon failure, process will panic
             //Lind handles IPv4, IPv6, and Unix for domains
             let thissock =
                 interface::Socket::new(sockhandle.domain, sockhandle.socktype, sockhandle.protocol);
@@ -257,7 +341,7 @@ impl Cage {
                 //Failure occured upon setting a socket option
                 //Possible failures can be read at the man page linked above
                 //
-                // TODO: Possibly add errors instead of having a single panic for all errors ??? ** //
+                //TODO: Possibly add errors instead of having a single panic for all errors
                 if sockret < 0 {
                     panic!("Cannot handle failure in setsockopt on socket creation");
                 }
@@ -268,15 +352,15 @@ impl Cage {
         };
     }
 
-    //TODO: bind_syscall can be merged with bind_inner to be one function as this is a remnant
-    //from a previous refactor
+    //TODO: bind_syscall can be merged with bind_inner to be one function as this
+    // is a remnant from a previous refactor
 
     /// ### Description
     ///
-    /// `bind_syscall` - when a socket is created with socket_syscall, it exists in a name
-    ///  space (address family) but has no address assigned to it. bind_syscall
-    ///  assigns the address specified by localaddr to the socket referred to
-    ///  by the file descriptor fd.
+    /// `bind_syscall` - when a socket is created with socket_syscall, it exists
+    /// in a name  space (address family) but has no address assigned to it.
+    /// bind_syscall  assigns the address specified by localaddr to the
+    /// socket referred to  by the file descriptor fd.
     ///
     /// ### Arguments
     ///
@@ -291,49 +375,44 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// * EACCES - The address is protected, and the user is not the
-    ///            superuser.
+    /// * EACCES - The address is protected, and the user is not the superuser.
     /// * EADDRINUSE - The given address is already in use.
-    /// * EADDRINUSE - (Internet domain sockets) The port number was specified as
-    ///                zero in the socket address structure, but, upon attempting
-    ///                to bind to an ephemeral port, it was determined that all
-    ///                port numbers in the ephemeral port range are currently in
-    ///                use.  See the discussion of
-    ///                /proc/sys/net/ipv4/ip_local_port_range ip(7).
+    /// * EADDRINUSE - (Internet domain sockets) The port number was specified
+    ///   as zero in the socket address structure, but, upon attempting to bind
+    ///   to an ephemeral port, it was determined that all port numbers in the
+    ///   ephemeral port range are currently in use.  See the discussion of
+    ///   /proc/sys/net/ipv4/ip_local_port_range ip(7).
     /// * EBADF - sockfd is not a valid file descriptor.
     /// * EINVAL - The socket is already bound to an address.
     /// * EINVAL - addrlen is wrong, or addr is not a valid address for this
-    ///            socket's domain.
+    ///   socket's domain.
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     ///
     /// The following errors are specific to UNIX domain (AF_UNIX)
     /// sockets:
     ///
     /// * EACCES - Search permission is denied on a component of the path
-    ///            prefix.  (See also path_resolution(7).)
+    ///   prefix.  (See also path_resolution(7).)
     /// * EADDRNOTAVAIL - A nonexistent interface was requested or the requested
-    ///                   address was not local.
+    ///   address was not local.
     /// * EFAULT - addr points outside the user's accessible address space.
-    /// * ELOOP - Too many symbolic links were encountered in resolving
-    ///           addr.
+    /// * ELOOP - Too many symbolic links were encountered in resolving addr.
     /// * ENAMETOOLONG - addr is too long.
     /// * ENOENT - A component in the directory prefix of the socket pathname
-    ///        does not exist.
+    ///   does not exist.
     /// * ENOMEM - Insufficient kernel memory was available.
     /// * ENOTDIR - A component of the path prefix is not a directory.
     /// * EROFS - The socket inode would reside on a read-only filesystem.
-    ///
-    // ** should this comment be left ?? : we assume we've converted into a RustSockAddr in the dispatcher
     pub fn bind_syscall(&self, fd: i32, localaddr: &interface::GenSockaddr) -> i32 {
         self.bind_inner(fd, localaddr, false)
     }
 
     //Direct to appropriate helper function based on the domain of the socket
     //to bind socket with local address
-    //For INET sockets, create and bind the inner socket which is a kernel socket noted by raw_sys_fd
-    //For Unix sockets, setup unix info field and bind to local address
-    //On success, zero is returned.  On error, -errno is returned, and
-    //errno is set to indicate the error.
+    //For INET sockets, create and bind the inner socket which is a kernel socket
+    // noted by raw_sys_fd For Unix sockets, setup unix info field and bind to
+    // local address On success, zero is returned.  On error, -errno is
+    // returned, and errno is set to indicate the error.
     fn bind_inner_socket(
         &self,
         sockhandle: &mut SocketHandle,
@@ -405,14 +484,16 @@ impl Cage {
             (None, Some(pardirinode)) => {
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
 
-                //this may end up skipping an inode number in the case of ENOTDIR, but that's not catastrophic
-                //FS_METADATA contains information about the file system
+                //this may end up skipping an inode number in the case of ENOTDIR, but that's
+                // not catastrophic FS_METADATA contains information about the
+                // file system
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed);
-                //fetch_add returns the previous value, which is the inode number we want, while incrementing the nextinode value as well
-                //The ordering argument Relaxed guarantees the memory location is atomic, which is all that is neccessary for a counter
-                //Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
+                //fetch_add returns the previous value, which is the inode number we want,
+                // while incrementing the nextinode value as well The ordering
+                // argument Relaxed guarantees the memory location is atomic, which is all that
+                // is neccessary for a counter Read more at https://stackoverflow.com/questions/30407121/which-stdsyncatomicordering-to-use
 
                 let newinode;
 
@@ -420,7 +501,7 @@ impl Cage {
                 if let Inode::Dir(ref mut dir) =
                     *(FS_METADATA.inodetable.get_mut(&pardirinode).unwrap())
                 {
-                    //Add file type flags and user read,write,execute permission flags ***
+                    //Add file type flags and user read,write,execute permission flags
                     let mode = (dir.mode | S_FILETYPEFLAGS as u32) & S_IRWXA;
                     //Add file type constant of a socket
                     let effective_mode = S_IFSOCK as u32 | mode;
@@ -577,11 +658,25 @@ impl Cage {
         }
     }
 
+    //Assign address in unix domain
+    //This helped function is used when we know we are working with unix sockets
+    //so we can return the address without possibilites of errors
+    //that come from INET sockets
     fn assign_new_addr_unix(sockhandle: &SocketHandle) -> interface::GenSockaddr {
+        //If the socket handle has a local address set, return a clone of the addr.
+        //This is because we do not want to assign a new address to a socket that is
+        // already assigned one
         if let Some(addr) = sockhandle.localaddr.clone() {
             addr
         } else {
+            //path will be in the format of /sockID, where ID is of type
+            //usize before being converted to a string type
+            //The UD_ID_COUNTER begins counting at 0
             let path = interface::gen_ud_path();
+            //Unix domains paths can't exceed 108 bytes. If this happens, process will
+            // panic Set the newremote address based on the Unix domain and the
+            // path Note, Unix domain socket addresses expect a null-terminated
+            // string or zero-padded path
             let newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                 AF_UNIX as u16,
                 path.as_bytes(),
@@ -590,29 +685,58 @@ impl Cage {
         }
     }
 
+    //Return a new address based on the domain of the socket handle
+    //If a socket handle contains a local address, return a clone of the local
+    // address
     fn assign_new_addr(
         sockhandle: &SocketHandle,
         domain: i32,
         rebindability: bool,
     ) -> Result<interface::GenSockaddr, i32> {
+        //The input domain must match the domain of the socket handle
+        if domain != sockhandle.domain as i32 {
+            return Err(syscall_error(
+                Errno::EINVAL,
+                "assign_new_addr",
+                "An address with an invalid family for the given domain was specified",
+            ));
+        }
+        //If the socket handle has a local address set, return a Result
+        //type containing a clone of the addr. This is because we do not
+        //want to assign a new address to a socket that already contains one
         if let Some(addr) = &sockhandle.localaddr {
             Ok(addr.clone())
         } else {
             let mut newremote: interface::GenSockaddr;
             //This is the specified behavior for the berkeley sockets API
+            //Learn more about BSD at https://web.mit.edu/macdev/Development/MITSupportLib/SocketsLib/Documentation/sockets.html
             match domain {
                 AF_UNIX => {
+                    //path will be in the format of /sockID, where ID is of type
+                    //usize before being converted toa string type
+                    //The UD_ID_COUNTER begins counting at 0
                     let path = interface::gen_ud_path();
+                    //Unix domains paths can't exceed 108 bytes. If this happens, process will
+                    // panic Set the newremote address based on the Unix domain
+                    // and the path Note, Unix domain socket addresses expect a
+                    // null-terminated string or zero-padded path
                     newremote = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                         AF_UNIX as u16,
                         path.as_bytes(),
                     ));
                 }
                 AF_INET => {
+                    //Initialize and assign values to the remote address for a connection
+                    //if a process binds to 0.0.0.0, all incoming connection to
+                    //this machine are forwarded to this process
                     newremote = interface::GenSockaddr::V4(interface::SockaddrV4::default());
                     let addr = interface::GenIpaddr::V4(interface::V4Addr::default());
                     newremote.set_addr(addr);
                     newremote.set_family(AF_INET as u16);
+                    //Arguments being passed in ...
+                    //port is set to 0 to use any available port
+                    //Possible protocols are IPPROTO_UDP and IPPROTO_TCP
+                    //Will panic for unknown protocols
                     newremote.set_port(
                         match NET_METADATA._reserve_localport(
                             addr.clone(),
@@ -627,10 +751,17 @@ impl Cage {
                     );
                 }
                 AF_INET6 => {
+                    //Initialize and assign values to the remote address for a connection
+                    //if a process binds to [0; 16] all incoming connection to
+                    //this machine are forwarded to this process
                     newremote = interface::GenSockaddr::V6(interface::SockaddrV6::default());
                     let addr = interface::GenIpaddr::V6(interface::V6Addr::default());
                     newremote.set_addr(addr);
                     newremote.set_family(AF_INET6 as u16);
+                    //Arguments being passed in ...
+                    //port is set to 0 to use any available port
+                    //Possible protocols are IPPROTO_UDP and IPPROTO_TCP
+                    //Will panic for unknown protocols
                     newremote.set_port(
                         match NET_METADATA._reserve_localport(
                             addr.clone(),
@@ -656,16 +787,110 @@ impl Cage {
         }
     }
 
-    //The connect() system call connects the socket referred to by the
-    //file descriptor fd to the address specified by remoteaddr.
+    /// ### Description
+    ///
+    /// `connect_syscall` connects the socket referred to by the
+    /// file descriptor fd to the address specified by remoteaddr.
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts two parameters:
+    /// * `fd` - an open file descriptor
+    /// * `remoteaddr` - the address to request a connection to
+    ///
+    /// ### Returns
+    ///
+    /// for a successful call, zero is returned. On
+    /// error, -errno is returned, and errno is set to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * EADDRNOTAVAIL - The specified address is not available from the local
+    ///   machine.
+    /// * EAFNOSUPPORT - The specified address is not a valid address for the
+    ///   address family of the specified socket.
+    /// * EALREADY - A connection request is already in progress for the
+    ///   specified socket.
+    /// ** EBADF - The socket argument is not a valid file descriptor.
+    /// * ECONNREFUSED - The target address was not listening for connections or
+    ///   refused the connection request.
+    /// ** EINPROGRESS - O_NONBLOCK is set for the file descriptor for the
+    ///    socket and the connection cannot be immediately established; the
+    ///    connection shall be established asynchronously.
+    /// * EINTR - The attempt to establish a connection was interrupted by
+    ///   delivery of a signal that was caught; the connection shall be
+    ///   established asynchronously.
+    /// ** EISCONN - The specified socket is connection-mode and is already
+    ///    connected.
+    /// * ENETUNREACH - No route to the network is present.
+    /// ** ENOTSOCK - The socket argument does not refer to a socket.
+    /// * EPROTOTYPE - The specified address has a different type than the
+    ///   socket bound to the specified peer address.
+    /// * ETIMEDOUT - The attempt to connect timed out before a connection was
+    ///   made.
+    ///
+    /// If the address family of the socket is AF_UNIX, then connect() shall
+    /// fail if:
+    ///
+    /// * EIO - An I/O error occurred while reading from or writing to the file
+    ///   system.
+    /// * ELOOP - A loop exists in symbolic links encountered during resolution
+    ///   of the pathname in address.
+    /// * ENAMETOOLONG - A component of a pathname exceeded {NAME_MAX}
+    ///   characters, or an entire pathname exceeded {PATH_MAX} characters.
+    /// ** ENOENT - A component of the pathname does not name an existing file
+    ///    or the pathname is an empty string.
+    /// * ENOTDIR - A component of the path prefix of the pathname in address is
+    ///   not a directory.
+    ///
+    /// The connect() function may fail if:
+    ///
+    /// * EACCES - Search permission is denied for a component of the path
+    ///   prefix; or write access to the named socket is denied.
+    /// * EADDRINUSE - Attempt to establish a connection that uses addresses
+    ///   that are already in use.
+    /// * ECONNRESET - Remote host reset the connection request.
+    /// * EHOSTUNREACH - The destination host cannot be reached (probably
+    ///   because the host is down or a remote router cannot reach it).
+    /// ** EINVAL - The address_len argument is not a valid length for the
+    ///    address family; or invalid address family in the sockaddr structure.
+    /// * ELOOP - More than {SYMLOOP_MAX} symbolic links were encountered during
+    ///   resolution of the pathname in address.
+    /// * ENAMETOOLONG - Pathname resolution of a symbolic link produced an
+    ///   intermediate result whose length exceeds {PATH_MAX}.
+    /// * ENETDOWN - The local network interface used to reach the destination
+    ///   is down.
+    /// * ENOBUFS- No buffer space is available.
+    /// ** EOPNOTSUPP - The socket is listening and cannot be connected.
+    ///
+    /// ** Indicates the error may be returned from RustPOSIX
+    ///
+    /// ### Panics
+    ///
+    /// * Unknown errno value from bind libc call, will cause panic
+    /// * Unknown errno value from connect libc call, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [connect(3)](https://linux.die.net/man/3/connect)
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //Pattern match such that FileDescriptor object must be the Socket variant
+        //Otherwise, return with an err as the fd refers to something other than a
+        // socket
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 Socket(ref mut sockfdobj) => {
+                    //We would like to pass the socket handle data to the function
+                    //without giving it ownership sockfdobj, which may be in use
+                    //by other threads accessing other fields
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
+                    //Possible address families are Unix, V4, V6
+                    //Error occurs if remoteaddr's address family does not match
+                    //the domain of the socket pointed to by fd
                     if remoteaddr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(
                             Errno::EINVAL,
@@ -703,6 +928,18 @@ impl Cage {
         }
     }
 
+    //User datagram protocol is a standardized communication protocol that
+    // transfers data between computers in a network. However, unlike other
+    // protocols such as TCP, UDP simplifies data transfer by sending packets
+    // (or, more specifically, datagrams) directly to the receiver without first
+    // establishing a two-way connection. Read more at https://spiceworks.com/tech/networking/articles/user-datagram-protocol-udp/
+    //
+    //The function sets up a connection on a UDP socket
+    //Args: sockhandle is a mut reference to the SocketHandle of the local socket
+    //      sockfdobj is a mut reference to the Socket Description of the local
+    // socket      remoteaddr is a reference to the remote address that the
+    // local socket will connect to On success, zero is returned. On error,
+    // -errno is returned, and errno is set to indicate the error.
     fn connect_udp(
         &self,
         sockhandle: &mut SocketHandle,
@@ -713,8 +950,14 @@ impl Cage {
         //we don't need to check connection state for UDP, it's connectionless!
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         match sockhandle.localaddr {
+            //If the socket is assigned a local address, then return with success
             Some(_) => return 0,
+            //Otherwise, assign a local address to the socket
             None => {
+                //Note, assign_new_addr expects a reference to SocketHandle, but sockhandle is
+                // a mut reference. This is why we need to dereference and
+                // reference the sockhandle pointer An error occurs if the
+                // sockhandle domain is not AF_UNIX, AF_INET, AF_INET6
                 let localaddr = match Self::assign_new_addr(
                     &*sockhandle,
                     sockhandle.domain,
@@ -724,21 +967,43 @@ impl Cage {
                     Err(e) => return e,
                 };
 
+                //Set up the connection with the local address
                 let bindret = self.bind_inner_socket(&mut *sockhandle, &localaddr, true);
-                // udp now connected so lets set rawfd for select
+                // Set the rawfd for select_syscall as we cannot implement the select
+                // logics for AF_INET socket right now, so we have to call the select
+                // syscall from libc, which takes the rawfd as the argument instead of
+                // the fake fd used by lind.
+                // The raw fd of the socket is the set to be the same as the fd set by the
+                // kernel in the libc connect call
                 sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
                 return bindret;
             }
         };
     }
 
+    //Transmission Control Protocol (TCP) is a standard protocol on the internet
+    //that ensures the reliable transmission of data between devices on a network.
+    //Read more at https://www.techtarget.com/searchnetworking/definition/TCP
+    //
+    //The function sets up a connection on a TCP socket
+    //Args: sockhandle is a mut reference to the SocketHandle of the local socket
+    //      sockfdobj is a mut reference to the Socket Description of the local
+    // socket      remoteaddr is a reference to the remote address that the
+    // local socket will connect to On success, zero is returned. On error,
+    // -errno is returned, and errno is set to indicate the error.
     fn connect_tcp(
         &self,
         sockhandle: &mut SocketHandle,
         sockfdobj: &mut SocketDesc,
         remoteaddr: &interface::GenSockaddr,
     ) -> i32 {
-        // TCP connection logic
+        //BUG:
+        // According to man pages, it may be possible dissolve the
+        // association by connecting to an address with the sa_family member
+        // of sockaddr set to AF_UNSPEC; thereafter, the socket can be
+        // connected to another address.
+        //
+        //If socket is already connected, we can not reconnect with the same socket
         if sockhandle.state != ConnState::NOTCONNECTED {
             return syscall_error(
                 Errno::EISCONN,
@@ -747,6 +1012,9 @@ impl Cage {
             );
         }
 
+        //In the case that the domain is AF_UNIX, AF_INET, or AF_INET6, perform a
+        // connection Otherwise, return with an error due to the domain being
+        // unsupported in lind
         match sockhandle.domain {
             AF_UNIX => self.connect_tcp_unix(&mut *sockhandle, sockfdobj, remoteaddr),
             AF_INET | AF_INET6 => self.connect_tcp_inet(&mut *sockhandle, sockfdobj, remoteaddr),
@@ -754,6 +1022,12 @@ impl Cage {
         }
     }
 
+    //The function sets up a connection on a TCP socket with a unix address family
+    //Args: sockhandle is a mut reference to the SocketHandle of the local socket
+    //      sockfdobj is a mut reference to the Socket Description of the local
+    // socket      remoteaddr is a reference to the remote address that the
+    // local socket will connect to On success, zero is returned. On error,
+    // -errno is returned, and errno is set to indicate the error.
     fn connect_tcp_unix(
         &self,
         sockhandle: &mut SocketHandle,
@@ -761,13 +1035,20 @@ impl Cage {
         remoteaddr: &interface::GenSockaddr,
     ) -> i32 {
         // TCP domain socket logic
+        //Check if the local address of the socket handle is not set
         if let None = sockhandle.localaddr {
+            //Assign a new local address for the Unix domain socket in sockhandle. This is
+            // necessary as each Unix domain socket needs a unique address
+            // (path) to distinguish it from other sockets.
             let localaddr = Self::assign_new_addr_unix(&sockhandle);
             self.bind_inner_socket(&mut *sockhandle, &localaddr, false);
         }
+        //Normalize the remote address to a path buffer
         let remotepathbuf = normpath(convpath(remoteaddr.path()), self);
 
-        // try to get and hold reference to the key-value pair, so other process can't alter it
+        //NET_METADATA.domsock_paths is the set of all currently bound domain sockets
+        //try to get and hold reference to the key-value pair, so other process can't
+        // alter it
         let path_ref = NET_METADATA.domsock_paths.get(&remotepathbuf);
         // if the entry doesn't exist, return an error.
         if path_ref.is_none() {
@@ -776,36 +1057,56 @@ impl Cage {
 
         let (pipe1, pipe2) = create_unix_sockpipes();
 
+        //Setup the socket handle with the remote address
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         sockhandle.unix_info.as_mut().unwrap().sendpipe = Some(pipe1.clone());
         sockhandle.unix_info.as_mut().unwrap().receivepipe = Some(pipe2.clone());
 
+        //Check if the socket is set to blocking mode
+        //connvar is necessary to synchronize connect and accept
+        //as we are performing it in the user space
         let connvar = if sockfdobj.flags & O_NONBLOCK == 0 {
             Some(interface::RustRfc::new(ConnCondVar::new()))
         } else {
             None
         };
 
-        // receive_pipe and send_pipe need to be swapped here
-        // because the receive_pipe and send_pipe are opposites between the
-        // sender and receiver. Swapping here also means we do not need to swap in
-        // accept.
+        //The receive_pipe of the socket that is accepting the connection is assigned
+        // the send_pipe of the socket that is requesting the connection.
+        //Similiarly, the send_pipe of the socket that is accepting the connection is
+        // assigned the receive_pipe of the socket that is requesting the
+        // connection. Swapping the pipes here means that in accept sys call we
+        // can use the pipes as placed in the domsock_accept_table without
+        // confusion
         let entry = DomsockTableEntry {
             sockaddr: sockhandle.localaddr.unwrap().clone(),
             receive_pipe: Some(pipe1.clone()).unwrap(),
             send_pipe: Some(pipe2.clone()).unwrap(),
             cond_var: connvar.clone(),
         };
+        //Access the domsock_accept_table, which keeps track of socket paths and
+        //details pertaining to them: the socket address, receive and send pipes, and
+        // cond_var
         NET_METADATA
             .domsock_accept_table
             .insert(remotepathbuf, entry);
+        // TODO: Add logics to handle nonblocking connects here
+        //Update the sock handle state to indicate that it is connected
         sockhandle.state = ConnState::CONNECTED;
+        //If the socket is set to blocking mode, wait until a thread
+        //accepts the connection
         if sockfdobj.flags & O_NONBLOCK == 0 {
             connvar.unwrap().wait();
         }
-        return 0;
+        return 0; //successful TCP connection over Unix domain
     }
 
+    //The function sets up a connection on a TCP socket with an inet address family
+    //Args: sockhandle is a mut reference to the SocketHandle of the local socket
+    //      sockfdobj is a mut reference to the Socket Description of the local
+    // socket      remoteaddr is a reference to the remote address that the
+    // local socket will connect to On success, zero is returned. On error,
+    // -errno is returned, and errno is set to indicate the error.
     fn connect_tcp_inet(
         &self,
         sockhandle: &mut SocketHandle,
@@ -816,6 +1117,8 @@ impl Cage {
         //for TCP, actually create the internal socket object and connect it
         let remoteclone = remoteaddr.clone();
 
+        //In the case that the socket is connected, return with error
+        //as we do not want a new connection
         if sockhandle.state != ConnState::NOTCONNECTED {
             return syscall_error(
                 Errno::EISCONN,
@@ -824,9 +1127,14 @@ impl Cage {
             );
         }
 
+        //In the case that the socket is not connected
         if let None = sockhandle.localaddr {
+            //Set the socket fd in the socket handle
             Self::force_innersocket(sockhandle);
 
+            //Return a new address based on the domain of the socket handle
+            //This won't return a clone of the local address as the socket handle
+            //does not contain a local address based on the check above
             let localaddr = match Self::assign_new_addr(
                 &*sockhandle,
                 sockhandle.domain,
@@ -835,6 +1143,11 @@ impl Cage {
                 Ok(a) => a,
                 Err(e) => return e,
             };
+
+            //Performs libc bind call to assign the local address to the fd in
+            //Socket within innersocket
+            //Any errors are a result of the libc bind call
+            //Here are the list of possible errors https://man7.org/linux/man-pages/man2/bind.2.html
             let bindret = sockhandle.innersocket.as_ref().unwrap().bind(&localaddr);
             if bindret < 0 {
                 sockhandle.localaddr = Some(localaddr);
@@ -854,6 +1167,9 @@ impl Cage {
         }
 
         let mut inprogress = false;
+        //Performs libc connect call to connect the socket referred to by the
+        // raw_sys_fd in Socket to the address specified by remoteclone
+        //Here are the list of possible errors https://www.man7.org/linux/man-pages/man2/connect.2.html
         let connectret = sockhandle
             .innersocket
             .as_ref()
@@ -861,6 +1177,11 @@ impl Cage {
             .connect(&remoteclone);
         if connectret < 0 {
             match Errno::from_discriminant(interface::get_errno()) {
+                //EINPROGRESS signifies that the socket is non-blocking and
+                //the connection could not be established immediately.
+                //https://www.gnu.org/software/libc/manual/html_node/Connecting.html
+                // BUG: Another connect call on the same socket, before the connection is completely
+                // established, should fail with EALREADY.
                 Ok(i) => {
                     if i == Errno::EINPROGRESS {
                         inprogress = true;
@@ -872,10 +1193,17 @@ impl Cage {
             };
         }
 
+        //Setup the socket handle as connected, insert the remote address of the
+        // connection, and reset the errno in case it is set to EINPROGRESS
         sockhandle.state = ConnState::CONNECTED;
         sockhandle.remoteaddr = Some(remoteaddr.clone());
         sockhandle.errno = 0;
-        // set the rawfd for select
+        // Set the rawfd for select_syscall as we cannot implement the select
+        // logics for AF_INET socket right now, so we have to call the select
+        // syscall from libc, which takes the rawfd as the argument instead of
+        // the fake fd used by lind.
+        // The raw fd of the socket is the set to be the same as the fd set by the
+        // kernel in the libc connect call
         sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
         if inprogress {
             sockhandle.state = ConnState::INPROGRESS;
@@ -885,7 +1213,7 @@ impl Cage {
                 "The libc call to connect is in progress.",
             );
         } else {
-            return 0;
+            return 0; //successfull TCP connection over INET domain
         }
     }
 
@@ -1058,7 +1386,8 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected, or connected for write only
+                                    // to be able to send here we either need to be fully connected,
+                                    // or connected for write only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1146,7 +1475,8 @@ impl Cage {
                                 };
                                 drop(unlocked_fd);
                                 drop(sockhandle);
-                                //send from a udp socket is just shunted off to sendto with the remote address set
+                                //send from a udp socket is just shunted off to sendto with the
+                                // remote address set
                                 return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
                             }
 
@@ -1241,7 +1571,8 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the state here
+        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the
+        // state here
         if sockhandle.state == ConnState::INPROGRESS
             && sockhandle
                 .innersocket
@@ -1264,16 +1595,17 @@ impl Cage {
         let mut newbuflen = buflen;
         let mut newbufptr = buf;
 
-        //if we have peeked some data before, fill our buffer with that data before moving on
+        //if we have peeked some data before, fill our buffer with that data before
+        // moving on
         if !sockhandle.last_peek.is_empty() {
             let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
             interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
             newbuflen -= bytecount;
             newbufptr = newbufptr.wrapping_add(bytecount);
 
-            //if we're not still peeking data, consume the data we peeked from our peek buffer
-            //and if the bytecount is more than the length of the peeked data, then we remove the entire
-            //buffer
+            //if we're not still peeking data, consume the data we peeked from our peek
+            // buffer and if the bytecount is more than the length of the peeked
+            // data, then we remove the entire buffer
             if flags & MSG_PEEK == 0 {
                 let len = sockhandle.last_peek.len();
                 sockhandle
@@ -1307,13 +1639,15 @@ impl Cage {
                         return (buflen - buflenleft) as i32;
                     }
                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
-                        // with blocking sockets, we return EAGAIN here to check for cancellation, then return to reading
+                        // with blocking sockets, we return EAGAIN here to check for cancellation,
+                        // then return to reading
                         if self
                             .cancelstatus
                             .load(interface::RustAtomicOrdering::Relaxed)
                         {
-                            // if the cancel status is set in the cage, we trap around a cancel point
-                            // until the individual thread is signaled to cancel itself
+                            // if the cancel status is set in the cage, we trap around a cancel
+                            // point until the individual thread is
+                            // signaled to cancel itself
                             loop {
                                 interface::cancelpoint(self.cageid)
                             }
@@ -1364,7 +1698,8 @@ impl Cage {
                                     .cancelstatus
                                     .load(interface::RustAtomicOrdering::Relaxed)
                                 {
-                                    // if the cancel status is set in the cage, we trap around a cancel point
+                                    // if the cancel status is set in the cage, we trap around a
+                                    // cancel point
                                     // until the individual thread is signaled to cancel itself
                                     loop {
                                         interface::cancelpoint(self.cageid);
@@ -1441,14 +1776,16 @@ impl Cage {
                                 .cancelstatus
                                 .load(interface::RustAtomicOrdering::Relaxed)
                             {
-                                // if the cancel status is set in the cage, we trap around a cancel point
-                                // until the individual thread is signaled to cancel itself
+                                // if the cancel status is set in the cage, we trap around a cancel
+                                // point until the individual thread
+                                // is signaled to cancel itself
                                 loop {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
                             interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
-                            continue; //received EAGAIN on blocking socket, try again
+                            continue; //received EAGAIN on blocking socket, try
+                                      // again
                         }
                         return syscall_error(i, "recvfrom", "Internal call to recvfrom failed");
                     }
@@ -2235,6 +2572,54 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SELECT SYSCALL------------------
+    /// ### Description
+    /// The `select_syscall()` allows a program to monitor multiple file
+    /// descriptors, waiting until one or more of the file descriptors become
+    /// "ready" for some class of I/O operation (e.g., input possible).  A
+    /// file descriptor is considered ready if it is possible to perform a
+    /// corresponding I/O operation (e.g., `read_syscall()`) without blocking.
+
+    /// ### Function Arguments
+    /// The `select_syscall()` receives five arguments:
+    /// * `nfds` - This argument should be set to the highest-numbered file
+    ///   descriptor in any of the three sets, plus 1.  The indicated file
+    ///   descriptors in each set are checked, up to this limit.
+    /// * `readfds` -  The file descriptors in this set are watched to see if
+    ///   they are ready for reading.  A file descriptor is ready for reading if
+    ///   a read operation will not block; in particular, a file descriptor is
+    ///   also ready on end-of-file. After select() has returned, readfds will
+    ///   be cleared of all file descriptors except for those that are ready for
+    ///   reading.
+    /// * `writefds` - The file descriptors in this set are watched to see if
+    ///   they are ready for writing.  A file descriptor is ready for writing if
+    ///   a write operation will not block.  However, even if a file descriptor
+    ///   indicates as writable, a large write may still block. After select()
+    ///   has returned, writefds will be cleared of all file descriptors except
+    ///   for those that are ready for writing.
+    /// * `exceptfds` - currently not supported, only the validity of the fds
+    ///   will be checked
+    /// * `timeout` - The timeout argument is a RustDuration structure that
+    ///   specifies the interval that select() should block waiting for a file
+    ///   descriptor to become ready.  The call will block until either: •  a
+    ///   file descriptor becomes ready; •  the call is interrupted by a signal
+    ///   handler; or •  the timeout expires.
+
+    /// ### Returns
+    /// On success, select() and return the number of file descriptors contained
+    /// in the two returned descriptor sets (that is, the total number of
+    /// bits that are set in readfds, writefds). The return value may be zero if
+    /// the timeout expired before any file descriptors became ready.
+    /// Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - An invalid file descriptor was given in one of the sets. (e.g.
+    ///   a file descriptor that was already closed.)
+    /// * EINTR - A signal was caught.
+    /// * EINVAL -  nfds is negative or exceeds the FD_SET_MAX_FD.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn select_syscall(
         &self,
         nfds: i32,
@@ -2243,6 +2628,7 @@ impl Cage {
         exceptfds: Option<&mut interface::FdSet>,
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
+        // nfds should be in the allowed range (i.e. 0 to 1024 according to standard)
         if nfds < STARTINGFD || nfds >= FD_SET_MAX_FD {
             return syscall_error(Errno::EINVAL, "select", "Number of FDs is wrong");
         }
@@ -2255,7 +2641,8 @@ impl Cage {
         };
 
         let mut retval = 0;
-        // in the loop below, we always read from original fd_sets, but make updates to the new copies
+        // in the loop below, we always read from original fd_sets, but make updates to
+        // the new copies
         let new_readfds = &mut interface::FdSet::new();
         let new_writefds = &mut interface::FdSet::new();
         loop {
@@ -2277,7 +2664,7 @@ impl Cage {
             }
 
             // 3. iterate thru exceptfds
-            // currently we don't really do select on execptfds, we just check if those fds are valid
+            // TODO: we currently don't implement exceptfds but possibly could if necessary
             if let Some(exceptfds_ref) = exceptfds.as_ref() {
                 for fd in 0..nfds {
                     // find the bit and see if it's on
@@ -2292,6 +2679,7 @@ impl Cage {
                 }
             }
 
+            // check for timeout
             if retval != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
@@ -2315,6 +2703,12 @@ impl Cage {
         return retval;
     }
 
+    /// This function is used to select on readfds specifically
+    /// This function monitors all readfds to check if they are ready to read
+    /// readfds could be one of the followings:
+    /// 1. Regular files (these files are always marked as readable)
+    /// 2. Pipes
+    /// 3. Sockets
     fn select_readfds(
         &self,
         nfds: i32,
@@ -2326,11 +2720,14 @@ impl Cage {
         let mut inet_info = SelectInetInfo::new();
 
         for fd in 0..nfds {
-            // check if current i is in readfd
+            // ignore file descriptors that are not in the set
             if !readfds.is_set(fd) {
                 continue;
             }
 
+            // try to get the FileDescriptor Object from fd number
+            // if the fd exists, do further processing based on the file descriptor type
+            // otherwise, raise an error
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
@@ -2339,9 +2736,22 @@ impl Cage {
                         let mut newconnection = false;
                         match sockfdobj.domain {
                             AF_UNIX => {
+                                // sockethandle lock with read access
                                 let sock_tmp = sockfdobj.handle.clone();
                                 let sockhandle = sock_tmp.read();
                                 if sockhandle.state == ConnState::INPROGRESS {
+                                    // if connection state is INPROGRESS, in case of AF_UNIX socket,
+                                    // that would mean the socket connects in non-blocking mode
+
+                                    // BUG: current implementation of AF_UNIX socket non-blocking
+                                    // connection is not working
+                                    // correctly, according to standards, when the connection
+                                    // is ready, select should report writability instead of
+                                    // readability so the code
+                                    // here should be removed. Interestingly, since connect_tcp_unix
+                                    // hasn't changed the state to INPROGRESS, so this piece of code
+                                    // inside the if statement
+                                    // is a dead code that would never be executed currently
                                     let remotepathbuf = normpath(
                                         convpath(sockhandle.remoteaddr.unwrap().path()),
                                         self,
@@ -2354,19 +2764,27 @@ impl Cage {
                                 }
 
                                 if sockhandle.state == ConnState::LISTEN {
+                                    // if connection state is LISTEN
+                                    // then check if there are any pending connections
+
+                                    // get the path of the socket
                                     let localpathbuf = normpath(
                                         convpath(sockhandle.localaddr.unwrap().path()),
                                         self,
                                     );
+                                    // check if there is any connections associated with the path
                                     let dsconnobj =
                                         NET_METADATA.domsock_accept_table.get(&localpathbuf);
                                     if dsconnobj.is_some() {
-                                        // we have a connecting domain socket, return as readable to be accepted
+                                        // we have a connecting domain socket, return as readable to
+                                        // be accepted
                                         new_readfds.set(fd);
                                         *retval += 1;
                                     }
                                 } else if sockhandle.state == ConnState::CONNECTED || newconnection
                                 {
+                                    // otherwise, the connection is already established
+                                    // check if the pipe has any thing
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                     let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                                     if receivepipe.check_select_read() {
@@ -2376,7 +2794,10 @@ impl Cage {
                                 }
                             }
                             AF_INET | AF_INET6 => {
-                                // here we simply record the inet fd into inet_fds and the tuple list for using kernel_select
+                                // For AF_INET or AF_INET6 socket, currently we still rely on kernel
+                                // implementation, so here we simply
+                                // prepare the kernel fd set by translating fd into kernel fd
+                                // and will pass it to kernel_select later
                                 if sockfdobj.rawfd < 0 {
                                     continue;
                                 }
@@ -2396,6 +2817,9 @@ impl Cage {
                             }
                         }
 
+                        // newconnection seems to be used for AF_UNIX socket with INPROGRESS state
+                        // (non-blocking AF_UNIX socket connection), which is a broken feature
+                        // currently
                         if newconnection {
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
@@ -2403,19 +2827,20 @@ impl Cage {
                         }
                     }
 
-                    //we don't support selecting streams
+                    // we don't support selecting streams
                     Stream(_) => {
                         continue;
                     }
 
                     Pipe(pipefdobj) => {
+                        // check if the pipe has anything to read
                         if pipefdobj.pipe.check_select_read() {
                             new_readfds.set(fd);
                             *retval += 1;
                         }
                     }
 
-                    //these file reads never block
+                    // these file reads never block
                     _ => {
                         new_readfds.set(fd);
                         *retval += 1;
@@ -2426,7 +2851,9 @@ impl Cage {
             }
         }
 
-        // do the kernel_select for inet sockets
+        // if kernel_fds is not empty, that would mean we will need to call the
+        // kernel_select (which is calling real select syscall under the hood)
+        // for these fds for AF_INET/AF_INET6 sockets
         if !inet_info.kernel_fds.is_empty() {
             let kernel_ret = update_readfds_from_kernel_select(new_readfds, &mut inet_info, retval);
             // NOTE: we ignore the kernel_select error if some domsocks are ready
@@ -2438,6 +2865,12 @@ impl Cage {
         return 0;
     }
 
+    /// This function is used to select on writefds specifically
+    /// This function monitors all writefds to check if they are ready to write
+    /// writefds could be one of the followings:
+    /// 1. Regular files (these files are always marked as writable)
+    /// 2. Pipes
+    /// 3. Sockets
     fn select_writefds(
         &self,
         nfds: i32,
@@ -2446,23 +2879,35 @@ impl Cage {
         retval: &mut i32,
     ) -> i32 {
         for fd in 0..nfds {
-            // check if current i is in writefds
+            // ignore file descriptors that are not in the set
             if !writefds.is_set(fd) {
                 continue;
             }
 
+            // try to get the FileDescriptor Object from fd number
+            // if the fd exists, do further processing based on the file descriptor type
+            // otherwise, raise an error
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
                     Socket(ref sockfdobj) => {
-                        // check if we've made an in progress connection first
+                        // sockethandle lock with read access
                         let sock_tmp = sockfdobj.handle.clone();
                         let sockhandle = sock_tmp.read();
                         let mut newconnection = false;
                         match sockhandle.domain {
                             AF_UNIX => {
                                 if sockhandle.state == ConnState::INPROGRESS {
+                                    // if connection state is INPROGRESS, in case of AF_UNIX socket,
+                                    // that would mean the socket connects in non-blocking mode
+
+                                    // BUG: current implementation of AF_UNIX socket non-blocking
+                                    // connection is not working
+                                    // correctly, according to standards, when the connection
+                                    // is ready, select should report for writability, but current
+                                    // implementation
+                                    // does not make much sense
                                     let remotepathbuf =
                                         convpath(sockhandle.remoteaddr.unwrap().path());
                                     let dsconnobj =
@@ -2471,8 +2916,14 @@ impl Cage {
                                         newconnection = true;
                                     }
                                 }
+                                // BUG: need to check if send_pipe is ready to
+                                // write
                             }
-                            AF_INET => {
+                            AF_INET | AF_INET6 => {
+                                // For AF_INET or AF_INET6 socket, currently we still rely on kernel
+                                // implementation, so here we simply
+                                // call check_rawconnection with innersocket if connection state
+                                // is INPROGRESS (non-blocking AF_INET/AF_INET6 socket connection)
                                 if sockhandle.state == ConnState::INPROGRESS
                                     && sockhandle
                                         .innersocket
@@ -2488,30 +2939,34 @@ impl Cage {
                             }
                         }
 
+                        // non-blocking AF_INET/AF_INET6 socket connection now established
+                        // change the state to connected
                         if newconnection {
                             let mut newconnhandle = sock_tmp.write();
                             newconnhandle.state = ConnState::CONNECTED;
                         }
 
-                        //we always say sockets are writable? Even though this is not true
+                        // BUG: socket are not always writable, it could block in cases
+                        // like the kernel send buffer is full
                         new_writefds.set(fd);
                         *retval += 1;
                     }
 
-                    //we always say streams are writable?
+                    // we always say streams are writable?
                     Stream(_) => {
                         new_writefds.set(fd);
                         *retval += 1;
                     }
 
                     Pipe(pipefdobj) => {
+                        // check if the pipe has any space to write
                         if pipefdobj.pipe.check_select_write() {
                             new_writefds.set(fd);
                             *retval += 1;
                         }
                     }
 
-                    //these file writes never block
+                    // these file writes never block
                     _ => {
                         new_writefds.set(fd);
                         *retval += 1;
@@ -2890,7 +3345,8 @@ impl Cage {
         }
     }
 
-    //we only return the default host name because we do not allow for the user to change the host name right now
+    //we only return the default host name because we do not allow for the user to
+    // change the host name right now
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
         if length < 0 {
             return syscall_error(
@@ -2954,8 +3410,9 @@ impl Cage {
 
                 let mut mask: i16 = 0;
 
-                //0 essentially sets the timeout to the max value allowed (which is almost always more than enough time)
-                // NOTE that the nfds argument is highest fd + 1
+                //0 essentially sets the timeout to the max value allowed (which is almost
+                // always more than enough time) NOTE that the nfds argument is
+                // highest fd + 1
                 let selectret = Self::select_syscall(
                     &self,
                     fd + 1,
@@ -2988,7 +3445,8 @@ impl Cage {
     }
 
     pub fn _epoll_object_allocator(&self) -> i32 {
-        //seems to only be called in functions that don't have a filedesctable lock, so not passing the lock.
+        //seems to only be called in functions that don't have a filedesctable lock, so
+        // not passing the lock.
 
         let epollobjfd = Epoll(EpollDesc {
             mode: 0000,
@@ -3048,8 +3506,8 @@ impl Cage {
                 //now that we know that the types are all good...
                 match op {
                     EPOLL_CTL_DEL => {
-                        //since remove returns the value at the key and the values will always be EpollEvents,
-                        //I am using this to optimize the code
+                        //since remove returns the value at the key and the values will always be
+                        // EpollEvents, I am using this to optimize the code
                         epollfdobj.registered_fds.remove(&fd).unwrap().1;
                     }
                     EPOLL_CTL_MOD => {
@@ -3210,10 +3668,63 @@ impl Cage {
         }
     }
 
-    // Because socketpair needs to spawn off a helper thread to connect the two ends of the socket pair, and because that helper thread,
-    // along with the main thread, need to access the cage to call methods (syscalls) of it, and because rust's threading model states that
-    // any reference passed into a thread but not moved into it mut have a static lifetime, we cannot use a standard member function to perform
-    // this syscall, and must use an arc wrapped cage instead as a "this" parameter in lieu of self
+    /// ## ------------------SOCKETPAIR SYSCALL------------------
+    /// ### Description
+    /// The `socketpair_syscall()` call creates an unnamed pair of connected
+    /// sockets in the specified domain, of the specified type, and using
+    /// the optionally specified protocol.
+    /// The file descriptors used in referencing the new sockets are returned
+    /// in sv.sock1 and sv.sock2. The two sockets are indistinguishable.
+    /// ### Function Arguments
+    /// The `socketpair_syscall()` receives four arguments:
+    /// * `domain` -  The domain argument specifies a communication domain; this
+    ///   selects the protocol family which will be used for communication.
+    ///   Currently supported domains are AF_UNIX, AF_INET and AF_INET6.
+    /// * `socktype` - specifies the communication semantics. Currently defined
+    ///   types are:
+    ///                1. SOCK_STREAM Provides sequenced, reliable, two-way,
+    ///                   connection-based byte streams.  An out-of-band data
+    ///                   transmission mechanism may be supported.
+    ///                2. SOCK_DGRAM Supports datagrams (connectionless,
+    ///                   unreliable messages of a fixed maximum length). The
+    ///                   type argument serves a second purpose: in addition to
+    ///                   specifying a socket type, it may include the bitwise
+    ///                   OR of any of the following values, to modify the
+    ///                   behavior of the socket:
+    ///                1. SOCK_NONBLOCK Set the O_NONBLOCK file status flag on
+    ///                   the open file description referred to by the new file
+    ///                   descriptor.
+    ///                2. SOCK_CLOEXEC Set the close-on-exec flag on the new
+    ///                   file descriptor.
+    /// * `protocol` - The protocol specifies a particular protocol to be used
+    ///   with the socket. Currently only support the default protocol
+    ///   (IPPROTO_TCP).
+    /// * `sv` -  The file descriptors used in referencing the new sockets are
+    ///   returned in sv.sock1 and sv.sock2. The two sockets are
+    ///   indistinguishable.
+
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EAFNOSUPPORT - The specified address family is not supported on this
+    ///   machine.
+    /// * EOPNOTSUPP - The specified protocol does not support creation of
+    ///   socket pairs.
+    /// * EINVAL - The specified flag is not valid
+    /// * ENFILE - no enough file descriptors can be assigned
+    ///
+    /// ### Panics
+    /// No Panic is expected for this syscall.
+
+    // Because socketpair needs to spawn off a helper thread to connect the two ends
+    // of the socket pair, and because that helper thread, along with the main
+    // thread, need to access the cage to call methods (syscalls) of it, and because
+    // rust's threading model states that any reference passed into a thread but
+    // not moved into it mut have a static lifetime, we cannot use a standard member
+    // function to perform this syscall, and must use an arc wrapped cage
+    // instead as a "this" parameter in lieu of self
     pub fn socketpair_syscall(
         this: interface::RustRfc<Cage>,
         domain: i32,
@@ -3221,14 +3732,22 @@ impl Cage {
         protocol: i32,
         sv: &mut interface::SockPair,
     ) -> i32 {
-        let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol };
+        let newprotocol = if protocol == 0 { IPPROTO_TCP } else { protocol }; // only support protocol of 0 currently
+                                                                              // BUG: current implementation of socketpair creates two sockets and bind to an
+                                                                              // unique address.
+                                                                              // But according to standard, the sockets created from socketpair should not
+                                                                              // bind to any address
+
         // firstly check the parameters
+        // socketpair should always be a AF_UNIX TCP socket
         if domain != AF_UNIX {
             return syscall_error(
                 Errno::EOPNOTSUPP,
                 "socketpair",
                 "Linux socketpair only supports AF_UNIX aka AF_LOCAL domain.",
             );
+        // socket type is stored at the lowest 3 bits
+        // so we and it with 0x7 to retrieve it
         } else if socktype & 0x7 != SOCK_STREAM || newprotocol != IPPROTO_TCP {
             return syscall_error(
                 Errno::EOPNOTSUPP,
@@ -3237,6 +3756,12 @@ impl Cage {
             );
         }
 
+        // check if socktype contains any invalid flag bits
+        if socktype & !(SOCK_NONBLOCK | SOCK_CLOEXEC | 0x7) != 0 {
+            return syscall_error(Errno::EINVAL, "socket", "Invalid combination of flags");
+        }
+
+        // get the flags
         let nonblocking = (socktype & SOCK_NONBLOCK) != 0;
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
@@ -3261,6 +3786,7 @@ impl Cage {
         let sock2fd = this._socket_inserter(Socket(sock2fdobj.clone()));
 
         // assign local addresses and connect
+        // we are not supposed to assign and bind address to socketpair sockets
         let sock1tmp = sock1fdobj.handle.clone();
         let sock2tmp = sock2fdobj.handle.clone();
         let mut sock1handle = sock1tmp.write();
@@ -3288,6 +3814,9 @@ impl Cage {
         sv.sock1 = sock1fd;
         sv.sock2 = sock2fd;
 
+        // since socket file should not exist in the first place
+        // the code below is supposed to be removed as well
+
         // we need to increment the refcount of the sockets we created
         // reason: in bind_inner_socket, we added entries to the inode table
         let inode1num = sock1handle.unix_info.as_mut().unwrap().inode;
@@ -3304,8 +3833,8 @@ impl Cage {
         return 0;
     }
 
-    // all this does is send the net_devs data in a string to libc, where we will later parse and
-    // alloc into getifaddrs structs
+    // all this does is send the net_devs data in a string to libc, where we will
+    // later parse and alloc into getifaddrs structs
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
         if NET_IFADDRS_STR.len() < count {
             interface::fill(

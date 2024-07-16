@@ -2,9 +2,13 @@
 //!
 //! ## Notes:
 //!
-//! - These calls are implementations of the [`Cage`] struct in the [`safeposix`](crate::safeposix) crate. See the [`safeposix`](crate::safeposix) crate for more information.
-//! They have been structed as different modules for better maintainability and related functions. since they are tied to the `Cage` struct
-//! This module's rustdoc may turn up empty, thus they have been explicitly listed below for documentation purposes.
+//! - These calls are implementations of the [`Cage`] struct in the
+//!   [`safeposix`](crate::safeposix) crate. See the
+//!   [`safeposix`](crate::safeposix) crate for more information.
+//! They have been structed as different modules for better maintainability and
+//! related functions. since they are tied to the `Cage` struct This module's
+//! rustdoc may turn up empty, thus they have been explicitly listed below for
+//! documentation purposes.
 //!
 //!
 //! ## System Calls
@@ -26,8 +30,6 @@
 //! - [setitimer_syscall](crate::safeposix::cage::Cage::setitimer_syscall)
 //! - [getrlimit](crate::safeposix::cage::Cage::getrlimit)
 //! - [setrlimit](crate::safeposix::cage::Cage::setrlimit)
-//!
-//!
 
 #![allow(dead_code)]
 
@@ -37,11 +39,9 @@ use super::net_constants::*;
 use super::sys_constants::*;
 use crate::interface;
 use crate::safeposix::cage::{FileDescriptor::*, *};
-use crate::safeposix::filesystem::{decref_dir, metawalk, Inode, FS_METADATA};
+use crate::safeposix::filesystem::{metawalk, Inode, FS_METADATA};
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::SHM_METADATA;
-
-use std::sync::Arc as RustRfc;
 
 impl Cage {
     fn unmap_shm_mappings(&self) {
@@ -69,15 +69,68 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    ///'fork_syscall` creates a new process (cage object)
+    /// The newly created child process is an exact copy of the
+    /// parent process (the process that calls fork)
+    /// apart from it's cage_id and the parent_id
+    /// In this function we clone the mutex table, condition variables table,
+    /// semaphore table and the file descriptors and create
+    /// a new Cage object with these cloned tables.
+    /// We also update the shared memory mappings - and create mappings
+    /// from the new Cage object the the
+    /// parent Cage object's memory mappings.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts one parameter:
+    ///
+    /// * `child_cageid` : an integer representing the pid of the child process
+    ///
+    /// ### Errors
+    ///    
+    /// There are 2 scenarios where the call to `fork_syscall` might return an
+    /// error
+    ///
+    /// * When the RawMutex::create() call fails to create a new Mutex object
+    /// * When the RawCondvar::create() call fails to create a new Condition
+    ///   Variable object
+    ///
+    /// ### Returns
+    ///
+    /// On success it returns a value of 0, and the new child Cage object is
+    /// added to Cagetable
+    ///
+    /// ### Panics
+    ///
+    /// This system call has no scenarios where it panics
+    ///
+    /// To learn more about the syscall and possible error values, see
+    /// [fork(2)](https://man7.org/linux/man-pages/man2/fork.2.html)
+
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        //construct a new mutex in the child cage where each initialized mutex is in the parent cage
+        //Create a new mutex table that replicates the mutex table of the parent
+        // (calling) Cage object Since the child process inherits all the locks
+        // that the parent process holds,
         let mutextable = self.mutex_table.read();
+        // Initialize the child object's mutex table
         let mut new_mutex_table = vec![];
+        //Loop through each element in the mutex table
+        //Each entry in the mutex table represents a `lock` which the parent process
+        // holds Copying them into the child's Cage exhibits the inheritance of
+        // the lock
         for elem in mutextable.iter() {
             if elem.is_some() {
+                //If the mutex is `Some` - we create a new mutex and store it in the child's
+                // mutex table The create method returns a new struct obejct
+                // that represents a Mutex
                 let new_mutex_result = interface::RawMutex::create();
                 match new_mutex_result {
+                    // If the mutex creation is successful we push it on the child's table
                     Ok(new_mutex) => new_mutex_table.push(Some(interface::RustRfc::new(new_mutex))),
+                    // If the mutex creation returns an error, we abort the system call and return
+                    // the appropriate error
                     Err(_) => {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
@@ -94,19 +147,34 @@ impl Cage {
                     }
                 }
             } else {
+                // If the mutex is `None` - we mimic the same behavior in the child's mutex
+                // table
                 new_mutex_table.push(None);
             }
         }
         drop(mutextable);
 
-        //construct a new condvar in the child cage where each initialized condvar is in the parent cage
+        //Construct a replica of the condition variables table in the child cage object
+        //This table stores condition variables - which are special variables that the
+        // process uses to determine whether certain conditions have been met or
+        // not. Threads use condition variables to stop or resume their
+        // operation depending on the value of these variables. Read the CondVar
+        // table of the calling process
         let cvtable = self.cv_table.read();
+        // Initialize the table for the child process
         let mut new_cv_table = vec![];
+        // Loop through all the variables in the parent's table
         for elem in cvtable.iter() {
             if elem.is_some() {
+                //Create a condvar to store in the child's Cage object
+                //Returns the condition variable struct object which implements theb signal,
+                // wait, broadcast and timed_wait methods
                 let new_cv_result = interface::RawCondvar::create();
                 match new_cv_result {
+                    // If the result of the creation of the RawCondVar is successful - push it onto
+                    // the child's mutex table
                     Ok(new_cv) => new_cv_table.push(Some(interface::RustRfc::new(new_cv))),
+                    // If the creation was unsucessful - return an Error
                     Err(_) => {
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
@@ -123,18 +191,26 @@ impl Cage {
                     }
                 }
             } else {
+                // If the value is None - mimic the behavior in the child's condition variable
+                // table
                 new_cv_table.push(None);
             }
         }
         drop(cvtable);
 
-        //construct new cage struct with a cloned fdtable
+        //Clone the file descriptor table in the child's Cage object
+        //Each entry in the file descriptor table points to an open file description
+        // which in turn references the actual inodes of the files on disk
         let newfdtable = init_fdtable();
+        //Loop from 0 to maximum value of file descriptor index
         for fd in 0..MAXFD {
             let checkedfd = self.get_filedescriptor(fd).unwrap();
+            //Get the lock for the file descriptor
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
+                // Check the type of the file descriptor
                 match filedesc_enum {
+                    // If the fd is linked to a file
                     File(_normalfile_filedesc_obj) => {
                         let inodenum_option = if let File(f) = filedesc_enum {
                             Some(f.inode)
@@ -143,8 +219,11 @@ impl Cage {
                         };
 
                         if let Some(inodenum) = inodenum_option {
-                            //increment the reference count on the inode
                             let mut inode = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
+                            //Since the child Cage also inherits the parent's fd table
+                            //We increment the reference count on the actual inodes of the files on
+                            // disk Since the child Cage is a new
+                            // process that also references those files
                             match *inode {
                                 Inode::File(ref mut f) => {
                                     f.refcount += 1;
@@ -161,15 +240,24 @@ impl Cage {
                             }
                         }
                     }
+                    // If the fd is linked to a pipe increment the ref count of the pipe
                     Pipe(pipe_filedesc_obj) => {
                         pipe_filedesc_obj.pipe.incr_ref(pipe_filedesc_obj.flags)
                     }
+                    // If the fd is linked to a socket increment the ref count of the socket
                     Socket(socket_filedesc_obj) => {
-                        // checking whether this is a domain socket
+                        // Check if it is a domain socket
                         let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
+                        let sockhandle = sock_tmp.write();
                         let socket_type = sockhandle.domain;
+                        //Here we only increment the reference for AF_UNIX socket type
+                        //Since these are the only sockets that have an inode associated with them
                         if socket_type == AF_UNIX {
+                            //Increment the appropriate reference counter of the correct socket
+                            //Each socket has two pipes associated with them - a read and write
+                            // pipe Here we grab these two pipes and
+                            // increment their references individually
+                            // And also increment the reference count of the socket as a whole
                             if let Some(sockinfo) = &sockhandle.unix_info {
                                 if let Some(sendpipe) = sockinfo.sendpipe.as_ref() {
                                     sendpipe.incr_ref(O_WRONLY);
@@ -177,36 +265,31 @@ impl Cage {
                                 if let Some(receivepipe) = sockinfo.receivepipe.as_ref() {
                                     receivepipe.incr_ref(O_RDONLY);
                                 }
-                                if let Some(uinfo) = &mut sockhandle.unix_info {
-                                    if let Inode::Socket(ref mut sock) =
-                                        *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap())
-                                    {
-                                        sock.refcount += 1;
-                                    }
+                                if let Inode::Socket(ref mut sock) =
+                                    *(FS_METADATA.inodetable.get_mut(&sockinfo.inode).unwrap())
+                                {
+                                    sock.refcount += 1;
                                 }
                             }
                         }
                         drop(sockhandle);
-                        let sock_tmp = socket_filedesc_obj.handle.clone();
-                        let mut sockhandle = sock_tmp.write();
-                        if let Some(uinfo) = &mut sockhandle.unix_info {
-                            if let Inode::Socket(ref mut sock) =
-                                *(FS_METADATA.inodetable.get_mut(&uinfo.inode).unwrap())
-                            {
-                                sock.refcount += 1;
-                            }
-                        }
                     }
                     _ => {}
                 }
 
                 let newfdobj = filedesc_enum.clone();
-
+                // Insert the file descriptor object into the new file descriptor table
                 let _insertval = newfdtable[fd as usize].write().insert(newfdobj);
-                //add deep copied fd to fd table
             }
         }
+
+        //We read the current working directory of the parent Cage object
         let cwd_container = self.cwd.read();
+        //We try to resolve the inode of the current working directory - if the
+        //resolution is successful we update the reference count of the current working
+        // directory since the newly created Child cage object also references
+        // the same directory If the resolution is not successful - the code
+        // panics since the cwd's inode cannot be resolved correctly
         if let Some(cwdinodenum) = metawalk(&cwd_container) {
             if let Inode::Dir(ref mut cwddir) =
                 *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap())
@@ -219,12 +302,17 @@ impl Cage {
             panic!("We changed from a directory that was not a directory in chdir!");
         }
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        // We clone the parent cage's main threads and store them and index 0
+        // This is done since there isn't a thread established for the child Cage object
+        // yet - And there is no threadId to store it at.
+        // The child Cage object can then initialize and store the sigset appropriately
+        // when it establishes its own main thread id.
         let newsigset = interface::RustHashMap::new();
+        // Here we check if Lind is being run under the test suite or not
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
+            // When rustposix runs independently (not as Lind paired with NaCL runtime) we
+            // do not handle signals The test suite runs rustposix independently
+            // and hence we do not handle signals for the test suite
             let mainsigsetatomic = self
                 .sigset
                 .get(
@@ -236,29 +324,37 @@ impl Cage {
             let mainsigset = interface::RustAtomicU64::new(
                 mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
             );
+            // Insert the parent cage object's main threads sigset and store them at index 0
             newsigset.insert(0, mainsigset);
         }
 
-        /*
-         *  Construct a new semaphore table in child cage which equals to the one in the parent cage
-         */
+        // Construct a new semaphore table in child cage which equals to the one in the
+        // parent cage
         let semtable = &self.sem_table;
         let new_semtable: interface::RustHashMap<
             u32,
             interface::RustRfc<interface::RustSemaphore>,
         > = interface::RustHashMap::new();
-        // Loop all pairs
+        // Loop all pairs of semaphores and insert their copies into the new semaphore
+        // table Each pair consists of a key which is 32 bit unsigned integer
+        // And a Semaphore Object implemented as RustSemaphore
         for pair in semtable.iter() {
             new_semtable.insert((*pair.key()).clone(), pair.value().clone());
         }
 
+        // Create a new cage object using the cloned tables and the child id passed as a
+        // parameter
         let cageobj = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
+            // Setting the parent to be the current Cage object
             parent: self.cageid,
+            // Setting the fd table with our cloned fd table
             filedescriptortable: newfdtable,
             cancelstatus: interface::RustAtomicBool::new(false),
-            // This happens because self.getgid tries to copy atomic value which does not implement "Copy" trait; self.getgid.load returns i32.
+            // Intitialize IDs with the default value
+            // This happens because self.getgid tries to copy atomic value which does not implement
+            // "Copy" trait; self.getgid.load returns i32.
             getgid: interface::RustAtomicI32::new(
                 self.getgid.load(interface::RustAtomicOrdering::Relaxed),
             ),
@@ -271,28 +367,43 @@ impl Cage {
             geteuid: interface::RustAtomicI32::new(
                 self.geteuid.load(interface::RustAtomicOrdering::Relaxed),
             ),
+            // Clone the reverse shm mappings
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
+            // Setting the mutex tables with our copy of the mutex table
             mutex_table: interface::RustLock::new(new_mutex_table),
+            // Setting the condition variables table with our copy
             cv_table: interface::RustLock::new(new_cv_table),
+            // Setting the semaphores table with our copy
             sem_table: new_semtable,
+            // Creating a new empty table for storing threads of the child Cage object
             thread_table: interface::RustHashMap::new(),
+            // Cloning the signal handler of the parent Cage object
             signalhandler: self.signalhandler.clone(),
+            // Setting the signal set with the cloned and altered sigset
             sigset: newsigset,
+            // Creating a new copy for the pending signal set
             pendingsigset: interface::RustHashMap::new(),
+            // Setting the main thread id to 0 - since it is uninitialized
             main_threadid: interface::RustAtomicU64::new(0),
+            // Creating a new timer for the process with id = child_cageid
             interval_timer: interface::IntervalTimer::new(child_cageid),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
-        //update fields for shared mappings in cage
+        // Updating the shared mappings in the child cage object
+        // Loop through all the reverse mappings in the new cage object
         for rev_mapping in cageobj.rev_shm.lock().iter() {
             let mut shment = shmtable.get_mut(&rev_mapping.1).unwrap();
             shment.shminfo.shm_nattch += 1;
+            // Get the references of the curret cage id
             let refs = shment.attached_cages.get(&self.cageid).unwrap();
+            // Copy the references
             let childrefs = refs.clone();
             drop(refs);
+            // Create references from the new Cage object to the copied references
             shment.attached_cages.insert(child_cageid, childrefs);
         }
+        // Inserting the child Cage object at the appropriate index in the Cage table
         interface::cagetable_insert(child_cageid, cageobj);
 
         0
@@ -326,7 +437,8 @@ impl Cage {
         }
 
         // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
+        // this way the child can initialize the sigset properly when it establishes its
+        // own mainthreadid
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // we don't add these for the test suite
@@ -371,41 +483,69 @@ impl Cage {
         0
     }
 
+    /// ### Description
+    /// 
+    /// The exit function causes normal process(Cage) termination
+    /// The termination entails unmapping all memory references
+    /// Removing the cage object from the cage table, closing all open files
+    /// And decrement all references to files and directories
+    /// For more information please refer [https://man7.org/linux/man-pages/man3/exit.3.html]
+    /// 
+    /// ### Arguments 
+    /// 
+    /// The exit function takes only one argument which is `status`
+    /// `status` : This is a 32 bit integer value that the function returns back 
+    /// upon sucessfully terminating the process
+    /// 
+    /// ### Returns
+    /// 
+    /// This function returns a 32 bit integer value - which represents succesful 
+    /// termination of the calling Cage object
+    /// 
+    /// ### Panics
+    /// 
+    /// While this syscall does not panic directly - it can panic if the 
+    /// `decref_dir` function panics - which occurs when the working directory
+    /// passed to it is not a valid directory or the directory did not exist at all. 
+    /// or if the cage_id passed to the remove function is not a valid cage id. 
+    /// 
+    /// ### Errors
+    /// 
+    /// This function has no scenario where it returns an error
     pub fn exit_syscall(&self, status: i32) -> i32 {
-        //flush anything left in stdout
+        //Clear all values in stdout stream
         interface::flush_stdout();
-
+        //Unmap all memory mappings for the current cage object
         self.unmap_shm_mappings();
 
-        // close fds
+        //For all file descriptors that the cage holds
         for fd in 0..MAXFD {
+            // Close the file pointed to by the file descriptor
             self._close_helper(fd);
         }
 
-        //get file descriptor table into a vector
-        let cwd_container = self.cwd.read();
-        decref_dir(&*cwd_container);
-
-        //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
+        //Remove the current cage object from the cage table
         interface::cagetable_remove(self.cageid);
 
-        // Trigger SIGCHLD
+        // Check if Lind is being run as a test suite or not
+        // We do this since we only want to 
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // dont trigger SIGCHLD for test suite
+            // Trigger SIGCHILD if LIND is not run as a test suite
+            // SIGCHILD is simply a response that the parent recieves when it's child process terminates
             if self.cageid != self.parent {
                 interface::lind_kill_from_id(self.parent, SIGCHLD);
             }
         }
 
-        //fdtable will be dropped at end of dispatcher scope because of Arc
+        // Return the status integer back to the calling function
         status
     }
 
     /// ### Description
     ///  
-    /// The `getpid_syscall()` system call returns the id of the calling process. The uid is
-    /// guaranteed to be unique and can be used for naming temporary files.
-    /// The call is always successful.
+    /// The `getpid_syscall()` system call returns the id of the calling
+    /// process. The uid is guaranteed to be unique and can be used for
+    /// naming temporary files. The call is always successful.
     ///
     /// ### Arguments
     ///
@@ -420,26 +560,30 @@ impl Cage {
 
     /// ### Description
     ///
-    /// The `getppid_syscall()` returns the id of the parent process of the calling process.
-    /// The uid is guaranteed to be unique, and like the getpid call, this call is also always successful.  
-    /// This call is always successfull
+    /// The `getppid_syscall()` returns the id of the parent process of the
+    /// calling process. The uid is guaranteed to be unique, and like the
+    /// getpid call, this call is also always successful. This call is
+    /// always successfull
     ///
     /// ### Arguments
     /// The getppid syscall does not take any arguments
     ///
     /// ### Returns
-    /// Returns a 32 bit integer value that represents the unique id of the parent process.
+    /// Returns a 32 bit integer value that represents the unique id of the
+    /// parent process.
     pub fn getppid_syscall(&self) -> i32 {
-        self.parent as i32 // mimicing the call above -- easy to change later if necessary
+        self.parent as i32 // mimicing the call above -- easy to change later if
+                           // necessary
     }
 
     /// ### Description
     ///
-    /// This function returns the real group id of the calling process. The real group id is specified at
-    /// login time. The group id is the group of the user who invoked the program.
-    /// Lind is only run in one group - and hence a default value is expected from this function.  
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
-    /// gid to be the default value.
+    /// This function returns the real group id of the calling process. The real
+    /// group id is specified at login time. The group id is the group of
+    /// the user who invoked the program. Lind is only run in one group -
+    /// and hence a default value is expected from this function.
+    /// Initially we check if the call takes place during the loading stage, and
+    /// return -1 if yes and set the gid to be the default value.
     ///
     /// ### Arguments
     ///
@@ -447,23 +591,26 @@ impl Cage {
     ///
     /// ### Returns
     ///
-    /// Depending on whether the gid has been initialized or not this function returns either -1
-    /// or the default gid as a 32 bit integer.
+    /// Depending on whether the gid has been initialized or not this function
+    /// returns either -1 or the default gid as a 32 bit integer.
     pub fn getgid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
+        DEFAULT_GID as i32 //Lind is only run in one group so a default value
+                           // is returned
     }
 
     /// ### Description
     ///
-    /// The `getegid_syscall` returns the effective group id of the user who invoked the process.
-    /// Since Lind is only run in one group a default value (or -1) is returned.
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
+    /// The `getegid_syscall` returns the effective group id of the user who
+    /// invoked the process. Since Lind is only run in one group a default
+    /// value (or -1) is returned. Initially we check if the call takes
+    /// place during the loading stage, and return -1 if yes and set the
     /// egid to be the default value.
     ///
     /// ### Arguments
@@ -472,15 +619,18 @@ impl Cage {
     ///
     /// ### Returns
     ///
-    /// Returns a 32 bit integer value (or -1) which represents the effective group
+    /// Returns a 32 bit integer value (or -1) which represents the effective
+    /// group
     pub fn getegid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
+        DEFAULT_GID as i32 //Lind is only run in one group so a default value
+                           // is returned
     }
 
     /// ### Description
@@ -488,8 +638,8 @@ impl Cage {
     /// The `getuid_syscall` returns the real user id of the calling process.
     /// The real user id is the user who invoked the calling process.
     /// As Lind only allows one user, a default value is returned.
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
-    /// uid to be the default value.
+    /// Initially we check if the call takes place during the loading stage, and
+    /// return -1 if yes and set the uid to be the default value.
     ///
     /// ### Arguments
     ///  
@@ -499,36 +649,42 @@ impl Cage {
     ///
     /// Returns a 32 bit default integer (or -1) representing the user
     pub fn getuid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+        DEFAULT_UID as i32 //Lind is only run as one user so a default value is
+                           // returned
     }
 
     /// ### Description
     ///
-    /// The `geteuid_syscall` returns the effective user id of the calling process.
-    /// As Lind only allows one user, a default value (or -1) is returned.
-    /// Initially we check if the call takes place during the loading stage, and return -1 if yes and set the
-    /// euid to be the default value.
+    /// The `geteuid_syscall` returns the effective user id of the calling
+    /// process. As Lind only allows one user, a default value (or -1) is
+    /// returned. Initially we check if the call takes place during the
+    /// loading stage, and return -1 if yes and set the euid to be the
+    /// default value.
     ///
     /// ### Function Arguments
     /// The geteuid syscall does not take any arguments
     ///
     /// ### Returns
     ///
-    /// Returns a 32 bit default integer value (or -1) representing the effective user
+    /// Returns a 32 bit default integer value (or -1) representing the
+    /// effective user
     pub fn geteuid_syscall(&self) -> i32 {
-        // We return -1 for the first call for compatibility with the dynamic loader. For subsequent calls we return our default value.
+        // We return -1 for the first call for compatibility with the dynamic loader.
+        // For subsequent calls we return our default value.
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
             return -1;
         }
-        DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
+        DEFAULT_UID as i32 //Lind is only run as one user so a default value is
+                           // returned
     }
 
     pub fn sigaction_syscall(
