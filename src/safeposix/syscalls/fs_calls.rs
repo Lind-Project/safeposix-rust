@@ -1859,6 +1859,8 @@ impl Cage {
     /// ### Function Arguments
     /// * `fd`: The file descriptor to write to.
     /// * `iovec`: A pointer to an array of `IovecStruct` objects representing the data buffers to write.
+    /// The IovecStruct structure enables efficient writing of data from multiple buffers to a file 
+    /// descriptor in a single operation using the writev system call, potentially avoiding unnecessary data copying.
     /// * `iovcnt`: The number of `IovecStruct` objects in the array.
     ///
     /// ### Returns
@@ -1891,9 +1893,9 @@ impl Cage {
                     // Check the domain of the socket (IPv4 or IPv6)
                     match sockhandle.domain {
                         AF_INET | AF_INET6 => match sockhandle.protocol {
+                            // Handle TCP protocol.
                             IPPROTO_TCP => {
-                                // to be able to send here we either need to be fully connected, or
-                                // connected for write only
+                                // We need to be either fully connected or connected for write-only.
                                 if (sockhandle.state != ConnState::CONNECTED)
                                     && (sockhandle.state != ConnState::CONNWRONLY)
                                 {
@@ -1911,6 +1913,7 @@ impl Cage {
                                     .as_ref()
                                     .unwrap()
                                     .writev(iovec, iovcnt);
+                                // Handle errors
                                 if retval < 0 {
                                     match Errno::from_discriminant(interface::get_errno()) {
                                         Ok(i) => {
@@ -1939,8 +1942,7 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected,
-                                    // or connected for write only
+                                    // We need to be either fully connected or connected for write-only.
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -1956,6 +1958,7 @@ impl Cage {
                                     if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
                                         nonblocking = true;
                                     }
+                                    // Write data to the socket pipe.
                                     let retval = match sockinfo.sendpipe.as_ref() {
                                         Some(sendpipe) => sendpipe.write_vectored_to_pipe(
                                             iovec,

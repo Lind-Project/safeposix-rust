@@ -2465,6 +2465,8 @@ pub mod fs_tests {
     use std::thread;
     #[test]
     fn ut_lind_fs_writev_socketpair() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
@@ -2473,22 +2475,23 @@ pub mod fs_tests {
             Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
             0
         );
-    
+
+        // Prepare data to write.
         let data = b"Hello, world!";
         let iovec = interface::IovecStruct {
             iov_base: data.as_ptr() as *mut libc::c_void,
             iov_len: data.len(),
         };
-    
+        // Write the data to the first socket using writev_syscall.
         let bytes_written = cage.writev_syscall(socketpair.sock1, &iovec, 1);
         assert_eq!(bytes_written, data.len() as i32);
-    
+        // Read the data from the second socket.
         let mut buffer = vec![0u8; data.len()];
         let bytes_read = cage.recv_syscall(socketpair.sock2, buffer.as_mut_ptr(), buffer.len(), 0);
         assert_eq!(bytes_read, data.len() as i32);
-    
+        // Verify that the data
         assert_eq!(buffer, data);
-    
+        // Close both sockets.
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
     
