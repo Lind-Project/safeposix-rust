@@ -412,7 +412,7 @@ impl Cage {
     /// ### Description
     ///
     /// The exec system call replaces the current Cage object image with a new
-    /// Cage object exec is called immediately after a process(Cage) forks.
+    /// Cage object and exec is called immediately after a process(Cage) forks.
     /// For our purposes this translates to removing the parent cage object
     /// from the cagetable and adding the child object to it. We also close
     /// any file descriptors that the parent object holds if the `O_CLOEX`
@@ -474,11 +474,12 @@ impl Cage {
             self.close_syscall(fdnum);
         }
 
-        // We clone the parent cage's main threads and store them and index 0
+        // We clone the parent cage's main threads and store them at index 0
         // This is done since there isn't a thread established for the child Cage object
         // yet - And there is no threadId to store it at.
         // The child Cage object can then initialize and store the sigset appropriately
         // when it establishes its own main thread id.
+        // A sigset is a data structure that keeps track of which signals are affected by the process
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // When rustposix runs independently (not as Lind paired with NaCL runtime) we
