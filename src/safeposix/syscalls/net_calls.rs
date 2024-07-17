@@ -1242,139 +1242,29 @@ impl Cage {
         }
     }
 
-    pub fn sendto_syscall(
-        &self,
-        fd: i32,
-        buf: *const u8,
-        buflen: usize,
-        flags: i32,
-        dest_addr: &interface::GenSockaddr,
-    ) -> i32 {
-        //if ip and port are not specified, shunt off to send
-        if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
-            return self.send_syscall(fd, buf, buflen, flags);
-        }
-
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
-        let mut unlocked_fd = checkedfd.write();
-        if let Some(filedesc_enum) = &mut *unlocked_fd {
-            match filedesc_enum {
-                Socket(ref mut sockfdobj) => {
-                    let sock_tmp = sockfdobj.handle.clone();
-                    let mut sockhandle = sock_tmp.write();
-
-                    // check if this is a domain socket
-                    if sockhandle.domain == AF_UNIX {
-                        return syscall_error(
-                            Errno::EISCONN,
-                            "sendto",
-                            "The descriptor is connection-oriented",
-                        );
-                    }
-
-                    if dest_addr.get_family() != sockhandle.domain as u16 {
-                        return syscall_error(
-                            Errno::EINVAL,
-                            "sendto",
-                            "An address with an invalid family for the given domain was specified",
-                        );
-                    }
-
-                    if sockhandle.state != ConnState::NOTCONNECTED {
-                        return syscall_error(
-                            Errno::EISCONN,
-                            "sendto",
-                            "The descriptor is connected",
-                        );
-                    }
-
-                    match sockhandle.protocol {
-                        //Sendto doesn't make sense for the TCP protocol, it's connection oriented
-                        IPPROTO_TCP => {
-                            return syscall_error(
-                                Errno::EISCONN,
-                                "sendto",
-                                "The descriptor is connection-oriented",
-                            );
-                        }
-
-                        IPPROTO_UDP => {
-                            let tmpdest = *dest_addr;
-                            let ibindret =
-                                self._implicit_bind(&mut *sockhandle, tmpdest.get_family() as i32);
-                            if ibindret < 0 {
-                                return ibindret;
-                            }
-
-                            //unwrap ok because we implicit_bind_right before
-                            let sockret = sockhandle.innersocket.as_ref().unwrap().sendto(
-                                buf,
-                                buflen,
-                                Some(dest_addr),
-                            );
-
-                            //we don't mind if this fails for now and we will just get the error
-                            //from calling sendto
-                            if sockret < 0 {
-                                match Errno::from_discriminant(interface::get_errno()) {
-                                    Ok(i) => {
-                                        return syscall_error(
-                                            i,
-                                            "sendto",
-                                            "The libc call to sendto failed!",
-                                        );
-                                    }
-                                    Err(()) => {
-                                        panic!("Unknown errno value from socket sendto returned!")
-                                    }
-                                };
-                            } else {
-                                return sockret;
-                            }
-                        }
-
-                        _ => {
-                            return syscall_error(
-                                Errno::EOPNOTSUPP,
-                                "sendto",
-                                "Unkown protocol in sendto",
-                            );
-                        }
-                    }
-                }
-
-                _ => {
-                    return syscall_error(
-                        Errno::ENOTSOCK,
-                        "sendto",
-                        "file descriptor refers to something other than a socket",
-                    );
-                }
-            }
-        } else {
-            return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
-        }
-    }
-
     /// ### Description
     ///
-    /// `send_syscall` sends a message on a socket
+    /// `sendto_syscall` sends a message on a socket
     ///
-    ///  The send() call may be used only when the socket is in a
-    ///  connected state (so that the intended recipient is known).
+    ///  Note:
+    ///  send(fd, buf, buflen, flags);
+    ///  is equivalent to
+    ///  sendto(fd, buf, buflen, flags, destaddr);
+    ///  where destaddr has an unspecified port or IP
     ///
     /// ### Arguments
     ///
-    /// it accepts two parameters:
+    /// it accepts five parameters:
     /// * `fd` - the file descriptor of the sending socket
     /// * `buf` - the message is found in buf
     /// * `buflen` - the len of the message found in buf
     /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
     ///   possible args
+    /// * 'destaddr' - the address of the target socket
     ///
     /// ### Returns
     ///
-    /// On success, these calls return the number of bytes sent. On error, a
+    /// On success, the call returns the number of bytes sent. On error, a
     /// negative error number is returned, with the errorno set to represent
     /// the corresponding error
     ///
@@ -1390,13 +1280,13 @@ impl Cage {
     ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
     ///   a network/broadcast address as though it was a unicast address.
     ///
-    /// * EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
+    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
     ///   requested operation would block.  POSIX.1-2001 allows either error to
     ///   be returned for this case, and does not require these constants to
     ///   have the same value, so a portable application should check for both
     ///   possibilities.
     ///
-    /// * EAGAIN - (Internet domain datagram sockets) The socket referred to by
+    /// ** EAGAIN - (Internet domain datagram sockets) The socket referred to by
     ///   sockfd had not previously been bound to an address and, upon
     ///   attempting to bind it to an ephemeral port, it was determined that all
     ///   port numbers in the ephemeral port range are currently in use.  See
@@ -1404,7 +1294,7 @@ impl Cage {
     ///
     /// * EALREADY - Another Fast Open is in progress.
     ///
-    /// * EBADF - sockfd is not a valid open file descriptor.
+    /// ** EBADF - sockfd is not a valid open file descriptor.
     ///
     /// * ECONNRESET - Connection reset by peer.
     ///
@@ -1416,7 +1306,7 @@ impl Cage {
     /// * EINTR - A signal occurred before any data was transmitted; see
     ///   signal(7).
     ///
-    /// * EINVAL - Invalid argument passed.
+    /// ** EINVAL - Invalid argument passed.
     ///
     /// * EISCONN - The connection-mode socket was connected already but a
     ///   recipient was specified.  (Now either this error is returned, or the
@@ -1433,14 +1323,261 @@ impl Cage {
     ///
     /// * ENOMEM - No memory available.
     ///
-    /// * ENOTCONN - The socket is not connected, and no target has been given.
+    /// ** ENOTCONN - The socket is not connected, and no target has been given.
     ///
-    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     ///
-    /// * EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
+    /// ** EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
     ///   socket type.
     ///
-    /// * EPIPE - The local end has been shut down on a connection oriented
+    /// ** EPIPE - The local end has been shut down on a connection oriented
+    ///   socket.  In this case, the process will also receive a SIGPIPE unless
+    ///   MSG_NOSIGNAL is set.
+    ///
+    /// ** Indicates the error may be returned from RustPOSIX
+    ///
+    /// ### Panics TODO:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from sendto returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [send(2)](https://linux.die.net/man/2/send)
+    pub fn sendto_syscall(
+        &self,
+        fd: i32,
+        buf: *const u8,
+        buflen: usize,
+        flags: i32,
+        dest_addr: &interface::GenSockaddr,
+    ) -> i32 {
+        //if ip and port are not specified, shunt off to send
+        //to check for a possible connection to another socket that may exist
+        if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
+            return self.send_syscall(fd, buf, buflen, flags);
+        }
+        //BUG:
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let mut unlocked_fd = checkedfd.write();
+        //Check if the write gaurd holds a valid FileDescriptor
+        if let Some(filedesc_enum) = &mut *unlocked_fd {
+            match filedesc_enum {
+                //In this case, the file descriptor refers to a socket
+                Socket(ref mut sockfdobj) => {
+                    //Grab a write guard to the socket handle
+                    let sock_tmp = sockfdobj.handle.clone();
+                    let mut sockhandle = sock_tmp.write();
+
+                    //If the socket's domain is UNIX, return with error as UNIX
+                    //sockets are connection based.
+                    //TODO: Check whether the socket is connected and return
+                    //EISCONN or ENOTCONN accordingly.
+                    if sockhandle.domain == AF_UNIX {
+                        return syscall_error(
+                            Errno::EISCONN,
+                            "sendto",
+                            "The descriptor is connection-oriented",
+                        );
+                    }
+
+                    //The destaddr's address family must match that of the
+                    //socket's address from 'fd'. Otherwise, a message can't be sent
+                    if dest_addr.get_family() != sockhandle.domain as u16 {
+                        return syscall_error(
+                            Errno::EINVAL,
+                            "sendto",
+                            "An address with an invalid family for the given domain was specified",
+                        );
+                    }
+
+                    //If sendto_syscall is used on a connection-mode socket, then
+                    // the error EISCONN may be returned when destaddr is not NULL,
+                    // as we checked above
+                    if sockhandle.state != ConnState::NOTCONNECTED {
+                        return syscall_error(
+                            Errno::EISCONN,
+                            "sendto",
+                            "The descriptor is connected",
+                        );
+                    }
+
+                    //Pattern match based on the socket's protocol
+                    match sockhandle.protocol {
+                        //The TCP protocol is a connection-mode
+                        //If sendto_syscall is used on a connection-mode socket, then
+                        // the error EISCONN may be returned when destaddr is not NULL,
+                        // as we checked above
+                        IPPROTO_TCP => {
+                            return syscall_error(
+                                Errno::EISCONN,
+                                "sendto",
+                                "The descriptor is connection-oriented",
+                            );
+                        }
+
+                        //UDP protocol
+                        IPPROTO_UDP => {
+                            //An implicit bind refers to the automatic binding of a socket to an
+                            // address and port by the system, without
+                            // an explicit call to the bind() function by
+                            // the programmer.
+                            let tmpdest = *dest_addr;
+                            let ibindret =
+                                self._implicit_bind(&mut *sockhandle, tmpdest.get_family() as i32);
+                            //Call to _implicit_bind may panic upon unknown error values
+                            //Otherwise, the error value is returned here and passed through
+                            if ibindret < 0 {
+                                return ibindret;
+                            }
+
+                            //unwrap is safe because of the call to _implicit_bind
+                            //above. innersocket/raw_sys_fd will be set since
+                            //lind passes TCP sockets to the OS to partially handle.
+                            //Here we call sendto from libc
+                            let sockret = sockhandle.innersocket.as_ref().unwrap().sendto(
+                                buf,
+                                buflen,
+                                Some(dest_addr),
+                            );
+
+                            //If the call to sendto from libc returns
+                            //-1, indicating an error, retrieve the err
+                            //and return appropriately
+                            //Otherwise, return the number of bytes
+                            //written to the connected socket
+                            if sockret < 0 {
+                                match Errno::from_discriminant(interface::get_errno()) {
+                                    Ok(i) => {
+                                        return syscall_error(
+                                            i,
+                                            "sendto",
+                                            "The libc call to sendto failed!",
+                                        );
+                                    }
+                                    Err(()) => {
+                                        panic!("Unknown errno value from socket sendto returned!")
+                                    }
+                                };
+                            } else {
+                                return sockret; //on success, return the number
+                                                // of bytes sent
+                            }
+                        }
+                        //If the protocol of the socket is not TCP or UDP,
+                        //lind does not support it
+                        _ => {
+                            return syscall_error(
+                                Errno::EOPNOTSUPP,
+                                "sendto",
+                                "Unkown protocol in sendto",
+                            );
+                        }
+                    }
+                }
+                //If the file descriptor does not refer to a socket,
+                //return with error
+                _ => {
+                    return syscall_error(
+                        Errno::ENOTSOCK,
+                        "sendto",
+                        "file descriptor refers to something other than a socket",
+                    );
+                }
+            }
+        //Otherwise, the write gaurd does not hold a FileDescriptor
+        } else {
+            return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
+        }
+    }
+
+    /// ### Description
+    ///
+    /// `send_syscall` sends a message on a socket
+    ///
+    ///  The send() call may be used only when the socket is in a
+    ///  connected state (so that the intended recipient is known).
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts four parameters:
+    /// * `fd` - the file descriptor of the sending socket
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    ///
+    /// ### Returns
+    ///
+    /// On success, the call returns the number of bytes sent. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// * EACCES - (For UNIX domain sockets, which are identified by pathname)
+    ///   Write permission is denied on the destination socket file, or search
+    ///   permission is denied for one of the directories the path prefix.  (See
+    ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
+    ///   a network/broadcast address as though it was a unicast address.
+    ///
+    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
+    ///   requested operation would block.  POSIX.1-2001 allows either error to
+    ///   be returned for this case, and does not require these constants to
+    ///   have the same value, so a portable application should check for both
+    ///   possibilities.
+    ///
+    /// ** EAGAIN - (Internet domain datagram sockets) The socket referred to by
+    ///   sockfd had not previously been bound to an address and, upon
+    ///   attempting to bind it to an ephemeral port, it was determined that all
+    ///   port numbers in the ephemeral port range are currently in use.  See
+    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    ///
+    /// * EALREADY - Another Fast Open is in progress.
+    ///
+    /// ** EBADF - sockfd is not a valid open file descriptor.
+    ///
+    /// * ECONNRESET - Connection reset by peer.
+    ///
+    /// * EDESTADDRREQ - The socket is not connection-mode, and no peer address
+    ///   is set.
+    ///
+    /// * EFAULT - An invalid user space address was specified for an argument.
+    ///
+    /// * EINTR - A signal occurred before any data was transmitted; see
+    ///   signal(7).
+    ///
+    /// ** EINVAL - Invalid argument passed.
+    ///
+    /// * EISCONN - The connection-mode socket was connected already but a
+    ///   recipient was specified.  (Now either this error is returned, or the
+    ///   recipient specification is ignored.)
+    ///
+    /// * EMSGSIZE - The socket type requires that message be sent atomically,
+    ///   and the size of the message to be sent made this impossible.
+    ///
+    /// * ENOBUFS - The output queue for a network interface was full.  This
+    ///   generally indicates that the interface has stopped sending, but may be
+    ///   caused by transient congestion. (Normally, this does not occur in
+    ///   Linux.  Packets are just silently dropped when a device queue
+    ///   overflows.)
+    ///
+    /// * ENOMEM - No memory available.
+    ///
+    /// ** ENOTCONN - The socket is not connected, and no target has been given.
+    ///
+    /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ** EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
+    ///   socket type.
+    ///
+    /// ** EPIPE - The local end has been shut down on a connection oriented
     ///   socket.  In this case, the process will also receive a SIGPIPE unless
     ///   MSG_NOSIGNAL is set.
     ///
@@ -1460,10 +1597,10 @@ impl Cage {
         //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        //If the write gaurd holds a valid FileDescriptor
+        //Check if the write gaurd holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
-                //The file descriptor refers to a socket
+                //In this case, the file descriptor refers to a socket
                 Socket(ref mut sockfdobj) => {
                     //Grab a write guard to the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
@@ -1478,8 +1615,11 @@ impl Cage {
                             //Pattern match based on the socket protocol
                             match sockhandle.protocol {
                                 //TCP socket
-                                // ** Why isn't the protocol 0?? */
-                                // ** If this is fine, why don't we handle UDP sockets ?? //
+                                //Across UNIX connections, it rarely exists
+                                //that it is preferable to use UDP sockets
+                                //rather than TCP sockets.
+                                //As of right now, lind only implements
+                                //UNIX sockets with the TCP protocol
                                 IPPROTO_TCP => {
                                     //For a TCP socket to be able to send here we
                                     //either need to be fully connected, or connected for write
@@ -1522,11 +1662,12 @@ impl Cage {
                                         }
                                     };
                                     //In the case that the write_to_pipe call returns EPIPE,
-                                    // meaning The local end has been shut down on a connection
-                                    // oriented socket. In this case, the process will also receive
-                                    // a SIGPIPE unless
-                                    // MSG_NOSIGNAL is set.
-                                    if retval == -(Errno::EPIPE as i32) {
+                                    // meaning the local end has been shut down on a connection
+                                    // oriented socket. Then, the process will also receive
+                                    // a SIGPIPE unless MSG_NOSIGNAL is set.
+                                    if (retval == -(Errno::EPIPE as i32))
+                                        && ((flags & MSG_NOSIGNAL) == 0)
+                                    {
                                         // The default action for SIGPIPE is to terminate the
                                         // process without a core dump. This simplifies error
                                         // handling in programs that
@@ -1534,14 +1675,14 @@ impl Cage {
                                         // input, transforming it, and then writing it to another
                                         // process. SIGPIPE allows the program to skip error
                                         // handling and blindly write data until it’s killed
-
-                                        //TODO only send kill if MSG_NOSIGNAL not set
+                                        //
+                                        // Trigger SIGPIPE
                                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
-                                    } // Trigger SIGPIPE
-                                    retval //return number of bytes sent
+                                    }
+                                    retval //on success, return number of bytes
+                                           // sent
                                 }
-                                //If PROTOCOL is not TCP
-                                // ** Why is this the case for unix ?? **//
+                                //PROTOCOL is not TCP
                                 _ => {
                                     return syscall_error(
                                         Errno::EOPNOTSUPP,
@@ -1579,7 +1720,7 @@ impl Cage {
                                         .as_ref()
                                         .unwrap()
                                         .sendto(buf, buflen, None);
-                                    //If the call to sendto from libc return
+                                    //If the call to sendto from libc returns
                                     //-1, indicating an error, retrieve the err
                                     //and return appropriately
                                     //Otherwise, return the number of bytes
