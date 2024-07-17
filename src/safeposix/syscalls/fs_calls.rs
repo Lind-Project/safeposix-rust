@@ -5143,14 +5143,15 @@ impl Cage {
                     let cage2_rev_shm = cage2.rev_shm.lock();
                     // Find all addresses associated with the shmid of the memory segment
                     let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid);
-                    
+                    // Add each semaphore at its appropriate offset
                     for offset in segment.semaphor_offsets.iter() {
-                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
+                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); 
                         self.sem_table.insert(shmaddr as u32 + *offset, sementry);
                     }
                 }
             }
 
+            // Map the shared segment onto the current cage using `map_shm` function
             segment.map_shm(shmaddr, prot, self.cageid)
         } else {
             syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
