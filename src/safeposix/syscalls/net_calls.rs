@@ -2971,9 +2971,6 @@ impl Cage {
     }
 
     pub fn _epoll_object_allocator(&self) -> i32 {
-        // seems to only be called in functions that don't have a filedesctable lock, so
-        // not passing the lock.
-
         // create a Epoll file descriptor
         let epollobjfd = Epoll(EpollDesc {
             mode: 0000,
