@@ -1471,7 +1471,8 @@ impl Cage {
                             // object is updated by adding the number of bytes read (bytesread).
                             // This ensures that the next read operation will start from the correct
                             // position.
-                            let bytesread = fileobject.readat(buf, count, position as usize).unwrap();
+                            let bytesread =
+                                fileobject.readat(buf, count, position as usize).unwrap();
                             //move position forward by the number of bytes we've read
                             normalfile_filedesc_obj.position += bytesread;
                             // Return the number of bytes read.
@@ -1796,17 +1797,86 @@ impl Cage {
         }
     }
 
-    //------------------------------------WRITE SYSCALL------------------------------------
-
+    /// ## ------------------WRITE SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `write_syscall()` attempts to write `count` bytes from the buffer
+    /// pointed to by `buf` to the file associated with the open file
+    /// descriptor, `fd`. The number of bytes written may be less than count
+    /// if, for example, there is insufficient space on the underlying
+    /// physical medium, or when the syscall gets interrupted by a signal,
+    /// which we have not implemented yet. On files that support seeking
+    /// (for example, a regular file), the write operation commences at the
+    /// file offset, and the file offset is incremented by the number of bytes
+    /// written. For files that do not support seeking, writing starts from the
+    /// logical end of the file (for pipes and streams) or is handled based on
+    /// the specific characteristics of the file type (for character devices).
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `write_syscall()` receives three arguments:
+    /// * `fd` - This argument refers to the file descriptor to which the data
+    ///   is to be written.
+    /// * `buf` - This argument refers to the buffer from which the file data is
+    ///   to be written. This value is greater than or equal to zero.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   written to the file. This value should be greater than or equal to
+    ///   zero.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// written. This number will never be greater than `count`. The value
+    /// returned may be less than `count` if the write_syscall() was
+    /// interrupted by a signal, or if the file is a pipe or FIFO or special
+    /// file and has fewer than `count` bytes immediately available for
+    /// writing.
+    ///
+    /// ### Errors
+    ///
+    /// * EBADF - Given file descriptor in the arguments is invalid; the
+    ///   file/stream/ pipe are not open for writing.
+    /// * EISDIR - The file descriptor opened for writing is a directory.
+    /// * EINVAL - File descriptor is attached to an object which is unsuitable
+    ///   for writing.
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When the file type file descriptor contains a Socket as an inode.
+    /// * When there is some other issue fetching the file descriptor.
+    /// # When writing the blank bytes in the file fails.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [write(2)](https://man7.org/linux/man-pages/man2/write.2.html)
     pub fn write_syscall(&self, fd: i32, buf: *const u8, count: usize) -> i32 {
+        //BUG
+        //If the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //delegate to pipe, stream, or socket helper if specified by file descriptor
-            // enum type
+            // There are different types of file descriptors (File, Sockets, Stream, PIPE),
+            // Based on the enum type, each file descriptor has a different implementation
+            // for writing data to the file.
             match filedesc_enum {
-                //we must borrow the filedesc object as a mutable reference to update the position
+                // Writing to `Epoll` type file descriptors is not supported.
+                Epoll(_) => syscall_error(
+                    Errno::EINVAL,
+                    "write",
+                    "fd is attached to an object which is unsuitable for writing",
+                ),
+
+                // We must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Return an error if the file cannot be opened for writing.
+                    // The function `is_rdonly` checks for read only permissions, for a file
+                    // which if true, returns an error, else the file can be opened for writing.
                     if is_rdonly(normalfile_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1815,26 +1885,48 @@ impl Cage {
                         );
                     }
 
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let mut inodeobj = FS_METADATA
                         .inodetable
                         .get_mut(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character helper or print out if it's a character file or stream,
-                    //checking based on the type of the inode object
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match *inodeobj {
+                        // For `Dir` type inode, an error is returned as writing to a directory is
+                        // not allowed.
+                        Inode::Dir(_) => syscall_error(
+                            Errno::EISDIR,
+                            "write",
+                            "attempted to write to a directory",
+                        ),
+
+                        // For `File` type inode, the writing happens at the current position
+                        // of the object pointed by `position`. The fileobject is fetched from
+                        // the FileObjectTable and we start writing from the buffer `buf` until
+                        // `count` number of bytes.
                         Inode::File(ref mut normalfile_inode_obj) => {
+                            // Get the current position of the File Descriptor Object.
                             let position = normalfile_filedesc_obj.position;
 
+                            // Calculate the number of blank bytes needed to pad the file
+                            // if the current position is past the end of the file, because
+                            // the space between the end of the file and the new write position
+                            // should be filled with zeroes to maintain data integrity.
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = position as isize - filesize as isize;
 
+                            // Get the mutable file object associated with the file descriptor
+                            // object
                             let mut fileobject = FILEOBJECTTABLE
                                 .get_mut(&normalfile_filedesc_obj.inode)
                                 .unwrap();
 
-                            //we need to pad the file with blank bytes if we are at a position past
-                            // the end of the file!
+                            // Pad the file with blank bytes if we are at a position past
+                            // the end of the file. `zerofill_at` function fills `blankbytecount`
+                            // bytes in the file from the offset
+                            // starting from `filesize`.
                             if blankbytecount > 0 {
                                 if let Ok(byteswritten) =
                                     fileobject.zerofill_at(filesize, blankbytecount as usize)
@@ -1847,58 +1939,71 @@ impl Cage {
                                 }
                             }
 
-                            let newposition;
-                            if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
-                                //move position forward by the number of bytes we've written
-                                normalfile_filedesc_obj.position = position + byteswritten;
-                                newposition = normalfile_filedesc_obj.position;
-                                if newposition > normalfile_inode_obj.size {
-                                    normalfile_inode_obj.size = newposition;
-                                    drop(inodeobj);
-                                    drop(fileobject);
-                                    log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
-                                } //update file size if necessary
-
-                                byteswritten as i32
-                            } else {
-                                0 //0 bytes written, but not an error value
-                                  // that can/should be passed to the user
+                            // Write `count` bytes from `buf` to the file at `position` using
+                            // `writeat` function, which returns the number of bytes written when
+                            // successful, else panics.
+                            let byteswritten = fileobject.writeat(buf, count, position).unwrap();
+                            // Move position forward by the number of bytes we've written
+                            normalfile_filedesc_obj.position = position + byteswritten;
+                            // Update the file size if necessary
+                            if normalfile_filedesc_obj.position > normalfile_inode_obj.size {
+                                normalfile_inode_obj.size = normalfile_filedesc_obj.position;
+                                drop(inodeobj);
+                                drop(fileobject);
+                                log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
                             }
+                            // Return the number of bytes written
+                            byteswritten as i32
                         }
 
+                        // For `CharDev` type inode, the writing happens to the Character Device
+                        // file, with each device type returning the `count` number of bytes that
+                        // are to be written.
                         Inode::CharDev(ref char_inode_obj) => {
+                            // The `_write_chr_file` helper function typically does not write
+                            // anything to the device and simply returns the bytes count.
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
+                        // A Sanity check is added to make sure that there is no such case when the
+                        // fd type is "File" and the inode type is "Socket". This state is ideally
+                        // not possible, so we panic in such cases.
                         Inode::Socket(_) => {
                             panic!("write(): Socket inode found on a filedesc fd")
                         }
-
-                        Inode::Dir(_) => syscall_error(
-                            Errno::EISDIR,
-                            "write",
-                            "attempted to write to a directory",
-                        ),
                     }
                 }
+
+                // For `Socket` type file descriptor, a write is equivalent to a `send_syscall` so
+                // we transfer control there. A `send_syscall` is used for sending
+                // message through a socket.
                 Socket(_) => {
                     drop(unlocked_fd);
                     self.send_syscall(fd, buf, count, 0)
                 }
+
+                // For `Stream` type file descriptors (stdout or stderr), the data is printed out
+                // and the number of bytes written is returned.
                 Stream(stream_filedesc_obj) => {
-                    //if it's stdout or stderr, print out and we're done
+                    // Stream 1 represents `stdout` and 2 represents `stderr`.
                     if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
+                        // `log_from_ptr` simply prints out the data to stdout
                         interface::log_from_ptr(buf, count);
                         count as i32
                     } else {
-                        return syscall_error(
+                        syscall_error(
                             Errno::EBADF,
                             "write",
                             "specified stream not open for writing",
-                        );
+                        )
                     }
                 }
+
+                // The `Pipe` type file descriptor handles write through blocking and non-blocking
+                // modes differently to ensure appropriate behavior based on the flags set on the
+                // pipe.
                 Pipe(pipe_filedesc_obj) => {
+                    // Return an error if the pipe cannot be opened for writing.
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1907,40 +2012,124 @@ impl Cage {
                         );
                     }
 
+                    // Check if the `O_NONBLOCK` flag is set in the pipe's flags.
+                    // If `O_NONBLOCK` is set, we set nonblocking to true, indicating that the pipe
+                    // operates in non-blocking mode.
                     let mut nonblocking = false;
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
 
+                    // Attempt to write `count` bytes from `buf` to the pipe.
+                    // write_to_pipe writes a specified number of bytes starting at the given
+                    // pointer to a circular buffer.
                     let retval = pipe_filedesc_obj
                         .pipe
                         .write_to_pipe(buf, count, nonblocking)
                         as i32;
+
+                    // If the write fails with `EPIPE`, send a `SIGPIPE` signal to the process.
                     if retval == -(Errno::EPIPE as i32) {
+                        // BUG: Need to add the check for processing a signal.
                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
-                    } // Trigger SIGPIPE
+                    }
                     retval
                 }
-                Epoll(_) => syscall_error(
-                    Errno::EINVAL,
-                    "write",
-                    "fd is attached to an object which is unsuitable for writing",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
         }
     }
 
-    //------------------------------------PWRITE SYSCALL------------------------------------
-
+    /// ## ------------------PWRITE SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `pwrite_syscall()` attempts to write `count` bytes from the buffer
+    /// pointed to by `buf` to the file associated with the open file
+    /// descriptor, `fd`, starting at the given `offset`. Unlike `write()`,
+    /// `pwrite()` does not change the file offset.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `pwrite_syscall()` receives four arguments:
+    /// * `fd` - This argument refers to the file descriptor to which the data
+    ///   is to be written.
+    /// * `buf` - This argument refers to the buffer containing the data to be
+    ///   written to the file.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   written to the file.
+    /// * `offset` - This argument specifies the file offset at which the write
+    ///   is to begin. The file offset is not changed by this operation.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// written. This number will never be greater than `count`. The value
+    /// returned may be less than `count` if there is insufficient space in
+    /// the file system or if the pwrite is interrupted by a signal.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - Given file descriptor in the arguments is invalid; the file
+    ///   is not opened for writing.
+    /// * `EISDIR` - The file descriptor opened for writing is a directory.
+    /// * `ESPIPE` - The file descriptor opened for writing is either of type
+    ///   Socket, Stream, Pipe, or Epoll.
+    ///
+    /// ### Panics
+    ///
+    /// * If the parent inode does not exist in the inode table, causing
+    ///   unwrap() to panic.
+    /// * When the file type file descriptor contains a Socket as an inode.
+    /// * When there is some other issue fetching the file descriptor.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [pwrite(2)](https://man7.org/linux/man-pages/man2/pwrite.2.html)
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
+        //BUG
+        //If the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            // Match the type of file descriptor (File, Sockets, Stream, Pipe, Epoll)
             match filedesc_enum {
-                //we must borrow the filedesc object as a mutable reference to update the position
+                // Return an error for Sockets, as they do not support the concept of seeking to a
+                // specific offset because data arrives in a continuous stream from the network.
+                Socket(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with a socket, cannot seek",
+                ),
+                // Return an error for Streams, as like sockets, streams are sequential and do not
+                // support seeking to an offset.
+                Stream(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with a stream, cannot seek",
+                ),
+                // Return an error for Pipes, as they are designed for sequential reads and writes
+                // between processes. Seeking within a pipe would not make sense because data is
+                // read in the order it was written, making pwrite inapplicable.
+                Pipe(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with a pipe, cannot seek",
+                ),
+                // Return an error for Epoll, as Epoll file descriptors are for event notification
+                // and do not hold any data themselves.
+                Epoll(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "pwrite",
+                    "file descriptor is associated with an epollfd, cannot seek",
+                ),
+                // We must borrow the filedesc object as a mutable reference to update the position
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Return an error if the file cannot be not opened for writing.
                     if is_rdonly(normalfile_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -1949,15 +2138,28 @@ impl Cage {
                         );
                     }
 
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let mut inodeobj = FS_METADATA
                         .inodetable
                         .get_mut(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //delegate to character helper or print out if it's a character file or stream,
-                    //checking based on the type of the inode object
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
                     match *inodeobj {
+                        // For `Dir` type inode, an error is returned as writing to a directory is
+                        // not allowed
+                        Inode::Dir(_) => syscall_error(
+                            Errno::EISDIR,
+                            "pwrite",
+                            "attempted to write to a directory",
+                        ),
+
                         Inode::File(ref mut normalfile_inode_obj) => {
+                            // Calculate the number of blank bytes needed to pad the file
+                            // if the current offset is past the end of the file, because
+                            // the space between the end of the file and the new write position
+                            // should be filled with zeroes to maintain data integrity.
                             let position = offset as usize;
                             let filesize = normalfile_inode_obj.size;
                             let blankbytecount = offset - filesize as isize;
@@ -1966,8 +2168,10 @@ impl Cage {
                                 .get_mut(&normalfile_filedesc_obj.inode)
                                 .unwrap();
 
-                            //we need to pad the file with blank bytes if we are seeking past the
-                            // end of the file!
+                            // Pad the file with blank bytes if we are at a position past
+                            // the end of the file. `zerofill_at` function fills `blankbytecount`
+                            // bytes in the file from the offset
+                            // starting from `filesize`.
                             if blankbytecount > 0 {
                                 if let Ok(byteswritten) =
                                     fileobject.zerofill_at(filesize, blankbytecount as usize)
@@ -1980,80 +2184,101 @@ impl Cage {
                                 }
                             }
 
-                            let newposition;
-                            let retval = if let Ok(byteswritten) =
-                                fileobject.writeat(buf, count, position)
-                            {
-                                //move position forward by the number of bytes we've written
-                                newposition = position + byteswritten;
+                            // Write `count` bytes from `buf` to the file at `position` using
+                            // `writeat` function, which returns the number of bytes written.
+                            let retval = fileobject.writeat(buf, count, position).unwrap();
+                            let newposition = position + retval;
 
-                                byteswritten as i32
-                            } else {
-                                newposition = position;
-                                0 //0 bytes written, but not an error value
-                                  // that can/should be passed to the user
-                                  // we still may need to update file size from
-                                  // blank bytes write, so we don't bail out
-                            };
-
+                            // Update the file size once data is written to the file
                             if newposition > filesize {
                                 normalfile_inode_obj.size = newposition;
+                                // Drop the mutable instances of fileobject and inodeobj, before
+                                // writing to the metadata.
                                 drop(fileobject);
                                 drop(inodeobj);
                                 log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
-                            } //update file size if necessary
+                            }
 
-                            retval
+                            // Return the final value of the bytes written in the file
+                            retval as i32
                         }
 
+                        // For `CharDev` type inode, the writing happens to the Character Device
+                        // file, with each device type returning the `count` number of bytes that
+                        // are to be written.
                         Inode::CharDev(ref char_inode_obj) => {
+                            // The `_write_chr_file` helper function typically does not write
+                            // anything to the device and simply returns the bytes count.
                             self._write_chr_file(&char_inode_obj, buf, count)
                         }
 
+                        // A Sanity check is added to make sure that there is no such case when the
+                        // fd type is "File" and the inode type is "Socket". This state is ideally
+                        // not possible, so we panic in such cases.
                         Inode::Socket(_) => {
                             panic!("pwrite: socket fd and inode don't match types")
                         }
-
-                        Inode::Dir(_) => syscall_error(
-                            Errno::EISDIR,
-                            "pwrite",
-                            "attempted to write to a directory",
-                        ),
                     }
                 }
-                Socket(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with a socket, cannot seek",
-                ),
-                Stream(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with a stream, cannot seek",
-                ),
-                Pipe(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with a pipe, cannot seek",
-                ),
-                Epoll(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "pwrite",
-                    "file descriptor is associated with an epollfd, cannot seek",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "pwrite", "invalid file descriptor")
         }
     }
 
+    /// ## ------------------WRITE CHARACTER DEVICE HELPER FUNCTION------------------
+    /// ### Description
+    ///
+    /// The `_write_chr_file()` helper function handles the writing to character
+    /// device files. Depending on the specific character device being
+    /// written to, the function may either succeed without performing any
+    /// action or return an error indicating that writing to the specified
+    /// device is not supported. This function is currently referenced in
+    /// "write" and "pwrite" syscalls.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `_write_chr_file()` receives three arguments:
+    /// * `inodeobj` - This argument refers to the inode object of the character
+    ///   device file.
+    /// * `_buf` - This argument refers to the buffer containing the data to be
+    ///   written to the file.
+    /// * `count` - This argument refers to the number of bytes of data to be
+    ///   written to the file.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the number of bytes
+    /// written. For specific character devices, the function transparently
+    /// succeeds while doing nothing, returning `count` as the number of
+    /// bytes written. If writing to the specified device is not
+    /// implemented, an error is returned.
+    ///
+    /// ### Errors
+    ///
+    /// * `EOPNOTSUPP` - The write operation is not supported for the specified
+    ///   device.
+    ///
+    /// ### Panics
+    ///
+    /// This function does not cause any panics.
     fn _write_chr_file(&self, inodeobj: &DeviceInode, _buf: *const u8, count: usize) -> i32 {
-        //writes to any of these device files transparently succeed while doing nothing
+        // Writes to any of these device files transparently succeed while doing
+        // nothing. The data passed to them for writing is simply discarded.
         match inodeobj.dev {
+            // Represented by "/dev/null", it is a virtual null device used to discard any output
+            // redirected to it.
             NULLDEVNO => count as i32,
+            // Represented by "/dev/zero", it provides as many null bytes (zero value) as are read
+            // from it.
             ZERODEVNO => count as i32,
+            // Represented by "/dev/random", it provides random output.
             RANDOMDEVNO => count as i32,
+            // Represented by "/dev/urandom", it also provides random output.
+            // Writes behave identically for both random and urandom devices and will not block.
+            // Currently, we are not doing anything on "write" for these devices.
             URANDOMDEVNO => count as i32,
+            // For other devices, return an error indicating the operation is not supported.
             _ => syscall_error(
                 Errno::EOPNOTSUPP,
                 "write or pwrite",
@@ -2402,7 +2627,8 @@ impl Cage {
     /// ### Errors
     ///
     /// * `EBADF` - fd is not a valid file descriptor.
-    /// * `ENOTDIR` - the open file descriptor fildes does not refer to a directory.
+    /// * `ENOTDIR` - the open file descriptor fildes does not refer to a
+    ///   directory.
     /// Other errors, like `EACCES`, `ENOMEM`, etc. are not supported.
     ///
     /// ### Panics
@@ -2451,7 +2677,7 @@ impl Cage {
                     "fchdir",
                     "the file descriptor does not refer to a directory",
                 )
-            },
+            }
         };
         //Obtain the write lock on the current working directory of the cage
         //and change it to the new directory
@@ -2500,11 +2726,11 @@ impl Cage {
         //Perfrom a walk down the file tree starting from the root directory to
         //obtain an inode number of the file whose pathname was specified.
         //`None` is returned if one of the following occurs while moving down
-        //the tree: 
-        //1. Accessing a child of a non-directory inode 
-        //2. Accessing a child of a nonexistent parent directory
-        //3. Accessing a nonexistent child
-        //4. Accessing an unexpected component, like `.` or `..` directory reference.
+        //the tree:
+        // 1. Accessing a child of a non-directory inode
+        // 2. Accessing a child of a nonexistent parent directory
+        // 3. Accessing a nonexistent child
+        // 4. Accessing an unexpected component, like `.` or `..` directory reference.
         //In this case, `The file does not exist` error is returned.
         //Otherwise, a `Some()` option containing the inode number is returned.
         if let Some(inodenum) = metawalk(&truepath) {
