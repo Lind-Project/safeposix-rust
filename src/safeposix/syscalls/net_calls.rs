@@ -1829,22 +1829,88 @@ impl Cage {
         return self.recv_common(fd, buf, buflen, flags, &mut None);
     }
 
-    //we currently ignore backlog
-    pub fn listen_syscall(&self, fd: i32, _backlog: i32) -> i32 {
+    /// ### Description
+    ///
+    /// `listen_syscall` listen for connections on a socket
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts two parameters:
+    /// * `sockfd` - a file descriptor that refers to a socket of type
+    ///   SOCK_STREAM Note, we do not implement sockets of type SOCK_SEQPACKET
+    /// * `backlog` - defines the maximum length to which the queue of pending
+    ///   connections for sockfd may grow.  If a connection request arrives when
+    ///   the queue is full, the client may receive an error with an indication
+    ///   of ECONNREFUSED or, if the underlying protocol supports
+    ///   retransmission, the request may be ignored so that a later reattempt
+    ///   at connection succeeds.
+    ///
+    /// ### Returns
+    ///
+    /// for a successful call, zero is returned. On error, -errno is
+    /// returned and errno is set to indicate the error
+    ///
+    /// ### Errors
+    ///
+    /// * EADDRINUSE - Another socket is already listening on the same port.
+    ///
+    /// * EADDRINUSE - (Internet domain sockets) The socket referred to by
+    ///   sockfd had not previously been bound to an address and, upon
+    ///   attempting to bind it to an ephemeral port, it was determined that all
+    ///   port numbers in the ephemeral port range are currently in use.  See
+    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    ///
+    /// * EBADF - The argument sockfd is not a valid file descriptor.
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// * EOPNOTSUPP - The socket is not of a type that supports the listen()
+    ///   operation.
+    ///
+    /// ### Panics
+    ///
+    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will
+    ///   cause a panic.
+    /// * unknown errno value from socket bind sys call from libc in the case
+    ///   that the socket isn't assigned an address
+    /// * unknown errno value from socket listen sys call from libc
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [listen(2)](https://linux.die.net/man/2/listen)
+    //
+    // TODO: We are currently ignoring backlog
+    pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
+        //BUG:s
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
+                //If the file descriptor refers to a socket
                 Socket(ref mut sockfdobj) => {
                     //get or create the socket and bind it before listening
+                    //Gain write access to the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
 
+                    //If the given socket is already listening, return with
+                    //success
                     match sockhandle.state {
                         ConnState::LISTEN => {
-                            return 0; //Already done!
+                            return 0;
                         }
 
+                        //Possible connection states in which the socket
+                        //can not be set to listening mode:
+                        // * Connected to another socket and can send
+                        // and receive data
+                        // * Connected to another socket and can only send
+                        // data
+                        // * Connected to another socket and can only receive
+                        // data
+                        // * A non-blocking socket is in progress of connecting
+                        // to another socket
                         ConnState::CONNECTED
                         | ConnState::CONNRDONLY
                         | ConnState::CONNWRONLY
@@ -1856,7 +1922,11 @@ impl Cage {
                             );
                         }
 
+                        //If the given socket is not connected, it is ready
+                        //to begin listening
                         ConnState::NOTCONNECTED => {
+                            //If the given socket is not a TCP socket, then the
+                            //socket can not listen for connections
                             if sockhandle.protocol != IPPROTO_TCP {
                                 return syscall_error(
                                     Errno::EOPNOTSUPP,
@@ -1865,12 +1935,24 @@ impl Cage {
                                 );
                             }
 
-                            // simple if it's a domain socket
+                            //TODO: Implement backlog for UNIX
+                            //If the given socket is a Unix socket, lind handles
+                            //the connection, return with success
                             if sockhandle.domain == AF_UNIX {
                                 sockhandle.state = ConnState::LISTEN;
                                 return 0;
                             }
 
+                            //If the given socket is not assigned an address,
+                            //attempt to bind the socket to an address.
+                            //
+                            //An implicit bind refers to the automatic binding of a socket to an
+                            // address and port by the system, without
+                            // an explicit call to the bind() function by
+                            // the programmer.
+                            //
+                            //If implicit bind fails, return with the errno if known
+                            //Otherwise, panic!
                             if sockhandle.localaddr.is_none() {
                                 let shd = sockhandle.domain as i32;
                                 let ibindret = self._implicit_bind(&mut *sockhandle, shd);
@@ -1882,7 +1964,10 @@ impl Cage {
                                 }
                             }
 
-                            let ladr = sockhandle.localaddr.unwrap().clone(); //must have been populated by implicit bind
+                            //The socket must have been assigned an address by implicit bind
+                            let ladr = sockhandle.localaddr.unwrap().clone();
+                            //Grab a tuple of the address, port, and port type
+                            //to be inserted into the set of listening ports
                             let porttuple = mux_port(
                                 ladr.addr().clone(),
                                 ladr.port(),
@@ -1890,10 +1975,14 @@ impl Cage {
                                 TCPPORT,
                             );
 
+                            //Set the socket connection state to listening
+                            //to readily accept connections
                             NET_METADATA.listening_port_set.insert(porttuple.clone());
                             sockhandle.state = ConnState::LISTEN;
 
-                            let listenret = sockhandle.innersocket.as_ref().unwrap().listen(5); //default backlog in repy for whatever reason, we replicate it
+                            //Call listen from libc on the socket
+                            let listenret =
+                                sockhandle.innersocket.as_ref().unwrap().listen(backlog);
                             if listenret < 0 {
                                 let lr = match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => syscall_error(
@@ -1905,30 +1994,42 @@ impl Cage {
                                         panic!("Unknown errno value from socket listen returned!")
                                     }
                                 };
-                                NET_METADATA.listening_port_set.remove(&mux_port(
-                                    ladr.addr().clone(),
-                                    ladr.port(),
-                                    sockhandle.domain,
-                                    TCPPORT,
-                                ));
+                                //Remove the tuple of the address, port, and
+                                //port type from the set of listening ports
+                                //as we are returning from an error
+                                NET_METADATA.listening_port_set.remove(&porttuple);
+
+                                //Set the socket state to NOTCONNECTED, as
+                                //the socket is not listening
                                 sockhandle.state = ConnState::NOTCONNECTED;
                                 return lr;
                             };
 
-                            //set rawfd for select
+                            // Set the rawfd for select_syscall as we cannot implement the select
+                            // logics for AF_INET socket right now, so we have to call the select
+                            // syscall from libc, which takes the rawfd as the argument instead of
+                            // the fake fd used by lind.
+                            // The raw fd of the socket is the set to be the same as the fd set by
+                            // the kernal in the libc connect call
                             sockfdobj.rawfd = sockhandle.innersocket.as_ref().unwrap().raw_sys_fd;
 
+                            //If listening socket is not in the table of pending
+                            //connections, we must insert it as the key with
+                            //an empty vector as the value
+                            //We can now track incoming connections
                             if !NET_METADATA.pending_conn_table.contains_key(&porttuple) {
                                 NET_METADATA
                                     .pending_conn_table
                                     .insert(porttuple.clone(), vec![]);
                             }
 
-                            return 0;
+                            return 0; //return on success
                         }
                     }
                 }
 
+                //Otherwise, the file descriptor refers to something other
+                //than a socket, return with error
                 _ => {
                     return syscall_error(
                         Errno::ENOTSOCK,
@@ -1937,6 +2038,7 @@ impl Cage {
                     );
                 }
             }
+        //Otherwise, file descriptor is invalid, return with error
         } else {
             return syscall_error(Errno::EBADF, "listen", "invalid file descriptor");
         }
@@ -3373,12 +3475,77 @@ impl Cage {
         return 0;
     }
 
+    /// ## ------------------POLL SYSCALL------------------
+    /// ### Description
+    /// poll_syscall performs a similar task to select_syscall: it waits for
+    /// one of a set of file descriptors to become ready to perform I/O.
+
+    /// ### Function Arguments
+    /// The `poll_syscall()` receives two arguments:
+    /// * `fds` - The set of file descriptors to be monitored is specified in
+    ///   the fds argument, which is an array of PollStruct structures
+    ///   containing three fields: fd, events and revents. events and revents
+    ///   are requested events and returned events, respectively. The field fd
+    ///   contains a file descriptor for an open file. If this field is
+    ///   negative, then the corresponding events field is ignored and the
+    ///   revents field returns zero. The field events is an input parameter, a
+    ///   bit mask specifying the events the application is interested in for
+    ///   the file descriptor fd. The bits returned in revents can include any
+    ///   of those specified in events, or POLLNVAL. The bits that may be
+    ///   set/returned in events and revents are: 1. POLLIN: There is data to
+    ///   read. 2. POLLPRI: There is some exceptional condition on the file
+    ///   descriptor, currently not supported 3. POLLOUT: Writing is now
+    ///   possible, though a write larger than the available space in a socket
+    ///   or pipe will still block
+    ///   4. POLLNVAL: Invalid request: fd not open (only returned in revents;
+    ///   ignored in events).
+    /// * `timeout` - The timeout argument is a RustDuration structure that
+    ///   specifies the interval that poll() should block waiting for a file
+    ///   descriptor to become ready. The call will block until either: 1.  a
+    ///   file descriptor becomes ready; 2. the call is interrupted by a signal
+    ///   handler; 3. the timeout expires.
+
+    /// ### Returns
+    /// On success, poll_syscall returns a nonnegative value which is the
+    /// number of elements in the pollfds whose revents fields have been
+    /// set to a nonzero value (indicating an event or an error). A
+    /// return value of zero indicates that the system call timed out
+    /// before any file descriptors became ready.
+    ///
+    /// ### Errors
+    /// * EINTR - A signal was caught.
+    /// * EINVAL - fd exceeds the FD_SET_MAX_FD.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn poll_syscall(
         &self,
         fds: &mut [PollStruct],
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
-        //timeout is supposed to be in milliseconds
+        // timeout is supposed to be in milliseconds
+
+        // current implementation of poll_syscall is based on select_syscall
+        // which gives several issues:
+        // 1. according to standards, select_syscall should only support file descriptor
+        //    that is smaller than 1024, while poll_syscall should not have such
+        //    limitation but our implementation of poll_syscall is actually calling
+        //    select_syscall directly which would mean poll_syscall would also have the
+        //    1024 maximum size limitation However, rustposix itself only support file
+        //    descriptor that is smaller than 1024 which solves this issue automatically
+        //    in an interesting way
+        // 2. current implementation of poll_syscall is very inefficient, that it passes
+        //    each of the file descriptor into select_syscall one by one. A better
+        //    solution might be transforming pollstruct into fdsets and pass into
+        //    select_syscall once (TODO). A even more efficienct way would be completely
+        //    rewriting poll_syscall so it does not depend on select_syscall anymore.
+        //    This is also how Linux does for poll_syscall since Linux claims that poll
+        //    have a better performance than select.
+        // 3. several revent value such as POLLERR (which should be set when pipe is
+        //    broken), or POLLHUP (when peer closed its channel) are not possible to
+        //    monitor. Since select_syscall does not have these features, so our
+        //    poll_syscall, which derived from select_syscall, would subsequently not be
+        //    able to support these features.
 
         let mut return_code: i32 = 0;
         let start_time = interface::starttimer();
@@ -3388,9 +3555,26 @@ impl Cage {
             None => interface::RustDuration::MAX,
         };
 
+        // according to standard, we should clear all revents
+        for structpoll in &mut *fds {
+            structpoll.revents = 0;
+        }
+
+        // we loop until either timeout
+        // or any of the file descriptor is ready
         loop {
+            // iterate through each file descriptor
             for structpoll in &mut *fds {
+                // get the file descriptor
                 let fd = structpoll.fd;
+
+                // according to standard, we should ignore all file descriptor
+                // that is smaller than 0
+                if fd < 0 {
+                    continue;
+                }
+
+                // get the associated events to monitor
                 let events = structpoll.events;
 
                 // init FdSet structures
@@ -3398,24 +3582,25 @@ impl Cage {
                 let writes = &mut interface::FdSet::new();
                 let errors = &mut interface::FdSet::new();
 
-                //read
+                // POLLIN for readable fd
                 if events & POLLIN > 0 {
                     reads.set(fd)
                 }
-                //write
+                // POLLOUT for writable fd
                 if events & POLLOUT > 0 {
                     writes.set(fd)
                 }
-                //err
-                if events & POLLERR > 0 {
+                // POLLPRI for except fd
+                if events & POLLPRI > 0 {
                     errors.set(fd)
                 }
 
+                // this mask is used for storing final revent result
                 let mut mask: i16 = 0;
 
-                //0 essentially sets the timeout to the max value allowed (which is almost
-                // always more than enough time) NOTE that the nfds argument is
-                // highest fd + 1
+                // here we just call select_syscall with timeout of zero,
+                // which essentially just check each fd set once then return
+                // NOTE that the nfds argument is highest fd + 1
                 let selectret = Self::select_syscall(
                     &self,
                     fd + 1,
@@ -3424,23 +3609,44 @@ impl Cage {
                     Some(errors),
                     Some(interface::RustDuration::ZERO),
                 );
+                // if there is any file descriptor ready
                 if selectret > 0 {
-                    mask += if !reads.is_empty() { POLLIN } else { 0 };
-                    mask += if !writes.is_empty() { POLLOUT } else { 0 };
-                    mask += if !errors.is_empty() { POLLERR } else { 0 };
+                    // is the file descriptor ready to read?
+                    mask |= if !reads.is_empty() { POLLIN } else { 0 };
+                    // is the file descriptor ready to write?
+                    mask |= if !writes.is_empty() { POLLOUT } else { 0 };
+                    // is there any exception conditions on the file descriptor?
+                    mask |= if !errors.is_empty() { POLLPRI } else { 0 };
+                    // this file descriptor is ready for something,
+                    // increment the return value
                     return_code += 1;
                 } else if selectret < 0 {
-                    return selectret;
+                    // if there is any error, first check if the error
+                    // is EBADF, which refers to invalid file descriptor error
+                    // in this case, we should set POLLNVAL to revent
+                    if selectret == -(Errno::EBADF as i32) {
+                        mask |= POLLNVAL;
+                        // according to standard, return value is the number of fds
+                        // with non-zero revent, which may indicate an error as well
+                        return_code += 1;
+                    } else {
+                        return selectret;
+                    }
                 }
+                // set the revents
                 structpoll.revents = mask;
             }
 
+            // we break if there is any file descriptor ready
+            // or timeout is reached
             if return_code != 0 || interface::readtimer(start_time) > end_time {
                 break;
             } else {
+                // otherwise, check for signal and loop again
                 if interface::sigcheck() {
                     return syscall_error(Errno::EINTR, "poll", "interrupted function call");
                 }
+                // We yield to let other threads continue if we've found no ready descriptors
                 interface::lind_yield();
             }
         }
@@ -3448,9 +3654,7 @@ impl Cage {
     }
 
     pub fn _epoll_object_allocator(&self) -> i32 {
-        //seems to only be called in functions that don't have a filedesctable lock, so
-        // not passing the lock.
-
+        // create a Epoll file descriptor
         let epollobjfd = Epoll(EpollDesc {
             mode: 0000,
             registered_fds: interface::RustHashMap::<i32, EpollEvent>::new(),
@@ -3458,7 +3662,7 @@ impl Cage {
             errno: 0,
             flags: 0,
         });
-        //get a file descriptor
+        // get a file descriptor
         let (fd, guardopt) = self.get_next_fd(None);
         if fd < 0 {
             return fd;
@@ -3469,6 +3673,29 @@ impl Cage {
         return fd;
     }
 
+    /// ## ------------------EPOLL_CREATE SYSCALL------------------
+    /// ### Description
+    /// epoll_create_syscall creates a new epoll instance: it waits for
+    /// one of the file descriptors from the sets to become ready to perform
+    /// I/O.
+
+    /// ### Function Arguments
+    /// The `epoll_create_syscall()` receives one argument:
+    /// * `size` - the size argument is a legacy argument in Linux and is
+    ///   ignored, but must be greater than zero
+
+    /// ### Returns
+    /// On success, the system calls return a file descriptor (a nonnegative
+    /// integer).
+    ///
+    /// ### Errors
+    /// * ENFILE - file descriptor number reached the limit
+    /// * EINVAL - size is not positive.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/epoll_create.2.html
     pub fn epoll_create_syscall(&self, size: i32) -> i32 {
         if size <= 0 {
             return syscall_error(
@@ -3480,25 +3707,115 @@ impl Cage {
         return Self::_epoll_object_allocator(self);
     }
 
-    //this one can still be optimized
+    /// ## ------------------EPOLL_CTL SYSCALL------------------
+    /// ### Description
+    /// This system call is used to add, modify, or remove entries in the
+    /// interest list of the epoll instance referred to by the file
+    /// descriptor epfd.  It requests the operation op to be performed for the
+    /// target file descriptor, fd.
+
+    /// ### Function Arguments
+    /// The `epoll_ctl_syscall()` receives four arguments:
+    /// * `epfd` - the epoll file descriptor to be applied the action
+    /// * `op` - the operation to be performed, valid values for the op argument
+    ///   are:
+    /// 1. EPOLL_CTL_ADD: Add an entry to the interest list of the epoll file
+    ///    descriptor, epfd. The entry includes the file descriptor, fd, a
+    ///    reference to the corresponding open file description, and the
+    ///    settings specified in event.
+    /// 2. EPOLL_CTL_MOD: Change the settings associated with fd in the interest
+    ///    list to the new settings specified in event.
+    /// 3. EPOLL_CTL_DEL: Remove (deregister) the target file descriptor fd from
+    ///    the interest list.
+    /// * `fd` - the target file descriptor to be performed by op
+    /// * `event` - The event argument describes the object linked to the file
+    ///   descriptor fd.
+
+    /// ### Returns
+    /// When successful, epoll_ctl_syscall returns zero.
+    ///
+    /// ### Errors
+    /// * EBADF - epfd or fd is not a valid file descriptor.
+    /// * EEXIST - op was EPOLL_CTL_ADD, and the supplied file descriptor fd is
+    ///   already registered with this epoll instance.
+    /// * EINVAL - epfd is not an epoll file descriptor, or fd is the same as
+    ///   epfd, or the requested operation op is not supported by this
+    ///   interface.
+    /// * ENOENT - op was EPOLL_CTL_MOD or EPOLL_CTL_DEL, and fd is not
+    ///   registered with this epoll instance.
+    /// * EPERM - The target file fd does not support epoll.  This error can
+    ///   occur if fd refers to, for example, a regular file or a directory.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
     pub fn epoll_ctl_syscall(&self, epfd: i32, op: i32, fd: i32, event: &EpollEvent) -> i32 {
-        //making sure that the epfd is really an epoll fd
+        // first check the fds are within the valid range
+        if epfd < 0 || epfd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "epoll ctl",
+                "provided epoll fd is not a valid file descriptor",
+            );
+        }
+
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "epoll ctl",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
+        // making sure that the epfd is really an epoll fd
         let checkedfd = self.get_filedescriptor(epfd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum_epollfd) = &mut *unlocked_fd {
             if let Epoll(epollfdobj) = filedesc_enum_epollfd {
-                //check if the other fd is an epoll or not...
+                // first check if fd equals to epfd
+                // standard says EINVAL should be returned when fd equals to epfd
+                // must check before trying to get the read lock of fd
+                // otherwise deadlock would occur (trying to get read lock while the
+                // same fd is already hold with write lock)
+                if fd == epfd {
+                    return syscall_error(
+                        Errno::EINVAL,
+                        "epoll ctl",
+                        "provided fd is the same as epfd",
+                    );
+                }
+
+                // check if the other fd is an epoll or not...
                 let checkedfd = self.get_filedescriptor(fd).unwrap();
                 let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
-                    if let Epoll(_) = filedesc_enum {
-                        return syscall_error(
-                            Errno::EBADF,
-                            "epoll ctl",
-                            "provided fd is not a valid file descriptor",
-                        );
+                    match filedesc_enum {
+                        Epoll(_) => {
+                            // nested Epoll (i.e. Epoll monitoring on Epoll file descriptor)
+                            // is allowed on Linux with some restrictions, though we currently do
+                            // not support this
+
+                            return syscall_error(
+                                Errno::EBADF,
+                                "epoll ctl",
+                                "provided fd is not a valid file descriptor",
+                            );
+                        }
+                        File(_) => {
+                            // according to standard, EPERM should be returned when
+                            // fd refers to a file or directory
+                            return syscall_error(
+                                Errno::EPERM,
+                                "epoll ctl",
+                                "The target file fd does not support epoll.",
+                            );
+                        }
+                        // other file descriptors are valid
+                        _ => {}
                     }
                 } else {
+                    // fd is not a valid file descriptor
                     return syscall_error(
                         Errno::EBADF,
                         "epoll ctl",
@@ -3506,15 +3823,10 @@ impl Cage {
                     );
                 }
 
-                //now that we know that the types are all good...
+                // now that we know that the types are all good...
                 match op {
                     EPOLL_CTL_DEL => {
-                        //since remove returns the value at the key and the values will always be
-                        // EpollEvents, I am using this to optimize the code
-                        epollfdobj.registered_fds.remove(&fd).unwrap().1;
-                    }
-                    EPOLL_CTL_MOD => {
-                        //check if the fd that we are modifying exists or not
+                        // check if the fd that we are modifying exists or not
                         if !epollfdobj.registered_fds.contains_key(&fd) {
                             return syscall_error(
                                 Errno::ENOENT,
@@ -3522,7 +3834,19 @@ impl Cage {
                                 "fd is not registered with this epfd",
                             );
                         }
-                        //if the fd already exists, insert overwrites the prev entry
+                        // if the fd already exists, remove the entry
+                        epollfdobj.registered_fds.remove(&fd);
+                    }
+                    EPOLL_CTL_MOD => {
+                        // check if the fd that we are modifying exists or not
+                        if !epollfdobj.registered_fds.contains_key(&fd) {
+                            return syscall_error(
+                                Errno::ENOENT,
+                                "epoll ctl",
+                                "fd is not registered with this epfd",
+                            );
+                        }
+                        // if the fd already exists, insert overwrites the prev entry
                         epollfdobj.registered_fds.insert(
                             fd,
                             EpollEvent {
@@ -3532,6 +3856,7 @@ impl Cage {
                         );
                     }
                     EPOLL_CTL_ADD => {
+                        //check if the fd that we are modifying exists or not
                         if epollfdobj.registered_fds.contains_key(&fd) {
                             return syscall_error(
                                 Errno::EEXIST,
@@ -3539,6 +3864,7 @@ impl Cage {
                                 "fd is already registered",
                             );
                         }
+                        // add the fd and events
                         epollfdobj.registered_fds.insert(
                             fd,
                             EpollEvent {
@@ -3552,22 +3878,63 @@ impl Cage {
                     }
                 }
             } else {
+                // epfd is not epoll object
                 return syscall_error(
-                    Errno::EBADF,
+                    Errno::EINVAL,
                     "epoll ctl",
-                    "provided fd is not a valid file descriptor",
+                    "provided epoll fd is not a valid epoll file descriptor",
                 );
             }
         } else {
+            // epfd is not a valid file descriptor
             return syscall_error(
                 Errno::EBADF,
                 "epoll ctl",
-                "provided epoll fd is not a valid epoll file descriptor",
+                "provided fd is not a valid file descriptor",
             );
         }
         return 0;
     }
 
+    /// ## ------------------EPOLL_WAIT SYSCALL------------------
+    /// ### Description
+    /// The epoll_wait_syscall waits for events on the epoll instance
+    /// referred to by the file descriptor epfd. The buffer pointed to by events
+    /// is used to return information from the ready list about file descriptors
+    /// in the interest list that have some events available.  Up to maxevents
+    /// are returned by epoll_wait_syscall(). The maxevents argument must be
+    /// greater than zero.
+
+    /// ### Function Arguments
+    /// The `epoll_wait_syscall()` receives four arguments:
+    /// * `epfd` - the epoll file descriptor on which the action is to be
+    ///   performed
+    /// * `events` - The buffer of array of EpollEvent used to store returned
+    ///   information from the ready list about file descriptors in the interest
+    ///   list that have some events available
+    /// * `maxevents` - maximum number of returned events. The maxevents
+    ///   argument must be greater than zero.
+    /// * `timeout` - The timeout argument is a RustDuration structure that
+    ///   specifies the interval that epoll_wait_syscall should block waiting
+    ///   for a file descriptor to become ready.
+
+    /// ### Returns
+    /// On success, epoll_wait_syscall returns the number of file descriptors
+    /// ready for the requested I/O operation, or zero if no file descriptor
+    /// became ready when timeout expires
+    ///
+    /// ### Errors
+    /// * EBADF - epfd is not a valid file descriptor.
+    /// * EINTR - The call was interrupted by a signal handler before either (1)
+    ///   any of the requested events occurred or (2) the timeout expired
+    /// * EINVAL - epfd is not an epoll file descriptor, or maxevents is less
+    ///   than or equal to zero.
+    ///
+    /// ### Panics
+    /// * when maxevents is larger than the size of events, index_out_of_bounds
+    ///   panic may occur
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/epoll_wait.2.html
     pub fn epoll_wait_syscall(
         &self,
         epfd: i32,
@@ -3575,20 +3942,44 @@ impl Cage {
         maxevents: i32,
         timeout: Option<interface::RustDuration>,
     ) -> i32 {
+        // current implementation of epoll is still based on poll_syscall,
+        // we are essentially transforming the epoll input to poll input then
+        // feeding into poll_syscall, and transforming the poll_syscall output
+        // back to epoll result. Such method gives several issues:
+        // 1. epoll is supposed to support a brand new mode called edge-triggered
+        // mode, which only considers a fd to be ready only when new changes are made
+        // to the fd. Currently, we do not support this feature
+        // 2. several flags, such as EPOLLRDHUP, EPOLLERR, etc. are not supported
+        // since poll_syscall currently does not support these flags, so epoll_syscall
+        // that relies on poll_syscall, as a consequence, does not support them
+
+        // first check the fds are within the valid range
+        if epfd < 0 || epfd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "epoll wait",
+                "provided epoll fd is not a valid file descriptor",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(epfd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
+            // check if epfd is a valid Epoll object
             if let Epoll(epollfdobj) = filedesc_enum {
-                if maxevents < 0 {
+                // maxevents should be larger than 0
+                if maxevents <= 0 {
                     return syscall_error(
                         Errno::EINVAL,
                         "epoll wait",
                         "max events argument is not a positive number",
                     );
                 }
+                // transform epoll instance into poll instance
                 let mut poll_fds_vec: Vec<PollStruct> = vec![];
                 let mut rm_fds_vec: Vec<i32> = vec![];
-                let mut num_events: usize = 0;
+                // iterate through each registered fds
                 for set in epollfdobj.registered_fds.iter() {
                     let (&key, &value) = set.pair();
 
@@ -3600,62 +3991,85 @@ impl Cage {
                         continue;
                     }
 
+                    // get the events to monitor
                     let events = value.events;
                     let mut structpoll = PollStruct {
                         fd: key,
                         events: 0,
                         revents: 0,
                     };
+                    // check for each supported event
+                    // EPOLLIN: if the fd is ready to read
                     if events & EPOLLIN as u32 > 0 {
                         structpoll.events |= POLLIN;
                     }
+                    // EPOLLOUT: if the fd is ready to write
                     if events & EPOLLOUT as u32 > 0 {
                         structpoll.events |= POLLOUT;
                     }
-                    if events & EPOLLERR as u32 > 0 {
-                        structpoll.events |= POLLERR;
+                    // EPOLLPRI: if the fd has any exception?
+                    if events & EPOLLPRI as u32 > 0 {
+                        structpoll.events |= POLLPRI;
                     }
+                    // now PollStruct is constructed, push it to the vector
                     poll_fds_vec.push(structpoll);
-                    num_events += 1;
                 }
 
                 for fd in rm_fds_vec.iter() {
                     epollfdobj.registered_fds.remove(fd);
                 } // remove closed fds
 
+                // call poll_syscall
                 let poll_fds_slice = &mut poll_fds_vec[..];
                 let pollret = Self::poll_syscall(&self, poll_fds_slice, timeout);
                 if pollret < 0 {
+                    // in case of error, return the error
                     return pollret;
                 }
+                // the counter is used for making sure the number of returned ready fds
+                // is smaller than or equal to maxevents
                 let mut count = 0;
-                let end_idx: usize = interface::rust_min(num_events, maxevents as usize);
-                for result in poll_fds_slice[..end_idx].iter() {
+                for result in poll_fds_slice.iter() {
+                    // transform the poll result into epoll result
+                    // poll_event is used for marking if the fd is ready for something
+
+                    // events are requested events for poll
+                    // revents are the returned events and all results are stored here
                     let mut poll_event = false;
                     let mut event = EpollEvent {
                         events: 0,
                         fd: epollfdobj.registered_fds.get(&result.fd).unwrap().fd,
                     };
+                    // check for POLLIN
                     if result.revents & POLLIN > 0 {
                         event.events |= EPOLLIN as u32;
                         poll_event = true;
                     }
+                    // check for POLLOUT
                     if result.revents & POLLOUT > 0 {
                         event.events |= EPOLLOUT as u32;
                         poll_event = true;
                     }
-                    if result.revents & POLLERR > 0 {
-                        event.events |= EPOLLERR as u32;
+                    // check for POLLPRI
+                    if result.revents & POLLPRI > 0 {
+                        event.events |= EPOLLPRI as u32;
                         poll_event = true;
                     }
 
+                    // if the fd is ready for something
+                    // add it to the return array
                     if poll_event {
                         events[count] = event;
                         count += 1;
+                        // if already reached maxevents, break
+                        if count >= maxevents as usize {
+                            break;
+                        }
                     }
                 }
                 return count as i32;
             } else {
+                // the fd is not an epoll object
                 return syscall_error(
                     Errno::EINVAL,
                     "epoll wait",
@@ -3663,6 +4077,7 @@ impl Cage {
                 );
             }
         } else {
+            // epfd is not a valid file descriptor
             return syscall_error(
                 Errno::EBADF,
                 "epoll wait",
