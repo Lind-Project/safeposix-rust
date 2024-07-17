@@ -710,13 +710,10 @@ pub mod net_tests {
         lindrustfinalize();
     }
 
-    //We try to queue more than 5 connections, as the
-    //backlog is set to 5. We expect only the first 5 queues to return
-    //with success.
-    //Currently, the 6th connection returns with EINPROGRESS, while
-    //we expect ECONNREFUSED, possibly
+    //We try to queue more than 1 connection with the
+    //backlog is set to 1. We expect both connections to return with
+    //errno set to EINPROGRESS as the sockets are non-blocking
     #[test]
-    #[ignore]
     pub fn ut_lind_net_listen_more_than_backlog() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -727,18 +724,10 @@ pub mod net_tests {
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-        let clientsockfd3 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-        let clientsockfd4 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-        let clientsockfd5 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-        let clientsockfd6 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
         assert!(serversockfd > 0);
         assert!(clientsockfd1 > 0);
         assert!(clientsockfd2 > 0);
-        assert!(clientsockfd3 > 0);
-        assert!(clientsockfd4 > 0);
-        assert!(clientsockfd5 > 0);
-        assert!(clientsockfd6 > 0);
         let port: u16 = generate_random_port();
         //binding to a socket
         let sockaddr = interface::SockaddrV4 {
@@ -751,41 +740,33 @@ pub mod net_tests {
         };
         let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
-        assert_eq!(cage.listen_syscall(serversockfd, 5), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 1), 0);
 
-        interface::sleep(interface::RustDuration::from_millis(100));
-        assert_eq!(
-            cage.connect_syscall(clientsockfd1, &socket),
-            -(Errno::EINPROGRESS as i32)
-        );
-        assert_eq!(
-            cage.connect_syscall(clientsockfd2, &socket),
-            -(Errno::EINPROGRESS as i32)
-        );
-        assert_eq!(
-            cage.connect_syscall(clientsockfd3, &socket),
-            -(Errno::EINPROGRESS as i32)
-        );
-        assert_eq!(
-            cage.connect_syscall(clientsockfd4, &socket),
-            -(Errno::EINPROGRESS as i32)
-        );
-        assert_eq!(
-            cage.connect_syscall(clientsockfd5, &socket),
-            -(Errno::EINPROGRESS as i32)
-        );
-        assert_eq!(
-            cage.connect_syscall(clientsockfd6, &socket),
-            -(Errno::ECONNREFUSED as i32)
-        );
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+
+            assert_eq!(
+                cage2.connect_syscall(clientsockfd1, &socket),
+                -(Errno::EINPROGRESS as i32)
+            );
+
+            interface::sleep(interface::RustDuration::from_millis(100));
+
+            assert_eq!(
+                cage2.connect_syscall(clientsockfd2, &socket),
+                -(Errno::EINPROGRESS as i32)
+            );
+
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
 
         assert_eq!(cage.close_syscall(serversockfd), 0);
-        assert_eq!(cage.close_syscall(clientsockfd1), 0);
-        assert_eq!(cage.close_syscall(clientsockfd2), 0);
-        assert_eq!(cage.close_syscall(clientsockfd3), 0);
-        assert_eq!(cage.close_syscall(clientsockfd4), 0);
-        assert_eq!(cage.close_syscall(clientsockfd5), 0);
-        assert_eq!(cage.close_syscall(clientsockfd6), 0);
+
+        thread.join().unwrap();
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
