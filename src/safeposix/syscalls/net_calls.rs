@@ -3152,7 +3152,8 @@ impl Cage {
                         "the socket is not connected",
                     );
                 }
-                // we just return the remoteaddr stored in sockhandle
+                // remoteaddr stores the value we want so we just return the remoteaddr stored
+                // in sockhandle
                 *ret_addr = sockhandle.remoteaddr.unwrap();
                 return 0;
             } else {
@@ -3176,7 +3177,8 @@ impl Cage {
     /// ## ------------------GETSOCKNAME SYSCALL------------------
     /// ### Description
     /// The `getsockname_syscall()` returns the current address to which the
-    /// socket fd is bound, in the buffer pointed to by ret_addr.
+    /// socket fd is bound, in the buffer pointed to by ret_addr. If the socket
+    /// hasn't bound to any address, it returns an empty address.
 
     /// ### Function Arguments
     /// The `getsockname_syscall()` receives two arguments:
@@ -3215,6 +3217,8 @@ impl Cage {
                 // get the read lock of socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // each socket type has different structure
+                // so we must handle them seperately
                 if sockhandle.domain == AF_UNIX {
                     // in case of AF_UNIX socket
                     if sockhandle.localaddr == None {
@@ -3233,8 +3237,8 @@ impl Cage {
                 } else {
                     // in case of AF_INET/AF_INET6
                     if sockhandle.localaddr == None {
-                        // for ipv4, sets the address to 0.0.0.0 if the address is not initialized
-                        // yet for ipv6, sets the address to 0:0:0:0:0:0:0:0
+                        // for ipv4, set the address to 0.0.0.0 if the address is not initialized
+                        // yet for ipv6, set the address to 0:0:0:0:0:0:0:0
                         // (::) if the address is not initialized yet
                         // setting the family as well based on the domain
                         let addr = match sockhandle.domain {
@@ -3276,7 +3280,7 @@ impl Cage {
     /// ## ------------------GETHOSTNAME SYSCALL------------------
     /// ### Description
     /// The `gethostname_syscall()` returns the null-terminated hostname in the
-    /// character array name, which has length bytes.  If the null-terminated
+    /// address_ptr, which has length bytes.  If the null-terminated
     /// hostname is too large to fit, then the name is truncated, and no error
     /// is returned
 
