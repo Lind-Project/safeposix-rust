@@ -1152,6 +1152,9 @@ impl Cage {
     ///
     /// `stat_syscall` retrieves file information for the file specified by
     /// `path` and populates the provided `statbuf` with this information.
+    /// Although no file permissions are required to perform the call, execute
+    /// (search) permission is required on all of the directories in
+    /// pathname that lead to the file.
     ///
     /// ### Arguments
     ///
@@ -1217,7 +1220,8 @@ impl Cage {
     }
 
     // helper function to populate information of generic inode objects (for example
-    // a file) into the statbuf
+    // a file) into the statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1230,7 +1234,8 @@ impl Cage {
     }
 
     // helper function to populate information of socket inode object into the
-    // statbuf
+    // statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper_sock(inodeobj: &SocketInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1243,7 +1248,8 @@ impl Cage {
     }
 
     // helper function to populate information of directory inode object into the
-    // statbuf
+    // statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper_dir(inodeobj: &DirectoryInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1256,7 +1262,8 @@ impl Cage {
     }
 
     // helper function to populate information of device inode object into the
-    // statbuf
+    // statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper_chr_file(inodeobj: &DeviceInode, statbuf: &mut StatData) {
         statbuf.st_dev = 5;
         statbuf.st_mode = inodeobj.mode;
@@ -1268,7 +1275,7 @@ impl Cage {
         statbuf.st_size = inodeobj.size;
     }
 
-    //Streams and pipes don't have associated inodes so we populate them from
+    // Streams and pipes don't have associated inodes so we populate them from
     // mostly dummy information
     fn _stat_alt_helper(&self, statbuf: &mut StatData, inodenum: usize) {
         statbuf.st_dev = FS_METADATA.dev_id;

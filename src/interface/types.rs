@@ -30,7 +30,7 @@ pub struct FSData {
 //redefining the StatData struct in this file so that we maintain flow of
 // program derive eq attributes for testing whether the structs equal other
 // statdata structs from stat/fstat
-#[derive(Eq, PartialEq, Default)]
+#[derive(Eq, PartialEq, Default, Debug)]
 #[repr(C)]
 pub struct StatData {
     pub st_dev: u64,

@@ -50,6 +50,8 @@ pub enum Inode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct GenericInode {
     pub size: usize,
     pub uid: u32,
@@ -66,6 +68,8 @@ pub struct GenericInode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct DeviceInode {
     pub size: usize,
     pub uid: u32,
@@ -83,6 +87,8 @@ pub struct DeviceInode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct SocketInode {
     pub size: usize,
     pub uid: u32,
@@ -97,6 +103,8 @@ pub struct SocketInode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct DirectoryInode {
     pub size: usize,
     pub uid: u32,

@@ -4038,31 +4038,46 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_shmget_syscall(){
+    pub fn ut_lind_fs_shmget_syscall() {
         // acquire locks and start env cleanup
         let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1); 
+        let cage = interface::cagetable_getref(1);
 
         let key = 33123;
         // Get shmid of a memory segment / create a new one if it doesn't exist
-        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);       
-        assert_eq!(shmid,4); 
+        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);
+        assert_eq!(shmid, 4);
 
         // Check error upon asking for a valid key and passing the IPC_CREAT and IPC_EXCL flag
-        assert_eq!(cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),-(Errno::EEXIST as i32 ));
+        assert_eq!(
+            cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),
+            -(Errno::EEXIST as i32)
+        );
 
-        // Check error when passing IPC_CREAT flag as the key 
-        assert_eq!(cage.shmget_syscall(IPC_PRIVATE,1024,IPC_PRIVATE),-(Errno::ENOENT as i32));
+        // Check error when passing IPC_CREAT flag as the key
+        assert_eq!(
+            cage.shmget_syscall(IPC_PRIVATE, 1024, IPC_PRIVATE),
+            -(Errno::ENOENT as i32)
+        );
 
-        // Check if the function returns a correct shmid upon asking with a key that we know exists 
-        assert_eq!(cage.shmget_syscall(key, 1024,0666),shmid);
+        // Check if the function returns a correct shmid upon asking with a key that we know exists
+        assert_eq!(cage.shmget_syscall(key, 1024, 0666), shmid);
 
         // Check if the function returns the correct error when we don't pass IPC_CREAT for a key that doesn't exist
-        assert_eq!(cage.shmget_syscall(123456, 1024, 0),-(Errno::ENOENT as i32));
+        assert_eq!(
+            cage.shmget_syscall(123456, 1024, 0),
+            -(Errno::ENOENT as i32)
+        );
 
         // Check if the size error is returned correctly
-        assert_eq!(cage.shmget_syscall(123456, (SHMMAX + 10 )as usize, IPC_CREAT),-(Errno::EINVAL as i32));
-        assert_eq!(cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),-(Errno::EINVAL as i32));
+        assert_eq!(
+            cage.shmget_syscall(123456, (SHMMAX + 10) as usize, IPC_CREAT),
+            -(Errno::EINVAL as i32)
+        );
+        assert_eq!(
+            cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),
+            -(Errno::EINVAL as i32)
+        );
 
         lindrustfinalize();
     }
@@ -4070,7 +4085,6 @@ pub mod fs_tests {
     #[test]
     pub fn ut_lind_fs_lseek_on_file() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -4393,5 +4407,63 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
+    }
+    
+    pub fn ut_lind_fs_stat_common_paths() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let mut statdata = StatData::default();
+
+        fn normpath(path: String, _: &MockFSMetadata) -> std::path::PathBuf {
+            std::path::PathBuf::from(path)
+        }
+
+        fn convpath(path: &str) -> String {
+            path.to_string()
+        }
+
+        fn metawalk(_: &std::path::Path) -> Option<u64> {
+            Some(1) // Always returns inode number 1 for simplicity
+        }
+
+        // test out whether an error is output for a non existent file path
+        // (ENOENT[-2])
+        assert_eq!(
+            cage.stat_syscall("non_existent_file_path", &mut statdata),
+            syscall_error(Errno::ENOENT, "stat", "test_failure")
+        );
+
+        cage.stat_syscall("/", &mut statdata);
+
+        // StatData {
+        //     st_dev: 20,
+        //     st_ino: 1,
+        //     st_mode: 16895,
+        //     st_nlink: 5,
+        //     st_uid: 1000,
+        //     st_gid: 1000,
+        //     st_rdev: 0,
+        //     st_size: 0,
+        //     st_blksize: 0,
+        //     st_blocks: 0,
+        //     st_atim: (
+        //         0,
+        //         0,
+        //     ),
+        //     st_mtim: (
+        //         0,
+        //         0,
+        //     ),
+        //     st_ctim: (
+        //         0,
+        //         0,
+        //     ),
+        // }
+        //
+        println!("{:#?}", statdata);
+        return;
     }
 }
