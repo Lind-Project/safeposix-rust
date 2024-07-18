@@ -2047,10 +2047,10 @@ impl Cage {
     /// ## ------------------SHUTDOWN SYSCALL------------------
     /// ### Description
     /// The `netshutdown_syscall()` call causes all or part of a full-duplex
-    /// connection on the socket associated with fd to be shut down. If how is
-    /// SHUT_RD, further receptions will be disallowed.  If how is SHUT_WR,
-    /// further transmissions will be disallowed.  If how is SHUT_RDWR, further
-    /// receptions and transmissions will be disallowed.
+    /// connection on the socket associated with fd to be shut down. If "how" is
+    /// SHUT_RD, further receptions will be disallowed.  If "how" is SHUT_WR,
+    /// further transmissions will be disallowed.  If "how" is SHUT_RDWR,
+    /// further receptions and transmissions will be disallowed.
     ///
     /// ### Function Arguments
     /// The `netshutdown_syscall()` receives two arguments:
@@ -2066,7 +2066,7 @@ impl Cage {
     ///
     /// ### Errors
     /// * EBADF - An invalid file descriptor was given in one of the sets
-    /// * EINVAL - An invalid value was specified in how
+    /// * EINVAL - An invalid value was specified in "how"
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
     /// * ENOTCONN - The specified socket is not connected.
     ///
