@@ -1446,6 +1446,7 @@ pub mod net_tests {
     }
 
     #[test]
+    //INET Sockets
     pub fn ut_lind_net_recvfrom() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -1626,6 +1627,214 @@ pub mod net_tests {
 
         //connect to the server
         assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+
+        //send the data with delays so that the server can process the information
+        // cleanly
+        assert_eq!(
+            cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
+            100
+        );
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        assert_eq!(
+            cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
+            100
+        );
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        assert_eq!(
+            cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(100)), 100, 0),
+            100
+        );
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        assert_eq!(
+            cage.send_syscall(clientsockfd, str2cbuf(&"A".repeat(50)), 50, 0),
+            50
+        );
+        interface::sleep(interface::RustDuration::from_millis(100));
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    //UNIX Sockets
+    pub fn ut_lind_net_recvfrom_unix() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let serversockfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+        let clientsockfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+
+        //making sure that the assigned fd's are valid
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+
+        //binding to a socket
+        let serversockaddr_unix =
+            interface::new_sockaddr_unix(AF_UNIX as u16, "server_select".as_bytes());
+        let serversocket_unix = interface::GenSockaddr::Unix(serversockaddr_unix);
+
+        let clientsockaddr_unix =
+            interface::new_sockaddr_unix(AF_UNIX as u16, "client_select".as_bytes());
+        let mut clientsocket_unix = interface::GenSockaddr::Unix(clientsockaddr_unix);
+
+        assert_eq!(cage.bind_syscall(serversockfd, &serversocket_unix), 0);
+        assert_eq!(cage.bind_syscall(clientsockfd, &clientsocket_unix), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 1), 0); //we are only allowing for one client at a time
+
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        //creating a thread for the server so that the information can be sent between
+        // the two threads
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+
+            //accept connection from client
+            let mut socket2 = clientsocket_unix;
+            let sockfd = cage2.accept_syscall(serversockfd, &mut clientsocket_unix);
+
+            assert!(sockfd > 0);
+
+            //process the first test...
+            //Writing 100, then peek 100, then read 100
+            let mut buf = sizecbuf(100);
+            assert_eq!(
+                cage2.recvfrom_syscall(
+                    sockfd,
+                    buf.as_mut_ptr(),
+                    100,
+                    MSG_PEEK,
+                    &mut Some(&mut socket2)
+                ),
+                100
+            ); //peeking at the input message
+            buf = sizecbuf(100);
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 100, 0, &mut Some(&mut socket2)),
+                100
+            ); //reading the input message
+            buf = sizecbuf(100);
+
+            interface::sleep(interface::RustDuration::from_millis(200));
+
+            //process the second test...
+            //Writing 100, read 20, peek 20, read 80
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 20, 0, &mut Some(&mut socket2)),
+                20
+            );
+            buf = sizecbuf(100);
+            assert_eq!(
+                cage2.recvfrom_syscall(
+                    sockfd,
+                    buf.as_mut_ptr(),
+                    20,
+                    MSG_PEEK,
+                    &mut Some(&mut socket2)
+                ),
+                20
+            );
+            buf = sizecbuf(100);
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 80, 0, &mut Some(&mut socket2)),
+                80
+            );
+            buf = sizecbuf(100);
+
+            interface::sleep(interface::RustDuration::from_millis(200));
+
+            //process the third test...
+            //Writing 100, peek several times, read 100
+            for _ in 0..4 {
+                assert_eq!(
+                    cage2.recvfrom_syscall(
+                        sockfd,
+                        buf.as_mut_ptr(),
+                        10,
+                        MSG_PEEK,
+                        &mut Some(&mut socket2)
+                    ),
+                    10
+                );
+                buf = sizecbuf(100);
+            }
+            for _ in 0..4 {
+                assert_eq!(
+                    cage2.recvfrom_syscall(
+                        sockfd,
+                        buf.as_mut_ptr(),
+                        20,
+                        MSG_PEEK,
+                        &mut Some(&mut socket2)
+                    ),
+                    20
+                );
+                buf = sizecbuf(100);
+            }
+            for _ in 0..4 {
+                assert_eq!(
+                    cage2.recvfrom_syscall(
+                        sockfd,
+                        buf.as_mut_ptr(),
+                        30,
+                        MSG_PEEK,
+                        &mut Some(&mut socket2)
+                    ),
+                    30
+                );
+                buf = sizecbuf(100);
+            }
+            for _ in 0..4 {
+                assert_eq!(
+                    cage2.recvfrom_syscall(
+                        sockfd,
+                        buf.as_mut_ptr(),
+                        40,
+                        MSG_PEEK,
+                        &mut Some(&mut socket2)
+                    ),
+                    40
+                );
+                buf = sizecbuf(100);
+            }
+            assert_eq!(
+                cage2.recvfrom_syscall(sockfd, buf.as_mut_ptr(), 100, 0, &mut Some(&mut socket2)),
+                100
+            );
+            buf = sizecbuf(100);
+
+            interface::sleep(interface::RustDuration::from_millis(200));
+
+            //process the fourth test...
+            //Writing 50, peek 50
+            assert_eq!(
+                cage2.recvfrom_syscall(
+                    sockfd,
+                    buf.as_mut_ptr(),
+                    50,
+                    MSG_PEEK,
+                    &mut Some(&mut socket2)
+                ),
+                50
+            );
+
+            interface::sleep(interface::RustDuration::from_millis(100));
+
+            assert_eq!(cage2.close_syscall(sockfd), 0);
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        //connect to the server
+        assert_eq!(cage.connect_syscall(clientsockfd, &serversocket_unix), 0);
 
         //send the data with delays so that the server can process the information
         // cleanly
