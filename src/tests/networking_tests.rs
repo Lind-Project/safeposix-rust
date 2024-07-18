@@ -1081,18 +1081,43 @@ pub mod net_tests {
     #[test]
     #[ignore]
     pub fn ut_lind_net_poll() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // test for poll monitoring on multiple different file descriptors:
+        // 1. regular file
+        // 2. AF_INET server socket waiting for two clients
+        // 3. AF_INET server socket's connection file descriptor with clients
+        // 4. AF_UNIX server socket's connection file descriptor with a client
+        // 5. pipe
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
         let cage = interface::cagetable_getref(1);
 
+        // creating regular file's file descriptor
         let filefd = cage.open_syscall("/netpolltest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert!(filefd > 0);
 
+        // creating socket file descriptors
         let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
         let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let serversockfd_unix = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+        let clientsockfd_unix = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+
+        assert!(serversockfd > 0);
+        assert!(clientsockfd1 > 0);
+        assert!(clientsockfd2 > 0);
+        assert!(serversockfd_unix > 0);
+        assert!(clientsockfd_unix > 0);
+
+        // creating a pipe
+        let mut pipefds = PipeArray {
+            readfd: -1,
+            writefd: -1,
+        };
+        assert_eq!(cage.pipe_syscall(&mut pipefds), 0);
+
+        // create a INET address
         let port: u16 = generate_random_port();
 
         let sockaddr = interface::SockaddrV4 {
@@ -1104,177 +1129,319 @@ pub mod net_tests {
             padding: 0,
         };
         let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+
+        //binding to a socket
+        let serversockaddr_unix =
+            interface::new_sockaddr_unix(AF_UNIX as u16, "server_poll".as_bytes());
+        let serversocket_unix = interface::GenSockaddr::Unix(serversockaddr_unix);
+
+        let clientsockaddr_unix =
+            interface::new_sockaddr_unix(AF_UNIX as u16, "client_poll".as_bytes());
+        let clientsocket_unix = interface::GenSockaddr::Unix(clientsockaddr_unix);
+
+        assert_eq!(cage.bind_syscall(serversockfd_unix, &serversocket_unix), 0);
+        assert_eq!(cage.bind_syscall(clientsockfd_unix, &clientsocket_unix), 0);
+        assert_eq!(cage.listen_syscall(serversockfd_unix, 1), 0);
+
         assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
 
+        // create a PollStruct for each fd
         let serverpoll = interface::PollStruct {
             fd: serversockfd,
             events: POLLIN,
             revents: 0,
         };
-        let filepoll = interface::PollStruct {
-            fd: filefd,
+
+        let serverunixpoll = interface::PollStruct {
+            fd: serversockfd_unix,
             events: POLLIN,
             revents: 0,
         };
-        let mut polled = vec![serverpoll, filepoll];
 
-        cage.fork_syscall(2);
-        //client 1 connects to the server to send and recv data...
-        let thread1 = interface::helper_thread(move || {
-            interface::sleep(interface::RustDuration::from_millis(30));
+        let filepoll = interface::PollStruct {
+            fd: filefd,
+            events: POLLIN | POLLOUT,
+            revents: 0,
+        };
+
+        let pipepoll = interface::PollStruct {
+            fd: pipefds.readfd,
+            events: POLLIN,
+            revents: 0,
+        };
+
+        let mut polled = vec![filepoll, serverpoll, serverunixpoll, pipepoll];
+
+        assert_eq!(cage.fork_syscall(2), 0); // used for AF_INET thread client 1
+        assert_eq!(cage.fork_syscall(3), 0); // used for AF_INET thread client 2
+        assert_eq!(cage.fork_syscall(4), 0); // used for AF_UNIX thread client
+
+        assert_eq!(cage.fork_syscall(5), 0); // used for pipe thread
+
+        assert_eq!(cage.close_syscall(clientsockfd1), 0);
+        assert_eq!(cage.close_syscall(clientsockfd2), 0);
+        assert_eq!(cage.close_syscall(clientsockfd_unix), 0);
+
+        // this barrier have to ensure that the clients finish the connect before we do
+        // the poll due to an unfixed bug (`close` could block when other
+        // thread/cage is `accept`)
+        let barrier = Arc::new(Barrier::new(3));
+        let barrier_clone1 = barrier.clone();
+        let barrier_clone2 = barrier.clone();
+
+        // this barrier is used for control the flow the pipe
+        let barrier_pipe = Arc::new(Barrier::new(2));
+        let barrier_pipe_clone = barrier_pipe.clone();
+
+        // due to an unfixed bug in ref counter of AF_UNIX socket pipe
+        // have to make sure all the threads exits only after the AF_UNIX test finished
+        let barrier_exit = Arc::new(Barrier::new(4));
+        let barrier_exit_clone1 = barrier_exit.clone();
+        let barrier_exit_clone2 = barrier_exit.clone();
+        let barrier_exit_clone3 = barrier_exit.clone();
+
+        // client 1 connects to the server to send and recv data
+        let threadclient1 = interface::helper_thread(move || {
             let cage2 = interface::cagetable_getref(2);
-
-            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
-            assert_eq!(
-                cage2.send_syscall(clientsockfd1, str2cbuf(&"test"), 4, 0),
-                4
-            );
-            //giving it a longer pause time to that it can process all of the data that it
-            // is recieving
-            interface::sleep(interface::RustDuration::from_millis(100));
-
             assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.close_syscall(clientsockfd2), 0);
+
+            // connect to server
+            assert_eq!(cage2.connect_syscall(clientsockfd1, &socket), 0);
+            barrier_clone1.wait();
+
+            // send message to server
+            assert_eq!(cage2.send_syscall(clientsockfd1, str2cbuf("test"), 4, 0), 4);
+
+            interface::sleep(interface::RustDuration::from_millis(1));
+
+            // receive message from server
+            let mut buf = sizecbuf(4);
+            assert_eq!(cage2.recv_syscall(clientsockfd1, buf.as_mut_ptr(), 4, 0), 4);
+            assert_eq!(cbuf2str(&buf), "test");
+
+            assert_eq!(cage2.close_syscall(clientsockfd1), 0);
+            barrier_exit_clone1.wait();
             cage2.exit_syscall(EXIT_SUCCESS);
         });
 
-        cage.fork_syscall(3);
-        //client 2 connects to the server to send and recv data...
-        let thread2 = interface::helper_thread(move || {
-            //give it a longer time so that it can sufficiently process all of the data
-            interface::sleep(interface::RustDuration::from_millis(45));
+        // client 2 connects to the server to send and recv data
+        let threadclient2 = interface::helper_thread(move || {
             let cage3 = interface::cagetable_getref(3);
-
-            assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
-            assert_eq!(
-                cage3.send_syscall(clientsockfd2, str2cbuf(&"test"), 4, 0),
-                4
-            );
-
-            interface::sleep(interface::RustDuration::from_millis(100));
-
             assert_eq!(cage3.close_syscall(serversockfd), 0);
+            assert_eq!(cage3.close_syscall(clientsockfd1), 0);
+
+            // connect to server
+            assert_eq!(cage3.connect_syscall(clientsockfd2, &socket), 0);
+            barrier_clone2.wait();
+
+            // send message to server
+            assert_eq!(cage3.send_syscall(clientsockfd2, str2cbuf("test"), 4, 0), 4);
+
+            interface::sleep(interface::RustDuration::from_millis(1));
+
+            // receive message from server
+            let mut buf = sizecbuf(4);
+            let mut result: i32;
+            loop {
+                result = cage3.recv_syscall(clientsockfd2, buf.as_mut_ptr(), 4, 0);
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
+                }
+            }
+            assert_eq!(result, 4);
+            assert_eq!(cbuf2str(&buf), "test");
+
+            assert_eq!(cage3.close_syscall(clientsockfd2), 0);
+            barrier_exit_clone2.wait();
             cage3.exit_syscall(EXIT_SUCCESS);
         });
 
-        //acting as the server and processing the request
-        let thread3 = interface::helper_thread(move || {
-            let mut infds: Vec<i32>;
-            let mut outfds: Vec<i32>;
-            for _counter in 0..600 {
-                //start a while true loop for processing requests
-                let pollretvalue = cage.poll_syscall(
-                    &mut polled.as_mut_slice(),
-                    Some(interface::RustDuration::ZERO),
-                );
-                assert!(pollretvalue >= 0);
+        let threadclient_unix = interface::helper_thread(move || {
+            let cage4 = interface::cagetable_getref(4);
+            assert_eq!(cage4.close_syscall(serversockfd_unix), 0);
+            assert_eq!(cage4.close_syscall(serversockfd), 0);
 
-                infds = vec![];
-                outfds = vec![];
+            // connect to server
+            assert_eq!(
+                cage4.connect_syscall(clientsockfd_unix, &serversocket_unix),
+                0
+            );
 
-                for polledfile in &mut polled {
-                    if polledfile.revents & POLLIN != 0 {
-                        infds.push(polledfile.fd);
-                    }
-                    if polledfile.revents & POLLOUT != 0 {
-                        outfds.push(polledfile.fd);
-                    }
+            // send message to server
+            assert_eq!(
+                cage4.send_syscall(clientsockfd_unix, str2cbuf("test"), 4, 0),
+                4
+            );
+
+            interface::sleep(interface::RustDuration::from_millis(1));
+
+            // recieve message from server
+            let mut buf = sizecbuf(4);
+            let mut result: i32;
+            loop {
+                result = cage4.recv_syscall(clientsockfd_unix, buf.as_mut_ptr(), 4, 0);
+                if result != -libc::EINTR {
+                    break; // if the error was EINTR, retry the syscall
                 }
+            }
+            assert_eq!(result, 4);
+            assert_eq!(cbuf2str(&buf), "test");
 
-                //check for any activity in the input sockets
-                for sockfd in infds {
-                    //If the socket returned was listerner socket, then there's a new connection
-                    //so we accept it, and put the client socket in the list of inputs.
-                    if sockfd == serversockfd {
-                        let port: u16 = generate_random_port();
-                        let sockaddr = interface::SockaddrV4 {
-                            sin_family: AF_INET as u16,
-                            sin_port: port.to_be(),
-                            sin_addr: interface::V4Addr {
-                                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
-                            },
-                            padding: 0,
-                        };
-                        let mut addr = interface::GenSockaddr::V4(sockaddr); //127.0.0.1 from bytes above
+            assert_eq!(cage4.close_syscall(clientsockfd_unix), 0);
+            cage4.exit_syscall(EXIT_SUCCESS);
+        });
 
-                        let newsockfd = cage.accept_syscall(sockfd, &mut addr);
-                        polled.push(interface::PollStruct {
-                            fd: newsockfd,
-                            events: POLLIN,
+        let thread_pipe = interface::helper_thread(move || {
+            let cage5 = interface::cagetable_getref(5);
+
+            interface::sleep(interface::RustDuration::from_millis(1));
+            // send message to pipe
+            assert_eq!(cage5.write_syscall(pipefds.writefd, str2cbuf("test"), 4), 4);
+
+            let mut buf = sizecbuf(5);
+            // wait until peer read the message
+            barrier_pipe_clone.wait();
+
+            // read the message sent by peer
+            assert_eq!(cage5.read_syscall(pipefds.readfd, buf.as_mut_ptr(), 5), 5);
+            assert_eq!(cbuf2str(&buf), "test2");
+
+            barrier_exit_clone3.wait();
+            cage5.exit_syscall(EXIT_SUCCESS);
+        });
+
+        barrier.wait();
+        // acting as the server and processing the request
+        // Server loop to handle connections and I/O
+        // Check for any activity in any of the Input sockets
+        for counter in 0..600 {
+            let poll_result = cage.poll_syscall(&mut polled.as_mut_slice(), None);
+            assert!(poll_result >= 0); // check for error
+
+            // clearfds stores the fds that should be removed from polled at the end of the
+            // iteration
+            let mut clearfds = vec![];
+            // addfds stores the fds that should be added to polled at the end of the
+            // iteration
+            let mut addfds = vec![];
+
+            // check for readfds
+            for poll in &mut polled {
+                // If the socket returned was listerner socket, then there's a new conn., so we
+                // accept it, and put the client socket in the list of Inputs.
+                if poll.fd == serversockfd {
+                    if poll.revents & POLLIN != 0 {
+                        let mut sockgarbage =
+                            interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                        let sockfd = cage.accept_syscall(poll.fd as i32, &mut sockgarbage);
+                        assert!(sockfd > 0);
+                        // new connection is estalished, add it to readfds and writefds
+
+                        addfds.push(interface::PollStruct {
+                            fd: sockfd,
+                            events: POLLIN | POLLOUT,
                             revents: 0,
-                        })
-                    } else if sockfd == filefd {
-                        //Write to a file...
-                        assert_eq!(cage.write_syscall(sockfd, str2cbuf("test"), 4), 4);
-                        assert_eq!(cage.lseek_syscall(sockfd, 0, SEEK_SET), 0);
-                        //Once the write is successful into a file, modify the file descriptor so
-                        // that its ready for reading out of the file.
-                        for polledfile in &mut polled {
-                            if polledfile.fd == sockfd {
-                                polledfile.events = POLLOUT;
-                                break;
-                            }
-                        }
-                    } else {
+                        });
+                    }
+                } else if poll.fd == filefd {
+                    // poll on regular file should always success
+                    // therefore revents should be set for filefd at the first iteration
+                    assert_eq!(counter, 0);
+                    assert_eq!(poll.revents, POLLIN | POLLOUT);
+                    // remove file fd from poll
+                    clearfds.push(filefd);
+                } else if poll.fd == serversockfd_unix {
+                    if poll.revents & POLLIN != 0 {
+                        // unix socket
+                        let mut sockgarbage = interface::GenSockaddr::Unix(
+                            interface::new_sockaddr_unix(AF_UNIX as u16, "".as_bytes()),
+                        );
+                        let sockfd = cage.accept_syscall(poll.fd as i32, &mut sockgarbage);
+                        assert!(sockfd > 0);
+                        // new connection is estalished, add it to poll
+                        addfds.push(interface::PollStruct {
+                            fd: sockfd,
+                            events: POLLIN | POLLOUT,
+                            revents: 0,
+                        });
+                    }
+                } else if poll.fd == pipefds.readfd {
+                    if poll.revents & POLLIN != 0 {
+                        // pipe
+                        let mut buf = sizecbuf(4);
+                        // read the message from peer
+                        assert_eq!(cage.read_syscall(pipefds.readfd, buf.as_mut_ptr(), 4), 4);
+                        assert_eq!(cbuf2str(&buf), "test");
+
+                        // write the message from peer
+                        assert_eq!(
+                            cage.write_syscall(pipefds.writefd, str2cbuf("test2"), 5) as usize,
+                            5
+                        );
+                        barrier_pipe.wait();
+
+                        // pipe poll test done
+                        clearfds.push(pipefds.readfd);
+                    }
+                } else {
+                    if poll.revents & POLLIN != 0 {
                         //If the socket is in established conn., then we recv the data. If there's
                         // no data, then close the client socket.
                         let mut buf = sizecbuf(4);
-                        let mut result: i32;
+                        let mut recvresult: i32;
                         loop {
-                            result = cage.recv_syscall(sockfd, buf.as_mut_ptr(), 4, 0);
-                            if result != -libc::EINTR {
-                                assert_eq!(result & !4, 0); //This must be 0 or 4 to be correct, either the socket is good for
-                                                            // recieving or it's closed
+                            // receive message from peer
+                            recvresult = cage.recv_syscall(poll.fd as i32, buf.as_mut_ptr(), 4, 0);
+                            if recvresult != -libc::EINTR {
                                 break; // if the error was EINTR, retry the
                                        // syscall
                             }
                         }
-                        if result == 4 {
-                            assert_eq!(cbuf2str(&buf), "test");
-                            //This socket is ready for writing, modify the socket descriptor to be
-                            // in read-write mode. This socket can write data out to network
-                            for polledfile in &mut polled {
-                                if polledfile.fd == sockfd {
-                                    polledfile.events = POLLOUT;
-                                    break;
-                                }
+                        if recvresult == 4 {
+                            if cbuf2str(&buf) == "test" {
+                                continue;
                             }
-                        } else {
-                            //No data means remote socket closed, hence close the client socket in
-                            // server, also remove this socket from polling.
-                            assert_eq!(cage.close_syscall(sockfd), 0);
-                            polled.retain(|x| x.fd != sockfd);
+                        } else if recvresult == -libc::ECONNRESET {
+                            // peer closed the connection
+                            println!("Connection reset by peer on socket {}", poll.fd);
+                            assert_eq!(cage.close_syscall(poll.fd as i32), 0);
+                            clearfds.push(poll.fd);
                         }
                     }
-                }
-
-                for sockfd in outfds {
-                    if sockfd == filefd {
-                        let mut read_buf1 = sizecbuf(4);
-                        assert_eq!(cage.read_syscall(sockfd, read_buf1.as_mut_ptr(), 4), 4);
-                        assert_eq!(cbuf2str(&read_buf1), "test");
-                        //test for file finished, remove from polling.
-                        polled.retain(|x| x.fd != sockfd);
-                    } else {
-                        //Data is sent out of this socket, it's no longer ready for writing, modify
-                        // it only read mode.
-                        assert_eq!(cage.send_syscall(sockfd, str2cbuf(&"test"), 4, 0), 4);
-                        for polledfile in &mut polled {
-                            if polledfile.fd == sockfd {
-                                polledfile.events = POLLIN;
-                            }
-                        }
+                    if poll.revents & POLLOUT != 0 {
+                        // Data is sent out this socket, it's no longer ready for writing
+                        // clear the POLLOUT from events
+                        assert_eq!(cage.send_syscall(poll.fd as i32, str2cbuf("test"), 4, 0), 4);
+                        poll.events &= !POLLOUT;
                     }
                 }
             }
-            assert_eq!(cage.close_syscall(serversockfd), 0);
-            assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        });
+            // clear fds
+            polled.retain(|x| {
+                for fd in &clearfds {
+                    if *fd == x.fd {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            // add new fds
+            polled.extend(addfds);
+        }
+        assert_eq!(cage.close_syscall(serversockfd), 0);
+        assert_eq!(cage.close_syscall(serversockfd_unix), 0);
 
-        thread1.join().unwrap();
-        thread2.join().unwrap();
-        thread3.join().unwrap();
+        // let threads exit
+        barrier_exit.wait();
 
+        threadclient1.join().unwrap();
+        threadclient2.join().unwrap();
+        threadclient_unix.join().unwrap();
+        thread_pipe.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
 
