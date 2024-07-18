@@ -4982,9 +4982,11 @@ impl Cage {
     /// ### Description
     /// 
     /// `shmget_syscall` returns the shared memory segment identifier associated with a particular `key`
-    /// If a key doesn't exist or equals `IPC_PRIVATE`, shmget creates a new
-    /// memory segment and attaches it to the key, however we only create a new memory segment if the key 
-    /// doesn't exist, and return an error if key equals `IPC_PRIVATE`
+    /// If a key doesn't exist, shmget creates a new memory segment and attaches it to the key.
+    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which 
+    /// is not associated with a key during this syscall, 
+    /// but for our implementaion, we return an error and only create a new memory 
+    /// segment when the IPC_CREAT flag is specified in the`shmflag` argument.
     /// 
     /// ### Returns 
     /// 
@@ -4995,6 +4997,10 @@ impl Cage {
     /// `key` : An i32 value that references a memory segment
     /// `size` : Size of the memory segment to be created if key doesn't exist
     /// `shmflag` : mode flags which indicate whether to create a new key or not
+    ///  The `shmflag` is composed of the following 
+    ///  * IPC_CREAT - specify that the system call creates a new segment
+    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used 
+    ///               and the key passed has a memory segment associated with it.
     /// 
     /// ### Errors 
     /// 
@@ -5045,7 +5051,6 @@ impl Cage {
                 }
 
                 // If memory segment doesn't exist and IPC_CREAT was specified - we create a new memory segment
-
                 // Check if the size passed is a valid value
                 if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
                     return syscall_error(
