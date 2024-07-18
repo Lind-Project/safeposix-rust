@@ -3173,7 +3173,68 @@ impl Cage {
         return 0;
     }
 
+    /// ## ------------------GETSOCKOPT SYSCALL------------------
+    /// ### Description
+    /// "getsockopt_syscall()" get the option specified by the optname argument,
+    /// at the protocol level specified by the level argument for the socket
+    /// associated with the file descriptor specified by the fd argument and
+    /// store to the optval argument.
+    ///
+    /// ### Function Arguments
+    /// The `getsockopt_syscall()` receives four arguments:
+    /// * `fd` - The file descriptor to retrieve the socket option.
+    /// * `level` - the protocol level at which the option resides. To set
+    ///   options at the socket level, specify the level argument as SOL_SOCKET.
+    ///   To set options at other levels, supply the appropriate level
+    ///   identifier for the protocol controlling the option.
+    /// * `optname` - The name of the option
+    /// * `optval` - The buffer to hold the return value
+    ///
+    /// ### Returns
+    /// Upon successful completion, getsockopt_syscall() shall return 0.
+    ///
+    /// ### Errors
+    /// * EBADF - The socket argument is not a valid file descriptor.
+    /// * ENOPROTOOPT - The option is unknown at the level indicated.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getsockopt.2.html
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
+        // current sockopt syscalls have some issues in storing the option values
+        // Our current approach is to use the optname as the bit position of the option,
+        // so i-th bit of the option refers to the i-th optname. This gives some issues:
+        // we are currently using a 32-bit integer to store both the socket option and
+        // tcp option, whihc means any optname that is larger than 32 would overflow the
+        // option. Linux is doing a completely different thing from us. First,
+        // for tcp options, these option value are not just simply stored at a
+        // central place. Each option is handled seperately and may corresponds
+        // to multiple flags turning on/off. For socket options, Linux do store
+        // some options at one location (sk_flags) using the same apporach as we
+        // did. But Linux has a seperate layer of internal flags used for
+        // flags that are stored in sk_flags specifically. These internal flag values
+        // are enum type and therefore are sequential value, indicating the bit
+        // position of the option. Linux creates a mapping from user-facing
+        // socket optname (e.g. SO_KEEPALIVE) to internal flags so that
+        // optname that is not supposed to store in sk_flags does not affect the
+        // sequential order of sk_flags bit and socket optname that ought to be
+        // stored in sk_flags can be grouped efficiently. This allows Linux to
+        // support the number of socket options much larger than 32, while still
+        // able to store some boolean socket options inside sk_flags, a 32-bit integer,
+        // correctly.
+        //
+        // other issues include:
+        // 1. many of the options such as SO_SNDBUF, SO_RCVBUF, though are stored in
+        //    sockhandle, never get used anywhere
+        // 2. when we set the socket options before bind/connect, these options will not
+        //    be set with libc setsockopt since innersocket hasn’t been created yet. But
+        //    when later the innersocket is created, we did not set these options to
+        //    innersocket
+        // 3. the optval argument is not supposed to be an integer type. Optval for some
+        //    optname is a struct.
+
         // first let's check the fd range
         if fd < 0 || fd >= MAXFD {
             return syscall_error(
@@ -3188,8 +3249,8 @@ impl Cage {
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
-                // we are using an i32 to store all the options together
-                // so we are using i-th bit to store i-th option
+                // we store the options inside a 32-bit integer
+                // where i-th bits corresponds to i-th option
                 let optbit = 1 << optname;
                 let sock_tmp = sockfdobj.handle.clone();
                 let mut sockhandle = sock_tmp.write();
@@ -3249,6 +3310,7 @@ impl Cage {
                             }
                             // these options are stored inside the socket_options
                             // so we just retrieve it and set to optval
+                            // BUG: SO_LINGER is not supposed to be a boolean option
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT
                             | SO_REUSEADDR => {
                                 if sockhandle.socket_options & optbit == optbit {
@@ -3324,7 +3386,43 @@ impl Cage {
         return 0;
     }
 
+    /// ## ------------------SETSOCKOPT SYSCALL------------------
+    /// ### Description
+    /// "setsockopt_syscall()" shall set the option specified by the optname
+    /// argument, at the protocol level specified by the level argument, to the
+    /// value pointed to by the optval argument for the socket associated with
+    /// the file descriptor specified by the fd argument.
+    ///
+    /// ### Function Arguments
+    /// The `setsockopt_syscall()` receives four arguments:
+    /// * `fd` - The file descriptor to retrieve the socket option.
+    /// * `level` - the protocol level at which the option resides. To set
+    ///   options at the socket level, specify the level argument as SOL_SOCKET.
+    ///   To set options at other levels, supply the appropriate level
+    ///   identifier for the protocol controlling the option.
+    /// * `optname` - The name of the option
+    /// * `optval` - The value of the option
+    ///
+    /// ### Returns
+    /// Upon successful completion, setsockopt_syscall() shall return 0.
+    ///
+    /// ### Errors
+    /// * EBADF - The socket argument is not a valid file descriptor.
+    /// * EINVAL - The specified option is invalid at the specified socket level
+    ///   or the socket has been shut down.
+    /// * EISCONN - The socket is already connected, and a specified option
+    ///   cannot be set while the socket is connected.
+    /// * ENOPROTOOPT - The option is unknown at the level indicated.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man3/setsockopt.3p.html
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+        // there are some issues with sockopt syscalls. See comment at
+        // getsockopt_syscall for more detail
+
         // first let's check the fd range
         if fd < 0 || fd >= MAXFD {
             return syscall_error(
@@ -3334,13 +3432,14 @@ impl Cage {
             );
         }
 
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
-                //checking that we recieved SOL_SOCKET
                 match level {
                     SOL_UDP => {
+                        // we do not support SOL_UDP
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "setsockopt",
@@ -3351,22 +3450,28 @@ impl Cage {
                         // Here we check and set tcp_options
                         // Currently only support TCP_NODELAY for SOL_TCP
                         if optname == TCP_NODELAY {
+                            // we store this flag in tcp_options at the corresponding bit
                             let optbit = 1 << optname;
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
                             let mut newoptions = sockhandle.tcp_options;
-                            //now let's set this if we were told to
+                            // now let's set this if we were told to
+                            // optval should always be 1 or 0.
                             if optval != 0 {
-                                //optval should always be 1 or 0.
+                                // set the bit
                                 newoptions |= optbit;
                             } else {
+                                // clear the bit
                                 newoptions &= !optbit;
                             }
 
+                            // if the tcp option changed, we need to call underlining
+                            // setsockopt on rawfd to actually set the option with libc setsockopt
                             if newoptions != sockhandle.tcp_options {
                                 if let Some(sock) = sockhandle.innersocket.as_ref() {
                                     let sockret = sock.setsockopt(SOL_TCP, optname, optval);
                                     if sockret < 0 {
+                                        // error returned from libc setsockopt
                                         match Errno::from_discriminant(interface::get_errno()) {
                                             Ok(i) => {
                                                 return syscall_error(
@@ -3382,9 +3487,11 @@ impl Cage {
                                     }
                                 }
                             }
+                            // store the new options
                             sockhandle.tcp_options = newoptions;
                             return 0;
                         }
+                        // we do not support other TCP options yet
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "setsockopt",
@@ -3393,12 +3500,14 @@ impl Cage {
                     }
                     SOL_SOCKET => {
                         // Here we check and set socket_options
+                        // we store this flag in socket_options at the corresponding bit
                         let optbit = 1 << optname;
                         let sock_tmp = sockfdobj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
 
                         match optname {
                             SO_ACCEPTCONN | SO_TYPE | SO_SNDLOWAT | SO_RCVLOWAT => {
+                                // these socket options are read-onlly and cannot be manually set
                                 let error_string =
                                     format!("Cannot set option using setsockopt. {}", optname);
                                 return syscall_error(
@@ -3408,30 +3517,41 @@ impl Cage {
                                 );
                             }
                             SO_LINGER | SO_KEEPALIVE => {
+                                // these socket options are stored inside socket_options
+                                // so we just modify it in socket_options
+                                // optval should always be 1 or 0.
                                 if optval == 0 {
+                                    // clear the bit
                                     sockhandle.socket_options &= !optbit;
                                 } else {
-                                    //optval should always be 1 or 0.
+                                    // set the bit
                                     sockhandle.socket_options |= optbit;
                                 }
+                                // BUG: we did not pass these options to libc setsockopt
 
                                 return 0;
                             }
 
                             SO_REUSEPORT | SO_REUSEADDR => {
                                 let mut newoptions = sockhandle.socket_options;
-                                //now let's set this if we were told to
+                                // now let's set this if we were told to
+                                // optval should always be 1 or 0.
                                 if optval != 0 {
-                                    //optval should always be 1 or 0.
+                                    // set the bit
                                     newoptions |= optbit;
                                 } else {
+                                    // clear the bit
                                     newoptions &= !optbit;
                                 }
 
+                                // if the socket option changed, we need to call underlining
+                                // setsockopt on rawfd to actually set the option with libc
+                                // setsockopt
                                 if newoptions != sockhandle.socket_options {
                                     if let Some(sock) = sockhandle.innersocket.as_ref() {
                                         let sockret = sock.setsockopt(SOL_SOCKET, optname, optval);
                                         if sockret < 0 {
+                                            // error from libc setsockopt
                                             match Errno::from_discriminant(interface::get_errno()) {
                                                 Ok(i) => {
                                                     return syscall_error(
@@ -3448,10 +3568,13 @@ impl Cage {
                                     }
                                 }
 
+                                // set the new options
                                 sockhandle.socket_options = newoptions;
 
                                 return 0;
                             }
+                            // sndbuf and rcvbuf are stored in a dedicated field
+                            // so we just set it
                             SO_SNDBUF => {
                                 sockhandle.sndbuf = optval;
                                 return 0;
@@ -3460,7 +3583,7 @@ impl Cage {
                                 sockhandle.rcvbuf = optval;
                                 return 0;
                             }
-                            //should always be one -- can only handle it being 1
+                            // we do not support changing this option yet
                             SO_OOBINLINE => {
                                 if optval != 1 {
                                     return syscall_error(
@@ -3471,6 +3594,7 @@ impl Cage {
                                 }
                                 return 0;
                             }
+                            // other options are either not supported or invalid
                             _ => {
                                 return syscall_error(
                                     Errno::EOPNOTSUPP,
@@ -3481,6 +3605,7 @@ impl Cage {
                         }
                     }
                     _ => {
+                        // invalid level
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "getsockopt",
@@ -3489,6 +3614,7 @@ impl Cage {
                     }
                 }
             } else {
+                // the fd is not a socket
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockopt",
@@ -3496,6 +3622,7 @@ impl Cage {
                 );
             }
         } else {
+            // the fd is not a valid file descriptor
             return syscall_error(
                 Errno::EBADF,
                 "getsockopt",
