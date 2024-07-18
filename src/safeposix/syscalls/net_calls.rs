@@ -2200,7 +2200,7 @@ impl Cage {
         // now change the connection state for all socket types
         match how {
             SHUT_RD => {
-                if sockhandle.state == ConnState::CONNWRONLY {
+                if sockhandle.state == ConnState::CONNRDONLY {
                     // shutdown RD on socket with RDONLY state means
                     // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
@@ -2214,7 +2214,7 @@ impl Cage {
                 }
             }
             SHUT_WR => {
-                if sockhandle.state == ConnState::CONNRDONLY {
+                if sockhandle.state == ConnState::CONNWRONLY {
                     // shutdown WR on socket with WRONLY state means
                     // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
