@@ -1424,6 +1424,7 @@ impl Cage {
                             // address and port by the system, without
                             // an explicit call to the bind() function by
                             // the programmer.
+                            //This is necessary if the socket isn't assigned an address
                             let tmpdest = *dest_addr;
                             let ibindret =
                                 self._implicit_bind(&mut *sockhandle, tmpdest.get_family() as i32);
@@ -1814,6 +1815,7 @@ impl Cage {
         }
     }
 
+    //Helper function of recv_common, for recv and recvfrom syscalls
     fn recv_common_inner(
         &self,
         filedesc_enum: &mut FileDescriptor,
@@ -1823,9 +1825,13 @@ impl Cage {
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
         match &mut *filedesc_enum {
+            //Verify that the file descriptor refers to a socket
             Socket(ref mut sockfdobj) => {
+                //Grab a write guard to the socket handle
                 let sock_tmp = sockfdobj.handle.clone();
                 let mut sockhandle = sock_tmp.write();
+                //Pattern match based on the socket protocol
+                //and call the appropriate function to handle each case
                 match sockhandle.protocol {
                     IPPROTO_TCP => {
                         return self.recv_common_inner_tcp(
@@ -1847,6 +1853,8 @@ impl Cage {
                         )
                     }
 
+                    //In the case that the protocol is neither TCP nor UDP,
+                    //return with error as lind does not support it
                     _ => {
                         return syscall_error(
                             Errno::EOPNOTSUPP,
@@ -1856,6 +1864,8 @@ impl Cage {
                     }
                 }
             }
+            //If the file descriptor does not refer to a socket,
+            //return with error
             _ => {
                 return syscall_error(
                     Errno::ENOTSOCK,
@@ -1866,6 +1876,8 @@ impl Cage {
         }
     }
 
+    //Helper function of recv_common_inner, for recv and recvfrom syscalls
+    //Handles TCP sockets
     fn recv_common_inner_tcp(
         &self,
         sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>,
@@ -1875,8 +1887,13 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the
-        // state here
+        //In the case that the socket is nonblocking and the connection can not
+        //be completed immediately, the connection state of the socket will
+        //be set to INPROGRESS.
+        //It is possible that select_syscall or poll_syscall had reported
+        //the INPROGRESS TCP socket as readable. If so, we can adjust the
+        //state of the socket to CONNECTED.
+        //** In what case would this happen?? */
         if sockhandle.state == ConnState::INPROGRESS
             && sockhandle
                 .innersocket
@@ -1887,6 +1904,9 @@ impl Cage {
             sockhandle.state = ConnState::CONNECTED;
         }
 
+        //In the case that the socket is neither connected to another socket
+        //nor connected to another socket in a read-only mode, return with error
+        //as data can not be read otherwise.
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY)
         {
             return syscall_error(
@@ -1901,15 +1921,25 @@ impl Cage {
 
         //if we have peeked some data before, fill our buffer with that data before
         // moving on
+        // ** Why is this a step ?? ** //
         if !sockhandle.last_peek.is_empty() {
+            //Grab the minimum of the two values
             let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
+            //Copy the bytes from the previous peek into buf
             interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
+            //newbufptr now points to the first byte available in the buffer
+            //newbuflen reflects the number of bytes that are available in the buffer
             newbuflen -= bytecount;
             newbufptr = newbufptr.wrapping_add(bytecount);
 
             //if we're not still peeking data, consume the data we peeked from our peek
             // buffer and if the bytecount is more than the length of the peeked
             // data, then we remove the entire buffer
+            // ** What is the point of the if else statement being passed in as the
+            // parameter ?? bytecount = min(sockhandle.last_peek.len(),
+            // newbuflen) so how can bytecount be greater than
+            // sockhandle.last_peek.len() ?? Seems like it always returns
+            // bytecount regardless ** //
             if flags & MSG_PEEK == 0 {
                 let len = sockhandle.last_peek.len();
                 sockhandle
@@ -1917,34 +1947,55 @@ impl Cage {
                     .drain(..(if bytecount > len { len } else { bytecount }));
             }
 
+            //if we've filled all of the buffer with peeked data, return with success
             if newbuflen == 0 {
-                //if we've filled all of the buffer with peeked data, return
-                return bytecount as i32;
+                return bytecount as i32; //return number of bytes read into
+                                         // buff
             }
         }
 
+        //Initialize variables to indicate a pointer to the first available
+        //byte in the buff and remaining buffer length, respectively
         let bufleft = newbufptr;
         let buflenleft = newbuflen;
         let mut retval;
 
+        //The domain of the socket is UNIX
+        //lind handles UNIX communication using pipes
         if sockhandle.domain == AF_UNIX {
             // get the remote socket pipe, read from it, and return bytes read
+            //
+            //Check if the socket is non-blocking
+            //If no messages are available at the socket, the receive calls
+            //wait for a message to arrive, unless the socket is nonblocking
+            //(see fcntl(2)), in which case the value -1 is returned and errno
+            //is set to EAGAIN or EWOULDBLOCK.
             let mut nonblocking = false;
             if sockfdobj.flags & O_NONBLOCK != 0 {
                 nonblocking = true;
             }
+            //we loop here so we can cancel blocking recvs, if necessary
             loop {
+                //Grab the receive pipe from the socket to read the data
+                //into the remaining space in the buffer **
                 let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                 let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                 retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
+                //In the case of an error from reading from the receive pipe
                 if retval < 0 {
+                    //** This step seems weird
+                    // Even if the call fails we return with the previous peeked data? */
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft {
-                        return (buflen - buflenleft) as i32;
+                        return (buflen - buflenleft) as i32; //return number of
+                                                             // bytes read from
+                                                             // peek
                     }
+                    //In the case that the socket is blocking and errno = EAGAIN,
+                    //a receive timeout has expired before data was received.
+                    //Check for cancellation of recv call before looping back to
+                    //read again
                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
-                        // with blocking sockets, we return EAGAIN here to check for cancellation,
-                        // then return to reading
                         if self
                             .cancelstatus
                             .load(interface::RustAtomicOrdering::Relaxed)
@@ -1956,20 +2007,31 @@ impl Cage {
                                 interface::cancelpoint(self.cageid)
                             }
                         }
-                        // in order to prevent deadlock
+                        //in order to prevent deadlock,
+                        //temporarily yield the lock on the socket handle
+                        //to a waiting thread, if one exists
                         interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
-                        continue;
+                        continue; //read again from receive pipe, as errno =
+                                  // EAGAIN on a blocking socket
                     } else {
-                        //if not EAGAIN, return the error
+                        //In the case that the error is not EAGAIN, return the error
                         return retval;
                     }
                 }
-                break;
+                break; //upon a successful read from the receive pipe, break
+                       // from the loop
             }
+        //The domain of the socket is INET or INET6
+        //We will call recvfrom from libc to handle the reading of data
         } else {
+            //we loop here so we can cancel blocking recvs, if necessary
             loop {
-                // we loop here so we can cancel blocking recvs
-                //socket must be connected so unwrap ok
+                //socket must be connected so the innersocket/raw_sys_fd is filled
+                //the unwrap won't cause a panic
+                //
+                //Depending on whether the socket is blocking or non-blocking,
+                //call the relevant corresponding function
+                //to read into the remaining space in the buffer ** ??
                 if sockfdobj.flags & O_NONBLOCK != 0 {
                     retval = sockhandle
                         .innersocket
@@ -1984,10 +2046,13 @@ impl Cage {
                         .recvfrom(bufleft, buflenleft, addr);
                 }
 
+                //In the case that the libc call returns with an error
                 if retval < 0 {
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft {
-                        return (buflen - buflenleft) as i32;
+                        return (buflen - buflenleft) as i32; //return number of
+                                                             // bytes read from
+                                                             // peek
                     }
 
                     match Errno::from_discriminant(interface::get_errno()) {
@@ -2009,8 +2074,12 @@ impl Cage {
                                         interface::cancelpoint(self.cageid);
                                     }
                                 }
+                                //in order to prevent deadlock,
+                                //temporarily yield the lock on the socket handle
+                                //to a waiting thread, if one exists
                                 interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
-                                continue; // EAGAIN, try again
+                                continue; //read again from receive pipe, as
+                                          // errno = EAGAIN on a blocking socket
                             }
 
                             return syscall_error(
@@ -2019,22 +2088,34 @@ impl Cage {
                                 "Internal call to recvfrom failed",
                             );
                         }
+                        //In the case that recvfrom from libc returns an unknown errno
+                        //value, panic
                         Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                     };
                 }
-                break; // we're okay to move on
+                break; //upon a successful read from the receive pipe, break
+                       // from the loop
             }
         }
+        //sum the total number of bytes from the last peak plus the additional
+        //bytes from the current read. This equates to the number of bytes
+        //return to our buff
         let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
 
+        //If the MSG_PEEK flag is on, write the new bytes read from the receive pipe
+        //into the last_peek field of the socket handle to keep track of
+        //the last peek
         if flags & MSG_PEEK != 0 {
             //extend from the point after we read our previously peeked bytes
             interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
         }
 
-        return totalbyteswritten;
+        return totalbyteswritten; //upon success, return the number of bytes
+                                  // written into buff
     }
 
+    //Helper function of recv_common_inner, for recv and recvfrom syscalls
+    //Handles UDP sockets
     fn recv_common_inner_udp(
         &self,
         sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>,
@@ -2043,21 +2124,33 @@ impl Cage {
         buflen: usize,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
+        //If the source address of the message is not NULL, grab the domain of
+        //the address. Otherwise, use AF_INET as it is unlikely a UNIX socket
+        //would send a message over a UDP connection ??
         let binddomain = if let Some(baddr) = addr {
             baddr.get_family() as i32
         } else {
             AF_INET
         };
 
+        //An implicit bind refers to the automatic binding of a socket to an
+        // address and port by the system, without
+        // an explicit call to the bind() function by
+        // the programmer.
+        //This is necessary if the socket isn't assigned an address
+        //Call to _implicit_bind may panic upon unknown error values
+        //Otherwise, the error value is returned here and passed through
         let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
         if ibindret < 0 {
             return ibindret;
         }
 
+        //we loop here so we can cancel blocking recvs, if necessary
         loop {
-            // loop for blocking sockets
-            //if the remoteaddr is set and addr is not, use remoteaddr
-            //unwrap is ok because of implicit bind
+            //if the remoteaddr is set and addr is not, use remoteaddr buff
+            //to grab the address from which the message is sent from
+            //otherwise, use addr to grab the address from which the message is sent from
+            // ?? unwrap will not cause panic because of implicit bind
             let retval = if let (None, Some(ref mut remoteaddr)) = (&addr, sockhandle.remoteaddr) {
                 sockhandle.innersocket.as_ref().unwrap().recvfrom(
                     buf,
@@ -2072,8 +2165,14 @@ impl Cage {
                     .recvfrom(buf, buflen, addr)
             };
 
+            //In the case that the libc call to recvfrom returns with an error
             if retval < 0 {
                 match Errno::from_discriminant(interface::get_errno()) {
+                    //We have the recieve timeout set to every one second, so
+                    //if our blocking socket ever returns EAGAIN, it must be
+                    //the case that this recv timeout was exceeded, and we
+                    //should thus not treat this as a failure in our emulated
+                    //socket; see comment in Socket::new in interface/comm.rs
                     Ok(i) => {
                         if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
                             if self
@@ -2087,6 +2186,9 @@ impl Cage {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
+                            //in order to prevent deadlock,
+                            //temporarily yield the lock on the socket handle
+                            //to a waiting thread, if one exists
                             interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
                             continue; //received EAGAIN on blocking socket, try
                                       // again
@@ -2096,11 +2198,13 @@ impl Cage {
                     Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                 };
             } else {
-                return retval; // we can proceed
+                return retval; //upon success, return the number of bytes
+                               // written into buff
             }
         }
     }
 
+    //Helper function of recv_syscall and recvfrom_syscall
     pub fn recv_common(
         &self,
         fd: i32,
@@ -2109,8 +2213,14 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
+        //BUG:
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //Check if the write gaurd holds a valid FileDescriptor, and if so
+        //call recv_common_inner.
+        //Otherwise, return with an error
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             return self.recv_common_inner(filedesc_enum, buf, buflen, flags, addr);
         } else {
@@ -2118,6 +2228,82 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    /// `recvfrom_syscall` receives a message from a socket
+    ///
+    ///  The recvfrom() call receives messages from a socket, and may be used
+    ///  to receive data on a socket whether or not it is connection-oriented.
+    ///  recvfrom(fd, buf, buflen, flags, NULL);
+    ///  It is equivalent to the call:
+    ///  recv(fd, buf, buflen, flags);
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts five parameters:
+    /// * `fd` - the file descriptor of the socket receiving a message
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    /// * 'addr' - the source address of the message received
+    ///
+    /// ### Returns
+    ///
+    /// * On success, the call returns the number of bytes received. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    /// * When a stream socket peer has performed an orderly shutdown, the
+    /// return value will be 0 (the traditional "end-of-file" return).
+    /// * Datagram sockets in various domains (e.g., the UNIX and Internet
+    /// domains) permit zero-length datagrams.  When such a datagram is
+    /// received, the return value is 0.
+    /// * The value 0 may also be returned if the requested number of bytes
+    /// to receive from a stream socket was 0.
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
+    ///    receive operation would block, or a receive timeout had been set and
+    ///    the timeout expired before data was received.  POSIX.1 allows
+    ///    either error to be returned for this case, and does not
+    ///    require these constants to have the same value, so a
+    ///    portable application should check for both possibilities.
+    ///
+    /// * EBADF - The argument sockfd is an invalid file descriptor.
+    ///
+    /// * ECONNREFUSED - A remote host refused to allow the network connection
+    ///   (typically because it is not running the requested service).
+    ///
+    /// * EFAULT - The receive buffer pointer(s) point outside the process's
+    ///   address space.
+    ///
+    /// * EINTR - The receive was interrupted by delivery of a signal before any
+    ///   data was available; see signal(7).
+    ///
+    /// * EINVAL - Invalid argument passed.
+    ///
+    /// * ENOMEM - Could not allocate memory for recvmsg().
+    ///
+    /// * ENOTCONN - The socket is associated with a connection-oriented
+    ///   protocol and has not been connected (see connect(2) and accept(2)).
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ** Indicates the error may be returned from RustPOSIX
+    ///
+    /// ### Panics TODO:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from recvfrom returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [recvfrom(2)](https://linux.die.net/man/2/recvfrom)
     pub fn recvfrom_syscall(
         &self,
         fd: i32,
@@ -2129,6 +2315,79 @@ impl Cage {
         return self.recv_common(fd, buf, buflen, flags, addr);
     }
 
+    /// ### Description
+    ///
+    /// `recv_syscall` receives a message from a socket
+    ///
+    ///  The recv() call is normally used only on a connected socket.
+    ///  It is equivalent to the call:
+    ///  recvfrom(fd, buf, buflen, flags, NULL);
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts four parameters:
+    /// * `fd` - the file descriptor of the socket receiving a message
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    ///
+    /// ### Returns
+    ///
+    /// * On success, the call returns the number of bytes received. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    /// * When a stream socket peer has performed an orderly shutdown, the
+    /// return value will be 0 (the traditional "end-of-file" return).
+    /// * Datagram sockets in various domains (e.g., the UNIX and Internet
+    /// domains) permit zero-length datagrams.  When such a datagram is
+    /// received, the return value is 0.
+    /// * The value 0 may also be returned if the requested number of bytes
+    /// to receive from a stream socket was 0.
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
+    ///    receive operation would block, or a receive timeout had been set and
+    ///    the timeout expired before data was received.  POSIX.1 allows
+    ///    either error to be returned for this case, and does not
+    ///    require these constants to have the same value, so a
+    ///    portable application should check for both possibilities.
+    ///
+    /// * EBADF - The argument sockfd is an invalid file descriptor.
+    ///
+    /// * ECONNREFUSED - A remote host refused to allow the network connection
+    ///   (typically because it is not running the requested service).
+    ///
+    /// * EFAULT - The receive buffer pointer(s) point outside the process's
+    ///   address space.
+    ///
+    /// * EINTR - The receive was interrupted by delivery of a signal before any
+    ///   data was available; see signal(7).
+    ///
+    /// * EINVAL - Invalid argument passed.
+    ///
+    /// * ENOMEM - Could not allocate memory for recvmsg().
+    ///
+    /// * ENOTCONN - The socket is associated with a connection-oriented
+    ///   protocol and has not been connected (see connect(2) and accept(2)).
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ** Indicates the error may be returned from RustPOSIX
+    ///
+    /// ### Panics TODO:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from recvfrom returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [recv(2)](https://linux.die.net/man/2/recv)
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
         return self.recv_common(fd, buf, buflen, flags, &mut None);
     }
@@ -2173,7 +2432,7 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
     /// * unknown errno value from socket bind sys call from libc in the case
     ///   that the socket isn't assigned an address
@@ -2181,10 +2440,8 @@ impl Cage {
     ///
     /// for more detailed description of all the commands and return values, see
     /// [listen(2)](https://linux.die.net/man/2/listen)
-    //
-    // TODO: We are currently ignoring backlog
     pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
-        //BUG:s
+        //BUG:
         //If fd is out of range of [0,MAXFD], process will panic
         //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
