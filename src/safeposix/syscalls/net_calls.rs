@@ -3237,10 +3237,13 @@ impl Cage {
                 } else {
                     // in case of AF_INET/AF_INET6
                     if sockhandle.localaddr == None {
+                        // if the socket hasn't bound to any address, we'd return an empty address
+                        // with both ip and port set to 0. But family should be set since it is
+                        // something that was already specified when the socket was created
+
                         // for ipv4, set the address to 0.0.0.0 if the address is not initialized
                         // yet for ipv6, set the address to 0:0:0:0:0:0:0:0
                         // (::) if the address is not initialized yet
-                        // setting the family as well based on the domain
                         let addr = match sockhandle.domain {
                             AF_INET => interface::GenIpaddr::V4(interface::V4Addr::default()),
                             AF_INET6 => interface::GenIpaddr::V6(interface::V6Addr::default()),
@@ -3249,9 +3252,9 @@ impl Cage {
                             }
                         };
                         ret_addr.set_addr(addr);
-                        // sets port to 0 as well
+                        // sets port to 0
                         ret_addr.set_port(0);
-                        // sets the family
+                        // set the family
                         ret_addr.set_family(sockhandle.domain as u16);
                         return 0;
                     }
