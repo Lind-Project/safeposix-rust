@@ -4048,8 +4048,11 @@ pub mod fs_tests {
         let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);       
         assert_eq!(shmid,4); 
 
-        // Check error upon asking for a valid key and passing the IPC_CREAT or IPC_EXCL flag
+        // Check error upon asking for a valid key and passing the IPC_CREAT and IPC_EXCL flag
         assert_eq!(cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),-(Errno::EEXIST as i32 ));
+
+        // Check error when passing IPC_CREAT flag as the key 
+        assert_eq!(cage.shmget_syscall(IPC_PRIVATE,1024,IPC_PRIVATE),-(Errno::ENOENT as i32));
 
         // Check if the function returns a correct shmid upon asking with a key that we know exists 
         assert_eq!(cage.shmget_syscall(key, 1024,0666),shmid);
