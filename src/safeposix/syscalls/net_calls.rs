@@ -2051,7 +2051,7 @@ impl Cage {
     /// SHUT_RD, further receptions will be disallowed.  If how is SHUT_WR,
     /// further transmissions will be disallowed.  If how is SHUT_RDWR, further
     /// receptions and transmissions will be disallowed.
-
+    ///
     /// ### Function Arguments
     /// The `netshutdown_syscall()` receives two arguments:
     /// * `fd` - The socket file descriptor
@@ -2059,7 +2059,7 @@ impl Cage {
     ///   receptions will be disallowed.  If how is SHUT_WR, further
     ///   transmissions will be disallowed.  If how is SHUT_RDWR, further
     ///   receptions and transmissions will be disallowed.
-
+    ///
     /// ### Returns
     /// On success, zero is returned. Otherwise, errors or panics are returned
     /// for different scenarios.
