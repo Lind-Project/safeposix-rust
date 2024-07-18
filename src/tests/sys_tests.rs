@@ -130,7 +130,7 @@ pub mod sys_tests {
         cage1.fork_syscall(2);
         let cage2 = interface::cagetable_getref(2);
         // Spawn exec and check if it returns 0
-        assert_eq!(cage2.exec_syscall(2), 0);
+        assert_eq!(cage1.exec_syscall(2), 0);
         lindrustfinalize();
     }
 }
