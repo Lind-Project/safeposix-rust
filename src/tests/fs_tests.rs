@@ -4034,6 +4034,9 @@ pub mod fs_tests {
 
         assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
     pub fn ut_lind_fs_shmget_syscall(){
         // acquire locks and start env cleanup
         let _thelock = setup::lock_and_init();
@@ -4061,4 +4064,4 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 }
-}
+
