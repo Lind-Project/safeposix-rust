@@ -6,7 +6,8 @@ pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
-    use libc::c_void;
+    use libc::{c_void, EINVAL};
+    use std::borrow::Borrow;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
@@ -4077,5 +4078,16 @@ pub mod fs_tests {
         let key = 33137;
         let shmid = cage.shmget_syscall(key, 1024, IPC_CREAT);
 
+        let shmret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+
+        // Assert that the return address is valid
+        assert_ne!(shmret,-1); 
+
+        // Assert that the functin returns an appropriate error when passed an invalid shmid 
+        assert_eq!(cage.shmat_syscall(shmid+10, 0xfffff000 as *mut u8, 0),-(Errno::EINVAL as i32));
+
+        
+
+        lindrustfinalize();
     }
 }
