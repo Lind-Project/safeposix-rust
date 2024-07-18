@@ -3367,12 +3367,12 @@ impl Cage {
     /// ### Description
     /// The `getpeername_syscall()` returns the address of the peer connected to
     /// the socket fd, in the buffer pointed to by ret_addr
-
+    ///
     /// ### Function Arguments
     /// The `getpeername_syscall()` receives two arguments:
     /// * `fd` -  The file descriptor of the socket
     /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
-
+    ///
     /// ### Returns
     /// On success, zero is returned. Otherwise, errors or panics are returned
     /// for different scenarios.
@@ -3439,12 +3439,12 @@ impl Cage {
     /// The `getsockname_syscall()` returns the current address to which the
     /// socket fd is bound, in the buffer pointed to by ret_addr. If the socket
     /// hasn't bound to any address, it returns an empty address.
-
+    ///
     /// ### Function Arguments
     /// The `getsockname_syscall()` receives two arguments:
     /// * `fd` -  The file descriptor of the socket
     /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
-
+    ///
     /// ### Returns
     /// On success, zero is returned. Otherwise, errors or panics are returned
     /// for different scenarios.
@@ -3482,7 +3482,7 @@ impl Cage {
                 if sockhandle.domain == AF_UNIX {
                     // in case of AF_UNIX socket
                     if sockhandle.localaddr == None {
-                        // if hasn't bind to any address
+                        // if hasn't bound to any address,
                         // return an empty address
                         let null_path: &[u8] = &[];
                         *ret_addr = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
@@ -3501,9 +3501,9 @@ impl Cage {
                         // with both ip and port set to 0. But family should be set since it is
                         // something that was already specified when the socket was created
 
-                        // for ipv4, set the address to 0.0.0.0 if the address is not initialized
-                        // yet for ipv6, set the address to 0:0:0:0:0:0:0:0
-                        // (::) if the address is not initialized yet
+                        // for ipv4, set the address to 0.0.0.0 to indicate uninitialized address
+                        // for ipv6, set the address to 0:0:0:0:0:0:0:0
+                        // (::) to indicate uninitialized address
                         let addr = match sockhandle.domain {
                             AF_INET => interface::GenIpaddr::V4(interface::V4Addr::default()),
                             AF_INET6 => interface::GenIpaddr::V6(interface::V6Addr::default()),
@@ -3512,7 +3512,6 @@ impl Cage {
                             }
                         };
                         ret_addr.set_addr(addr);
-                        // sets port to 0
                         ret_addr.set_port(0);
                         // set the family
                         ret_addr.set_family(sockhandle.domain as u16);
@@ -3546,12 +3545,12 @@ impl Cage {
     /// address_ptr, which has length bytes.  If the null-terminated
     /// hostname is too large to fit, then the name is truncated, and no error
     /// is returned
-
+    ///
     /// ### Function Arguments
     /// The `gethostname_syscall()` receives two arguments:
     /// * `address_ptr` -  The buffer to hold the returned host name
     /// * `length` - The length of the buffer
-
+    ///
     /// ### Returns
     /// On success, zero is returned. Otherwise, errors or panics are returned
     /// for different scenarios.
@@ -3564,8 +3563,8 @@ impl Cage {
     ///
     /// more details at https://www.man7.org/linux/man-pages/man2/gethostname.2.html
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
-        // we only return the default host name because we do not allow for the user to
-        // change the host name right now
+        // we only return the default host name (Lind) because we do not allow for the
+        // user to change the host name right now
         if length < 0 {
             return syscall_error(
                 Errno::EINVAL,
@@ -4373,12 +4372,12 @@ impl Cage {
     /// The `getifaddrs_syscall()` function creates a linked list of structures
     /// describing the network interfaces of the local system, and stores the
     /// address of the first item of the list in buf.
-
+    ///
     /// ### Function Arguments
     /// The `getifaddrs_syscall()` receives two arguments:
     /// * `buf` -  The buffer to hold the returned address
     /// * `count` - The length of the buffer
-
+    ///
     /// ### Returns
     /// On success, zero is returned. Otherwise, errors or panics are returned
     /// for different scenarios.
