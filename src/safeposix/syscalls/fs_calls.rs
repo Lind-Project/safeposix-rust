@@ -1291,18 +1291,53 @@ impl Cage {
     }
 
     //------------------------------------FSTAT SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `fstat_syscall` retrieves file status information for the file specified
+    /// by the file descriptor `fd` and populates the provided `statbuf`
+    /// with this information.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `fd` - The file descriptor for the file for which we need the status
+    ///   information.
+    /// * `statbuf` - A mutable reference to a `StatData` struct where the file
+    ///   status will be stored.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0. On error, a negative
+    /// errno is returned to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - The file descriptor `fd` is invalid.
+    /// * `EOPNOTSUPP` - `fstat` is not supported on sockets.
+    ///
+    /// ### Panics
+    ///
+    /// * If the inode number retrieved from the file descriptor does not exist
+    ///   in `FS_METADATA.inodetable`.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the relevant documentation.
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
+        // Attempt to get the file descriptor
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let unlocked_fd = checkedfd.read();
+
         if let Some(filedesc_enum) = &*unlocked_fd {
-            //Delegate populating statbuf to the relevant helper depending on the file
+            // Delegate populating statbuf to the relevant helper depending on the file
             // type. First we check in the file descriptor to handle sockets,
             // streams, and pipes, and if it is a normal file descriptor we
             // handle regular files, dirs, and char files based on the
             // information in the inode.
             match filedesc_enum {
                 File(normalfile_filedesc_obj) => {
+                    // fetch the inode object of the normal file
                     let inode = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
@@ -1313,6 +1348,7 @@ impl Cage {
                     statbuf.st_ino = normalfile_filedesc_obj.inode;
                     statbuf.st_dev = FS_METADATA.dev_id;
 
+                    // match inode to one of 4 inode types
                     match &*inode {
                         Inode::File(f) => {
                             Self::_istat_helper(&f, statbuf);
@@ -1335,13 +1371,19 @@ impl Cage {
                         "we don't support fstat on sockets yet",
                     );
                 }
+                // Streams don't have inodes, so we'll populate statbuf with dummy info
                 Stream(_) => {
+                    // ??? not sure why we are setting the value to 2, mostly a dummy value
                     self._stat_alt_helper(statbuf, STREAMINODE);
                 }
+                // Pipes don't have inodes, so we'll populate statbuf with dummy info
                 Pipe(_) => {
+                    // ??? not sure why we are setting the value to 0xfeef0000, mostly a dummy value
                     self._stat_alt_helper(statbuf, 0xfeef0000);
                 }
+                // Epolls don't have inodes, so we'll populate statbuf with dummy info
                 Epoll(_) => {
+                    // ??? not sure why we are setting the value to 0xfeef0000, mostly a dummy value
                     self._stat_alt_helper(statbuf, 0xfeef0000);
                 }
             }

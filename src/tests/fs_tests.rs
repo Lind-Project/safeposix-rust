@@ -4,7 +4,7 @@ pub mod fs_tests {
 
     use super::super::*;
     use crate::interface;
-    use crate::safeposix::syscalls::fs_calls::*;
+    use crate::safeposix::syscalls::{fs_calls::*, fs_constants};
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use libc::c_void;
     use std::fs::OpenOptions;
@@ -4436,33 +4436,11 @@ pub mod fs_tests {
             syscall_error(Errno::ENOENT, "stat", "test_failure")
         );
 
+        // chardev(device inode file) "/dev/zero"
+        // generic inode file "/etc/hosts"
+
         cage.stat_syscall("/", &mut statdata);
 
-        // StatData {
-        //     st_dev: 20,
-        //     st_ino: 1,
-        //     st_mode: 16895,
-        //     st_nlink: 5,
-        //     st_uid: 1000,
-        //     st_gid: 1000,
-        //     st_rdev: 0,
-        //     st_size: 0,
-        //     st_blksize: 0,
-        //     st_blocks: 0,
-        //     st_atim: (
-        //         0,
-        //         0,
-        //     ),
-        //     st_mtim: (
-        //         0,
-        //         0,
-        //     ),
-        //     st_ctim: (
-        //         0,
-        //         0,
-        //     ),
-        // }
-        //
         println!("{:#?}", statdata);
         return;
     }
