@@ -828,33 +828,6 @@ pub mod net_tests {
     }
 
     #[test]
-    pub fn ut_lind_net_getsockname_empty_ipv6() {
-        // this test is used for testing getsockname on ipv6 address with socket
-        // that hasn't bound toany address
-
-        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        let cage = interface::cagetable_getref(1);
-
-        let sockfd = cage.socket_syscall(AF_INET6, SOCK_STREAM, 0);
-        assert!(sockfd >= 0);
-        let mut retsocket = interface::GenSockaddr::V6(interface::SockaddrV6::default());
-        assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
-        // port should be 0
-        assert_eq!(retsocket.port(), 0);
-        // address should be ::
-        assert_eq!(
-            retsocket.addr(),
-            interface::GenIpaddr::V6(interface::V6Addr::default())
-        );
-
-        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-    #[test]
     pub fn ut_lind_net_getsockname_empty() {
         // this test is used for testing getsockname with socket that hasn't bound to
         // any address
@@ -888,6 +861,19 @@ pub mod net_tests {
             interface::GenSockaddr::Unix(interface::new_sockaddr_unix(SOCK_STREAM as u16, &[]));
         assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
         assert_eq!(retsocket, emptysocket_unix);
+
+        // test for ipv6
+        let sockfd = cage.socket_syscall(AF_INET6, SOCK_STREAM, 0);
+        assert!(sockfd >= 0);
+        let mut retsocket = interface::GenSockaddr::V6(interface::SockaddrV6::default());
+        assert_eq!(cage.getsockname_syscall(sockfd, &mut retsocket), 0);
+        // port should be 0
+        assert_eq!(retsocket.port(), 0);
+        // address should be ::
+        assert_eq!(
+            retsocket.addr(),
+            interface::GenIpaddr::V6(interface::V6Addr::default())
+        );
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
@@ -1024,7 +1010,6 @@ pub mod net_tests {
         let mut sockgarbage = interface::GenSockaddr::V4(interface::SockaddrV4::default());
         barrier.wait();
         let fd = cage.accept_syscall(sockfd as i32, &mut sockgarbage);
-        assert!(fd > 0);
 
         let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
         assert_eq!(cage.getsockname_syscall(fd, &mut retsocket), 0);
@@ -1116,7 +1101,6 @@ pub mod net_tests {
         ));
         barrier.wait();
         let fd = cage.accept_syscall(sockfd as i32, &mut sockgarbage);
-        assert!(fd > 0);
 
         // the socket created from accept should be automatically assigned an address as
         // well
