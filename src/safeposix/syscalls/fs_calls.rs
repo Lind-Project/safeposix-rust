@@ -2443,31 +2443,123 @@ impl Cage {
         }
     }
 
-    //------------------------------------LSEEK SYSCALL------------------------------------
+    /// ## -------------------------------- LSEEK SYSCALL -------------------------
+    /// ### Description
+    ///
+    /// The `lseek_syscall()` repositions the offset of the file associated
+    /// with the file descriptor `fd` to a new location as specified by
+    /// `offset` and `whence`. The new offset is calculated relative to the
+    /// position specified by whence. This syscall allows the file offset to
+    /// be set beyond the end of the file (but this does not change the size
+    /// of the file). If data is later written at this point, subsequent reads
+    /// of the data in the gap (a "hole") return null bytes ('\0') until data
+    /// is actually written into the gap.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `lseek_syscall()` receives three arguments:
+    /// * `fd` - It is the file descriptor, which identifies the file being
+    ///   accessed
+    /// * `offset` - It determines the position in the file where the file
+    ///   offset should be set. It specifies the number of bytes from a
+    ///   particular reference point.
+    /// * `whence` - It determines how the seek operation is performed. There
+    ///   are three possible values for whence: `SEEK_SET`: The file offset is
+    ///   set to offset bytes. `SEEK_CUR`: The file offset is set to its current
+    ///   location plus offset bytes. `SEEK_END`: The file offset is set to the
+    ///   size of the file plus offset bytes.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, we return the resulting offset
+    /// location as measured in bytes from the beginning of the file.
+    /// Otherwise, errors or panics are returned for different scenarios.
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` - The `whence` type is different from the available values;
+    ///   seek to a position before the start of the file; seek to after last
+    ///   position in directory
+    /// * `ESPIPE` - Seek is not possible when file descriptor is a
+    ///   socket/pipe/stream/epoll.
+    ///
+    ///
+    /// ### Panics
+    ///
+    /// * When there is some issue fetching the file descriptor.
+    /// * When the file type file descriptor contains a Socket as an inode.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [lseek(2)](https://man7.org/linux/man-pages/man2/lseek.2.html)
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
+        //BUG
+        //If the provided file descriptor is out of bounds, get_filedescriptor returns
+        //Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
+
+        // Check if the file descriptor object is valid
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             //confirm fd type is seekable
             match filedesc_enum {
+                // Return an error for Sockets, as they do not support the concept of seeking to a
+                // specific offset because data arrives in a continuous stream from the network.
+                Socket(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "lseek",
+                    "file descriptor is associated with a socket, cannot seek",
+                ),
+                // Return an error for Streams, as like sockets, streams are sequential and do not
+                // support seeking to an offset.
+                Stream(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "lseek",
+                    "file descriptor is associated with a stream, cannot seek",
+                ),
+                // Return an error for Pipes, as they are designed for sequential reads and writes
+                // between processes. Seeking within a pipe would not be possible.
+                Pipe(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "lseek",
+                    "file descriptor is associated with a pipe, cannot seek",
+                ),
+                // Return an error for Epoll, as Epoll file descriptors are for event notification
+                // and do not hold any data themselves, so seeking is not possible.
+                Epoll(_) => syscall_error(
+                    Errno::ESPIPE,
+                    "lseek",
+                    "file descriptor is associated with an epollfd, cannot seek",
+                ),
                 File(ref mut normalfile_filedesc_obj) => {
+                    // Get the inode object from the inode table associated with the file
+                    // descriptor.
                     let inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
-                    //handle files/directories differently
+                    // Match the type of inode object with the type (File, Socket, CharDev, Dir)
+                    // Handle files/directories differently
                     match &*inodeobj {
                         Inode::File(normalfile_inode_obj) => {
+                            // For file type inode, match the type of whence first, and based
+                            // on that, update the final position of the offset of the file.
                             let eventualpos = match whence {
+                                // Simply update the offset of the file to the given value.
                                 SEEK_SET => offset,
+                                // Get the current offset position of the file and add `offset`.
                                 SEEK_CUR => normalfile_filedesc_obj.position as isize + offset,
+                                // Get the file size and add `offset` position.
                                 SEEK_END => normalfile_inode_obj.size as isize + offset,
                                 _ => {
                                     return syscall_error(Errno::EINVAL, "lseek", "unknown whence");
                                 }
                             };
 
+                            // Sanity check to make sure that the final position of seeking
+                            // doesn't go before position 0 in the file.
                             if eventualpos < 0 {
                                 return syscall_error(
                                     Errno::EINVAL,
@@ -2475,30 +2567,40 @@ impl Cage {
                                     "seek to before position 0 in file",
                                 );
                             }
-                            //subsequent writes to the end of the file must zero pad up until this
-                            // point if we overran the end of our file
-                            // when seeking
+                            // subsequent writes to the end of the file must zero pad up until this
+                            // point if we overran the end of our file when seeking. This is
+                            // currently supported in write and pwrite syscalls.
 
+                            // Update the final position of the file descriptor object
                             normalfile_filedesc_obj.position = eventualpos as usize;
-                            //return the location that we sought to
+                            // Return the location that we sought to
                             eventualpos as i32
                         }
 
                         Inode::CharDev(_) => {
-                            0 //for character files, rather than seeking, we
+                            0 // for character files, rather than seeking, we
                               // transparently do nothing
                         }
 
+                        // A Sanity check is added to make sure that there is no such case when the
+                        // fd type is "File" and the inode type is "Socket". This state is ideally
+                        // not possible, so we panic in such cases.
                         Inode::Socket(_) => {
                             panic!("lseek: socket fd and inode don't match types")
                         }
 
                         Inode::Dir(dir_inode_obj) => {
-                            //for directories we seek between entries, and thus our end position is
-                            // the total number of entries
+                            // For directory type inode, we seek between directory entries,
+                            // and based on the whence check, we update the final position.
                             let eventualpos = match whence {
+                                // Simply update the offset of the directory to the given value.
                                 SEEK_SET => offset,
+                                // Get the current position of the directory pointing to a directory
+                                // entry and add the offset to it.
                                 SEEK_CUR => normalfile_filedesc_obj.position as isize + offset,
+                                // The Inode dictionary contains the directory entries mapped with
+                                // the inode object, and final position is updated by adding the
+                                // total count of the entries with the given offset.
                                 SEEK_END => {
                                     dir_inode_obj.filename_to_inode_dict.len() as isize + offset
                                 }
@@ -2507,7 +2609,8 @@ impl Cage {
                                 }
                             };
 
-                            //confirm that the location we want to seek to is valid
+                            // Sanity check to make sure that the final position of seeking
+                            // doesn't go before position 0 in the directory.
                             if eventualpos < 0 {
                                 return syscall_error(
                                     Errno::EINVAL,
@@ -2515,6 +2618,8 @@ impl Cage {
                                     "seek to before position 0 in directory",
                                 );
                             }
+                            // Return an error if the position we are seeking is after the
+                            // last possible position in the directory.
                             if eventualpos > dir_inode_obj.filename_to_inode_dict.len() as isize {
                                 return syscall_error(
                                     Errno::EINVAL,
@@ -2523,32 +2628,13 @@ impl Cage {
                                 );
                             }
 
+                            // Update the final position of the file descriptor object
                             normalfile_filedesc_obj.position = eventualpos as usize;
-                            //return the location that we sought to
+                            // Return the location that we sought to
                             eventualpos as i32
                         }
                     }
                 }
-                Socket(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "lseek",
-                    "file descriptor is associated with a socket, cannot seek",
-                ),
-                Stream(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "lseek",
-                    "file descriptor is associated with a stream, cannot seek",
-                ),
-                Pipe(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "lseek",
-                    "file descriptor is associated with a pipe, cannot seek",
-                ),
-                Epoll(_) => syscall_error(
-                    Errno::ESPIPE,
-                    "lseek",
-                    "file descriptor is associated with an epollfd, cannot seek",
-                ),
             }
         } else {
             syscall_error(Errno::EBADF, "lseek", "invalid file descriptor")
