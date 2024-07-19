@@ -1372,7 +1372,8 @@ impl Cage {
                     let mut sockhandle = sock_tmp.write();
 
                     //If the socket's domain is UNIX, return with error as UNIX
-                    //sockets are connection based.
+                    //sockets are connection based. Currently, lind
+                    //does not implement UDP sends/recvs over UNIX sockets
                     //TODO: Check whether the socket is connected and return
                     //EISCONN or ENOTCONN accordingly.
                     if sockhandle.domain == AF_UNIX {
@@ -1396,13 +1397,14 @@ impl Cage {
                     //If sendto_syscall is used on a connection-mode socket, then
                     // the error EISCONN may be returned when destaddr is not NULL,
                     // as we checked above
-                    if sockhandle.state != ConnState::NOTCONNECTED {
-                        return syscall_error(
-                            Errno::EISCONN,
-                            "sendto",
-                            "The descriptor is connected",
-                        );
-                    }
+                    // Can we delete the check below ??
+                    // if sockhandle.state != ConnState::NOTCONNECTED {
+                    //     return syscall_error(
+                    //         Errno::EISCONN,
+                    //         "sendto",
+                    //         "The descriptor is connected",
+                    //     );
+                    // }
 
                     //Pattern match based on the socket's protocol
                     match sockhandle.protocol {
@@ -1659,7 +1661,7 @@ impl Cage {
                                         //sendpipe is not available in unix socket info
                                         //transmission of data is not possible so return with error
                                         None => {
-                                            return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
+                                            panic!("sendpipe is not available in unix socket info in send syscall");
                                         }
                                     };
                                     //In the case that the write_to_pipe call returns EPIPE,
@@ -1677,6 +1679,7 @@ impl Cage {
                                         // process. SIGPIPE allows the program to skip error
                                         // handling and blindly write data until it’s killed
                                         //
+                                        // BUG: Issue #306 -> https://github.com/Lind-Project/safeposix-rust/issues/306
                                         // Trigger SIGPIPE
                                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
                                     }
@@ -1762,7 +1765,9 @@ impl Cage {
                                             );
                                         }
                                     };
-                                    //** Why is it necessary to drop here?? */
+                                    //in sendto_syscall, we need to acquire the 
+                                    //fd/sockhandle with write/read lock again. 
+                                    //If we do not release the lock here, deadlock will happen
                                     drop(unlocked_fd);
                                     drop(sockhandle);
                                     //remote address is set in sendto from libc
@@ -1793,7 +1798,7 @@ impl Cage {
                         _ => {
                             return syscall_error(
                                 Errno::EINVAL,
-                                "connect",
+                                "send",
                                 "Unsupported domain provided",
                             )
                         }
@@ -1893,7 +1898,6 @@ impl Cage {
         //It is possible that select_syscall or poll_syscall had reported
         //the INPROGRESS TCP socket as readable. If so, we can adjust the
         //state of the socket to CONNECTED.
-        //** In what case would this happen?? */
         if sockhandle.state == ConnState::INPROGRESS
             && sockhandle
                 .innersocket
@@ -1983,8 +1987,6 @@ impl Cage {
                 retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
                 //In the case of an error from reading from the receive pipe
                 if retval < 0 {
-                    //** This step seems weird
-                    // Even if the call fails we return with the previous peeked data? */
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft {
                         return (buflen - buflenleft) as i32; //return number of
