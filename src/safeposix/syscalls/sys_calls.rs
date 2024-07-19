@@ -524,7 +524,7 @@ impl Cage {
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
         };
 
-        // Insert new image with updated fd tables to be inserted in the cagetable
+        // Insert new cage with updated fd tables to be inserted in the cagetable
         interface::cagetable_insert(child_cageid, newcage);
         0
     }
