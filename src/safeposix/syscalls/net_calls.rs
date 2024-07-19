@@ -1397,14 +1397,14 @@ impl Cage {
                     //If sendto_syscall is used on a connection-mode socket, then
                     // the error EISCONN may be returned when destaddr is not NULL,
                     // as we checked above
-                    // Can we delete the check below ??
-                    // if sockhandle.state != ConnState::NOTCONNECTED {
-                    //     return syscall_error(
-                    //         Errno::EISCONN,
-                    //         "sendto",
-                    //         "The descriptor is connected",
-                    //     );
-                    // }
+                    // UDP sockets may be connected
+                    if sockhandle.state != ConnState::NOTCONNECTED {
+                        return syscall_error(
+                            Errno::EISCONN,
+                            "sendto",
+                            "The descriptor is connected",
+                        );
+                    }
 
                     //Pattern match based on the socket's protocol
                     match sockhandle.protocol {
@@ -1939,11 +1939,6 @@ impl Cage {
             //if we're not still peeking data, consume the data we peeked from our peek
             // buffer and if the bytecount is more than the length of the peeked
             // data, then we remove the entire buffer
-            // ** What is the point of the if else statement being passed in as the
-            // parameter ?? bytecount = min(sockhandle.last_peek.len(),
-            // newbuflen) so how can bytecount be greater than
-            // sockhandle.last_peek.len() ?? Seems like it always returns
-            // bytecount regardless ** //
             if flags & MSG_PEEK == 0 {
                 let len = sockhandle.last_peek.len();
                 sockhandle
@@ -2126,9 +2121,10 @@ impl Cage {
         buflen: usize,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-        //If the source address of the message is not NULL, grab the domain of
-        //the address. Otherwise, use AF_INET as it is unlikely a UNIX socket
-        //would send a message over a UDP connection ??
+        //Unlikely the following sequence occurs.
+        //Only happens if the sockhandle isn't binded to an address.
+        //
+        //If the sending address's domain isn't specified, assume INET
         let binddomain = if let Some(baddr) = addr {
             baddr.get_family() as i32
         } else {
