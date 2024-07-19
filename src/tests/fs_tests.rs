@@ -4085,9 +4085,6 @@ pub mod fs_tests {
 
         // Assert that the functin returns an appropriate error when passed an invalid shmid 
         assert_eq!(cage.shmat_syscall(shmid+10, 0xfffff000 as *mut u8, 0),-(Errno::EINVAL as i32));
-
-        
-
         lindrustfinalize();
     }
 }
