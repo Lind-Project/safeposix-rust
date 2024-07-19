@@ -1373,18 +1373,15 @@ impl Cage {
                 }
                 // Streams don't have inodes, so we'll populate statbuf with dummy info
                 Stream(_) => {
-                    // ??? not sure why we are setting the value to 2, mostly a dummy value
                     self._stat_alt_helper(statbuf, STREAMINODE);
                 }
                 // Pipes don't have inodes, so we'll populate statbuf with dummy info
                 Pipe(_) => {
-                    // ??? not sure why we are setting the value to 0xfeef0000, mostly a dummy value
-                    self._stat_alt_helper(statbuf, 0xfeef0000);
+                    self._stat_alt_helper(statbuf, PIPEINODE);
                 }
                 // Epolls don't have inodes, so we'll populate statbuf with dummy info
                 Epoll(_) => {
-                    // ??? not sure why we are setting the value to 0xfeef0000, mostly a dummy value
-                    self._stat_alt_helper(statbuf, 0xfeef0000);
+                    self._stat_alt_helper(statbuf, EPOLLINODE);
                 }
             }
             0 //fstat has succeeded!

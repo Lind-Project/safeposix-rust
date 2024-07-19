@@ -4409,7 +4409,8 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     
-    pub fn ut_lind_fs_stat_common_paths() {
+    
+    pub fn ut_lind_fs_stat_syscall_tests() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -4436,12 +4437,45 @@ pub mod fs_tests {
             syscall_error(Errno::ENOENT, "stat", "test_failure")
         );
 
-        // chardev(device inode file) "/dev/zero"
-        // generic inode file "/etc/hosts"
+        // setting up directory inode object '/tmp' for testing stat_syscall with a
+        // directory
+        let dir_path = "/tmp"; // since setup already initializes tmp, assuming it is there
+        assert_eq!(cage.stat_syscall(dir_path, &mut statdata), 0);
 
-        cage.stat_syscall("/", &mut statdata);
+        // setting up generic inode object "/tmp/generic" for testing stat_syscall with
+        // a generic file
+        let generic_path = "/tmp/generic";
+        let creat_fd = cage.creat_syscall(generic_path, S_IRWXA);
+        assert!(creat_fd > 0);
+        assert_eq!(cage.stat_syscall(generic_path, &mut statdata), 0);
 
-        println!("{:#?}", statdata);
+        // setting up character device inode object "/chardev" for testing stat_syscall
+        // with a character device
+        let dev = makedev(&DevNo { major: 1, minor: 3 });
+        let chardev_path = "/chardev";
+        assert_eq!(
+            cage.mknod_syscall(chardev_path, S_IRWXA | S_IFCHR as u32, dev),
+            0
+        );
+        assert_eq!(cage.stat_syscall(chardev_path, &mut statdata), 0);
+
+        // setting up socket inode object with path "/socket.sock"  for testing
+        // stat_syscall with a socket
+        let socketfile_path = "/socket.sock";
+        let socketfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+        assert!(socketfd > 0);
+        let sockaddr = interface::new_sockaddr_unix(AF_UNIX as u16, socketfile_path.as_bytes());
+        let socket = interface::GenSockaddr::Unix(sockaddr);
+        assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
+
+        // stat_syscall test here
+        assert_eq!(cage.stat_syscall(socketfile_path, &mut statdata), 0);
+
+        // socket teardown
+        assert_eq!(cage.close_syscall(socketfd), 0);
+        cage.unlink_syscall(socketfile_path);
+
+        lindrustfinalize();
         return;
     }
 }
