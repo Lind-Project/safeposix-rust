@@ -1176,8 +1176,6 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * If the inode number retrieved from `metawalk` does not exist in
-    ///   `FS_METADATA.inodetable`.
     /// * If `statbuf` is incorrectly populated, causing potential runtime
     ///   issues.
     ///
@@ -1190,7 +1188,8 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            // can panic if inode does not exist in inode table
+            // won't panic since check for inode number in table is already happening in
+            // above 'metawalk' function
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
             //populate those fields in statbuf which depend on things other than the inode

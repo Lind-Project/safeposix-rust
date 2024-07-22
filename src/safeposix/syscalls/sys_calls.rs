@@ -433,7 +433,7 @@ impl Cage {
     /// ### Panics
     ///
     /// This function doesn't directly panic - but the unmap memory mappings
-    /// function panics if it cannot create an shm entry or if the unwrapping 
+    /// function panics if it cannot create an shm entry or if the unwrapping
     /// on the file descriptor fails due to an invalid fd
     ///
     /// For more information please refer to - [https://man7.org/linux/man-pages/man3/exec.3.html]
@@ -479,7 +479,8 @@ impl Cage {
         // yet - And there is no threadId to store it at.
         // The child Cage object can then initialize and store the sigset appropriately
         // when it establishes its own main thread id.
-        // A sigset is a data structure that keeps track of which signals are affected by the process
+        // A sigset is a data structure that keeps track of which signals are affected
+        // by the process
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // When rustposix runs independently (not as Lind paired with NaCL runtime) we
