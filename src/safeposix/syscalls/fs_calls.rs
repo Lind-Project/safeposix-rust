@@ -5159,17 +5159,51 @@ impl Cage {
         }
     }
 
-    //------------------SHMDT SYSCALL------------------
-
+    ///------------------SHMDT SYSCALL------------------
+    /// ### Description 
+    /// 
+    /// This syscall can be viewed as a reversal of the `shmat_syscall`
+    /// 'shmat_syscall` attaches a particular memory shared memory segment to a 
+    /// `shmaddr` passed as an argument
+    /// `shmdt` unmaps the shared memory segment that is currently mapped at the address
+    /// specified by the `shmaddr` argument. 
+    /// 
+    /// ### Arguments
+    /// 
+    /// `shmaddr` : The address within the address space of the calling Cage to unmap
+    /// 
+    /// ### Returns
+    /// 
+    /// Returns the id of the memory segment that has been unmapped
+    /// 
+    /// ### Errors
+    /// 
+    /// This function can result in the following errors
+    /// 
+    /// * EINVAL : If there is no memory segment with the address specified
+    /// 
+    /// 
+    /// ### Panics
+    /// 
+    /// This function panics if creating an inode fails
+    /// 
+    /// 
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
+        // Acquire the lock of the reverse memory mappings of the Cage object
         let mut rev_shm = self.rev_shm.lock();
+        // This function returns the index where the pair of (shmaddr, shmid) is store within the vector 
+        // That holds these mappings
         let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
 
+        // Check if the index is valid
         if let Some(index) = rev_shm_index {
+            // Get the second element of the (shmaddr,shmid) pair which gives us the id of the memory segment
             let shmid = rev_shm[index].1;
+            // Get the memory segment from the shmtable which corresponds to the shmid extracted above
             match metadata.shmtable.entry(shmid) {
+                // If the memory segment is occupied
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
 
@@ -5193,7 +5227,7 @@ impl Cage {
 
                     return shmid; //NaCl relies on this non-posix behavior of
                                   // returning the shmid on success
-                }
+                }   
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
                 }
