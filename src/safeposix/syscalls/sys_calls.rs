@@ -409,16 +409,50 @@ impl Cage {
         0
     }
 
+    /// ### Description
+    ///
+    /// The exec system call replaces the current Cage object image with a new
+    /// Cage object and exec is called immediately after a process(Cage) forks.
+    /// For our purposes this translates to removing the parent cage object
+    /// from the cagetable and adding the child object to it. We also close
+    /// any file descriptors that the parent object holds if the `O_CLOEX`
+    /// flag has been set on that file descriptor  
+    ///
+    /// ### Arguments
+    ///
+    /// `child_cageid`: uid of the new child Cage object
+    ///
+    /// ### Returns
+    ///
+    /// Returns 0 upon successfully update the current running image
+    ///
+    /// ### Errors
+    ///
+    /// This syscall doesn't directly have any cases where it returns an error
+    ///
+    /// ### Panics
+    ///
+    /// This function doesn't directly panic - but the unmap memory mappings
+    /// function panics if it cannot create an shm entry or if the unwrapping 
+    /// on the file descriptor fails due to an invalid fd
+    ///
+    /// For more information please refer to - [https://man7.org/linux/man-pages/man3/exec.3.html]
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
+        // We remove the current running process from the cagetable
         interface::cagetable_remove(self.cageid);
-
+        // Function call to unmap shared memory mappings of the current process
         self.unmap_shm_mappings();
 
+        // Initialize an empty vector to hold file descriptors
         let mut cloexecvec = vec![];
         for fd in 0..MAXFD {
+            // Get mutex of the file descriptor
             let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
+                // For each valid file descriptor we chech if the O_CLOEXEC flag is set or not
+                // The O_CLOEXEC flag determines whether the fd should be closed upon calling
+                // exec or not
                 if match filedesc_enum {
                     File(f) => f.flags & O_CLOEXEC,
                     Stream(s) => s.flags & O_CLOEXEC,
@@ -427,21 +461,30 @@ impl Cage {
                     Epoll(p) => p.flags & O_CLOEXEC,
                 } != 0
                 {
+                    // If the flag is set - we add the fd to our vector
                     cloexecvec.push(fd);
                 }
             }
         }
 
+        //For each fd in our close  vector list
+        //We call the close_syscall which takes in a file decsriptor
+        //and closes it
         for fdnum in cloexecvec {
             self.close_syscall(fdnum);
         }
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its
-        // own mainthreadid
+        // We clone the parent cage's main threads and store them at index 0
+        // This is done since there isn't a thread established for the child Cage object
+        // yet - And there is no threadId to store it at.
+        // The child Cage object can then initialize and store the sigset appropriately
+        // when it establishes its own main thread id.
+        // A sigset is a data structure that keeps track of which signals are affected by the process
         let newsigset = interface::RustHashMap::new();
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
+            // When rustposix runs independently (not as Lind paired with NaCL runtime) we
+            // do not handle signals The test suite runs rustposix independently
+            // and hence we do not handle signals for the test suite
             let mainsigsetatomic = self
                 .sigset
                 .get(
@@ -456,6 +499,9 @@ impl Cage {
             newsigset.insert(0, mainsigset);
         }
 
+        // Initialize a new cage object to replace the current running image
+        // We set all the ids to -1 to indicate the loading phase
+        // We clone the fd table with the memories unmapped
         let newcage = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -477,8 +523,8 @@ impl Cage {
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
         };
-        //wasteful clone of fdtable, but mutability constraints exist
 
+        // Insert new cage with updated fd tables to be inserted in the cagetable
         interface::cagetable_insert(child_cageid, newcage);
         0
     }
