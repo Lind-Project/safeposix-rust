@@ -4507,7 +4507,9 @@ pub mod fs_tests {
         // directory
         let dir_path = "/tmp"; // since setup already initializes tmp, assuming it is there
         let dir_fd = cage.open_syscall(dir_path, O_RDONLY | O_DIRECTORY, S_IRWXA);
+        assert!(dir_fd > 0);
         assert_eq!(cage.fstat_syscall(dir_fd, &mut statdata), 0);
+        assert_eq!(cage.close_syscall(dir_fd), 0);
 
         // setting up generic inode object "/tmp/generic" for testing fstat_syscall with
         // a generic file
@@ -4524,8 +4526,10 @@ pub mod fs_tests {
             cage.mknod_syscall(chardev_path, S_IRWXA | S_IFCHR as u32, dev),
             0
         );
-        let chardev_fd = cage.open_syscall(chardev_path, O_RDONLY | O_DEV, mode)
-        assert_eq!(cage.fstat_syscall(chardev_path, &mut statdata), 0);
+        let chardev_fd = cage.open_syscall(chardev_path, O_RDONLY, S_IRWXA);
+        assert!(chardev_fd > 0);
+        assert_eq!(cage.fstat_syscall(chardev_fd, &mut statdata), 0);
+        assert_eq!(cage.close_syscall(chardev_fd), 0);
 
         // setting up socket inode object with path "/socket.sock"  for testing
         // fstat_syscall with a socket
@@ -4537,7 +4541,10 @@ pub mod fs_tests {
         assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
 
         // fstat_syscall test here
-        assert_eq!(cage.fstat_syscall(socketfile_path, &mut statdata), 0);
+        let socketfile_path_fd = cage.open_syscall(socketfile_path, O_RDONLY, S_IRWXA);
+        assert!(socketfile_path_fd > 0);
+        assert_eq!(cage.fstat_syscall(socketfile_path_fd, &mut statdata), 0);
+        assert_eq!(cage.close_syscall(socketfile_path_fd), 0);
 
         // socket teardown
         assert_eq!(cage.close_syscall(socketfd), 0);
