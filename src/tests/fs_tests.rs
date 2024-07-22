@@ -6,9 +6,10 @@ pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
-    use libc::c_void;
+    use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
     pub fn ut_lind_fs_simple() {
@@ -4470,6 +4471,73 @@ pub mod fs_tests {
 
         // stat_syscall test here
         assert_eq!(cage.stat_syscall(socketfile_path, &mut statdata), 0);
+
+        // socket teardown
+        assert_eq!(cage.close_syscall(socketfd), 0);
+        cage.unlink_syscall(socketfile_path);
+
+        lindrustfinalize();
+        return;
+    }
+
+    pub fn ut_lind_fs_fstat_syscall_tests() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let mut statdata = StatData::default();
+
+        // test whether an invalid fd results in a panic
+        let invalid_fd = 0x10000000; // some dummy high fd which should fail fd check
+
+        // here, we catch the panic spat out by fstat into an Err
+        let invalid_fd_panic = catch_unwind(AssertUnwindSafe(|| {
+            cage.fstat_syscall(invalid_fd, &mut statdata);
+        }));
+        assert!(invalid_fd_panic.is_err());
+
+        // test out whether an error is output for a non existent fd (1000)
+        // (ENOENT[-2])
+        let non_existent_fd = 1000;
+        assert_eq!(cage.fstat_syscall(non_existent_fd, &mut statdata), -2);
+
+        // setting up directory inode object '/tmp' for testing fstat_syscall with a
+        // directory
+        let dir_path = "/tmp"; // since setup already initializes tmp, assuming it is there
+        let dir_fd = cage.open_syscall(dir_path, O_RDONLY | O_DIRECTORY, S_IRWXA);
+        assert_eq!(cage.fstat_syscall(dir_fd, &mut statdata), 0);
+
+        // setting up generic inode object "/tmp/generic" for testing fstat_syscall with
+        // a generic file
+        let generic_path = "/tmp/generic";
+        let creat_fd = cage.creat_syscall(generic_path, S_IRWXA);
+        assert!(creat_fd > 0);
+        assert_eq!(cage.fstat_syscall(creat_fd, &mut statdata), 0);
+
+        // setting up character device inode object "/chardev" for testing fstat_syscall
+        // with a character device
+        let dev = makedev(&DevNo { major: 1, minor: 3 });
+        let chardev_path = "/chardev";
+        assert_eq!(
+            cage.mknod_syscall(chardev_path, S_IRWXA | S_IFCHR as u32, dev),
+            0
+        );
+        let chardev_fd = cage.open_syscall(chardev_path, O_RDONLY | O_DEV, mode)
+        assert_eq!(cage.fstat_syscall(chardev_path, &mut statdata), 0);
+
+        // setting up socket inode object with path "/socket.sock"  for testing
+        // fstat_syscall with a socket
+        let socketfile_path = "/socket.sock";
+        let socketfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+        assert!(socketfd > 0);
+        let sockaddr = interface::new_sockaddr_unix(AF_UNIX as u16, socketfile_path.as_bytes());
+        let socket = interface::GenSockaddr::Unix(sockaddr);
+        assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
+
+        // fstat_syscall test here
+        assert_eq!(cage.fstat_syscall(socketfile_path, &mut statdata), 0);
 
         // socket teardown
         assert_eq!(cage.close_syscall(socketfd), 0);

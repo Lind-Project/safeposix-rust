@@ -1317,6 +1317,7 @@ impl Cage {
     ///
     /// ### Panics
     ///
+    /// * If the file descriptor passed
     /// * If the inode number retrieved from the file descriptor does not exist
     ///   in `FS_METADATA.inodetable`.
     ///
