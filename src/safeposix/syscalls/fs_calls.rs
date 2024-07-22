@@ -3144,70 +3144,148 @@ impl Cage {
         return dupfd;
     }
 
-    //------------------------------------CLOSE SYSCALL------------------------------------
-
+    /// ## ------------------CLOSE SYSCALL------------------
+    /// ### Description
+    ///
+    /// The `close_syscall()` is used to close a file descriptor, so that it no
+    /// longer refers to any file and may be reused. This is an essential
+    /// operation for managing resources, as file descriptors are a limited
+    /// resource in any operating system.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `close_syscall()` receives one argument:
+    /// * `fd` - This argument refers to the file descriptor to be closed.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, it returns 0. Otherwise, it
+    /// returns error number set with the appropriate error code.
+    ///
+    /// ### Errors
+    ///
+    /// * The syscall returns errors which occur in its helper functions.
+    ///
+    /// ### Panics
+    ///
+    /// * There are no such panics which happen inside the function.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [close(2)](https://man7.org/linux/man-pages/man2/close.2.html)
     pub fn close_syscall(&self, fd: i32) -> i32 {
-        //check that the fd is valid
+        // Call the helper function which validates the result and deletes
+        // reference of the file descriptor.
         return Self::_close_helper(self, fd);
     }
 
+    /// ## ----------------- CLOSE HELPER INNER ------------------
+    /// ### Description
+    ///
+    /// The `_close_helper_inner` function manages the cleanup and closing of
+    /// various types of file descriptors (files, directories, pipes, sockets)
+    /// by decrementing reference counts and removing inodes if necessary.
+    /// ### Function Arguments
+    ///
+    /// The function receives one argument:
+    /// * `fd` - This argument refers to the file descriptor to be closed.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, it returns 0. Otherwise, it
+    /// returns errors set with the appropriate error code.
+    ///
+    /// ### Errors
+    ///
+    /// * EBADF - The given file descriptor is invalid
+    /// * ENOEXEC - The Non-regular type file (dir/chardev) in file object table
+    ///
+    /// ### Panics
+    ///
+    /// * If the provided file descriptor is out of bounds, causing unwrap() to
+    ///   panic
+    /// * When the file type filedescriptor contains a Socket as an inode.
+    ///
+    /// For more detailed description of all the commands and return values, see
+    /// [close(2)](https://man7.org/linux/man-pages/man2/close.2.html)
     pub fn _close_helper_inner(&self, fd: i32) -> i32 {
+        //BUG
+        //if the provided file descriptor is out of bounds, get_filedescriptor returns
+        // Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
-            //Decide how to proceed depending on the fd type.
-            //First we check in the file descriptor to handle sockets (no-op), sockets
-            // (clean the socket), and pipes (clean the pipe), and if it is a
-            // normal file descriptor we decrement the refcount to reflect
+            // We decide, how to proceed depending on the fd type.
+            // First we check in the file descriptor to handle stream / epoll (no-op),
+            // sockets (clean the socket), and pipes (clean the pipe), and if it is a
+            // normal file descriptor we decrement the reference count to reflect
             // one less reference to the file.
             match filedesc_enum {
                 //if we are a socket, we dont change disk metadata
-                Stream(_) => {}
-                Epoll(_) => {} //Epoll closing not implemented yet
+                Stream(_) => {} // Stream closing not supported
+                Epoll(_) => {}  // Epoll closing not implemented yet
                 Socket(ref mut socket_filedesc_obj) => {
+                    // Retrieve the socket file descriptor object and get the write
+                    // lock on the socket handle.
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
 
-                    // we need to do the following if UDS
-                    if let Some(ref mut ui) = sockhandle.unix_info {
-                        let inodenum = ui.inode;
-                        if let Some(sendpipe) = ui.sendpipe.as_ref() {
-                            sendpipe.decr_ref(O_WRONLY);
-                            //last reference, lets remove it
-                            if sendpipe.is_pipe_closed() {
-                                ui.sendpipe = None;
+                    // we need to do the following if UDS (Unix Domain Socket)
+                    // AF_UNIX represents the Unix domain sockets.
+                    let socket_type = sockhandle.domain;
+                    if socket_type == AF_UNIX {
+                        if let Some(ref mut ui) = sockhandle.unix_info {
+                            let inodenum = ui.inode;
+                            // Decrement the reference count for the send pipe if it exists. If the
+                            // reference count drops to zero, remove the send pipe.
+                            if let Some(sendpipe) = ui.sendpipe.as_ref() {
+                                sendpipe.decr_ref(O_WRONLY);
+                                //last reference, lets remove it
+                                if sendpipe.is_pipe_closed() {
+                                    ui.sendpipe = None;
+                                }
                             }
-                        }
-                        if let Some(receivepipe) = ui.receivepipe.as_ref() {
-                            receivepipe.decr_ref(O_RDONLY);
-                            //last reference, lets remove it
-                            if receivepipe.is_pipe_closed() {
-                                ui.receivepipe = None;
+                            // Decrement the reference count for the receive pipe if it exists. If
+                            // the reference count drops to zero, remove
+                            // the receive pipe.
+                            if let Some(receivepipe) = ui.receivepipe.as_ref() {
+                                receivepipe.decr_ref(O_RDONLY);
+                                //last reference, lets remove it
+                                if receivepipe.is_pipe_closed() {
+                                    ui.receivepipe = None;
+                                }
                             }
-                        }
-                        let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
-                        if let Inode::Socket(ref mut sock) = *inodeobj {
-                            sock.refcount -= 1;
-                            if sock.refcount == 0 {
-                                if sock.linkcount == 0 {
-                                    drop(inodeobj);
-                                    let path = normpath(
-                                        convpath(sockhandle.localaddr.unwrap().path()),
-                                        self,
-                                    );
-                                    FS_METADATA.inodetable.remove(&inodenum);
-                                    NET_METADATA.domsock_paths.remove(&path);
+                            // Retrieve the inode object for the socket and decrement its reference
+                            // count. If both the reference count and
+                            // link count are zero, the socket is no longer needed.
+                            let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
+                            if let Inode::Socket(ref mut sock) = *inodeobj {
+                                sock.refcount -= 1;
+                                if sock.refcount == 0 {
+                                    if sock.linkcount == 0 {
+                                        // Remove the socket from the inode table and the domain
+                                        // socket paths
+                                        // if it is no longer needed.
+                                        drop(inodeobj);
+                                        let path = normpath(
+                                            convpath(sockhandle.localaddr.unwrap().path()),
+                                            self,
+                                        );
+                                        FS_METADATA.inodetable.remove(&inodenum);
+                                        NET_METADATA.domsock_paths.remove(&path);
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 Pipe(ref pipe_filedesc_obj) => {
-                    // lets decrease the pipe objects internal ref count for the corresponding end
-                    // depending on what flags are set
+                    // Decrease the pipe objects internal ref count for the corresponding end
+                    // depending on what flags are set (O_RDONLY or O_WRONLY).
                     pipe_filedesc_obj.pipe.decr_ref(pipe_filedesc_obj.flags);
                 }
                 File(ref normalfile_filedesc_obj) => {
+                    // Retrieve the inode object for the file.
                     let inodenum = normalfile_filedesc_obj.inode;
                     let mut inodeobj = FS_METADATA.inodetable.get_mut(&inodenum).unwrap();
 
@@ -3215,20 +3293,31 @@ impl Cage {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             normalfile_inode_obj.refcount -= 1;
 
-                            //if it's not a reg file, then we have nothing to close
-                            //Inode::File is a regular file by default
+                            // Check if it's not a regular file, then we have nothing to close
+                            // Inode::File is a regular file by default
+                            // Reference count represents the number of active file descriptors
+                            // pointing to the file.
                             if normalfile_inode_obj.refcount == 0 {
+                                // FileObjectTable stores the entries of the currently opened files
+                                // in the system, so if there are no
+                                // active file descriptors pointing to the
+                                // file, we delete them from the table.
                                 FILEOBJECTTABLE
                                     .remove(&inodenum)
                                     .unwrap()
                                     .1
                                     .close()
                                     .unwrap();
+                                // Link count as 0 represents that there are no hard links present
+                                // for the file, so we need to remove it from the filesystem.
                                 if normalfile_inode_obj.linkcount == 0 {
                                     drop(inodeobj);
-                                    //removing the file from the entire filesystem (interface,
+                                    // removing the file from the entire filesystem (interface,
                                     // metadata, and object table)
                                     FS_METADATA.inodetable.remove(&inodenum);
+                                    // FILEDATAPREFIX represents the common prefix of the name
+                                    // of the file which combined with the inode number represents
+                                    // a unique entity. It stores the data of the inode object.
                                     let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                                     interface::removefile(sysfilename).unwrap();
                                     log_metadata(&FS_METADATA, inodenum);
@@ -3240,17 +3329,24 @@ impl Cage {
                         Inode::Dir(ref mut dir_inode_obj) => {
                             dir_inode_obj.refcount -= 1;
 
-                            //if it's not a reg file, then we have nothing to close
+                            // File object table only contains references for the regular
+                            // type files, and since "Directory" is not a regular file type,
+                            // it should not exist in the table. Return an error if the
+                            // directory exists in the file object table.
                             match FILEOBJECTTABLE.get(&inodenum) {
                                 Some(_) => {
                                     return syscall_error(
                                         Errno::ENOEXEC,
                                         "close or dup",
-                                        "Non-regular file in file object table",
+                                        "Non-regular file (dir) in file object table",
                                     );
                                 }
+                                // Continue if the object table doesn't contain the inode.
                                 None => {}
                             }
+                            // When the link count is 2 and the reference count is 0, it means
+                            // the directory is empty and no processes are using it. This allows
+                            // the directory to be safely removed from the file system.
                             if dir_inode_obj.linkcount == 2 && dir_inode_obj.refcount == 0 {
                                 //The reference to the inode has to be dropped to avoid
                                 //deadlocking because the remove() method will need to
@@ -3266,16 +3362,18 @@ impl Cage {
                         }
                         Inode::CharDev(ref mut char_inode_obj) => {
                             char_inode_obj.refcount -= 1;
-
-                            //if it's not a reg file, then we have nothing to close
+                            // Since "CharDev" is not a regular file type, it should not
+                            // exist in the file object table. Return an error if the
+                            // chardev inode exists in the file object table.
                             match FILEOBJECTTABLE.get(&inodenum) {
                                 Some(_) => {
                                     return syscall_error(
                                         Errno::ENOEXEC,
                                         "close or dup",
-                                        "Non-regular file in file object table",
+                                        "Non-regular file (chardev) in file object table",
                                     );
                                 }
+                                // Continue if the object table doesn't contain the inode.
                                 None => {}
                             }
                             if char_inode_obj.linkcount == 0 && char_inode_obj.refcount == 0 {
@@ -3287,27 +3385,72 @@ impl Cage {
                             }
                             log_metadata(&FS_METADATA, inodenum);
                         }
+                        // A Sanity check is added to make sure that there is no such case when the
+                        // fd type is "File" and the inode type is "Socket". This state is ideally
+                        // not possible, so we panic in such cases.
                         Inode::Socket(_) => {
                             panic!("close(): Socket inode found on a filedesc fd.")
                         }
                     }
                 }
             }
+            // If everything is successful, we return 0
             0
         } else {
             return syscall_error(Errno::EBADF, "close", "invalid file descriptor");
         }
     }
 
+    /// ## ------------------CLOSE HELPER ------------------
+    /// ### Description
+    ///
+    /// The `_close_helper` function calls `_close_helper_inner` to handle
+    /// the specifics of closing the file descriptor (like decrementing
+    /// reference counts, handling special cases for sockets, pipes, etc.).
+    /// Once `_close_helper_inner` has successfully done its job (indicated
+    /// by returning a non-negative value), `_close_helper` removes the file
+    /// descriptor from the file descriptor table. This ensures that the file
+    /// descriptor is fully closed and no longer tracked by the system.
+    ///
+    /// ### Function Arguments
+    ///
+    /// The `_close_helper()` receives one argument:
+    /// * `fd` - This argument refers to the file descriptor to be closed.
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion of this call, it returns 0. Otherwise, it
+    /// returns an error number with the appropriate error code.
+    ///
+    /// ### Errors
+    ///
+    /// * There are no explicit errors returned by this function. The errors
+    ///   thrown by `_close_helper_inner` function are returned.
+    ///
+    /// ### Panics
+    ///
+    /// * If the provided file descriptor is out of bounds, causing unwrap() to
+    ///   panic.
     pub fn _close_helper(&self, fd: i32) -> i32 {
         let inner_result = self._close_helper_inner(fd);
+        // Return value of less than 0 indicates that there was some error
+        // closing the fd, so we return the error.
         if inner_result < 0 {
             return inner_result;
         }
 
-        //removing descriptor from fd table
+        // Once we know that the closing of the fd was successful,
+        // we remove the file descriptor from the fd table and free the space.
+        //
+        // Bug:
+        // if the provided file descriptor is out of bounds, get_filedescriptor returns
+        // Err(), unwrapping on which  produces a 'panic!'
+        //otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        // This operation effectively removes the file descriptor from the fd table
+        // by removing its reference from the variable and then not using it further,
+        // allowing it to be dropped
         if unlocked_fd.is_some() {
             let _discarded_fd = unlocked_fd.take();
         }
