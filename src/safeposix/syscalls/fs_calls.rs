@@ -1316,12 +1316,13 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * If the file descriptor passed
+    /// * If the file descriptor passed is invalid (less than zero or greater
+    ///   than MAX FD which is 1024)
     /// * If the inode number retrieved from the file descriptor does not exist
     ///   in `FS_METADATA.inodetable`.
     ///
     /// For more detailed description of all the commands and return values,
-    /// refer to the relevant documentation.
+    /// refer to the stat man page [here](https://man7.org/linux/man-pages/man2/stat.2.html).
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         // Attempt to get the file descriptor
