@@ -6,7 +6,7 @@
 use dashmap::DashSet;
 use parking_lot::Mutex;
 use std::env;
-use std::io::{self, IoSlice};
+use std::io::IoSlice;
 
 pub use std::ffi::CStr as RustCStr;
 use std::fs::{self, canonicalize, File, OpenOptions};

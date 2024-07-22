@@ -188,7 +188,7 @@ impl Cage {
             file: None,
         }
     }
-    
+
     pub fn open_syscall(&self, path: &str, flags: i32, mode: u32) -> i32 {
         // Check that the given input path is not empty
         if path.len() == 0 {
@@ -1930,6 +1930,7 @@ impl Cage {
             syscall_error(Errno::EBADF, "write", "invalid file descriptor")
         }
     }
+
     //------------------------------------LSEEK SYSCALL------------------------------------
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
         let checkedfd = self.get_filedescriptor(fd).unwrap();
