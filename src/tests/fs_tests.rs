@@ -4210,4 +4210,148 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
+
+    #[test]
+    pub fn ut_lind_fs_close_regular_file() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create and open a regular file, then close it.
+        let fd = cage.open_syscall("/test_file", O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Write sample data to the file.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("hello"), 5), 5);
+
+        // Close the file descriptor, which should succeed.
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        // Attempt to close the file descriptor again to ensure it's already closed.
+        // Expect an error for "Invalid File Descriptor".
+        assert_eq!(cage.close_syscall(fd), -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_close_directory() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a directory and open it.
+        let path = "/test_dir";
+        assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+        let fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Close the directory file descriptor, which should succeed.
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        // Attempt to close the file descriptor again to ensure it's already closed.
+        // Expect an error for "Invalid File Descriptor".
+        assert_eq!(cage.close_syscall(fd), -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_close_socket() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a socket pair.
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+
+        // Close both the socket file descriptors, which should succeed.
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+
+        // Attempt to close the file descriptors again to ensure they are already
+        // closed. Expect an error for "Invalid File Descriptor".
+        assert_eq!(cage.close_syscall(socketpair.sock1), -(Errno::EBADF as i32));
+        assert_eq!(cage.close_syscall(socketpair.sock2), -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_close_pipe() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Create a pipe.
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        let write_fd = pipe_fds.writefd;
+
+        // Write data to the pipe
+        let write_data = "Testing";
+        assert_eq!(
+            cage.write_syscall(write_fd, write_data.as_ptr(), write_data.len()),
+            write_data.len() as i32
+        );
+
+        // Read the data from the pipe.
+        let mut buf = sizecbuf(7);
+        assert_eq!(
+            cage.read_syscall(read_fd, buf.as_mut_ptr(), buf.len()),
+            write_data.len() as i32
+        );
+        assert_eq!(cbuf2str(&buf), write_data);
+
+        // Close the pipe file descriptors, which should succeed.
+        assert_eq!(cage.close_syscall(read_fd), 0);
+        assert_eq!(cage.close_syscall(write_fd), 0);
+
+        // Attempt to close the file descriptor again to ensure they are already closed.
+        // Expect an error for "Invalid File Descriptor".
+        assert_eq!(cage.close_syscall(read_fd), -(Errno::EBADF as i32));
+        assert_eq!(cage.close_syscall(write_fd), -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_close_chardev() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // Open a character device file.
+        let fd = cage.open_syscall("/dev/zero", O_RDWR, S_IRWXA);
+        assert!(fd >= 0);
+
+        // Close the character device file descriptor, which should succeed.
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        // Attempt to close the file descriptor again to ensure it's already closed.
+        // Expect an error for "Invalid File Descriptor".
+        assert_eq!(cage.close_syscall(fd), -(Errno::EBADF as i32));
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 }
