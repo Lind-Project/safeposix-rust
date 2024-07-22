@@ -2221,6 +2221,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     use crate::interface::IovecStruct;
+    //test for stream in writev
     #[test]
     fn test_writev_syscall_stream() {
         let _thelock = setup::lock_and_init();
@@ -2250,7 +2251,7 @@ pub mod fs_tests {
     
         lindrustfinalize();
     }
-    // Update the test case
+    //test for file in writev
     #[test]
     fn test_writev_syscall_file() {
         let _thelock = setup::lock_and_init();
