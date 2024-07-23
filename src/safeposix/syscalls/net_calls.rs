@@ -3175,17 +3175,17 @@ impl Cage {
 
     /// ## ------------------GETSOCKOPT SYSCALL------------------
     /// ### Description
-    /// "getsockopt_syscall()" get the option specified by the optname argument,
-    /// at the protocol level specified by the level argument for the socket
-    /// associated with the file descriptor specified by the fd argument and
-    /// store to the optval argument.
+    /// "getsockopt_syscall()" retrieves the option specified by the optname
+    /// argument at the protocol level specified by the level argument for
+    /// the socket associated with the file descriptor specified by the fd
+    /// argument, and stores the result in the optval argument.
     ///
     /// ### Function Arguments
     /// The `getsockopt_syscall()` receives four arguments:
     /// * `fd` - The file descriptor to retrieve the socket option.
-    /// * `level` - the protocol level at which the option resides. To set
+    /// * `level` - the protocol level at which the option resides. To get
     ///   options at the socket level, specify the level argument as SOL_SOCKET.
-    ///   To set options at other levels, supply the appropriate level
+    ///   To get options at other levels, supply the appropriate level
     ///   identifier for the protocol controlling the option.
     /// * `optname` - The name of the option
     /// * `optval` - The buffer to hold the return value
@@ -3202,28 +3202,31 @@ impl Cage {
     /// No panic is expected from this syscall
     ///
     /// more details at https://man7.org/linux/man-pages/man2/getsockopt.2.html
+    /// more details for avaliable socket options at
+    /// https://man7.org/linux/man-pages/man7/socket.7.html
+    /// https://man7.org/linux/man-pages/man7/tcp.7.html
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
-        // current sockopt syscalls have some issues in storing the option values
-        // Our current approach is to use the optname as the bit position of the option,
-        // so i-th bit of the option refers to the i-th optname. This gives some issues:
-        // we are currently using a 32-bit integer to store both the socket option and
-        // tcp option, whihc means any optname that is larger than 32 would overflow the
-        // option. Linux is doing a completely different thing from us. First,
-        // for tcp options, these option value are not just simply stored at a
-        // central place. Each option is handled seperately and may corresponds
-        // to multiple flags turning on/off. For socket options, Linux do store
-        // some options at one location (sk_flags) using the same apporach as we
-        // did. But Linux has a seperate layer of internal flags used for
-        // flags that are stored in sk_flags specifically. These internal flag values
-        // are enum type and therefore are sequential value, indicating the bit
-        // position of the option. Linux creates a mapping from user-facing
-        // socket optname (e.g. SO_KEEPALIVE) to internal flags so that
-        // optname that is not supposed to store in sk_flags does not affect the
-        // sequential order of sk_flags bit and socket optname that ought to be
-        // stored in sk_flags can be grouped efficiently. This allows Linux to
-        // support the number of socket options much larger than 32, while still
-        // able to store some boolean socket options inside sk_flags, a 32-bit integer,
-        // correctly.
+        // The current sockopt syscalls have issues storing the option values. Our
+        // approach uses the optname as the bit position of the option, meaning
+        // the i-th bit of the option corresponds to the i-th optname. This
+        // causes problems because we use a 32-bit integer to store both the
+        // socket option and the TCP option, leading to overflow if any optname
+        // is larger than 32.
+        //
+        // Linux handles this differently. For TCP options, the option values are not
+        // stored centrally; each option is handled separately and may
+        // correspond to multiple flags being turned on or off. For socket
+        // options, Linux stores some options in a single location (sk_flags)
+        // using a similar approach to ours. However, Linux uses a separate
+        // layer of internal flags specifically for those stored in sk_flags. These
+        // internal flag values are of enum type and are sequential, indicating
+        // the bit position of the option. Linux creates a mapping from
+        // user-facing socket optnames (e.g., SO_KEEPALIVE) to internal flags.
+        // This ensures that optnames not meant for sk_flags do not affect the
+        // sequential order of sk_flags bits, and those that should be stored in
+        // sk_flags are grouped efficiently. This allows Linux to support more
+        // than 32 socket options while correctly storing some boolean socket
+        // options in sk_flags, a 32-bit integer.
         //
         // other issues include:
         // 1. many of the options such as SO_SNDBUF, SO_RCVBUF, though are stored in
@@ -3252,6 +3255,7 @@ impl Cage {
                 // we store the options inside a 32-bit integer
                 // where i-th bits corresponds to i-th option
                 let optbit = 1 << optname;
+                // get the write lock of the socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let mut sockhandle = sock_tmp.write();
                 match level {
@@ -3301,16 +3305,37 @@ impl Cage {
                             // indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
                                 if sockhandle.state == ConnState::LISTEN {
-                                    // if in LISTEN state, set optval to 1
+                                    // if in LISTEN state, set return value to 1
                                     *optval = 1;
                                 } else {
-                                    // otherwise, set optval to 0
+                                    // otherwise, set return value to 0
                                     *optval = 0;
                                 }
                             }
                             // these options are stored inside the socket_options
                             // so we just retrieve it and set to optval
                             // BUG: SO_LINGER is not supposed to be a boolean option
+
+                            // SO_LINGER: When enabled, a close or shutdown will not return
+                            // until all queued messages for the socket have been
+                            // successfully sent or the linger timeout has been reached.
+                            // Otherwise, the call returns immediately and the closing is
+                            // done in the background.  When the socket is closed as part
+                            // of exit, it always lingers in the background.
+
+                            // SO_KEEPALIVE: Enable sending of keep-alive messages on connection-
+                            // oriented sockets.  Expects an integer boolean flag.
+
+                            // SO_SNDLOWAT/SO_RCVLOWAT: Specify the minimum number of bytes in the
+                            // buffer until the socket layer will pass
+                            // the data to the protocol (SO_SNDLOWAT) or
+                            // the user on receiving (SO_RCVLOWAT).
+
+                            // SO_REUSEPORT: Permits multiple AF_INET or AF_INET6 sockets to be
+                            // bound to an identical socket address.
+
+                            // SO_REUSEADDR: Indicates that the rules used in validating addresses
+                            // supplied in a bind call should allow reuse of local addresses.
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT
                             | SO_REUSEADDR => {
                                 if sockhandle.socket_options & optbit == optbit {
@@ -3323,12 +3348,16 @@ impl Cage {
                             }
                             // sndbuf, rcvbuf, socktype are stored in a dedicated field
                             // so retrieve it directly and set the optval to it
+
+                            // SO_SNDBUF: Sets or gets the maximum socket send buffer in bytes.
+                            // SO_RCVBUF: Sets or gets the maximum socket receive buffer in bytes.
                             SO_SNDBUF => {
                                 *optval = sockhandle.sndbuf;
                             }
                             SO_RCVBUF => {
                                 *optval = sockhandle.rcvbuf;
                             }
+                            // SO_TYPE: Gets the socket type as an integer
                             SO_TYPE => {
                                 *optval = sockhandle.socktype;
                             }
@@ -3388,10 +3417,12 @@ impl Cage {
 
     /// ## ------------------SETSOCKOPT SYSCALL------------------
     /// ### Description
-    /// "setsockopt_syscall()" shall set the option specified by the optname
-    /// argument, at the protocol level specified by the level argument, to the
-    /// value pointed to by the optval argument for the socket associated with
-    /// the file descriptor specified by the fd argument.
+    /// "setsockopt_syscall()" sets a socket option. It configures the option
+    /// specified by the optname argument, at the protocol level specified
+    /// by the level argument, to the value pointed to by the optval argument.
+    /// This is done for the socket associated with the file descriptor provided
+    /// in the fd argument.
+    ///
     ///
     /// ### Function Arguments
     /// The `setsockopt_syscall()` receives four arguments:
@@ -3437,6 +3468,8 @@ impl Cage {
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
+                // for the explanation of each socket options, check
+                // getsockopt_syscall at corresponding location
                 match level {
                     SOL_UDP => {
                         // we do not support SOL_UDP
@@ -3507,7 +3540,7 @@ impl Cage {
 
                         match optname {
                             SO_ACCEPTCONN | SO_TYPE | SO_SNDLOWAT | SO_RCVLOWAT => {
-                                // these socket options are read-onlly and cannot be manually set
+                                // these socket options are read-only and cannot be manually set
                                 let error_string =
                                     format!("Cannot set option using setsockopt. {}", optname);
                                 return syscall_error(
