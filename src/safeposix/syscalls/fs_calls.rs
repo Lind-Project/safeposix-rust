@@ -2567,9 +2567,11 @@ impl Cage {
                                     "seek to before position 0 in file",
                                 );
                             }
-                            // subsequent writes to the end of the file must zero pad up until this
-                            // point if we overran the end of our file when seeking. This is
-                            // currently supported in write and pwrite syscalls.
+                            // subsequent writes to the end of the file must zero pad up (filling
+                            // the gap between the current end of the file and the new position with
+                            // zero bytes ('\0')) until this point if we overran the end of our file
+                            // when seeking. This is currently supported in write and pwrite
+                            // syscalls.
 
                             // Update the final position of the file descriptor object
                             normalfile_filedesc_obj.position = eventualpos as usize;
@@ -3223,7 +3225,7 @@ impl Cage {
             match filedesc_enum {
                 //if we are a socket, we dont change disk metadata
                 Stream(_) => {} // Stream closing not supported
-                Epoll(_) => {}  // Epoll closing not implemented yet
+                Epoll(_) => {}  // TODO: Epoll closing not implemented yet
                 Socket(ref mut socket_filedesc_obj) => {
                     // Retrieve the socket file descriptor object and get the write
                     // lock on the socket handle.
@@ -3261,19 +3263,16 @@ impl Cage {
                             let mut inodeobj = FS_METADATA.inodetable.get_mut(&ui.inode).unwrap();
                             if let Inode::Socket(ref mut sock) = *inodeobj {
                                 sock.refcount -= 1;
-                                if sock.refcount == 0 {
-                                    if sock.linkcount == 0 {
-                                        // Remove the socket from the inode table and the domain
-                                        // socket paths
-                                        // if it is no longer needed.
-                                        drop(inodeobj);
-                                        let path = normpath(
-                                            convpath(sockhandle.localaddr.unwrap().path()),
-                                            self,
-                                        );
-                                        FS_METADATA.inodetable.remove(&inodenum);
-                                        NET_METADATA.domsock_paths.remove(&path);
-                                    }
+                                if sock.refcount == 0 && sock.linkcount == 0 {
+                                    // Remove the socket from the inode table and the domain
+                                    // socket paths if it is no longer needed.
+                                    drop(inodeobj);
+                                    let path = normpath(
+                                        convpath(sockhandle.localaddr.unwrap().path()),
+                                        self,
+                                    );
+                                    FS_METADATA.inodetable.remove(&inodenum);
+                                    NET_METADATA.domsock_paths.remove(&path);
                                 }
                             }
                         }
