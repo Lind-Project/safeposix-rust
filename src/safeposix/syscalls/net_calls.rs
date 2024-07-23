@@ -1336,7 +1336,7 @@ impl Cage {
     ///
     /// ** Indicates the error may be returned from RustPOSIX
     ///
-    /// ### Panics TODO:
+    /// ### Panics:
     ///
     /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
@@ -1586,7 +1586,7 @@ impl Cage {
     ///
     /// ** Indicates the error may be returned from RustPOSIX
     ///
-    /// ### Panics TODO:
+    /// ### Panics:
     ///
     /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
@@ -1765,21 +1765,22 @@ impl Cage {
                                             );
                                         }
                                     };
-                                    //in sendto_syscall, we need to acquire the 
-                                    //fd/sockhandle with write/read lock again. 
+                                    //in sendto_syscall, we need to acquire the
+                                    //fd/sockhandle with write/read lock again.
                                     //If we do not release the lock here, deadlock will happen
                                     drop(unlocked_fd);
                                     drop(sockhandle);
                                     //remote address is set in sendto from libc
                                     //as UDP socket is connection-less
+                                    //error checking is handled in sento_syscall
                                     return self.sendto_syscall(
                                         fd,
                                         buf,
                                         buflen,
                                         flags,
                                         &remoteaddr,
-                                    ); //return the number of bytes written to the connected socket
-                                    //** TODO: Add error checking on the return value */
+                                    ); //return the number of bytes written to
+                                       // the connected socket
                                 }
 
                                 //Protcol besides UDP and TCP are not supported
@@ -1923,9 +1924,10 @@ impl Cage {
         let mut newbuflen = buflen;
         let mut newbufptr = buf;
 
-        //if we have peeked some data before, fill our buffer with that data before
-        // moving on
-        // ** Why is this a step ?? ** //
+        //if we have peeked some data before, fill our buffer with that data
+        //before moving on. This step is neccessary as we read the data from
+        //the pipe into the last peek field of the socket handle during our
+        //last peek
         if !sockhandle.last_peek.is_empty() {
             //Grab the minimum of the two values
             let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
@@ -1976,7 +1978,7 @@ impl Cage {
             //we loop here so we can cancel blocking recvs, if necessary
             loop {
                 //Grab the receive pipe from the socket to read the data
-                //into the remaining space in the buffer **
+                //into the remaining space in the buffer
                 let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                 let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                 retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
@@ -2028,7 +2030,7 @@ impl Cage {
                 //
                 //Depending on whether the socket is blocking or non-blocking,
                 //call the relevant corresponding function
-                //to read into the remaining space in the buffer ** ??
+                //to read into the remaining space in the buffer
                 if sockfdobj.flags & O_NONBLOCK != 0 {
                     retval = sockhandle
                         .innersocket
@@ -2148,7 +2150,7 @@ impl Cage {
             //if the remoteaddr is set and addr is not, use remoteaddr buff
             //to grab the address from which the message is sent from
             //otherwise, use addr to grab the address from which the message is sent from
-            // ?? unwrap will not cause panic because of implicit bind
+            //note: unwrap will not cause panic because of implicit bind
             let retval = if let (None, Some(ref mut remoteaddr)) = (&addr, sockhandle.remoteaddr) {
                 sockhandle.innersocket.as_ref().unwrap().recvfrom(
                     buf,
@@ -2294,7 +2296,7 @@ impl Cage {
     ///
     /// ** Indicates the error may be returned from RustPOSIX
     ///
-    /// ### Panics TODO:
+    /// ### Panics:
     ///
     /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
@@ -2378,7 +2380,7 @@ impl Cage {
     ///
     /// ** Indicates the error may be returned from RustPOSIX
     ///
-    /// ### Panics TODO:
+    /// ### Panics:
     ///
     /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
