@@ -4034,6 +4034,36 @@ pub mod fs_tests {
 
         assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+
+        lindrustfinalize();
+    }
+
+    pub fn ut_lind_fs_shmget_syscall(){
+        // acquire locks and start env cleanup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1); 
+
+        let key = 33123;
+        // Get shmid of a memory segment / create a new one if it doesn't exist
+        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);       
+        assert_eq!(shmid,4); 
+
+        // Check error upon asking for a valid key and passing the IPC_CREAT and IPC_EXCL flag
+        assert_eq!(cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),-(Errno::EEXIST as i32 ));
+
+        // Check error when passing IPC_CREAT flag as the key 
+        assert_eq!(cage.shmget_syscall(IPC_PRIVATE,1024,IPC_PRIVATE),-(Errno::ENOENT as i32));
+
+        // Check if the function returns a correct shmid upon asking with a key that we know exists 
+        assert_eq!(cage.shmget_syscall(key, 1024,0666),shmid);
+
+        // Check if the function returns the correct error when we don't pass IPC_CREAT for a key that doesn't exist
+        assert_eq!(cage.shmget_syscall(123456, 1024, 0),-(Errno::ENOENT as i32));
+
+        // Check if the size error is returned correctly
+        assert_eq!(cage.shmget_syscall(123456, (SHMMAX + 10 )as usize, IPC_CREAT),-(Errno::EINVAL as i32));
+        assert_eq!(cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),-(Errno::EINVAL as i32));
+
         lindrustfinalize();
     }
 }

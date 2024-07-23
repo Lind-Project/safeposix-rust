@@ -1175,6 +1175,171 @@ pub mod net_tests {
     }
 
     #[test]
+    //Attempt to call accept on a socket that is not listening for a connection
+    //Attempt to call accept on a socket that is closed
+    //Both of these should return their respective errors, being EINVAL and EBADF
+    pub fn ut_lind_net_accept_errs() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        assert!(serversockfd > 0);
+        assert!(clientsockfd > 0);
+        let port: u16 = generate_random_port();
+        //binding to a socket
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            let mut socket2 = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+
+            //Accept before listening
+            assert_eq!(
+                cage2.accept_syscall(serversockfd, &mut socket2),
+                -(Errno::EINVAL as i32)
+            );
+            //Now listen
+            assert_eq!(cage2.listen_syscall(serversockfd, 10), 0);
+
+            //Check that fd > 0, indicating a valid connection
+            assert!(cage2.accept_syscall(serversockfd, &mut socket2) > 0);
+            //Close serverfd and check that it doesn't accept
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(
+                cage2.accept_syscall(serversockfd, &mut socket2),
+                -(Errno::EBADF as i32)
+            );
+
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        interface::sleep(interface::RustDuration::from_millis(1000));
+        assert_eq!(cage.connect_syscall(clientsockfd, &socket), 0);
+
+        let mut retsocket = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        assert_eq!(cage.getsockname_syscall(clientsockfd, &mut retsocket), 0);
+        assert_ne!(retsocket, socket);
+
+        assert_eq!(cage.close_syscall(serversockfd), 0);
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    //We try to queue more than 1 connection with the
+    //backlog is set to 1. We expect both connections to return with
+    //errno set to EINPROGRESS as the sockets are non-blocking
+    pub fn ut_lind_net_listen_more_than_backlog() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let clientsockfd1 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+        let clientsockfd2 = cage.socket_syscall(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+
+        assert!(serversockfd > 0);
+        assert!(clientsockfd1 > 0);
+        assert!(clientsockfd2 > 0);
+        let port: u16 = generate_random_port();
+        //binding to a socket
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 1), 0);
+
+        //forking the cage to get another cage with the same information
+        assert_eq!(cage.fork_syscall(2), 0);
+
+        let thread = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+
+            assert_eq!(
+                cage2.connect_syscall(clientsockfd1, &socket),
+                -(Errno::EINPROGRESS as i32)
+            );
+
+            interface::sleep(interface::RustDuration::from_millis(100));
+
+            assert_eq!(
+                cage2.connect_syscall(clientsockfd2, &socket),
+                -(Errno::EINPROGRESS as i32)
+            );
+
+            assert_eq!(cage2.close_syscall(serversockfd), 0);
+            assert_eq!(cage2.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        });
+
+        assert_eq!(cage.close_syscall(serversockfd), 0);
+
+        thread.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    //UDP Socket should not be able to listen
+    //Fail with errno EOPNOTSUPP
+    #[test]
+    pub fn ut_lind_net_listen_udp_socket() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_DGRAM, 0);
+        assert!(serversockfd > 0);
+        let port: u16 = generate_random_port();
+        //binding to a socket
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.1
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 10), -95); //why can't i use EOPNOTSUPP here??
+
+        assert_eq!(cage.close_syscall(serversockfd), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_net_poll_bad_input() {
         // this test is used for testing poll with some error/edge cases
 
