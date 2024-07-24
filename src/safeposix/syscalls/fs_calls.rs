@@ -2465,9 +2465,9 @@ impl Cage {
     ///   particular reference point.
     /// * `whence` - It determines how the seek operation is performed. There
     ///   are three possible values for whence: `SEEK_SET`: The file offset is
-    ///   set to offset bytes. `SEEK_CUR`: The file offset is set to its current
-    ///   location plus offset bytes. `SEEK_END`: The file offset is set to the
-    ///   size of the file plus offset bytes.
+    ///   set to 0 + offset bytes. `SEEK_CUR`: The file offset is set to its
+    ///   current location plus offset bytes. `SEEK_END`: The file offset is set
+    ///   to the size of the file plus offset bytes.
     ///
     /// ### Returns
     ///
@@ -3170,7 +3170,7 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * There are no such panics which happen inside the function.
+    /// * This syscall indirectly panics when the helper function panics.
     ///
     /// For more detailed description of all the commands and return values, see
     /// [close(2)](https://man7.org/linux/man-pages/man2/close.2.html)
@@ -3267,11 +3267,15 @@ impl Cage {
                                     // Remove the socket from the inode table and the domain
                                     // socket paths if it is no longer needed.
                                     drop(inodeobj);
+                                    // Get the entire path of the socket which is used for removing
+                                    // it from the metadata file.
                                     let path = normpath(
                                         convpath(sockhandle.localaddr.unwrap().path()),
                                         self,
                                     );
+                                    // Remove the reference of the inode from the inodetable
                                     FS_METADATA.inodetable.remove(&inodenum);
+                                    // Remove any domain socket paths associated with the socket
                                     NET_METADATA.domsock_paths.remove(&path);
                                 }
                             }

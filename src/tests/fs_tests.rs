@@ -4138,8 +4138,18 @@ pub mod fs_tests {
         assert!(fd >= 0);
 
         // Attempt to seek to a negative offset and check if it returns an error
+        // using "SEEK_SET" whence, where we are explicitly setting the file
+        // offset to -10 value.
         assert_eq!(
             cage.lseek_syscall(fd, -10, SEEK_SET),
+            -(Errno::EINVAL as i32)
+        );
+
+        // Attempt to seek to a negative offset and check if it returns an error
+        // using "SEEK_CUR" whence, where current position of the file is 0,
+        // as it's empty initially, and we are adding -10 to the offset.
+        assert_eq!(
+            cage.lseek_syscall(fd, -10, SEEK_CUR),
             -(Errno::EINVAL as i32)
         );
 
