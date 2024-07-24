@@ -2044,13 +2044,53 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SHUTDOWN SYSCALL------------------
+    /// ### Description
+    /// The `netshutdown_syscall()` call causes all or part of a full-duplex
+    /// connection on the socket associated with fd to be shut down. If "how" is
+    /// SHUT_RD, further receptions will be disallowed.  If "how" is SHUT_WR,
+    /// further transmissions will be disallowed.  If "how" is SHUT_RDWR,
+    /// further receptions and transmissions will be disallowed.
+    ///
+    /// ### Function Arguments
+    /// The `netshutdown_syscall()` receives two arguments:
+    /// * `fd` - The socket file descriptor
+    /// * `how` -  how to shutdown the socket. If how is SHUT_RD, further
+    ///   receptions will be disallowed.  If how is SHUT_WR, further
+    ///   transmissions will be disallowed.  If how is SHUT_RDWR, further
+    ///   receptions and transmissions will be disallowed.
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - An invalid file descriptor was given in one of the sets
+    /// * EINVAL - An invalid value was specified in "how"
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The specified socket is not connected.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
+        // BUG: we did not check if the specified socket is connected or not
+
+        // first let's check fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "netshutdown",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
         match how {
             SHUT_RDWR | SHUT_RD | SHUT_WR => {
                 return Self::_cleanup_socket(self, fd, how);
             }
             _ => {
-                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                // invalid how argument
+                // See http://linux.die.net/man/2/shutdown for nuance to this error
                 return syscall_error(
                     Errno::EINVAL,
                     "netshutdown",
@@ -2060,6 +2100,7 @@ impl Cage {
         }
     }
 
+    // this function handles the core logic of shutdown
     pub fn _cleanup_socket_inner_helper(
         sockhandle: &mut SocketHandle,
         how: i32,
@@ -2067,40 +2108,59 @@ impl Cage {
     ) -> i32 {
         // we need to do a bunch of actual socket cleanup for INET sockets
         if sockhandle.domain != AF_UNIX {
+            // this flag is used for marking if we want to release the resources of the
+            // socket
             let mut releaseflag = false;
             if let Some(ref sobj) = sockhandle.innersocket {
+                // get the innersocket
                 if shutdown {
+                    // shutdown the internal socket with libc shutdown
                     let shutresult = sobj.shutdown(how);
 
                     if shutresult < 0 {
+                        // in case of error from libc shutdown, return the errno
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
                                 return syscall_error(
                                     i,
                                     "shutdown",
-                                    "The libc call to setsockopt failed!",
+                                    "The libc call to shutdown failed!",
                                 );
                             }
-                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            Err(()) => panic!("Unknown errno value from shutdown returned!"),
                         };
                     }
 
+                    // here we want to release the resources (port, innersocket) if the socket is
+                    // closed on RD and WR at the same time. however, BUG: this
+                    // is not something that is supposed to be done in shutdown, instead, they
+                    // should be handled in close
                     match how {
                         SHUT_RD => {
+                            // if we shutdown RD on a socket that is already in RDONLY state
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             if sockhandle.state == ConnState::CONNRDONLY {
                                 releaseflag = true;
                             }
                         }
                         SHUT_WR => {
+                            // if we shutdown WR on a socket that is already in WRONLY state
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             if sockhandle.state == ConnState::CONNWRONLY {
                                 releaseflag = true;
                             }
                         }
                         SHUT_RDWR => {
+                            // we shutdown RD and WR
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             releaseflag = true;
                         }
                         _ => {
-                            //See http://linux.die.net/man/2/shutdown for nuance to this error
+                            // invalid how argument
+                            // See http://linux.die.net/man/2/shutdown for nuance to this error
                             return syscall_error(
                                 Errno::EINVAL,
                                 "netshutdown",
@@ -2109,51 +2169,69 @@ impl Cage {
                         }
                     }
                 } else {
-                    //Reaching this means that the socket is closed. Removing the sockobj
-                    //indicates that the sockobj will drop, and therefore close
+                    // Reaching this means that the socket is closed after close_syscall. Removing
+                    // the sockobj indicates that the sockobj will drop, and therefore close
                     releaseflag = true;
                     sockhandle.innersocket = None;
                 }
             }
 
+            // if we want to release the associated resources of the socket
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                    //move to end
+                    // release the port
                     let release_ret_val = NET_METADATA._release_localport(
                         localaddr.addr(),
                         localaddr.port(),
                         sockhandle.protocol,
                         sockhandle.domain,
                     );
+                    // release the localaddr
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {
+                        // in case of any error in releasing the port
+                        // return the error
                         return e;
                     }
                 }
             }
         }
 
-        // now change the connections for all socket types
+        // now change the connection state for all socket types
         match how {
             SHUT_RD => {
-                if sockhandle.state == ConnState::CONNWRONLY {
+                if sockhandle.state == ConnState::CONNRDONLY {
+                    // shutdown RD on socket with RDONLY state means
+                    // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
                 } else {
+                    // otherwise, we only closed RD, and the socket can still write
+                    // however, BUG: Linux is handling shutdown for different state seperately.
+                    // shutdown on RD does not mean the socket would always be WRONLY. for example,
+                    // if the socket is in LISTEN state, shutdown on RD will cause the socket to
+                    // disconnect directly, without the need to shutdown on WR again.
                     sockhandle.state = ConnState::CONNWRONLY;
                 }
             }
             SHUT_WR => {
-                if sockhandle.state == ConnState::CONNRDONLY {
+                if sockhandle.state == ConnState::CONNWRONLY {
+                    // shutdown WR on socket with WRONLY state means
+                    // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
                 } else {
+                    // otherwise, we only closed WR, and the socket can still read
+                    // however, see above BUG
                     sockhandle.state = ConnState::CONNRDONLY;
                 }
             }
             SHUT_RDWR => {
+                // the socket is neither readable nor writable
+                // we just set the state to not connected
                 sockhandle.state = ConnState::NOTCONNECTED;
             }
             _ => {
-                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                // invalid how argument
+                // See http://linux.die.net/man/2/shutdown for nuance to this error
                 return syscall_error(
                     Errno::EINVAL,
                     "netshutdown",
@@ -2165,6 +2243,7 @@ impl Cage {
         return 0;
     }
 
+    // this function is an inner function of shutdown and checks for fd type
     pub fn _cleanup_socket_inner(
         &self,
         filedesc: &mut FileDescriptor,
@@ -2172,11 +2251,13 @@ impl Cage {
         shutdown: bool,
     ) -> i32 {
         if let Socket(sockfdobj) = filedesc {
+            // get write lock of sockhandle
             let sock_tmp = sockfdobj.handle.clone();
             let mut sockhandle = sock_tmp.write();
 
             Self::_cleanup_socket_inner_helper(&mut *sockhandle, how, shutdown)
         } else {
+            // this file descriptor is not a socket fd
             syscall_error(
                 Errno::ENOTSOCK,
                 "cleanup socket",
@@ -2185,19 +2266,27 @@ impl Cage {
         }
     }
 
+    // this function is an inner function of shutdown and checks for fd
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
             if inner_result < 0 {
+                // in case of error, return the error
                 return inner_result;
             }
 
+            // if how is SHUT_RDWR, we clear this file descriptor
+            // however, BUG: according to standard, shutdown() doesn’t close the file
+            // descriptor, even if how is specified as SHUT_RDWR. To close the file
+            // descriptor, we must additionally call close().
             if how == SHUT_RDWR {
                 let _discarded_fd = unlocked_fd.take();
             }
         } else {
+            // file descriptor does not exist
             return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
         }
 
