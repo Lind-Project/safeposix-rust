@@ -3363,14 +3363,48 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETPEERNAME SYSCALL------------------
+    /// ### Description
+    /// The `getpeername_syscall()` returns the address of the peer connected to
+    /// the socket fd, in the buffer pointed to by ret_addr
+    ///
+    /// ### Function Arguments
+    /// The `getpeername_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The socket is not connected.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getpeername.2.html
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getpeername",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
-                //if the socket is not connected, then we should return an error
+                // get the read lock of sockhandle
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // if the socket is not connected, then we should return an error
                 if sockhandle.remoteaddr == None {
                     return syscall_error(
                         Errno::ENOTCONN,
@@ -3378,9 +3412,12 @@ impl Cage {
                         "the socket is not connected",
                     );
                 }
+                // remoteaddr stores the value we want so we just return the remoteaddr stored
+                // in sockhandle
                 *ret_addr = sockhandle.remoteaddr.unwrap();
                 return 0;
             } else {
+                // if the fd is not socket object
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getpeername",
@@ -3388,6 +3425,7 @@ impl Cage {
                 );
             }
         } else {
+            // if the fd is not valid
             return syscall_error(
                 Errno::EBADF,
                 "getpeername",
@@ -3396,15 +3434,56 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETSOCKNAME SYSCALL------------------
+    /// ### Description
+    /// The `getsockname_syscall()` returns the current address to which the
+    /// socket fd is bound, in the buffer pointed to by ret_addr. If the socket
+    /// hasn't bound to any address, it returns an empty address.
+    ///
+    /// ### Function Arguments
+    /// The `getsockname_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getsockname.2.html
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getsockname",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
+                // must be a socket file descriptor
+
+                // get the read lock of socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // each socket type has different structure
+                // so we must handle them seperately
                 if sockhandle.domain == AF_UNIX {
+                    // in case of AF_UNIX socket
                     if sockhandle.localaddr == None {
+                        // if hasn't bound to any address,
+                        // return an empty address
                         let null_path: &[u8] = &[];
                         *ret_addr = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                             sockhandle.domain as u16,
@@ -3412,13 +3491,19 @@ impl Cage {
                         ));
                         return 0;
                     }
-                    //if the socket is not none, then return the socket
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 } else {
+                    // in case of AF_INET/AF_INET6
                     if sockhandle.localaddr == None {
-                        //sets the address to 0.0.0.0 if the address is not initialized yet
-                        //setting the family as well based on the domain
+                        // if the socket hasn't bound to any address, we'd return an empty address
+                        // with both ip and port set to 0. But family should be set since it is
+                        // something that was already specified when the socket was created
+
+                        // for ipv4, set the address to 0.0.0.0 to indicate uninitialized address
+                        // for ipv6, set the address to 0:0:0:0:0:0:0:0
+                        // (::) to indicate uninitialized address
                         let addr = match sockhandle.domain {
                             AF_INET => interface::GenIpaddr::V4(interface::V4Addr::default()),
                             AF_INET6 => interface::GenIpaddr::V6(interface::V6Addr::default()),
@@ -3428,13 +3513,16 @@ impl Cage {
                         };
                         ret_addr.set_addr(addr);
                         ret_addr.set_port(0);
+                        // set the family
                         ret_addr.set_family(sockhandle.domain as u16);
                         return 0;
                     }
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 }
             } else {
+                // the fd is not a socket
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockname",
@@ -3442,6 +3530,7 @@ impl Cage {
                 );
             }
         } else {
+            // invalid fd
             return syscall_error(
                 Errno::EBADF,
                 "getsockname",
@@ -3450,9 +3539,32 @@ impl Cage {
         }
     }
 
-    //we only return the default host name because we do not allow for the user to
-    // change the host name right now
+    /// ## ------------------GETHOSTNAME SYSCALL------------------
+    /// ### Description
+    /// The `gethostname_syscall()` returns the null-terminated hostname in the
+    /// address_ptr, which has length bytes.  If the null-terminated
+    /// hostname is too large to fit, then the name is truncated, and no error
+    /// is returned
+    ///
+    /// ### Function Arguments
+    /// The `gethostname_syscall()` receives two arguments:
+    /// * `address_ptr` -  The buffer to hold the returned host name
+    /// * `length` - The length of the buffer
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EINVAL - length is negative
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man2/gethostname.2.html
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
+        // we only return the default host name (Lind) because we do not allow for the
+        // user to change the host name right now
         if length < 0 {
             return syscall_error(
                 Errno::EINVAL,
@@ -3461,15 +3573,19 @@ impl Cage {
             );
         }
 
+        // DEFAULT_HOSTNAME is "Lind"
+        // we convert the string to vector with a null terminator
         let mut bytes: Vec<u8> = DEFAULT_HOSTNAME.as_bytes().to_vec();
         bytes.push(0u8); //Adding a null terminator to the end of the string
         let name_length = bytes.len();
 
+        // take the min between name_length and length from argument
         let mut len = name_length;
         if (length as usize) < len {
             len = length as usize;
         }
 
+        // fill up the address_ptr
         interface::fill(address_ptr, len, &bytes);
 
         return 0;
@@ -4251,9 +4367,32 @@ impl Cage {
         return 0;
     }
 
-    // all this does is send the net_devs data in a string to libc, where we will
-    // later parse and alloc into getifaddrs structs
+    /// ## ------------------GETIFADDRS SYSCALL------------------
+    /// ### Description
+    /// The `getifaddrs_syscall()` function creates a linked list of structures
+    /// describing the network interfaces of the local system, and stores the
+    /// address of the first item of the list in buf.
+    ///
+    /// ### Function Arguments
+    /// The `getifaddrs_syscall()` receives two arguments:
+    /// * `buf` -  The buffer to hold the returned address
+    /// * `count` - The length of the buffer
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EOPNOTSUPP - buf length is too small to hold the return value
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
+        // all this does is returning the net_devs data in a string, where we will later
+        // parse and alloc into getifaddrs structs in libc
+
         if NET_IFADDRS_STR.len() < count {
             interface::fill(
                 buf,
