@@ -1176,8 +1176,7 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * If `statbuf` is incorrectly populated, causing potential runtime
-    ///   issues.
+    /// * This function does not have any known panics.
     ///
     /// For more detailed description of all the commands and return values,
     /// refer to the stat man page [here](https://man7.org/linux/man-pages/man2/stat.2.html).
