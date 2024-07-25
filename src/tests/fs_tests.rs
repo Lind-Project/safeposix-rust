@@ -4419,18 +4419,6 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
         let mut statdata = StatData::default();
 
-        fn normpath(path: String, _: &MockFSMetadata) -> std::path::PathBuf {
-            std::path::PathBuf::from(path)
-        }
-
-        fn convpath(path: &str) -> String {
-            path.to_string()
-        }
-
-        fn metawalk(_: &std::path::Path) -> Option<u64> {
-            Some(1) // Always returns inode number 1 for simplicity
-        }
-
         // test out whether an error is output for a non existent file path
         // (ENOENT[-2])
         assert_eq!(

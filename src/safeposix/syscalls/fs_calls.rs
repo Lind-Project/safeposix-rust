@@ -1325,12 +1325,13 @@ impl Cage {
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         // Attempt to get the file descriptor
-        // BUG: This line results in a panic if the file descriptor is invalid. We
-        // should gracefully be handling this error.
         let checkedfd_result = self.get_filedescriptor(fd);
+
+        // If the file descriptor is invalid, return an error of code 9 (bad file num).
         if let Err(_) = checkedfd_result {
             return syscall_error(Errno::EBADF, "fstat", "Bad File Descriptor");
         }
+        // If the file descriptor is valid, we get the file descriptor object
         let checkedfd = checkedfd_result.unwrap();
 
         // Acquire a write lock on the file descriptor to ensure exclusive access.
@@ -5307,40 +5308,40 @@ impl Cage {
     }
 
     /// ### Description
-    /// 
+    ///
     /// `shmget_syscall` returns the shared memory segment identifier associated with a particular `key`
     /// If a key doesn't exist, shmget creates a new memory segment and attaches it to the key.
-    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which 
-    /// is not associated with a key during this syscall, 
-    /// but for our implementaion, we return an error and only create a new memory 
+    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which
+    /// is not associated with a key during this syscall,
+    /// but for our implementaion, we return an error and only create a new memory
     /// segment when the IPC_CREAT flag is specified in the`shmflag` argument.
-    /// 
-    /// ### Returns 
-    /// 
+    ///
+    /// ### Returns
+    ///
     /// An 32 bit integer which represens the identifier of the memory segment associated with the key
-    /// 
+    ///
     /// ### Arguments
-    /// 
+    ///
     /// `key` : An i32 value that references a memory segment
     /// `size` : Size of the memory segment to be created if key doesn't exist
     /// `shmflag` : mode flags which indicate whether to create a new key or not
-    ///  The `shmflag` is composed of the following 
+    ///  The `shmflag` is composed of the following
     ///  * IPC_CREAT - specify that the system call creates a new segment
-    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used 
+    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used
     ///               and the key passed has a memory segment associated with it.
-    /// 
-    /// ### Errors 
-    /// 
+    ///
+    /// ### Errors
+    ///
     /// * ENOENT : the key equals the `IPC_PRIVATE` constant
     /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are passed as flags
     /// * ENOENT : key did not exist and the `IPC_CREAT` flag was not passed
     /// * EINVAL : the size passed was less than the minimum size of segment or greater than the maximum possible size
-    /// 
+    ///
     /// ### Panics
-    /// 
+    ///
     /// There are no cases where the function directly panics
-    /// 
-    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 { 
+    ///
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
         //Check if the key passed equals the IPC_PRIVATE flag
         if key == IPC_PRIVATE {
             // Return error since this is not suppported currently
@@ -5392,7 +5393,7 @@ impl Cage {
                 // Insert new id in the hash table entry pointed by the key
                 vacant.insert(shmid);
                 // Mode of the new segment is the 9 least significant bits of the shmflag
-                let mode = (shmflg & 0x1FF) as u16; 
+                let mode = (shmflg & 0x1FF) as u16;
                 // Create a new segment with the key, size, cageid of the calling process
                 let segment = new_shm_segment(
                     key,
@@ -5407,7 +5408,7 @@ impl Cage {
             }
         };
         // Return the shmid
-        shmid 
+        shmid
     }
 
     //------------------SHMAT SYSCALL------------------
