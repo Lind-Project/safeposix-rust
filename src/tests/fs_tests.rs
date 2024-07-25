@@ -4480,11 +4480,11 @@ pub mod fs_tests {
         // test whether an invalid fd results in a panic
         let invalid_fd = 0x10000000; // some dummy high fd which should fail fd check
 
-        // here, we catch the panic spat out by fstat into an Err
-        let invalid_fd_panic = catch_unwind(AssertUnwindSafe(|| {
-            cage.fstat_syscall(invalid_fd, &mut statdata);
-        }));
-        assert!(invalid_fd_panic.is_err());
+        // test whether an invalid fd results in a
+        assert_eq!(
+            cage.fstat_syscall(invalid_fd, &mut statdata),
+            syscall_error(Errno::EBADF, "", "")
+        );
 
         // test out whether an error is output for a non existent fd (1000)
         // (ENOENT[-2])
