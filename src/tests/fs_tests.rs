@@ -4089,4 +4089,25 @@ pub mod fs_tests {
 
         lindrustfinalize();
     }
+
+    #[test]
+    pub fn ut_lind_fs_smhdt_syscall(){
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let key = 33137;
+        let shmid = cage.shmget_syscall(key, 1024, IPC_CREAT);
+
+        let shmret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
+
+        // Check that the shmdt calls returns the shmid upon succesful unmapping
+        assert_eq!(cage.shmdt_syscall(0xfffff000 as *mut u8),shmid);
+
+        // Assert that when passed an incorrect address, the function returns the appropriate error
+        assert_eq!(cage.shmdt_syscall(0xfffff010 as *mut u8),-(Errno::EINVAL as i32));
+
+        lindrustfinalize();
+    }
 }

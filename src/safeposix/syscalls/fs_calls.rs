@@ -5187,7 +5187,7 @@ impl Cage {
     /// 
     /// This function panics if creating an inode fails
     /// 
-    /// 
+    /// For more information please refer - [https://man7.org/linux/man-pages/man3/shmdt.3p.html]
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
