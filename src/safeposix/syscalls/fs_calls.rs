@@ -5096,7 +5096,7 @@ impl Cage {
     /// `shmaddr` : Address in the address space of the calling Cage where the segment is to be mapped
     /// `shmflag` : Flag which indicates if the memory segment to be mapped is readonly or not
     /// 
-    /// ### Returns 
+    /// ### Returns
     /// 
     /// Returns the address at which the memory segment has been mapped into
     /// 
@@ -5143,14 +5143,15 @@ impl Cage {
                     let cage2_rev_shm = cage2.rev_shm.lock();
                     // Find all addresses associated with the shmid of the memory segment
                     let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid);
-                    // Add each semaphore at its appropriate offset
+                    // Add each semaphore at its appropriate offset - only need to index the first address
+                    // Since semaphores are consistent across all cages and all addresses within the cages
                     for offset in segment.semaphor_offsets.iter() {
                         let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); 
                         self.sem_table.insert(shmaddr as u32 + *offset, sementry);
                     }
                 }
             }
-
+            
             // Map the shared segment onto the current cage using `map_shm` function
             segment.map_shm(shmaddr, prot, self.cageid)
         } else {
