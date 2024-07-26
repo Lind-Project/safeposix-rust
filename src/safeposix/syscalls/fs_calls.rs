@@ -3224,7 +3224,7 @@ impl Cage {
             // one less reference to the file.
             match filedesc_enum {
                 //if we are a socket, we dont change disk metadata
-                Stream(_) => {} // Stream closing not supported
+                Stream(_) => {} // Streams don't require any additional cleanup
                 Epoll(_) => {}  // TODO: Epoll closing not implemented yet
                 Socket(ref mut socket_filedesc_obj) => {
                     // Retrieve the socket file descriptor object and get the write
