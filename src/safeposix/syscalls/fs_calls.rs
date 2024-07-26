@@ -101,11 +101,11 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
-use std::io::{self, Write, IoSlice};
+use interface::RustIOSlice;
 use crate::interface::log_to_stdout;
 use crate::interface::concat_iovec_to_slice;
 use crate::interface::log_from_slice;
-use crate::interface::RustLock; 
+use crate::interface::RustLock;
 use crate::interface::iovec_to_ioslice;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
@@ -1827,41 +1827,43 @@ impl Cage {
                 Stream(_stream_filedesc_obj) => {
                     // Convert the iovec array to a single contiguous slice of bytes
                     let iovecslice = concat_iovec_to_slice(iovec, iovcnt);
-                
-                    // Log the data from the slice. This function handles logging the provided data.
-                    log_from_slice(fd, &iovecslice)
+        
+                    // Log the data from the slice. Handle the Result from log_from_slice
+                    match log_from_slice(fd, &iovecslice) {
+                        Ok(bytes_written) => bytes_written,
+                        Err(err_msg) => syscall_error(Errno::EIO, "writev", &err_msg),
+                    }
                 }
                 File(ref mut normalfile_filedesc_obj) => {
-                    // let iovs: Vec<IoSlice> = unsafe { iovecs_to_ioslices(iovec, iovcnt) };
                     // Check if the file is open for writing
-                    if is_rdonly(normalfile_filedesc_obj.flags) { //inode number associated with the current fd
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        // Return error if the file is read-only
                         return syscall_error(
                             Errno::EBADF,
                             "writev",
                             "specified file not open for writing",
                         );
                     }
+
                     // Retrieve the inode object for the file
-                    let mut inodeobj = FS_METADATA //global structure 
-                        .inodetable //stores all the inodes in fs
+                    let mut inodeobj = FS_METADATA
+                        .inodetable
                         .get_mut(&normalfile_filedesc_obj.inode)
-                        .unwrap();//if the inode number does not exists then panic. 
-    
+                        .unwrap(); // Panic if the inode number does not exist
+
                     match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
-                            //It checks if the inodeobj retrieved from the inodetable is of the variant Inode::File. 
-                            //If it is, it provides a mutable reference (ref mut) to the actual inode data 
-                            //and assigns it to normalfile_inode_obj.
-                            let position = normalfile_filedesc_obj.position;//Get the current write position from the file descriptor object. This is where the write operation should start.
-                            let filesize = normalfile_inode_obj.size; //get the file size
-                            let blankbytecount = position as isize - filesize as isize; //calcutate the diff between the requirect file position and desired file position
-                            // Retrieve the file object from the file object table
+                            // The inode object retrieved is of type File. We get a mutable reference to the actual inode data.
+                            let position = normalfile_filedesc_obj.position; // Get the current write position from the file descriptor object
+                            let filesize = normalfile_inode_obj.size; // Get the file size
+                            let blankbytecount = position as isize - filesize as isize; // Calculate the difference between the required and desired file position
 
-                            let mut fileobject = FILEOBJECTTABLE 
-                                .get_mut(&normalfile_filedesc_obj.inode) //get inode number for the file
-                                .unwrap();//exits else panics
-    
-                            // We need to pad the file with blank bytes if we are at a position past the end of the file
+                            // Retrieve the file object from the file object table
+                            let mut fileobject = FILEOBJECTTABLE
+                                .get_mut(&normalfile_filedesc_obj.inode)
+                                .unwrap(); // Panic if the inode number does not exist
+
+                            // Pad the file with blank bytes if we are at a position past the end of the file
                             if blankbytecount > 0 {
                                 if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
                                     if byteswritten != blankbytecount as usize {
@@ -1872,41 +1874,15 @@ impl Cage {
                                 }
                             }
 
-                            //Create IoSlice objects from the raw iovec pointer
-                            //bunch of boxes (ioves array)
-                            //box label (iovstruct)
-                            //box location (iov_base)
-                            //box items (iov_len)
-                            //  iovec list of buffers for i/o operations
+                            // Create IoSlice objects from the raw iovec pointer
                             let iovs = iovec_to_ioslice(iovec, iovcnt);
-                            // let iovecs = unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
-                              
-                            // //we are assuming here the pointer lenghts are valid (need to find an alternate)
-                            // //create a helper function here
-                            // let iovs: Vec<IoSlice> = iovecs.iter()
-                            //     .map(|iovec| {
-                            //         let slice = unsafe { std::slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len as usize) };
-                            //         IoSlice::new(slice)
-                            //     })
-                            //     .collect();
-                            //from_raw_parts: This function takes a raw pointer (iovec) and a length (iovcnt), which is cast to usize, and creates a Rust slice (&[interface::IovecStruct])
-                            // that represents a view into the memory pointed to by iovec.
-                            //essentially it takes all the boxes and makes a list of them(iovecs slices)
-                            //for each label it looks inside the box and then puts a new label (Ioslice) such that writev understands.
-                            //and all the lables are put into a container (Vec<IoSlice>)
+
                             // Write to the file using the vectored IO method
-
-                            //IoSlice is designed to be a zero-copy abstraction
-                            // The IoSlice objects are just views into the original memory.
-                            // The main purpose of IoSlice is to allow for efficient I/O operations by avoiding unnecessary data copying.
-                            // it simply wraps the original memory, so any modifications to the original data will be reflected in the IoSlice objects.
-
-                            //file writing logic
-                            if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position) { //if write_v_at is successful then it executes
+                            if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position) {
                                 // Move position forward by the number of bytes we've written
                                 normalfile_filedesc_obj.position = position + byteswritten as usize;
                                 let newposition = normalfile_filedesc_obj.position;
-                                
+
                                 // Update file size if necessary
                                 if newposition > normalfile_inode_obj.size {
                                     normalfile_inode_obj.size = newposition;
@@ -1914,14 +1890,13 @@ impl Cage {
                                     drop(fileobject);
                                     log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
                                 }
-    
+
                                 byteswritten as i32
                             } else {
                                 syscall_error(Errno::EIO, "writev", "Failed to write data to file")
                             }
                         }
                         // Handle character device file
-                        // the code concatenates the data from the iovec array into a single buffer (buffer). It does this because the _write_chr_file function better with a single contiguous buffer.
                         Inode::CharDev(ref char_inode_obj) => {
                             let iovecs = unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
                             let total_len = iovecs.iter().map(|iov| iov.iov_len).sum::<usize>();
@@ -1932,18 +1907,11 @@ impl Cage {
                             }
                             self._write_chr_file(&char_inode_obj, buffer.as_ptr(), buffer.len())
                         }
-                        //The _write_chr_file function handles write operations for character device files (Inode::CharDev).
-                        //These files represent special files in Unix-like systems that often interact directly with hardware devices or have unique behaviors.
-
-                        // Inode::CharDev(ref char_inode_obj) => {// this is how write implemnts chr_file and we might need to do in the same way?
-                        //     self._write_chr_file(&char_inode_obj, buf, count)
-                        // }
-
-    
+                        // The _write_chr_file function handles write operations for character device files (Inode::CharDev).
                         Inode::Socket(_) => {
                             panic!("writev(): Socket inode found on a filedesc fd")
                         }
-    
+
                         Inode::Dir(_) => syscall_error(
                             Errno::EISDIR,
                             "writev",

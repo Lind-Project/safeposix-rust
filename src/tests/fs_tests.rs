@@ -9,8 +9,8 @@ pub mod fs_tests {
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use std::io::prelude::*;
-    use std::slice;
+    use interface::RustIOSlice;
+    use interface::IovecStruct;
 
     #[test]
     pub fn ut_lind_fs_simple() {
@@ -2220,14 +2220,16 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    use crate::interface::IovecStruct;
-    //test for stream in writev
+
     #[test]
     fn test_writev_syscall_stream() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
-        let fd = 1; // stdout
+        // Create a temporary file
+        let temp_file_name = "temp_stdout.txt";
+        let fd = cage.open_syscall(temp_file_name, O_CREAT | O_WRONLY | O_TRUNC, S_IRWXA);
+        assert!(fd >= 0, "Failed to open temporary file: fd = {}", fd);
     
         // Prepare the iovec structures
         let hello = b"Hello, ";
@@ -2243,15 +2245,27 @@ pub mod fs_tests {
             },
         ];
     
-        // Call writev_syscall
+        // Call writev_syscall with the file descriptor of the temporary file
         let bytes_written = cage.writev_syscall(fd, iovecs.as_ptr(), iovecs.len() as i32);
-        
-        // Validate the results
-        assert_eq!(bytes_written, 13, "Bytes written do not match expected value");
     
+        // Close the file descriptor
+        assert_eq!(cage.close_syscall(fd), 0);
+    
+        // Validate the results by reading from the temporary file
+        let fd = cage.open_syscall(temp_file_name, O_RDONLY, 0);
+        assert!(fd >= 0, "Failed to open tmp file for reading: fd = {}", fd);
+        let mut buffer = vec![0u8; 13];
+        let bytes_read = cage.read_syscall(fd, buffer.as_mut_ptr(), buffer.len());
+        assert_eq!(bytes_read, 13, "Incorrect number of bytes");
+        assert_eq!(&buffer[..], b"Hello, world!", "File contents do not match");
+    
+        // Clean up the temporary file 
+        assert_eq!(cage.unlink_syscall(temp_file_name), 0); 
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    //test for file in writev
+
     #[test]
     fn test_writev_syscall_file() {
         let _thelock = setup::lock_and_init();
@@ -2341,7 +2355,7 @@ pub mod fs_tests {
     
         // Create the slice and IoSlice 
         let slice = &original_data[1..4]; 
-        let io_slice = IoSlice::new(slice);
+        let io_slice = RustIOSlice::new(slice);
     
         // Access the data through the IoSlice
         let io_slice_data: &[u8] = &*io_slice;

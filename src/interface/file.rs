@@ -6,11 +6,10 @@
 use dashmap::DashSet;
 use parking_lot::Mutex;
 use std::env;
-use std::io::IoSlice;
 
 pub use std::ffi::CStr as RustCStr;
 use std::fs::{self, canonicalize, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write, IoSlice};
 pub use std::path::{Component as RustPathComponent, Path as RustPath, PathBuf as RustPathBuf};
 use std::slice;
 use std::sync::Arc;

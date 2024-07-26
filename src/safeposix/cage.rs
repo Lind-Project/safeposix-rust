@@ -42,8 +42,7 @@ pub use crate::interface::types::{
 
 use super::filesystem::normpath;
 use super::net::SocketHandle;
-use std::fs::File;
-use std::sync::RwLock;
+
 pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::net_constants::*;
 pub use super::syscalls::sys_constants::*;
@@ -58,7 +57,7 @@ pub enum FileDescriptor {
     Pipe(PipeDesc),
     Epoll(EpollDesc),
 }
-use std::sync::Arc;
+
 #[derive(Debug, Clone)]
 pub struct FileDesc {
     pub position: usize,
