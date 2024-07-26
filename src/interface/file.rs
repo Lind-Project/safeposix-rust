@@ -201,37 +201,7 @@ impl EmulatedFile {
 
         Ok(bytes_written)
     }
-    // write to a file from multiple buffers (represented by IoSlice objects)
-    // pub fn write_vectored_at(
-    //     &mut self,
-    //     bufs: &[IoSlice<'_>],
-    //     offset: usize,
-    // ) -> std::io::Result<usize> {
-    //     let mut total_bytes_written = 0;
 
-    //     if let Some(f) = &self.fobj {//checks if a file object actually exists in self.fob
-    //         let mut file = f.lock();// This acquires a lock on the file object 
-            
-    //         file.seek(SeekFrom::Start(offset as u64))?;// moves the file pointer to the desired starting position (offset) within the file. 
-    //         //SeekFrom::Start specifies that the offset is measured from the beginning of the file.
-    //         // The ? handles potential errors during the seek operation.
-    //         for buf in bufs {//iterates over each IoSlice object (buf) in the bufs array.
-    //             let bytes_written = file.write(buf)?;//: This attempts to write the data from the current IoSlice to the file. It uses the write method
-    //             total_bytes_written += bytes_written;
-    //             if bytes_written < buf.len() {//This is important! It checks if the write operation wrote fewer bytes than the size of the current buffer. 
-    //                 //If so, it means a partial write occurred. The loop breaks to avoid further attempts.
-    //                 break; // Stop if we wrote less than the buffer length
-    //             }
-    //         }
-    //     }
-    //     //Update File Size:
-    //     // Update recorded filesize if we've written past the previous filesize
-    //     if offset + total_bytes_written > self.filesize {
-    //         self.filesize = offset + total_bytes_written;
-    //     }
-
-    //     Ok(total_bytes_written)
-    // }
     pub fn write_vectored_at(
         &mut self,
         bufs: &[IoSlice<'_>],

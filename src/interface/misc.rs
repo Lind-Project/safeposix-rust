@@ -112,14 +112,12 @@ pub fn cagetable_clear() {
     }
 }
 
-/// This function takes a raw pointer (`iovec`) to an array of `IovecStruct` objects, which represent data buffers,
-/// and the number of `IovecStruct` objects in the array (`iovcnt`). It iterates through the array, extracts the data from each buffer,
-/// and concatenates it into a single `Vec<u8>`. 
-/// This function uses `unsafe` code because it works with raw pointers. It assumes that the provided `iovec` pointer is valid
-/// and points to a valid array of `IovecStruct` objects. It also assumes that the `iov_base` and `iov_len` fields of each
-/// `IovecStruct` object are valid and point to valid memory regions.
+// It takes a raw pointer (`iovec`) to an array of `IovecStruct` objects, which represent data buffers,
+// and the number of `IovecStruct` objects in the array (`iovcnt`). It iterates through the array, extracts the data from each buffer,
+// and concatenates it into a single `Vec<u8>`.
+
 pub fn concat_iovec_to_slice(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<u8> {
-    // ensure that the iovec pointer is valid and points to a valid iovec array
+    // Ensure that the iovec pointer is valid and points to a valid iovec array.
     let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
     // Create an empty vector to store the concatenated data.
     let mut data = Vec::new();
@@ -132,6 +130,9 @@ pub fn concat_iovec_to_slice(iovec: *const interface::IovecStruct, iovcnt: i32) 
     data
 }
 
+//This function logs data from a slice to the specified file descriptor.
+// It handles logging to standard output (fd 1) and standard error (fd 2).
+// For other file descriptors, it uses a low-level approach to write the data.
 
 pub fn log_from_slice(fd: i32, data: &[u8]) -> Result<i32, String> {
     match from_utf8(data) {
@@ -163,15 +164,16 @@ pub fn log_from_slice(fd: i32, data: &[u8]) -> Result<i32, String> {
     }
 }
 
-/// This converts a raw pointer to an array of `IovecStruct` objects into a vector of `IoSlice` objects.
-/// This function handles the conversion from the C-style `iovec` structure to the Rust-style `IoSlice` structure,
-/// which is used for vectored I/O operations. 
+// This function converts a raw pointer to an array of `IovecStruct` objects into a vector of `IoSlice` objects.
+// It handles the conversion from the C-style `iovec` structure to the Rust-style `IoSlice` structure,
+// which is used for vectored I/O operations.
+
 pub fn iovec_to_ioslice<'a>(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<IoSlice<'a>> {
     unsafe {
         std::slice::from_raw_parts(iovec, iovcnt as usize)
             .iter()
-            .map(|current_iovec| { // Change the parameter name here
-                let slice = std::slice::from_raw_parts(current_iovec.iov_base as *const u8, current_iovec.iov_len as usize); // Access fields from current_iovec
+            .map(|current_iovec| {
+                let slice = std::slice::from_raw_parts(current_iovec.iov_base as *const u8, current_iovec.iov_len as usize);
                 IoSlice::new(slice)
             })
             .collect()
