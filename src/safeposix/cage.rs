@@ -65,7 +65,6 @@ pub struct FileDesc {
     pub inode: usize,
     pub flags: i32,
     pub advlock: interface::RustRfc<interface::AdvisoryLock>,
-    pub file: Option<Arc<RwLock<File>>>,
 }
 
 #[derive(Debug, Clone)]

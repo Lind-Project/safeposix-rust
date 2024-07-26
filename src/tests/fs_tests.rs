@@ -2298,6 +2298,63 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    
+    use std::io::IoSlice;
+    #[test]
+    fn test_ioslice_no_copy2() {
+        let _thelock = setup::lock_and_init();
+        let _cage = interface::cagetable_getref(1);
 
+        let mut original_data = [1, 2, 3, 4, 5];
+
+        // Create the slice and IoSlice within a new scope 
+        {
+            let slice = &original_data[1..4]; 
+            let io_slice = IoSlice::new(slice); 
+
+            let io_slice_data: &[u8] = &*io_slice; 
+            assert_eq!(io_slice_data, &[2, 3, 4]);
+        } // The immutable borrow ends here when 'slice' and 'io_slice' go out of scope
+
+        // Now you can modify the original data safely 
+        original_data[2] = 99; 
+
+        // Create a new slice and IoSlice to reflect the changes
+        {
+            let slice = &original_data[1..4];
+            let io_slice = IoSlice::new(slice);
+            let io_slice_data: &[u8] = &*io_slice; 
+            assert_eq!(io_slice_data, &[2, 99, 4]); 
+        }
+
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn test_ioslice_no_copy() {
+        let _thelock = setup::lock_and_init();
+        let _cage = interface::cagetable_getref(1);
+    
+        let mut original_data = [1, 2, 3, 4, 5];
+    
+        // Create a raw pointer to the data 
+        let original_data_ptr = original_data.as_mut_ptr();
+    
+        // Create the slice and IoSlice 
+        let slice = &original_data[1..4]; 
+        let io_slice = IoSlice::new(slice);
+    
+        // Access the data through the IoSlice
+        let io_slice_data: &[u8] = &*io_slice;
+        println!("io_slice_data before modification: {:?}", io_slice_data);
+    
+        // Modify the original data using the raw pointer (unsafe)
+        unsafe { 
+            *original_data_ptr.add(2) = 99;
+        }
+    
+        // Print the data through the SAME IoSlice
+        println!("io_slice_data after modification: {:?}", io_slice_data); 
+    
+        lindrustfinalize();
+    }
 }
