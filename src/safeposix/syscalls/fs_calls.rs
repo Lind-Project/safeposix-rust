@@ -93,7 +93,6 @@
 
 // File system related system calls
 use super::fs_constants::*;
-use std::fs::File;
 use super::sys_constants::*;
 use crate::interface;
 use crate::safeposix::cage::Errno::EINVAL;
@@ -165,6 +164,7 @@ impl Cage {
     ///
     /// For more detailed description of all the commands and return values, see
     /// [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
+
     // This function is used to create a new File Descriptor Object and return it.
     // This file descriptor object is then inserted into the File Descriptor Table
     // of the associated cage in the open_syscall() function
@@ -183,7 +183,6 @@ impl Cage {
             inode: inodenum,
             flags: flags & allowmask,
             advlock: interface::RustRfc::new(interface::AdvisoryLock::new()),
-            // file: None,
         }
     }
 
