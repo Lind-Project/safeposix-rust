@@ -5173,18 +5173,54 @@ impl Cage {
         }
     }
 
-    //------------------SHMCTL SYSCALL------------------
-
+    
+    /// ### Description
+    /// 
+    /// The `shmctl_syscall` performs control operations over the memory segment specified by `shmid`
+    /// Each shared memory segment has a data structure associated with it, 
+    /// parts of which may be altered by `shmctl_syscall` or which determine the action of `shmctl_syscall`.
+    /// The operations that can be performed are specified by the `cmd` argument - and the allowed actions are 
+    /// 
+    /// * IPC_STAT : Gather information about the shared memory segment and store in the `buf` object passed as an argument
+    /// * IPC_RMID : Remove the shared memory segment associated with the `shmid` and the data associated with it
+    /// 
+    /// ### Arguments
+    /// 
+    /// `shmid` : The id which specifies the memory segment
+    /// `cmd` : The operation to perform on the specified memory segment 
+    /// `buf` : A reference to an object of type ShmidsStruct which can hold information regarding the shared memory segment
+    /// 
+    /// ### Returns 
+    /// 
+    /// This function returns 0 upon successful completion 
+    /// 
+    /// ### Errors 
+    /// 
+    /// * EINVAL : If the shmid is invalid and does not represent any shared memory segment or if the cmd argument is not currently supported
+    /// 
+    /// ### Panics
+    /// 
+    /// This function does not directly panic - however it can panic if the unwrap on the buf object fails
+    /// 
+    /// For more information please refer [https://man7.org/linux/man-pages/man2/shmctl.2.html]
     pub fn shmctl_syscall(&self, shmid: i32, cmd: i32, buf: Option<&mut ShmidsStruct>) -> i32 {
+        // Read the shmdata 
         let metadata = &SHM_METADATA;
 
+        // Get the memory segment associated with the shmid
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+            // Check for which operation has been specified by the cmd argument
             match cmd {
+                // For IPC_STAT we simply store the information regarding the memory segment into the buf 
+                // argument passed to this function
                 IPC_STAT => {
                     *buf.unwrap() = segment.shminfo;
                 }
+                // For IPC_RMID - we remove the memory segment and all the data associated with it
                 IPC_RMID => {
+                    // Set the rmid flag to be true to indicate that the segment has been removed
                     segment.rmid = true;
+                    
                     segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
                     if segment.shminfo.shm_nattch == 0 {
                         let key = segment.key;
@@ -5193,6 +5229,7 @@ impl Cage {
                         metadata.shmkeyidtable.remove(&key);
                     }
                 }
+                // For any other case we return an error
                 _ => {
                     return syscall_error(
                         Errno::EINVAL,
