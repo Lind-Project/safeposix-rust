@@ -9,6 +9,8 @@ pub mod fs_tests {
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
+    use crate::tests::FileDescriptor::Socket;
+    use std::thread;
 
     #[test]
     pub fn ut_lind_fs_simple() {
@@ -2461,8 +2463,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }
-    use crate::tests::FileDescriptor::Socket;
-    use std::thread;
+
     #[test]
     fn ut_lind_fs_writev_socketpair() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -2489,7 +2490,7 @@ pub mod fs_tests {
         let mut buffer = vec![0u8; data.len()];
         let bytes_read = cage.recv_syscall(socketpair.sock2, buffer.as_mut_ptr(), buffer.len(), 0);
         assert_eq!(bytes_read, data.len() as i32);
-        // Verify that the data
+        // Verify that the data received from the second socket matches the original data.
         assert_eq!(buffer, data);
         // Close both sockets.
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);

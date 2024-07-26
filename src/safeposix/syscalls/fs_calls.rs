@@ -1873,6 +1873,7 @@ impl Cage {
     /// * `EOPNOTSUPP(95)`: The system call is not supported for the given socket protocol.
     /// * `EAGAIN(11)`: There is no data available right now (for pipes).
     /// * `EPIPE(32)`: The pipe has been closed on the other end (for pipes).
+    /// 
     /// ### Panics
     /// * If an unknown error code is returned by the underlying socket writev function.
     ///  [writev(2)](https://linux.die.net/man/2/writev)
@@ -2004,6 +2005,9 @@ impl Cage {
                     }
 
                     let mut nonblocking = false;
+                    // Check if the O_NONBLOCK flag is set in the pipe's flags.
+                    // If it is, enable non-blocking mode for the write operation. 
+                    //Non-blocking I/O allows a process to continue doing other tasks while waiting for I/O operations to complete. 
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
