@@ -2044,13 +2044,53 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SHUTDOWN SYSCALL------------------
+    /// ### Description
+    /// The `netshutdown_syscall()` call causes all or part of a full-duplex
+    /// connection on the socket associated with fd to be shut down. If "how" is
+    /// SHUT_RD, further receptions will be disallowed.  If "how" is SHUT_WR,
+    /// further transmissions will be disallowed.  If "how" is SHUT_RDWR,
+    /// further receptions and transmissions will be disallowed.
+    ///
+    /// ### Function Arguments
+    /// The `netshutdown_syscall()` receives two arguments:
+    /// * `fd` - The socket file descriptor
+    /// * `how` -  how to shutdown the socket. If how is SHUT_RD, further
+    ///   receptions will be disallowed.  If how is SHUT_WR, further
+    ///   transmissions will be disallowed.  If how is SHUT_RDWR, further
+    ///   receptions and transmissions will be disallowed.
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - An invalid file descriptor was given in one of the sets
+    /// * EINVAL - An invalid value was specified in "how"
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The specified socket is not connected.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
+        // BUG: we did not check if the specified socket is connected or not
+
+        // first let's check fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "netshutdown",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
         match how {
             SHUT_RDWR | SHUT_RD | SHUT_WR => {
                 return Self::_cleanup_socket(self, fd, how);
             }
             _ => {
-                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                // invalid how argument
+                // See http://linux.die.net/man/2/shutdown for nuance to this error
                 return syscall_error(
                     Errno::EINVAL,
                     "netshutdown",
@@ -2060,6 +2100,7 @@ impl Cage {
         }
     }
 
+    // this function handles the core logic of shutdown
     pub fn _cleanup_socket_inner_helper(
         sockhandle: &mut SocketHandle,
         how: i32,
@@ -2067,40 +2108,59 @@ impl Cage {
     ) -> i32 {
         // we need to do a bunch of actual socket cleanup for INET sockets
         if sockhandle.domain != AF_UNIX {
+            // this flag is used for marking if we want to release the resources of the
+            // socket
             let mut releaseflag = false;
             if let Some(ref sobj) = sockhandle.innersocket {
+                // get the innersocket
                 if shutdown {
+                    // shutdown the internal socket with libc shutdown
                     let shutresult = sobj.shutdown(how);
 
                     if shutresult < 0 {
+                        // in case of error from libc shutdown, return the errno
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
                                 return syscall_error(
                                     i,
                                     "shutdown",
-                                    "The libc call to setsockopt failed!",
+                                    "The libc call to shutdown failed!",
                                 );
                             }
-                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            Err(()) => panic!("Unknown errno value from shutdown returned!"),
                         };
                     }
 
+                    // here we want to release the resources (port, innersocket) if the socket is
+                    // closed on RD and WR at the same time. however, BUG: this
+                    // is not something that is supposed to be done in shutdown, instead, they
+                    // should be handled in close
                     match how {
                         SHUT_RD => {
+                            // if we shutdown RD on a socket that is already in RDONLY state
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             if sockhandle.state == ConnState::CONNRDONLY {
                                 releaseflag = true;
                             }
                         }
                         SHUT_WR => {
+                            // if we shutdown WR on a socket that is already in WRONLY state
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             if sockhandle.state == ConnState::CONNWRONLY {
                                 releaseflag = true;
                             }
                         }
                         SHUT_RDWR => {
+                            // we shutdown RD and WR
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             releaseflag = true;
                         }
                         _ => {
-                            //See http://linux.die.net/man/2/shutdown for nuance to this error
+                            // invalid how argument
+                            // See http://linux.die.net/man/2/shutdown for nuance to this error
                             return syscall_error(
                                 Errno::EINVAL,
                                 "netshutdown",
@@ -2109,51 +2169,69 @@ impl Cage {
                         }
                     }
                 } else {
-                    //Reaching this means that the socket is closed. Removing the sockobj
-                    //indicates that the sockobj will drop, and therefore close
+                    // Reaching this means that the socket is closed after close_syscall. Removing
+                    // the sockobj indicates that the sockobj will drop, and therefore close
                     releaseflag = true;
                     sockhandle.innersocket = None;
                 }
             }
 
+            // if we want to release the associated resources of the socket
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                    //move to end
+                    // release the port
                     let release_ret_val = NET_METADATA._release_localport(
                         localaddr.addr(),
                         localaddr.port(),
                         sockhandle.protocol,
                         sockhandle.domain,
                     );
+                    // release the localaddr
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {
+                        // in case of any error in releasing the port
+                        // return the error
                         return e;
                     }
                 }
             }
         }
 
-        // now change the connections for all socket types
+        // now change the connection state for all socket types
         match how {
             SHUT_RD => {
-                if sockhandle.state == ConnState::CONNWRONLY {
+                if sockhandle.state == ConnState::CONNRDONLY {
+                    // shutdown RD on socket with RDONLY state means
+                    // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
                 } else {
+                    // otherwise, we only closed RD, and the socket can still write
+                    // however, BUG: Linux is handling shutdown for different state seperately.
+                    // shutdown on RD does not mean the socket would always be WRONLY. for example,
+                    // if the socket is in LISTEN state, shutdown on RD will cause the socket to
+                    // disconnect directly, without the need to shutdown on WR again.
                     sockhandle.state = ConnState::CONNWRONLY;
                 }
             }
             SHUT_WR => {
-                if sockhandle.state == ConnState::CONNRDONLY {
+                if sockhandle.state == ConnState::CONNWRONLY {
+                    // shutdown WR on socket with WRONLY state means
+                    // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
                 } else {
+                    // otherwise, we only closed WR, and the socket can still read
+                    // however, see above BUG
                     sockhandle.state = ConnState::CONNRDONLY;
                 }
             }
             SHUT_RDWR => {
+                // the socket is neither readable nor writable
+                // we just set the state to not connected
                 sockhandle.state = ConnState::NOTCONNECTED;
             }
             _ => {
-                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                // invalid how argument
+                // See http://linux.die.net/man/2/shutdown for nuance to this error
                 return syscall_error(
                     Errno::EINVAL,
                     "netshutdown",
@@ -2165,6 +2243,7 @@ impl Cage {
         return 0;
     }
 
+    // this function is an inner function of shutdown and checks for fd type
     pub fn _cleanup_socket_inner(
         &self,
         filedesc: &mut FileDescriptor,
@@ -2172,11 +2251,13 @@ impl Cage {
         shutdown: bool,
     ) -> i32 {
         if let Socket(sockfdobj) = filedesc {
+            // get write lock of sockhandle
             let sock_tmp = sockfdobj.handle.clone();
             let mut sockhandle = sock_tmp.write();
 
             Self::_cleanup_socket_inner_helper(&mut *sockhandle, how, shutdown)
         } else {
+            // this file descriptor is not a socket fd
             syscall_error(
                 Errno::ENOTSOCK,
                 "cleanup socket",
@@ -2185,19 +2266,27 @@ impl Cage {
         }
     }
 
+    // this function is an inner function of shutdown and checks for fd
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
             if inner_result < 0 {
+                // in case of error, return the error
                 return inner_result;
             }
 
+            // if how is SHUT_RDWR, we clear this file descriptor
+            // however, BUG: according to standard, shutdown() doesn’t close the file
+            // descriptor, even if how is specified as SHUT_RDWR. To close the file
+            // descriptor, we must additionally call close().
             if how == SHUT_RDWR {
                 let _discarded_fd = unlocked_fd.take();
             }
         } else {
+            // file descriptor does not exist
             return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
         }
 
@@ -3363,14 +3452,48 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETPEERNAME SYSCALL------------------
+    /// ### Description
+    /// The `getpeername_syscall()` returns the address of the peer connected to
+    /// the socket fd, in the buffer pointed to by ret_addr
+    ///
+    /// ### Function Arguments
+    /// The `getpeername_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The socket is not connected.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getpeername.2.html
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getpeername",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
-                //if the socket is not connected, then we should return an error
+                // get the read lock of sockhandle
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // if the socket is not connected, then we should return an error
                 if sockhandle.remoteaddr == None {
                     return syscall_error(
                         Errno::ENOTCONN,
@@ -3378,9 +3501,12 @@ impl Cage {
                         "the socket is not connected",
                     );
                 }
+                // remoteaddr stores the value we want so we just return the remoteaddr stored
+                // in sockhandle
                 *ret_addr = sockhandle.remoteaddr.unwrap();
                 return 0;
             } else {
+                // if the fd is not socket object
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getpeername",
@@ -3388,6 +3514,7 @@ impl Cage {
                 );
             }
         } else {
+            // if the fd is not valid
             return syscall_error(
                 Errno::EBADF,
                 "getpeername",
@@ -3396,15 +3523,56 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETSOCKNAME SYSCALL------------------
+    /// ### Description
+    /// The `getsockname_syscall()` returns the current address to which the
+    /// socket fd is bound, in the buffer pointed to by ret_addr. If the socket
+    /// hasn't bound to any address, it returns an empty address.
+    ///
+    /// ### Function Arguments
+    /// The `getsockname_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getsockname.2.html
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getsockname",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
+                // must be a socket file descriptor
+
+                // get the read lock of socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // each socket type has different structure
+                // so we must handle them seperately
                 if sockhandle.domain == AF_UNIX {
+                    // in case of AF_UNIX socket
                     if sockhandle.localaddr == None {
+                        // if hasn't bound to any address,
+                        // return an empty address
                         let null_path: &[u8] = &[];
                         *ret_addr = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                             sockhandle.domain as u16,
@@ -3412,13 +3580,19 @@ impl Cage {
                         ));
                         return 0;
                     }
-                    //if the socket is not none, then return the socket
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 } else {
+                    // in case of AF_INET/AF_INET6
                     if sockhandle.localaddr == None {
-                        //sets the address to 0.0.0.0 if the address is not initialized yet
-                        //setting the family as well based on the domain
+                        // if the socket hasn't bound to any address, we'd return an empty address
+                        // with both ip and port set to 0. But family should be set since it is
+                        // something that was already specified when the socket was created
+
+                        // for ipv4, set the address to 0.0.0.0 to indicate uninitialized address
+                        // for ipv6, set the address to 0:0:0:0:0:0:0:0
+                        // (::) to indicate uninitialized address
                         let addr = match sockhandle.domain {
                             AF_INET => interface::GenIpaddr::V4(interface::V4Addr::default()),
                             AF_INET6 => interface::GenIpaddr::V6(interface::V6Addr::default()),
@@ -3428,13 +3602,16 @@ impl Cage {
                         };
                         ret_addr.set_addr(addr);
                         ret_addr.set_port(0);
+                        // set the family
                         ret_addr.set_family(sockhandle.domain as u16);
                         return 0;
                     }
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 }
             } else {
+                // the fd is not a socket
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockname",
@@ -3442,6 +3619,7 @@ impl Cage {
                 );
             }
         } else {
+            // invalid fd
             return syscall_error(
                 Errno::EBADF,
                 "getsockname",
@@ -3450,9 +3628,32 @@ impl Cage {
         }
     }
 
-    //we only return the default host name because we do not allow for the user to
-    // change the host name right now
+    /// ## ------------------GETHOSTNAME SYSCALL------------------
+    /// ### Description
+    /// The `gethostname_syscall()` returns the null-terminated hostname in the
+    /// address_ptr, which has length bytes.  If the null-terminated
+    /// hostname is too large to fit, then the name is truncated, and no error
+    /// is returned
+    ///
+    /// ### Function Arguments
+    /// The `gethostname_syscall()` receives two arguments:
+    /// * `address_ptr` -  The buffer to hold the returned host name
+    /// * `length` - The length of the buffer
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EINVAL - length is negative
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man2/gethostname.2.html
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
+        // we only return the default host name (Lind) because we do not allow for the
+        // user to change the host name right now
         if length < 0 {
             return syscall_error(
                 Errno::EINVAL,
@@ -3461,15 +3662,19 @@ impl Cage {
             );
         }
 
+        // DEFAULT_HOSTNAME is "Lind"
+        // we convert the string to vector with a null terminator
         let mut bytes: Vec<u8> = DEFAULT_HOSTNAME.as_bytes().to_vec();
         bytes.push(0u8); //Adding a null terminator to the end of the string
         let name_length = bytes.len();
 
+        // take the min between name_length and length from argument
         let mut len = name_length;
         if (length as usize) < len {
             len = length as usize;
         }
 
+        // fill up the address_ptr
         interface::fill(address_ptr, len, &bytes);
 
         return 0;
@@ -4251,9 +4456,32 @@ impl Cage {
         return 0;
     }
 
-    // all this does is send the net_devs data in a string to libc, where we will
-    // later parse and alloc into getifaddrs structs
+    /// ## ------------------GETIFADDRS SYSCALL------------------
+    /// ### Description
+    /// The `getifaddrs_syscall()` function creates a linked list of structures
+    /// describing the network interfaces of the local system, and stores the
+    /// address of the first item of the list in buf.
+    ///
+    /// ### Function Arguments
+    /// The `getifaddrs_syscall()` receives two arguments:
+    /// * `buf` -  The buffer to hold the returned address
+    /// * `count` - The length of the buffer
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EOPNOTSUPP - buf length is too small to hold the return value
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
+        // all this does is returning the net_devs data in a string, where we will later
+        // parse and alloc into getifaddrs structs in libc
+
         if NET_IFADDRS_STR.len() < count {
             interface::fill(
                 buf,

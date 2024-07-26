@@ -5211,17 +5211,56 @@ impl Cage {
         None
     }
 
-    //------------------SHMGET SYSCALL------------------
-
-    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
+    /// ### Description
+    /// 
+    /// `shmget_syscall` returns the shared memory segment identifier associated with a particular `key`
+    /// If a key doesn't exist, shmget creates a new memory segment and attaches it to the key.
+    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which 
+    /// is not associated with a key during this syscall, 
+    /// but for our implementaion, we return an error and only create a new memory 
+    /// segment when the IPC_CREAT flag is specified in the`shmflag` argument.
+    /// 
+    /// ### Returns 
+    /// 
+    /// An 32 bit integer which represens the identifier of the memory segment associated with the key
+    /// 
+    /// ### Arguments
+    /// 
+    /// `key` : An i32 value that references a memory segment
+    /// `size` : Size of the memory segment to be created if key doesn't exist
+    /// `shmflag` : mode flags which indicate whether to create a new key or not
+    ///  The `shmflag` is composed of the following 
+    ///  * IPC_CREAT - specify that the system call creates a new segment
+    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used 
+    ///               and the key passed has a memory segment associated with it.
+    /// 
+    /// ### Errors 
+    /// 
+    /// * ENOENT : the key equals the `IPC_PRIVATE` constant
+    /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are passed as flags
+    /// * ENOENT : key did not exist and the `IPC_CREAT` flag was not passed
+    /// * EINVAL : the size passed was less than the minimum size of segment or greater than the maximum possible size
+    /// 
+    /// ### Panics
+    /// 
+    /// There are no cases where the function directly panics
+    /// 
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 { 
+        //Check if the key passed equals the IPC_PRIVATE flag
         if key == IPC_PRIVATE {
+            // Return error since this is not suppported currently
             return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
         }
+        // Variable to store shmid
         let shmid: i32;
+        // data of the shm table
         let metadata = &SHM_METADATA;
 
+        // Check if there exists a memory segment associated with the key passed as argument
         match metadata.shmkeyidtable.entry(key) {
+            // If there exists a memory segment at that key
             interface::RustHashEntry::Occupied(occupied) => {
+                // Produce an error if invalid flags are used with a valid key
                 if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
                     return syscall_error(
                         Errno::EEXIST,
@@ -5229,9 +5268,12 @@ impl Cage {
                         "key already exists and IPC_CREAT and IPC_EXCL were used",
                     );
                 }
+                // Get the id of the occupied memory segment
                 shmid = *occupied.get();
             }
+            // If the memory segment doesn't exist
             interface::RustHashEntry::Vacant(vacant) => {
+                // Return an error if IPC_CREAT was not specified
                 if 0 == (shmflg & IPC_CREAT) {
                     return syscall_error(
                         Errno::ENOENT,
@@ -5240,6 +5282,8 @@ impl Cage {
                     );
                 }
 
+                // If memory segment doesn't exist and IPC_CREAT was specified - we create a new memory segment
+                // Check if the size passed is a valid value
                 if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
                     return syscall_error(
                         Errno::EINVAL,
@@ -5248,11 +5292,13 @@ impl Cage {
                     );
                 }
 
+                // Generate a new id for the new memory segment
                 shmid = metadata.new_keyid();
+                // Insert new id in the hash table entry pointed by the key
                 vacant.insert(shmid);
-                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do
-                                                    // anything with them
-
+                // Mode of the new segment is the 9 least significant bits of the shmflag
+                let mode = (shmflg & 0x1FF) as u16; 
+                // Create a new segment with the key, size, cageid of the calling process
                 let segment = new_shm_segment(
                     key,
                     size,
@@ -5261,10 +5307,12 @@ impl Cage {
                     DEFAULT_GID,
                     mode,
                 );
+                // Insert the newly created segment in the SHM table with its key
                 metadata.shmtable.insert(shmid, segment);
             }
         };
-        shmid // return the shmid
+        // Return the shmid
+        shmid 
     }
 
     //------------------SHMAT SYSCALL------------------
