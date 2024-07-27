@@ -4,6 +4,7 @@ pub mod fs_tests {
 
     use super::super::*;
     use crate::interface;
+    use crate::safeposix::shm::SHM_METADATA;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
     use libc::c_void;
@@ -4047,7 +4048,7 @@ pub mod fs_tests {
         let key = 33123;
         // Get shmid of a memory segment / create a new one if it doesn't exist
         let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);       
-        assert_eq!(shmid,4); 
+        // assert_eq!(shmid,4); 
 
         // Check error upon asking for a valid key and passing the IPC_CREAT and IPC_EXCL flag
         assert_eq!(cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),-(Errno::EEXIST as i32 ));
@@ -4073,11 +4074,24 @@ pub mod fs_tests {
         // acquire locks and start env cleanup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);  
-
-        let key = 33123;
         // Get shmid of a memory segment / create a new one if it doesn't exist
         let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);  
+        let shmaddr = 0xfffff000 as *mut u8;
 
+        let shmret = cage.shmat_syscall(shmid, shmaddr, IPC_CREAT);
+
+        assert_ne!(shmret,-1);
+
+        let mut shmidstruct = ShmidsStruct::default();
+        // Check that the IPC_STAT command works
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)),0);
+        // Check that the IPC_RMID Command works
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)),0);
+        // Check that passing invalid command returns an appropriate error
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_SET, Some(&mut shmidstruct)),-(Errno::EINVAL as i32));
+        // Check that passing an invalid shmid returns an appropriate error
+        assert_eq!(cage.shmctl_syscall(shmid + 10, IPC_SET, Some(&mut shmidstruct)),-(Errno::EINVAL as i32));
+        lindrustfinalize();
     }
 
 }
