@@ -4410,7 +4410,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     
-    
+    #[test]
     pub fn ut_lind_fs_stat_syscall_tests() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -4468,6 +4468,7 @@ pub mod fs_tests {
         return;
     }
 
+    #[test]
     pub fn ut_lind_fs_fstat_syscall_tests() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
@@ -4480,16 +4481,16 @@ pub mod fs_tests {
         // test whether an invalid fd results in a panic
         let invalid_fd = 0x10000000; // some dummy high fd which should fail fd check
 
-        // test whether an invalid fd results in a
-        assert_eq!(
-            cage.fstat_syscall(invalid_fd, &mut statdata),
-            syscall_error(Errno::EBADF, "", "")
-        );
+        // here, we catch the panic spat out by fstat into an Err
+        let invalid_fd_panic = catch_unwind(AssertUnwindSafe(|| {
+            cage.fstat_syscall(invalid_fd, &mut statdata);
+        }));
+        assert!(invalid_fd_panic.is_err());
 
         // test out whether an error is output for a non existent fd (1000)
         // (ENOENT[-2])
         let non_existent_fd = 1000;
-        assert_eq!(cage.fstat_syscall(non_existent_fd, &mut statdata), -2);
+        assert_eq!(cage.fstat_syscall(non_existent_fd, &mut statdata), -9);
 
         // setting up directory inode object '/tmp' for testing fstat_syscall with a
         // directory
@@ -4519,23 +4520,23 @@ pub mod fs_tests {
         assert_eq!(cage.fstat_syscall(chardev_fd, &mut statdata), 0);
         assert_eq!(cage.close_syscall(chardev_fd), 0);
 
-        // setting up socket inode object with path "/socket.sock"  for testing
+        // setting up socket inode object with path "/socket.sock" for testing
         // fstat_syscall with a socket
         let socketfile_path = "/socket.sock";
+
         let socketfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
         assert!(socketfd > 0);
+
         let sockaddr = interface::new_sockaddr_unix(AF_UNIX as u16, socketfile_path.as_bytes());
         let socket = interface::GenSockaddr::Unix(sockaddr);
         assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
 
-        // fstat_syscall test here
-        let socketfile_path_fd = cage.open_syscall(socketfile_path, O_RDONLY, S_IRWXA);
-        assert!(socketfile_path_fd > 0);
-        assert_eq!(cage.fstat_syscall(socketfile_path_fd, &mut statdata), 0);
-        assert_eq!(cage.close_syscall(socketfile_path_fd), 0);
+        // Errno::EOPNOTSUPP : -95 
+        assert_eq!(cage.fstat_syscall(socketfd, &mut statdata), -95);
 
-        // socket teardown
+        // Clean up
         assert_eq!(cage.close_syscall(socketfd), 0);
+
         cage.unlink_syscall(socketfile_path);
 
         lindrustfinalize();

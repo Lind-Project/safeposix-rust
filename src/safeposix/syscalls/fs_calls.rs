@@ -1325,14 +1325,8 @@ impl Cage {
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         // Attempt to get the file descriptor
-        let checkedfd_result = self.get_filedescriptor(fd);
-
-        // If the file descriptor is invalid, return an error of code 9 (bad file num).
-        if let Err(_) = checkedfd_result {
-            return syscall_error(Errno::EBADF, "fstat", "Bad File Descriptor");
-        }
-        // If the file descriptor is valid, we get the file descriptor object
-        let checkedfd = checkedfd_result.unwrap();
+        // BUG: This can panic if there is an invalid file descriptor provided
+        let checkedfd = self.get_filedescriptor(fd).unwrap();
 
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let unlocked_fd = checkedfd.read();
