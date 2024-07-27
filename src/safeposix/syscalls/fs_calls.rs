@@ -1338,6 +1338,16 @@ impl Cage {
             // handle regular files, dirs, and char files based on the
             // information in the inode.
             match filedesc_enum {
+                // Fail faster for sockets
+                Socket(_) => {
+                    return syscall_error(
+                        Errno::EOPNOTSUPP,
+                        "fstat",
+                        "we don't support fstat on sockets yet",
+                    );
+                }
+
+                // if a normal file descriptor is found
                 File(normalfile_filedesc_obj) => {
                     // fetch the inode object of the normal file
                     let inode = FS_METADATA
@@ -1365,13 +1375,6 @@ impl Cage {
                             Self::_istat_helper_dir(&f, statbuf);
                         }
                     }
-                }
-                Socket(_) => {
-                    return syscall_error(
-                        Errno::EOPNOTSUPP,
-                        "fstat",
-                        "we don't support fstat on sockets yet",
-                    );
                 }
                 // Streams don't have inodes, so we'll populate statbuf with dummy info
                 Stream(_) => {
