@@ -4038,6 +4038,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
+    #[test]
     pub fn ut_lind_fs_shmget_syscall(){
         // acquire locks and start env cleanup
         let _thelock = setup::lock_and_init();
@@ -4066,4 +4067,17 @@ pub mod fs_tests {
 
         lindrustfinalize();
     }
+
+    #[test]
+    pub fn ut_lind_fs_shmctl(){
+        // acquire locks and start env cleanup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);  
+
+        let key = 33123;
+        // Get shmid of a memory segment / create a new one if it doesn't exist
+        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);  
+
+    }
+
 }

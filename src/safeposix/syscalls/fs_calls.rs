@@ -5217,12 +5217,15 @@ impl Cage {
                     *buf.unwrap() = segment.shminfo;
                 }
                 // For IPC_RMID - we remove the memory segment and all the data associated with it
+                // The segment truly gets destroyed when the number of cages attached to it becomes zero 
                 IPC_RMID => {
                     // Set the rmid flag to be true to indicate that the segment has been removed
                     segment.rmid = true;
                     
                     segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
+                    // Check if no processes are attached to the memory segment
                     if segment.shminfo.shm_nattch == 0 {
+                        // We completely destroy the memory segment
                         let key = segment.key;
                         drop(segment);
                         metadata.shmtable.remove(&shmid);
