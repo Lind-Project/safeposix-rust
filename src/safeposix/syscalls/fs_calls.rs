@@ -4980,40 +4980,45 @@ impl Cage {
     }
 
     /// ### Description
-    /// 
-    /// `shmget_syscall` returns the shared memory segment identifier associated with a particular `key`
-    /// If a key doesn't exist, shmget creates a new memory segment and attaches it to the key.
-    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which 
-    /// is not associated with a key during this syscall, 
-    /// but for our implementaion, we return an error and only create a new memory 
-    /// segment when the IPC_CREAT flag is specified in the`shmflag` argument.
-    /// 
-    /// ### Returns 
-    /// 
-    /// An 32 bit integer which represens the identifier of the memory segment associated with the key
-    /// 
+    ///
+    /// `shmget_syscall` returns the shared memory segment identifier associated
+    /// with a particular `key` If a key doesn't exist, shmget creates a new
+    /// memory segment and attaches it to the key. Traditionally if the
+    /// value of the key equals `IPC_PRIVATE`, we also create a new memory
+    /// segment which is not associated with a key during this syscall,
+    /// but for our implementaion, we return an error and only create a new
+    /// memory segment when the IPC_CREAT flag is specified in the`shmflag`
+    /// argument.
+    ///
+    /// ### Returns
+    ///
+    /// An 32 bit integer which represens the identifier of the memory segment
+    /// associated with the key
+    ///
     /// ### Arguments
-    /// 
+    ///
     /// `key` : An i32 value that references a memory segment
     /// `size` : Size of the memory segment to be created if key doesn't exist
     /// `shmflag` : mode flags which indicate whether to create a new key or not
-    ///  The `shmflag` is composed of the following 
+    ///  The `shmflag` is composed of the following
     ///  * IPC_CREAT - specify that the system call creates a new segment
-    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used 
-    ///               and the key passed has a memory segment associated with it.
-    /// 
-    /// ### Errors 
-    /// 
+    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to
+    ///    fail when IPC_CREAT is also used and the key passed has a memory
+    ///    segment associated with it.
+    ///
+    /// ### Errors
+    ///
     /// * ENOENT : the key equals the `IPC_PRIVATE` constant
-    /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are passed as flags
+    /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are
+    ///   passed as flags
     /// * ENOENT : key did not exist and the `IPC_CREAT` flag was not passed
-    /// * EINVAL : the size passed was less than the minimum size of segment or greater than the maximum possible size
-    /// 
+    /// * EINVAL : the size passed was less than the minimum size of segment or
+    ///   greater than the maximum possible size
+    ///
     /// ### Panics
-    /// 
+    ///
     /// There are no cases where the function directly panics
-    /// 
-    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 { 
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
         //Check if the key passed equals the IPC_PRIVATE flag
         if key == IPC_PRIVATE {
             // Return error since this is not suppported currently
@@ -5024,7 +5029,8 @@ impl Cage {
         // data of the shm table
         let metadata = &SHM_METADATA;
 
-        // Check if there exists a memory segment associated with the key passed as argument
+        // Check if there exists a memory segment associated with the key passed as
+        // argument
         match metadata.shmkeyidtable.entry(key) {
             // If there exists a memory segment at that key
             interface::RustHashEntry::Occupied(occupied) => {
@@ -5050,8 +5056,8 @@ impl Cage {
                     );
                 }
 
-                // If memory segment doesn't exist and IPC_CREAT was specified - we create a new memory segment
-                // Check if the size passed is a valid value
+                // If memory segment doesn't exist and IPC_CREAT was specified - we create a new
+                // memory segment Check if the size passed is a valid value
                 if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
                     return syscall_error(
                         Errno::EINVAL,
@@ -5065,7 +5071,7 @@ impl Cage {
                 // Insert new id in the hash table entry pointed by the key
                 vacant.insert(shmid);
                 // Mode of the new segment is the 9 least significant bits of the shmflag
-                let mode = (shmflg & 0x1FF) as u16; 
+                let mode = (shmflg & 0x1FF) as u16;
                 // Create a new segment with the key, size, cageid of the calling process
                 let segment = new_shm_segment(
                     key,
@@ -5080,34 +5086,35 @@ impl Cage {
             }
         };
         // Return the shmid
-        shmid 
+        shmid
     }
 
-
     /// ### Description
-    /// 
-    /// The `shmat_syscall` maps the shared memory segment associated with the shared memory 
-    /// identifer onto the address space of the calling Cage object. The address to which the
-    /// segment is mapped is given by the `shmaddr` parameter of this function.
-    /// 
+    ///
+    /// The `shmat_syscall` maps the shared memory segment associated with the
+    /// shared memory identifer onto the address space of the calling Cage
+    /// object. The address to which the segment is mapped is given by the
+    /// `shmaddr` parameter of this function.
+    ///
     /// ### Arguments
-    /// 
+    ///
     /// `shmid` : identifier of the memory segment to be mapped
-    /// `shmaddr` : Address in the address space of the calling Cage where the segment is to be mapped
-    /// `shmflag` : Flag which indicates if the memory segment to be mapped is readonly or not
-    /// 
+    /// `shmaddr` : Address in the address space of the calling Cage where the
+    /// segment is to be mapped `shmflag` : Flag which indicates if the
+    /// memory segment to be mapped is readonly or not
+    ///
     /// ### Returns
-    /// 
+    ///
     /// Returns the address at which the memory segment has been mapped into
-    /// 
-    /// ### Errors 
-    /// 
+    ///
+    /// ### Errors
+    ///
     /// * `EINVAL` : If the shmid passed as an argument is an invalid identifier
-    /// 
+    ///
     /// ### Panics
-    /// 
+    ///
     /// Currently there are no scenarios where the function panics
-    /// 
+    ///
     /// For more information - refer the documentation at [https://man7.org/linux/man-pages/man3/shmat.3p.html]
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
         // Get shm table
@@ -5123,13 +5130,16 @@ impl Cage {
             }
             // Aquire a mutex lock on the reverse memory mappings
             let mut rev_shm = self.rev_shm.lock();
-            // Push a reverse mapping of shmaddr -> shmid the processes's reverse mapping table
+            // Push a reverse mapping of shmaddr -> shmid the processes's reverse mapping
+            // table
             rev_shm.push((shmaddr as u32, shmid));
             drop(rev_shm);
 
-            // Clone semaphores that the memory segment holds into the current calling process
+            // Clone semaphores that the memory segment holds into the current calling
+            // process
             if !segment.semaphor_offsets.is_empty() {
-                // Since all processes that share this segment hold all the semaphores - we only need to grab them from one cage
+                // Since all processes that share this segment hold all the semaphores - we only
+                // need to grab them from one cage
                 if let Some(cageid) = segment
                     .attached_cages
                     .clone()
@@ -5143,15 +5153,16 @@ impl Cage {
                     let cage2_rev_shm = cage2.rev_shm.lock();
                     // Find all addresses associated with the shmid of the memory segment
                     let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid);
-                    // Add each semaphore at its appropriate offset - only need to index the first address
-                    // Since semaphores are consistent across all cages and all addresses within the cages
+                    // Add each semaphore at its appropriate offset - only need to index the first
+                    // address Since semaphores are consistent across all cages
+                    // and all addresses within the cages
                     for offset in segment.semaphor_offsets.iter() {
-                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); 
+                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone();
                         self.sem_table.insert(shmaddr as u32 + *offset, sementry);
                     }
                 }
             }
-            
+
             // Map the shared segment onto the current cage using `map_shm` function
             segment.map_shm(shmaddr, prot, self.cageid)
         } else {
@@ -5160,74 +5171,83 @@ impl Cage {
     }
 
     ///------------------SHMDT SYSCALL------------------
-    /// ### Description 
-    /// 
+    /// ### Description
+    ///
     /// This syscall can be viewed as a reversal of the `shmat_syscall`
-    /// 'shmat_syscall` attaches a particular memory shared memory segment to a 
+    /// 'shmat_syscall` attaches a particular memory shared memory segment to a
     /// `shmaddr` passed as an argument
-    /// `shmdt` unmaps the shared memory segment that is currently mapped at the address
-    /// specified by the `shmaddr` argument. 
-    /// 
+    /// `shmdt` unmaps the shared memory segment that is currently mapped at the
+    /// address specified by the `shmaddr` argument.
+    ///
     /// ### Arguments
-    /// 
-    /// `shmaddr` : The address within the address space of the calling Cage to unmap
-    /// 
+    ///
+    /// `shmaddr` : The address within the address space of the calling Cage to
+    /// unmap
+    ///
     /// ### Returns
-    /// 
+    ///
     /// Returns the id of the memory segment that has been unmapped
-    /// 
+    ///
     /// ### Errors
-    /// 
+    ///
     /// This function can result in the following errors
-    /// 
+    ///
     /// * EINVAL : If there is no memory segment with the address specified
-    /// 
-    /// 
+    ///
+    ///
     /// ### Panics
-    /// 
-    /// This function panics if creating an inode fails
-    /// 
+    ///
+    /// This function panics if there is no memory segment associated with the specified `shmaddr`
+    ///
     /// For more information please refer - [https://man7.org/linux/man-pages/man3/shmdt.3p.html]
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
         // Acquire the lock of the reverse memory mappings of the Cage object
         let mut rev_shm = self.rev_shm.lock();
-        // This function returns the index where the pair of (shmaddr, shmid) is store within the vector 
-        // That holds these mappings
+        // This function returns the index where the pair of (shmaddr, shmid) is stored
+        // within the vector That holds these mappings
         let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
 
         // Check if the index is valid
         if let Some(index) = rev_shm_index {
-            // Get the second element of the (shmaddr,shmid) pair which gives us the id of the memory segment
+            // Get the second element of the (shmaddr,shmid) pair which gives us the id of
+            // the memory segment
             let shmid = rev_shm[index].1;
-            // Get the memory segment from the shmtable which corresponds to the shmid extracted above
+            // Get the memory segment from the shmtable which corresponds to the shmid
+            // extracted above
             match metadata.shmtable.entry(shmid) {
                 // If the memory segment is occupied
                 interface::RustHashEntry::Occupied(mut occupied) => {
+                    // Get the mutex for the memory segment
                     let segment = occupied.get_mut();
-
-                    // update semaphores
+                    // Loop through each semaphore that the segment hold and remove it from the semaphore table
                     for offset in segment.semaphor_offsets.iter() {
                         self.sem_table.remove(&(shmaddr as u32 + *offset));
                     }
-
+                    // Use the unmap helper function to unmap the shmaddr from the current cage object
                     segment.unmap_shm(shmaddr, self.cageid);
 
+                    // Check if segment has been removed previously by the `shmctl_syscall`
+                    // and that the number of processess attached to the segment are zero
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         rm = true;
                     }
+
+                    // Remove the reverse mapping from the mappings of the current cage object
                     rev_shm.swap_remove(index);
 
+                    // If segment has been removed previously 
+                    // and has no processess attached to it 
+                    // we delete the memory segment from the shmtable
                     if rm {
                         let key = segment.key;
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
-
-                    return shmid; //NaCl relies on this non-posix behavior of
-                                  // returning the shmid on success
-                }   
+                    
+                    return shmid; 
+                }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
                 }

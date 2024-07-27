@@ -10,7 +10,6 @@ pub mod fs_tests {
     use std::borrow::{Borrow, BorrowMut};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use std::time::{Duration, Instant};
 
     #[test]
     pub fn ut_lind_fs_simple() {
@@ -4040,37 +4039,55 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_shmget_syscall(){
+    pub fn ut_lind_fs_shmget_syscall() {
         // acquire locks and start env cleanup
         let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1); 
+        let cage = interface::cagetable_getref(1);
 
         let key = 33123;
         // Get shmid of a memory segment / create a new one if it doesn't exist
-        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);       
-        assert_eq!(shmid,4); 
+        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);
+        assert_eq!(shmid, 4);
 
-        // Check error upon asking for a valid key and passing the IPC_CREAT and IPC_EXCL flag
-        assert_eq!(cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),-(Errno::EEXIST as i32 ));
+        // Check error upon asking for a valid key and passing the IPC_CREAT and
+        // IPC_EXCL flag
+        assert_eq!(
+            cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),
+            -(Errno::EEXIST as i32)
+        );
 
-        // Check error when passing IPC_CREAT flag as the key 
-        assert_eq!(cage.shmget_syscall(IPC_PRIVATE,1024,IPC_PRIVATE),-(Errno::ENOENT as i32));
+        // Check error when passing IPC_CREAT flag as the key
+        assert_eq!(
+            cage.shmget_syscall(IPC_PRIVATE, 1024, IPC_PRIVATE),
+            -(Errno::ENOENT as i32)
+        );
 
-        // Check if the function returns a correct shmid upon asking with a key that we know exists 
-        assert_eq!(cage.shmget_syscall(key, 1024,0666),shmid);
+        // Check if the function returns a correct shmid upon asking with a key that we
+        // know exists
+        assert_eq!(cage.shmget_syscall(key, 1024, 0666), shmid);
 
-        // Check if the function returns the correct error when we don't pass IPC_CREAT for a key that doesn't exist
-        assert_eq!(cage.shmget_syscall(123456, 1024, 0),-(Errno::ENOENT as i32));
+        // Check if the function returns the correct error when we don't pass IPC_CREAT
+        // for a key that doesn't exist
+        assert_eq!(
+            cage.shmget_syscall(123456, 1024, 0),
+            -(Errno::ENOENT as i32)
+        );
 
         // Check if the size error is returned correctly
-        assert_eq!(cage.shmget_syscall(123456, (SHMMAX + 10 )as usize, IPC_CREAT),-(Errno::EINVAL as i32));
-        assert_eq!(cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),-(Errno::EINVAL as i32));
+        assert_eq!(
+            cage.shmget_syscall(123456, (SHMMAX + 10) as usize, IPC_CREAT),
+            -(Errno::EINVAL as i32)
+        );
+        assert_eq!(
+            cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),
+            -(Errno::EINVAL as i32)
+        );
 
         lindrustfinalize();
     }
 
     #[test]
-    pub fn ut_lind_fs_shmat_syscall(){
+    pub fn ut_lind_fs_shmat_syscall() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -4082,16 +4099,20 @@ pub mod fs_tests {
         let shmret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
 
         // Assert that the return address is valid
-        assert_ne!(shmret,-1); 
+        assert_ne!(shmret, -1);
 
-        // Assert that the function returns an appropriate error when passed an invalid shmid 
-        assert_eq!(cage.shmat_syscall(shmid+10, 0xfffff000 as *mut u8, 0),-(Errno::EINVAL as i32));
+        // Assert that the function returns an appropriate error when passed an invalid
+        // shmid
+        assert_eq!(
+            cage.shmat_syscall(shmid + 10, 0xfffff000 as *mut u8, 0),
+            -(Errno::EINVAL as i32)
+        );
 
         lindrustfinalize();
     }
 
     #[test]
-    pub fn ut_lind_fs_smhdt_syscall(){
+    pub fn ut_lind_fs_smhdt_syscall() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
@@ -4103,10 +4124,14 @@ pub mod fs_tests {
         let shmret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
 
         // Check that the shmdt calls returns the shmid upon succesful unmapping
-        assert_eq!(cage.shmdt_syscall(0xfffff000 as *mut u8),shmid);
+        assert_eq!(cage.shmdt_syscall(0xfffff000 as *mut u8), shmid);
 
-        // Assert that when passed an incorrect address, the function returns the appropriate error
-        assert_eq!(cage.shmdt_syscall(0xfffff010 as *mut u8),-(Errno::EINVAL as i32));
+        // Assert that when passed an incorrect address, the function returns the
+        // appropriate error
+        assert_eq!(
+            cage.shmdt_syscall(0xfffff010 as *mut u8),
+            -(Errno::EINVAL as i32)
+        );
 
         lindrustfinalize();
     }
