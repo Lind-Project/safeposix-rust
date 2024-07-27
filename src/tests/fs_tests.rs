@@ -2500,6 +2500,8 @@ pub mod fs_tests {
 
     #[test]
     fn ut_lind_fs_writev_pipe() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
     
