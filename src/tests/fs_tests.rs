@@ -9,8 +9,6 @@ pub mod fs_tests {
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use crate::tests::FileDescriptor::Socket;
-    use std::thread;
 
     #[test]
     pub fn ut_lind_fs_simple() {
