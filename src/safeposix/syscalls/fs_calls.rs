@@ -100,7 +100,6 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
-use interface::RustIOSlice;
 use crate::interface::log_to_stdout;
 use crate::interface::concat_iovec_to_slice;
 use crate::interface::log_from_slice;

@@ -41,7 +41,6 @@ use crate::interface::types::SigsetType;
 use crate::safeposix::syscalls::fs_constants::SEM_VALUE_MAX;
 use std::sync::LazyLock;
 use std::time::Duration;
-use crate::interface::misc::io::IoSlice;
 
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS: i32 = 0;
@@ -168,13 +167,13 @@ pub fn log_from_slice(fd: i32, data: &[u8]) -> Result<i32, String> {
 // It handles the conversion from the C-style `iovec` structure to the Rust-style `IoSlice` structure,
 // which is used for vectored I/O operations.
 
-pub fn iovec_to_ioslice<'a>(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<IoSlice<'a>> {
+pub fn iovec_to_ioslice<'a>(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<RustIOSlice<'a>> {
     unsafe {
         std::slice::from_raw_parts(iovec, iovcnt as usize)
             .iter()
             .map(|current_iovec| {
                 let slice = std::slice::from_raw_parts(current_iovec.iov_base as *const u8, current_iovec.iov_len as usize);
-                IoSlice::new(slice)
+                RustIOSlice::new(slice)
             })
             .collect()
     }

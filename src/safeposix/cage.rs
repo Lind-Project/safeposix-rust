@@ -42,7 +42,6 @@ pub use crate::interface::types::{
 
 use super::filesystem::normpath;
 use super::net::SocketHandle;
-
 pub use super::syscalls::fs_constants::*;
 pub use super::syscalls::net_constants::*;
 pub use super::syscalls::sys_constants::*;

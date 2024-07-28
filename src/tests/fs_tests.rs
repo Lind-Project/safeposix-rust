@@ -9,7 +9,6 @@ pub mod fs_tests {
     use libc::c_void;
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use interface::RustIOSlice;
     use interface::IovecStruct;
 
     #[test]
@@ -2247,6 +2246,7 @@ pub mod fs_tests {
     
         // Call writev_syscall with the file descriptor of the temporary file
         let bytes_written = cage.writev_syscall(fd, iovecs.as_ptr(), iovecs.len() as i32);
+        assert_eq!(bytes_written, 13,"Bytes written do not match expected value");
     
         // Close the file descriptor
         assert_eq!(cage.close_syscall(fd), 0);
