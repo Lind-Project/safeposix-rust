@@ -9,7 +9,6 @@ pub mod fs_tests {
     use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
     pub fn ut_lind_fs_simple() {
