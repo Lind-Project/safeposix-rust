@@ -334,6 +334,13 @@ pub const SO_ACCEPTCONN: i32 = 30;
 pub const SOL_TCP: i32 = IPPROTO_TCP;
 pub const SOL_UDP: i32 = IPPROTO_UDP;
 
+// some TCP flags below are not part of Linux standards
+// for example, TCP_NOPUSH is the flag used in FreeBSD/MacOS
+// while the actual flag in Linux that serves the similar purpose
+// is TCP_CORK
+// Besides, some other flags are also not found in Linux man page:
+// TCP_KEEPALIVE, TCP_CONNECTIONTIMEOUT, PERSIST_TIMEOUT, TCP_RXT_CONNDROPTIME
+// and TCP_RXT_FINDROP
 pub const TCP_NODELAY: i32 = 0x01; // don't delay send to coalesce packets
 pub const TCP_MAXSEG: i32 = 0x02; // set maximum segment size
 pub const TCP_NOPUSH: i32 = 0x04; // don't push last block of write
