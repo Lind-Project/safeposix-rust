@@ -4112,7 +4112,7 @@ pub mod fs_tests {
     }
 
     #[test]
-    pub fn ut_lind_fs_smhdt_syscall() {
+    pub fn ut_lind_fs_shmdt_syscall() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
