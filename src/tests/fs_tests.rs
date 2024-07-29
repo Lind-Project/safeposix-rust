@@ -6,7 +6,7 @@ pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
-    use libc::c_void;
+    use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
@@ -4038,31 +4038,46 @@ pub mod fs_tests {
         lindrustfinalize();
     }
 
-    pub fn ut_lind_fs_shmget_syscall(){
+    pub fn ut_lind_fs_shmget_syscall() {
         // acquire locks and start env cleanup
         let _thelock = setup::lock_and_init();
-        let cage = interface::cagetable_getref(1); 
+        let cage = interface::cagetable_getref(1);
 
         let key = 33123;
         // Get shmid of a memory segment / create a new one if it doesn't exist
-        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);       
-        assert_eq!(shmid,4); 
+        let shmid = cage.shmget_syscall(33123, 1024, IPC_CREAT);
+        assert_eq!(shmid, 4);
 
         // Check error upon asking for a valid key and passing the IPC_CREAT and IPC_EXCL flag
-        assert_eq!(cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),-(Errno::EEXIST as i32 ));
+        assert_eq!(
+            cage.shmget_syscall(key, 1024, IPC_CREAT | IPC_EXCL),
+            -(Errno::EEXIST as i32)
+        );
 
-        // Check error when passing IPC_CREAT flag as the key 
-        assert_eq!(cage.shmget_syscall(IPC_PRIVATE,1024,IPC_PRIVATE),-(Errno::ENOENT as i32));
+        // Check error when passing IPC_CREAT flag as the key
+        assert_eq!(
+            cage.shmget_syscall(IPC_PRIVATE, 1024, IPC_PRIVATE),
+            -(Errno::ENOENT as i32)
+        );
 
-        // Check if the function returns a correct shmid upon asking with a key that we know exists 
-        assert_eq!(cage.shmget_syscall(key, 1024,0666),shmid);
+        // Check if the function returns a correct shmid upon asking with a key that we know exists
+        assert_eq!(cage.shmget_syscall(key, 1024, 0666), shmid);
 
         // Check if the function returns the correct error when we don't pass IPC_CREAT for a key that doesn't exist
-        assert_eq!(cage.shmget_syscall(123456, 1024, 0),-(Errno::ENOENT as i32));
+        assert_eq!(
+            cage.shmget_syscall(123456, 1024, 0),
+            -(Errno::ENOENT as i32)
+        );
 
         // Check if the size error is returned correctly
-        assert_eq!(cage.shmget_syscall(123456, (SHMMAX + 10 )as usize, IPC_CREAT),-(Errno::EINVAL as i32));
-        assert_eq!(cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),-(Errno::EINVAL as i32));
+        assert_eq!(
+            cage.shmget_syscall(123456, (SHMMAX + 10) as usize, IPC_CREAT),
+            -(Errno::EINVAL as i32)
+        );
+        assert_eq!(
+            cage.shmget_syscall(123456, 0 as usize, IPC_CREAT),
+            -(Errno::EINVAL as i32)
+        );
 
         lindrustfinalize();
     }
@@ -4070,7 +4085,6 @@ pub mod fs_tests {
     #[test]
     pub fn ut_lind_fs_lseek_on_file() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
         let cage = interface::cagetable_getref(1);
@@ -4393,5 +4407,130 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
+    }
+    
+    #[test]
+    pub fn ut_lind_fs_stat_syscall_tests() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        let mut statdata = StatData::default();
+
+        // test out whether an error is output for a non existent file path
+        // (ENOENT[-2])
+        assert_eq!(
+            cage.stat_syscall("non_existent_file_path", &mut statdata),
+            syscall_error(Errno::ENOENT, "stat", "test_failure")
+        );
+
+        // setting up directory inode object '/tmp' for testing stat_syscall with a
+        // directory
+        let dir_path = "/tmp"; // since setup already initializes tmp, assuming it is there
+        assert_eq!(cage.stat_syscall(dir_path, &mut statdata), 0);
+
+        // setting up generic inode object "/tmp/generic" for testing stat_syscall with
+        // a generic file
+        let generic_path = "/tmp/generic";
+        let creat_fd = cage.creat_syscall(generic_path, S_IRWXA);
+        assert!(creat_fd > 0);
+        assert_eq!(cage.stat_syscall(generic_path, &mut statdata), 0);
+
+        // setting up character device inode object "/chardev" for testing stat_syscall
+        // with a character device
+        let dev = makedev(&DevNo { major: 1, minor: 3 });
+        let chardev_path = "/chardev";
+        assert_eq!(
+            cage.mknod_syscall(chardev_path, S_IRWXA | S_IFCHR as u32, dev),
+            0
+        );
+        assert_eq!(cage.stat_syscall(chardev_path, &mut statdata), 0);
+
+        // setting up socket inode object with path "/socket.sock"  for testing
+        // stat_syscall with a socket
+        let socketfile_path = "/socket.sock";
+        let socketfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+        assert!(socketfd > 0);
+        let sockaddr = interface::new_sockaddr_unix(AF_UNIX as u16, socketfile_path.as_bytes());
+        let socket = interface::GenSockaddr::Unix(sockaddr);
+        assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
+
+        // stat_syscall test here
+        assert_eq!(cage.stat_syscall(socketfile_path, &mut statdata), 0);
+
+        // socket teardown
+        assert_eq!(cage.close_syscall(socketfd), 0);
+        cage.unlink_syscall(socketfile_path);
+
+        lindrustfinalize();
+        return;
+    }
+
+    #[test]
+    pub fn ut_lind_fs_fstat_syscall_tests() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let mut statdata = StatData::default();
+
+
+        // test out whether an error is output for a non existent fd (1000)
+        // (ENOENT[-2])
+        let non_existent_fd = 1000;
+        assert_eq!(cage.fstat_syscall(non_existent_fd, &mut statdata), -9);
+
+        // setting up directory inode object '/tmp' for testing fstat_syscall with a
+        // directory
+        let dir_path = "/tmp"; // since setup already initializes tmp, assuming it is there
+        let dir_fd = cage.open_syscall(dir_path, O_RDONLY | O_DIRECTORY, S_IRWXA);
+        assert!(dir_fd > 0);
+        assert_eq!(cage.fstat_syscall(dir_fd, &mut statdata), 0);
+        assert_eq!(cage.close_syscall(dir_fd), 0);
+
+        // setting up generic inode object "/tmp/generic" for testing fstat_syscall with
+        // a generic file
+        let generic_path = "/tmp/generic";
+        let creat_fd = cage.creat_syscall(generic_path, S_IRWXA);
+        assert!(creat_fd > 0);
+        assert_eq!(cage.fstat_syscall(creat_fd, &mut statdata), 0);
+
+        // setting up character device inode object "/chardev" for testing fstat_syscall
+        // with a character device
+        let dev = makedev(&DevNo { major: 1, minor: 3 });
+        let chardev_path = "/chardev";
+        assert_eq!(
+            cage.mknod_syscall(chardev_path, S_IRWXA | S_IFCHR as u32, dev),
+            0
+        );
+        let chardev_fd = cage.open_syscall(chardev_path, O_RDONLY, S_IRWXA);
+        assert!(chardev_fd > 0);
+        assert_eq!(cage.fstat_syscall(chardev_fd, &mut statdata), 0);
+        assert_eq!(cage.close_syscall(chardev_fd), 0);
+
+        // setting up socket inode object with path "/socket.sock" for testing
+        // fstat_syscall with a socket
+        let socketfile_path = "/socket.sock";
+
+        let socketfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
+        assert!(socketfd > 0);
+
+        let sockaddr = interface::new_sockaddr_unix(AF_UNIX as u16, socketfile_path.as_bytes());
+        let socket = interface::GenSockaddr::Unix(sockaddr);
+        assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
+
+        // Errno::EOPNOTSUPP : -95 
+        assert_eq!(cage.fstat_syscall(socketfd, &mut statdata), -95);
+
+        // Clean up
+        assert_eq!(cage.close_syscall(socketfd), 0);
+
+        cage.unlink_syscall(socketfile_path);
+
+        lindrustfinalize();
+        return;
     }
 }

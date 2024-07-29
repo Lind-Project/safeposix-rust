@@ -1148,12 +1148,47 @@ impl Cage {
     }
 
     //------------------------------------STAT SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `stat_syscall` retrieves file information for the file specified by
+    /// `path` and populates the provided `statbuf` with this information.
+    /// Although no file permissions are required to perform the call, execute
+    /// (search) permission is required on all of the directories in
+    /// pathname that lead to the file.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `path` - A string slice that specifies the file path for which status
+    ///   information is to be retrieved.
+    /// * `statbuf` - A mutable reference to a `StatData` struct where the file
+    ///   status will be stored.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0. On error, a negative
+    /// errno is returned to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The file specified by `path` does not exist or the path is
+    ///   invalid.
+    ///
+    /// ### Panics
+    ///
+    /// * This function does not have any known panics.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the stat man page [here](https://man7.org/linux/man-pages/man2/stat.2.html).
 
     pub fn stat_syscall(&self, path: &str, statbuf: &mut StatData) -> i32 {
+        //convert the path to an absolute path of type `PathBuf`
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
+            // won't panic since check for inode number in table is already happening in
+            // above 'metawalk' function
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
             //populate those fields in statbuf which depend on things other than the inode
@@ -1182,6 +1217,9 @@ impl Cage {
         }
     }
 
+    // helper function to populate information of generic inode objects (for example
+    // a file) into the statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper(inodeobj: &GenericInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1193,6 +1231,9 @@ impl Cage {
         statbuf.st_blocks = 0;
     }
 
+    // helper function to populate information of socket inode object into the
+    // statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper_sock(inodeobj: &SocketInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1204,6 +1245,9 @@ impl Cage {
         statbuf.st_blocks = 0;
     }
 
+    // helper function to populate information of directory inode object into the
+    // statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper_dir(inodeobj: &DirectoryInode, statbuf: &mut StatData) {
         statbuf.st_mode = inodeobj.mode;
         statbuf.st_nlink = inodeobj.linkcount;
@@ -1215,6 +1259,9 @@ impl Cage {
         statbuf.st_blocks = 0;
     }
 
+    // helper function to populate information of device inode object into the
+    // statbuf. Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+    // for more information on the fields being populated below.
     fn _istat_helper_chr_file(inodeobj: &DeviceInode, statbuf: &mut StatData) {
         statbuf.st_dev = 5;
         statbuf.st_mode = inodeobj.mode;
@@ -1226,7 +1273,7 @@ impl Cage {
         statbuf.st_size = inodeobj.size;
     }
 
-    //Streams and pipes don't have associated inodes so we populate them from
+    // Streams and pipes don't have associated inodes so we populate them from
     // mostly dummy information
     fn _stat_alt_helper(&self, statbuf: &mut StatData, inodenum: usize) {
         statbuf.st_dev = FS_METADATA.dev_id;
@@ -1242,18 +1289,67 @@ impl Cage {
     }
 
     //------------------------------------FSTAT SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `fstat_syscall` retrieves file status information for the file specified
+    /// by the file descriptor `fd` and populates the provided `statbuf`
+    /// with this information.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `fd` - The file descriptor for the file for which we need the status
+    ///   information.
+    /// * `statbuf` - A mutable reference to a `StatData` struct where the file
+    ///   status will be stored.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0. On error, a negative
+    /// errno is returned to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - The file descriptor `fd` is invalid.
+    /// * `EOPNOTSUPP` - `fstat` is not supported on sockets.
+    ///
+    /// ### Panics
+    ///
+    /// * If the file descriptor passed is invalid (less than zero or greater
+    ///   than MAX FD which is 1024)
+    /// * If the inode number retrieved from the file descriptor does not exist
+    ///   in `FS_METADATA.inodetable`.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the stat man page [here](https://man7.org/linux/man-pages/man2/stat.2.html).
 
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
+        // Attempt to get the file descriptor
+        // BUG: This can panic if there is an invalid file descriptor provided
         let checkedfd = self.get_filedescriptor(fd).unwrap();
+
+        // Acquire a write lock on the file descriptor to ensure exclusive access.
         let unlocked_fd = checkedfd.read();
+
         if let Some(filedesc_enum) = &*unlocked_fd {
-            //Delegate populating statbuf to the relevant helper depending on the file
+            // Delegate populating statbuf to the relevant helper depending on the file
             // type. First we check in the file descriptor to handle sockets,
             // streams, and pipes, and if it is a normal file descriptor we
             // handle regular files, dirs, and char files based on the
             // information in the inode.
             match filedesc_enum {
+                // Fail faster for sockets
+                Socket(_) => {
+                    return syscall_error(
+                        Errno::EOPNOTSUPP,
+                        "fstat",
+                        "we don't support fstat on sockets yet",
+                    );
+                }
+
+                // if a normal file descriptor is found
                 File(normalfile_filedesc_obj) => {
+                    // fetch the inode object of the normal file
                     let inode = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
@@ -1264,6 +1360,7 @@ impl Cage {
                     statbuf.st_ino = normalfile_filedesc_obj.inode;
                     statbuf.st_dev = FS_METADATA.dev_id;
 
+                    // match inode to one of 4 inode types
                     match &*inode {
                         Inode::File(f) => {
                             Self::_istat_helper(&f, statbuf);
@@ -1279,21 +1376,17 @@ impl Cage {
                         }
                     }
                 }
-                Socket(_) => {
-                    return syscall_error(
-                        Errno::EOPNOTSUPP,
-                        "fstat",
-                        "we don't support fstat on sockets yet",
-                    );
-                }
+                // Streams don't have inodes, so we'll populate statbuf with dummy info
                 Stream(_) => {
                     self._stat_alt_helper(statbuf, STREAMINODE);
                 }
+                // Pipes don't have inodes, so we'll populate statbuf with dummy info
                 Pipe(_) => {
-                    self._stat_alt_helper(statbuf, 0xfeef0000);
+                    self._stat_alt_helper(statbuf, PIPEINODE);
                 }
+                // Epolls don't have inodes, so we'll populate statbuf with dummy info
                 Epoll(_) => {
-                    self._stat_alt_helper(statbuf, 0xfeef0000);
+                    self._stat_alt_helper(statbuf, EPOLLINODE);
                 }
             }
             0 //fstat has succeeded!
@@ -5212,40 +5305,40 @@ impl Cage {
     }
 
     /// ### Description
-    /// 
+    ///
     /// `shmget_syscall` returns the shared memory segment identifier associated with a particular `key`
     /// If a key doesn't exist, shmget creates a new memory segment and attaches it to the key.
-    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which 
-    /// is not associated with a key during this syscall, 
-    /// but for our implementaion, we return an error and only create a new memory 
+    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which
+    /// is not associated with a key during this syscall,
+    /// but for our implementaion, we return an error and only create a new memory
     /// segment when the IPC_CREAT flag is specified in the`shmflag` argument.
-    /// 
-    /// ### Returns 
-    /// 
+    ///
+    /// ### Returns
+    ///
     /// An 32 bit integer which represens the identifier of the memory segment associated with the key
-    /// 
+    ///
     /// ### Arguments
-    /// 
+    ///
     /// `key` : An i32 value that references a memory segment
     /// `size` : Size of the memory segment to be created if key doesn't exist
     /// `shmflag` : mode flags which indicate whether to create a new key or not
-    ///  The `shmflag` is composed of the following 
+    ///  The `shmflag` is composed of the following
     ///  * IPC_CREAT - specify that the system call creates a new segment
-    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used 
+    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used
     ///               and the key passed has a memory segment associated with it.
-    /// 
-    /// ### Errors 
-    /// 
+    ///
+    /// ### Errors
+    ///
     /// * ENOENT : the key equals the `IPC_PRIVATE` constant
     /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are passed as flags
     /// * ENOENT : key did not exist and the `IPC_CREAT` flag was not passed
     /// * EINVAL : the size passed was less than the minimum size of segment or greater than the maximum possible size
-    /// 
+    ///
     /// ### Panics
-    /// 
+    ///
     /// There are no cases where the function directly panics
-    /// 
-    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 { 
+    ///
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
         //Check if the key passed equals the IPC_PRIVATE flag
         if key == IPC_PRIVATE {
             // Return error since this is not suppported currently
@@ -5297,7 +5390,7 @@ impl Cage {
                 // Insert new id in the hash table entry pointed by the key
                 vacant.insert(shmid);
                 // Mode of the new segment is the 9 least significant bits of the shmflag
-                let mode = (shmflg & 0x1FF) as u16; 
+                let mode = (shmflg & 0x1FF) as u16;
                 // Create a new segment with the key, size, cageid of the calling process
                 let segment = new_shm_segment(
                     key,
@@ -5312,7 +5405,7 @@ impl Cage {
             }
         };
         // Return the shmid
-        shmid 
+        shmid
     }
 
     //------------------SHMAT SYSCALL------------------
