@@ -100,7 +100,6 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
-use crate::interface::RustLock;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description

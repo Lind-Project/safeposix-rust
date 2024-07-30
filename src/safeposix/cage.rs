@@ -187,9 +187,9 @@ impl Cage {
     pub fn get_filedescriptor(
         &self,
         fd: i32,
-    ) -> Result<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>, Errno> {
+    ) -> Result<interface::RustRfc<interface::RustLock<Option<FileDescriptor>>>, ()> {
         if (fd < 0) || (fd >= MAXFD) {
-            return Err(Errno::EBADF);
+            Err(())
         } else {
             Ok(self.filedescriptortable[fd as usize].clone())
         }
