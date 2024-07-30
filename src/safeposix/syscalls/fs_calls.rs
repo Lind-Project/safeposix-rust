@@ -100,11 +100,7 @@ use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::NET_METADATA;
 use crate::safeposix::shm::*;
-use crate::interface::log_to_stdout;
-use crate::interface::concat_iovec_to_slice;
-use crate::interface::log_from_slice;
 use crate::interface::RustLock;
-use crate::interface::iovec_to_ioslice;
 impl Cage {
     /// ## ------------------OPEN SYSCALL------------------
     /// ### Description
@@ -1824,10 +1820,10 @@ impl Cage {
                 }
                 Stream(_stream_filedesc_obj) => {
                     // Convert the iovec array to a single contiguous slice of bytes
-                    let iovecslice = concat_iovec_to_slice(iovec, iovcnt);
+                    let iovecslice = interface::concat_iovec_to_slice(iovec, iovcnt);
         
                     // Log the data from the slice. Handle the Result from log_from_slice
-                    match log_from_slice(fd, &iovecslice) {
+                    match interface::log_from_slice(fd, &iovecslice) {
                         Ok(bytes_written) => bytes_written,
                         Err(err_msg) => syscall_error(Errno::EIO, "writev", &err_msg),
                     }
@@ -1873,7 +1869,7 @@ impl Cage {
                             }
 
                             // Create IoSlice objects from the raw iovec pointer
-                            let iovs = iovec_to_ioslice(iovec, iovcnt);
+                            let iovs = interface::iovec_to_ioslice(iovec, iovcnt);
 
                             // Write to the file using the vectored IO method
                             if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position) {
