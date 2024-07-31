@@ -395,7 +395,7 @@ pub fn create_log() {
     logobj.replace(log_mapobj);
 }
 
-// Serialize New Metadata to CBOR, write to logfile
+/// Serialize New Metadata to CBOR, write to logfile
 pub fn log_metadata(metadata: &FilesystemMetadata, inodenum: usize) {
     let serialpair: (usize, Option<&Inode>);
     let entrybytes;

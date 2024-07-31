@@ -4480,9 +4480,12 @@ pub mod fs_tests {
         let mut statdata = StatData::default();
 
         // test out whether an error is output for a non existent fd (1000)
-        // (ENOENT[-2])
+        // (EBADF[-9])
         let non_existent_fd = 1000;
-        assert_eq!(cage.fstat_syscall(non_existent_fd, &mut statdata), -9);
+        assert_eq!(
+            cage.fstat_syscall(non_existent_fd, &mut statdata),
+            syscall_error(Errno::EBADF, "fstat", "test_failure")
+        );
 
         // setting up directory inode object '/tmp' for testing fstat_syscall with a
         // directory
@@ -4524,7 +4527,10 @@ pub mod fs_tests {
         assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
 
         // Errno::EOPNOTSUPP : -95
-        assert_eq!(cage.fstat_syscall(socketfd, &mut statdata), -95);
+        assert_eq!(
+            cage.fstat_syscall(socketfd, &mut statdata),
+            syscall_error(Errno::EOPNOTSUPP, "fstat", "test_failure")
+        );
 
         // Clean up
         assert_eq!(cage.close_syscall(socketfd), 0);
@@ -4548,7 +4554,7 @@ pub mod fs_tests {
         // (ENOENT[-2])
         assert_eq!(
             cage.statfs_syscall("non_existent_file_path", &mut fsdata),
-            syscall_error(Errno::ENOENT, "stat", "test_failure")
+            syscall_error(Errno::ENOENT, "statfs", "test_failure")
         );
 
         // setting up inode object "/tmp/generic" for testing statfs_syscall
@@ -4576,7 +4582,7 @@ pub mod fs_tests {
         let non_existent_fd = 1000;
         assert_eq!(
             cage.fstatfs_syscall(non_existent_fd, &mut fsdata),
-            syscall_error(Errno::EBADF, "stat", "test_failure")
+            syscall_error(Errno::EBADF, "fstatfs", "test_failure")
         );
 
         // setting up generic inode object "/tmp/generic" for testing fstat_syscall with
@@ -4600,7 +4606,7 @@ pub mod fs_tests {
         // Errno::EBADF : -9
         assert_eq!(
             cage.fstatfs_syscall(socketfd, &mut fsdata),
-            syscall_error(Errno::EBADF, "stat", "test_failure")
+            syscall_error(Errno::EBADF, "fstatfs", "test_failure")
         );
 
         // Clean up
@@ -4609,6 +4615,83 @@ pub mod fs_tests {
         cage.unlink_syscall(socketfile_path);
 
         lindrustfinalize();
+        return;
+    }
+
+    #[test]
+    pub fn ut_lind_fs_access_syscall_tests() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // test out whether an error is output for a non existent file path
+        // (ENOENT[-2])
+        assert_eq!(
+            cage.access_syscall("non_existent_file_path", S_IRWXA),
+            syscall_error(Errno::ENOENT, "access", "test_failure")
+        );
+
+        // setting up inode object "/tmp/generic" for testing statfs_syscall
+        let generic_path = "/tmp/generic";
+        let creat_fd = cage.creat_syscall(generic_path, S_IRWXA);
+        assert!(creat_fd > 0);
+        // set mode to some value
+        assert_eq!(cage.access_syscall(generic_path, S_IRWXA), 0);
+
+        // change mode
+        assert_eq!(cage.chmod_syscall(generic_path, S_IRGRP), 0);
+        assert_eq!(
+            cage.access_syscall(generic_path, S_IRWXA),
+            syscall_error(Errno::EACCES, "access", "incorrect access")
+        );
+
+        lindrustfinalize();
+        return;
+    }
+
+    #[test]
+    pub fn ut_lind_fs_rename_syscall_tests() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        // test out whether an error is output for a non existent file path
+        // (EEXIST[-17])
+        assert_eq!(
+            cage.rename_syscall("non_existent_file_path", "non-existent-target"),
+            syscall_error(Errno::EEXIST, "rename", "test_failure")
+        );
+
+        // empty inputs for rename
+        assert_eq!(
+            cage.rename_syscall("", ""),
+            syscall_error(Errno::ENOENT, "rename", "empty inputs")
+        );
+
+        // root path provided
+        assert_eq!(
+            cage.rename_syscall("/", "rename-to-this"),
+            syscall_error(Errno::EBUSY, "rename", "cant deal with root")
+        );
+
+        // setting up inode object "/tmp/generic" for testing statfs_syscall
+        let generic_path = "/tmp/generic";
+        let creat_fd = cage.creat_syscall(generic_path, S_IRWXA);
+        assert!(creat_fd > 0);
+
+        // try to rename to different parent
+        assert_eq!(
+            cage.rename_syscall("/tmp", generic_path),
+            syscall_error(Errno::EOPNOTSUPP, "rename", "cant move directories")
+        );
+
+        // normal rename
+        assert_eq!(cage.rename_syscall("/tmp/generic", "/tmp/generic1"), 0);
+
         return;
     }
 }
