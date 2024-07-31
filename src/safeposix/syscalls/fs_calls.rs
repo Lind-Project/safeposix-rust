@@ -4727,11 +4727,10 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * If the inode number retrieved from `metawalkandparent` does not exist
-    ///   in `FS_METADATA.inodetable`.
+    /// * There are no known panics in this function.
     ///
     /// For more detailed description of all the commands and return values,
-    /// refer to the relevant documentation.
+    /// refer to the rename syscall man page [here](https://man7.org/linux/man-pages/man2/rename.2.html).
 
     pub fn rename_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
         if oldpath.len() == 0 {
