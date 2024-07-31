@@ -1396,12 +1396,45 @@ impl Cage {
     }
 
     //------------------------------------STATFS SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `statfs_syscall` retrieves file system status information for the file
+    /// system containing the file specified by `path` and populates the
+    /// provided `databuf` with this information.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `path` - A string slice that specifies the file path for which file
+    ///   system status information is to be retrieved.
+    /// * `databuf` - A mutable reference to a `FSData` struct where the file
+    ///   system status will be stored.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0. On error, a negative
+    /// errno is returned to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The file specified by `path` does not exist or the path is
+    ///   invalid.
+    ///
+    /// ### Panics
+    ///
+    /// * There are no panics that can happen in this function.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the statfs man page [here](https://man7.org/linux/man-pages/man2/statfs.2.html).
 
     pub fn statfs_syscall(&self, path: &str, databuf: &mut FSData) -> i32 {
+        //convert the path to an absolute path of type `PathBuf`
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
+            // won't panic since check for inode number in table is already happening in
+            // above 'metawalk' function
             let _inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
             //populate the dev id field -- can be done outside of the helper
@@ -1415,35 +1448,80 @@ impl Cage {
     }
 
     //------------------------------------FSTATFS SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `fstatfs_syscall` retrieves file system status information for the file
+    /// system containing the file specified by the file descriptor `fd` and
+    /// populates the provided `databuf` with this information.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `fd` - The file descriptor that refers to the open file.
+    /// * `databuf` - A mutable reference to a `FSData` struct where the file
+    ///   system status will be stored.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0. On error, a negative
+    /// errno is returned to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `EBADF` - The file descriptor `fd` is either invalid or it refers to a
+    ///   socket, stream, pipe, or epoll file descriptor, which are not
+    ///   supported by this function.
+    ///
+    /// ### Panics
+    ///
+    /// * If the file descriptor provided isn't in the appropriate range, this
+    ///   function can panic.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the statfs man page [here](https://man7.org/linux/man-pages/man2/statfs.2.html).
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
+        // BUG: If the provided file descriptor is out of bounds, get_filedescriptor
+        // returns Err(), unwrapping on which  produces a 'panic!'
+        // otherwise, file descriptor table entry is stored in 'checkedfd'
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
+
         if let Some(filedesc_enum) = &*unlocked_fd {
             //populate the dev id field -- can be done outside of the helper
             databuf.f_fsid = FS_METADATA.dev_id;
 
             match filedesc_enum {
+                // if the fd points to a normal file descriptor
                 File(normalfile_filedesc_obj) => {
+                    // won't panic since we have already checked that the entries exist
+                    // in the FS_METADATA inode table
                     let _inodeobj = FS_METADATA
                         .inodetable
                         .get(&normalfile_filedesc_obj.inode)
                         .unwrap();
 
+                    // populate the databuf using a helper function
                     return Self::_istatfs_helper(self, databuf);
                 }
+
+                // if the fd points to a socket, pipe, stream, or epoll file descriptor
                 Socket(_) | Pipe(_) | Stream(_) | Epoll(_) => {
                     return syscall_error(
                         Errno::EBADF,
                         "fstatfs",
-                        "can't fstatfs on socket, stream, pipe, or epollfd",
+                        "can't fstatfs on sockets, streams, pipes, or epoll fds",
                     );
                 }
             }
+        } else {
+            return syscall_error(Errno::EBADF, "statfs", "invalid file descriptor");
         }
-        return syscall_error(Errno::EBADF, "statfs", "invalid file descriptor");
     }
 
+    // These values have (probably) been picked up from the previously used
+    // environment, and have been working fine till now for our purposes
+    // TODO: Figure out how to populate the databuf values properly
     pub fn _istatfs_helper(&self, databuf: &mut FSData) -> i32 {
         databuf.f_type = 0xBEEFC0DE; //unassigned
         databuf.f_bsize = 4096;
@@ -5306,16 +5384,19 @@ impl Cage {
 
     /// ### Description
     ///
-    /// `shmget_syscall` returns the shared memory segment identifier associated with a particular `key`
-    /// If a key doesn't exist, shmget creates a new memory segment and attaches it to the key.
-    /// Traditionally if the value of the key equals `IPC_PRIVATE`, we also create a new memory segment which
-    /// is not associated with a key during this syscall,
-    /// but for our implementaion, we return an error and only create a new memory
-    /// segment when the IPC_CREAT flag is specified in the`shmflag` argument.
+    /// `shmget_syscall` returns the shared memory segment identifier associated
+    /// with a particular `key` If a key doesn't exist, shmget creates a new
+    /// memory segment and attaches it to the key. Traditionally if the
+    /// value of the key equals `IPC_PRIVATE`, we also create a new memory
+    /// segment which is not associated with a key during this syscall,
+    /// but for our implementaion, we return an error and only create a new
+    /// memory segment when the IPC_CREAT flag is specified in the`shmflag`
+    /// argument.
     ///
     /// ### Returns
     ///
-    /// An 32 bit integer which represens the identifier of the memory segment associated with the key
+    /// An 32 bit integer which represens the identifier of the memory segment
+    /// associated with the key
     ///
     /// ### Arguments
     ///
@@ -5324,20 +5405,22 @@ impl Cage {
     /// `shmflag` : mode flags which indicate whether to create a new key or not
     ///  The `shmflag` is composed of the following
     ///  * IPC_CREAT - specify that the system call creates a new segment
-    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to fail when IPC_CREAT is also used
-    ///               and the key passed has a memory segment associated with it.
+    ///  * IPC_EXCL - this flag is used with IPC_CREAT to cause this function to
+    ///    fail when IPC_CREAT is also used and the key passed has a memory
+    ///    segment associated with it.
     ///
     /// ### Errors
     ///
     /// * ENOENT : the key equals the `IPC_PRIVATE` constant
-    /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are passed as flags
+    /// * EEXIST : key exists and yet either `IPC_CREAT` or `IPC_EXCL` are
+    ///   passed as flags
     /// * ENOENT : key did not exist and the `IPC_CREAT` flag was not passed
-    /// * EINVAL : the size passed was less than the minimum size of segment or greater than the maximum possible size
+    /// * EINVAL : the size passed was less than the minimum size of segment or
+    ///   greater than the maximum possible size
     ///
     /// ### Panics
     ///
     /// There are no cases where the function directly panics
-    ///
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
         //Check if the key passed equals the IPC_PRIVATE flag
         if key == IPC_PRIVATE {
@@ -5349,7 +5432,8 @@ impl Cage {
         // data of the shm table
         let metadata = &SHM_METADATA;
 
-        // Check if there exists a memory segment associated with the key passed as argument
+        // Check if there exists a memory segment associated with the key passed as
+        // argument
         match metadata.shmkeyidtable.entry(key) {
             // If there exists a memory segment at that key
             interface::RustHashEntry::Occupied(occupied) => {
@@ -5375,8 +5459,8 @@ impl Cage {
                     );
                 }
 
-                // If memory segment doesn't exist and IPC_CREAT was specified - we create a new memory segment
-                // Check if the size passed is a valid value
+                // If memory segment doesn't exist and IPC_CREAT was specified - we create a new
+                // memory segment Check if the size passed is a valid value
                 if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
                     return syscall_error(
                         Errno::EINVAL,
