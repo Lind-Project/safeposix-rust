@@ -1629,7 +1629,7 @@ impl Cage {
                                         //can't send messages
                                         return syscall_error(
                                             Errno::ENOTCONN,
-                                            "writev",
+                                            "send",
                                             "The descriptor is not connected",
                                         );
                                     }
@@ -1654,7 +1654,11 @@ impl Cage {
                                         //sendpipe is not available in unix socket info
                                         //transmission of data is not possible so return with error
                                         None => {
-                                            panic!("sendpipe is not available in unix socket info in send syscall");
+                                            return syscall_error(
+                                                Errno::ENOTCONN,
+                                                "send",
+                                                "sendpipe is not available",
+                                            )
                                         }
                                     };
                                     //In the case that the write_to_pipe call returns EPIPE,
