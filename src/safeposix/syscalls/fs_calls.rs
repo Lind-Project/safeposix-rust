@@ -2818,7 +2818,7 @@ impl Cage {
     /// ### Description
     ///
     /// `access_syscall` checks the accessibility of the file specified by
-    /// `path` according to the given `amode`. The assmption while running this
+    /// `path` according to the given `amode`. The assumption while running this
     /// command is that the current user owns the file.
     ///
     /// ### Arguments
@@ -2857,6 +2857,11 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
+            // if we just want to check if the file exists or not (amode = F_OK)
+            if amode & F_OK == F_OK {
+                return 0;
+            }
+
             // will not panic since check for existence in table already happened in
             // metawalk
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
