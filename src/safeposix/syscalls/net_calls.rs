@@ -638,7 +638,7 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     //Clone the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
-                    //Obtain write gaurd for socket handle
+                    //Obtain write guard for socket handle
                     let mut sockhandle = sock_tmp.write();
                     //We would like to pass the socket handle data to the function
                     //without giving it ownership sockfdobj, which may be in use
@@ -874,7 +874,7 @@ impl Cage {
     /// [connect(3)](https://linux.die.net/man/3/connect)
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         //Pattern match such that FileDescriptor object must be the Socket variant
@@ -1280,11 +1280,8 @@ impl Cage {
     ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
     ///   a network/broadcast address as though it was a unicast address.
     ///
-    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
-    ///   requested operation would block.  POSIX.1-2001 allows either error to
-    ///   be returned for this case, and does not require these constants to
-    ///   have the same value, so a portable application should check for both
-    ///   possibilities.
+    /// ** EAGAIN - The socket is marked nonblocking and the
+    ///    requested operation would block.
     ///
     /// ** EAGAIN - (Internet domain datagram sockets) The socket referred to by
     ///   sockfd had not previously been bound to an address and, upon
@@ -1359,10 +1356,10 @@ impl Cage {
         }
         //BUG:
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        //Check if the write gaurd holds a valid FileDescriptor
+        //Check if the write guard holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 //In this case, the file descriptor refers to a socket
@@ -1490,7 +1487,7 @@ impl Cage {
                     );
                 }
             }
-        //Otherwise, the write gaurd does not hold a FileDescriptor
+        //Otherwise, the write guard does not hold a FileDescriptor
         } else {
             return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
         }
@@ -1530,11 +1527,8 @@ impl Cage {
     ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
     ///   a network/broadcast address as though it was a unicast address.
     ///
-    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
-    ///   requested operation would block.  POSIX.1-2001 allows either error to
-    ///   be returned for this case, and does not require these constants to
-    ///   have the same value, so a portable application should check for both
-    ///   possibilities.
+    /// ** EAGAIN - The socket is marked nonblocking and the
+    ///   requested operation would block.
     ///
     /// ** EAGAIN - (Internet domain datagram sockets) The socket referred to by
     ///   sockfd had not previously been bound to an address and, upon
@@ -1597,10 +1591,10 @@ impl Cage {
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
         //BUG:
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        //Check if the write gaurd holds a valid FileDescriptor
+        //Check if the write guard holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
                 //In this case, the file descriptor refers to a socket
@@ -1645,8 +1639,7 @@ impl Cage {
                                     // socket, send() normally
                                     // blocks, unless the socket has been placed in
                                     // nonblocking I/O mode.  In nonblocking mode it would fail with
-                                    // the error EAGAIN or
-                                    // EWOULDBLOCK in this case.
+                                    // the error EAGAIN in this case.
                                     let mut nonblocking = false;
                                     if sockfdobj.flags & O_NONBLOCK != 0 {
                                         nonblocking = true;
@@ -1815,7 +1808,7 @@ impl Cage {
                     );
                 }
             }
-        //Otherwise, the write gaurd does not hold a FileDescriptor
+        //Otherwise, the write guard does not hold a FileDescriptor
         } else {
             return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
         }
@@ -1970,7 +1963,7 @@ impl Cage {
             //If no messages are available at the socket, the receive calls
             //wait for a message to arrive, unless the socket is nonblocking
             //(see fcntl(2)), in which case the value -1 is returned and errno
-            //is set to EAGAIN or EWOULDBLOCK.
+            //is set to EAGAIN.
             let mut nonblocking = false;
             if sockfdobj.flags & O_NONBLOCK != 0 {
                 nonblocking = true;
@@ -2096,7 +2089,7 @@ impl Cage {
                        // from the loop
             }
         }
-        //sum the total number of bytes from the last peak plus the additional
+        //sum the total number of bytes from the last peek plus the additional
         //bytes from the current read. This equates to the number of bytes
         //return to our buff
         let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
@@ -2215,10 +2208,10 @@ impl Cage {
     ) -> i32 {
         //BUG:
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
-        //Check if the write gaurd holds a valid FileDescriptor, and if so
+        //Check if the write guard holds a valid FileDescriptor, and if so
         //call recv_common_inner.
         //Otherwise, return with an error
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
@@ -2267,12 +2260,9 @@ impl Cage {
     ///    Additional errors may be generated and returned from the
     ///    underlying protocol modules; see their respective manual pages.
     ///
-    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
+    /// ** EAGAIN - The socket is marked nonblocking and the
     ///    receive operation would block, or a receive timeout had been set and
-    ///    the timeout expired before data was received.  POSIX.1 allows
-    ///    either error to be returned for this case, and does not
-    ///    require these constants to have the same value, so a
-    ///    portable application should check for both possibilities.
+    ///    the timeout expired before data was received.
     ///
     /// * EBADF - The argument sockfd is an invalid file descriptor.
     ///
@@ -2351,12 +2341,9 @@ impl Cage {
     ///    Additional errors may be generated and returned from the
     ///    underlying protocol modules; see their respective manual pages.
     ///
-    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and the
+    /// ** EAGAIN - The socket is marked nonblocking and the
     ///    receive operation would block, or a receive timeout had been set and
-    ///    the timeout expired before data was received.  POSIX.1 allows
-    ///    either error to be returned for this case, and does not
-    ///    require these constants to have the same value, so a
-    ///    portable application should check for both possibilities.
+    ///    the timeout expired before data was received.
     ///
     /// * EBADF - The argument sockfd is an invalid file descriptor.
     ///
@@ -2443,7 +2430,7 @@ impl Cage {
     pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
         //BUG:
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -2784,12 +2771,8 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and no
-    ///     connections are present to be accepted.  
-    ///     POSIX.1-2001 and POSIX.1-2008
-    ///     allow either error to be returned for this case, and do
-    ///     not require these constants to have the same value, so a
-    ///     portable application should check for both possibilities.
+    /// ** EAGAIN - The socket is marked nonblocking and no
+    ///             connections are present to be accepted.  
     ///
     /// ** EBADF - sockfd is not an open file descriptor.
     ///
@@ -2839,7 +2822,7 @@ impl Cage {
     /// [accept(2)](https://linux.die.net/man/2/accept)
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
