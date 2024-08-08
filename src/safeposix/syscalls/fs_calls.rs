@@ -2857,10 +2857,8 @@ impl Cage {
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
-            // if we just want to check if the file exists or not (amode = F_OK)
-            if amode & F_OK == F_OK {
-                return 0;
-            }
+            // BUG: We don't support F_OK as a valid amode flag, which when passed we need
+            // to check only whether the file exists or not
 
             // will not panic since check for existence in table already happened in
             // metawalk
@@ -4758,6 +4756,10 @@ impl Cage {
                 // make sure file is not moved to another dir
                 // get inodenum for parent of new path
                 let (_, new_par_inodenum) = metawalkandparent(true_newpath.as_path());
+
+                // BUG: the rename according to the spec supports moving of files from one
+                // parent to another, so the below behavior is not as per spec
+
                 // check if old and new paths share parent
                 // if they don't, then that is not allowed
                 if new_par_inodenum != Some(parent_inodenum) {
