@@ -3404,8 +3404,164 @@ pub mod net_tests {
     }
 
     #[test]
+    #[ignore]
+    pub fn ut_lind_net_sockopt_bad_input_optname() {
+        // this test is used for testing invalid optname that is
+        // large enough to overflow to bitwise shift
+        // would fail currently
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+        let mut optstore = 0;
+
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, SOL_TCP, 100, &mut optstore),
+            -(Errno::ENOPROTOOPT as i32)
+        );
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, SOL_SOCKET, 100, &mut optstore),
+            -(Errno::ENOPROTOOPT as i32)
+        );
+
+        assert_eq!(
+            cage.setsockopt_syscall(sockfd, SOL_TCP, 100, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+        assert_eq!(
+            cage.setsockopt_syscall(sockfd, SOL_SOCKET, 100, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_getsockopt_bad_input() {
+        // this test is used for testing getsockopt_syscall with error input
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let filefd =
+            cage.open_syscall("/netgetsockopttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        let mut optstore = -12;
+
+        // unexist file descriptor
+        assert_eq!(
+            cage.getsockopt_syscall(10, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
+            -(Errno::EBADF as i32)
+        );
+
+        // out of range file descriptor
+        assert_eq!(
+            cage.getsockopt_syscall(-1, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
+            -(Errno::EBADF as i32)
+        );
+
+        // fd that is not socket
+        assert_eq!(
+            cage.getsockopt_syscall(filefd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
+            -(Errno::ENOTSOCK as i32)
+        );
+
+        // invalid level argument
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, 30, SO_REUSEPORT, &mut optstore),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // unsupported level argument
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, SOL_UDP, SO_REUSEPORT, &mut optstore),
+            -(Errno::ENOPROTOOPT as i32)
+        );
+
+        // invalid optname argument
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, SOL_SOCKET, 20, &mut optstore),
+            -(Errno::ENOPROTOOPT as i32)
+        );
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, SOL_TCP, 20, &mut optstore),
+            -(Errno::ENOPROTOOPT as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_net_setsockopt_bad_input() {
+        // this test is used for testing setsockopt_syscall with error input
+
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+
+        let filefd =
+            cage.open_syscall("/netsetsockopttest.txt", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        let sockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        // unexist file descriptor
+        assert_eq!(
+            cage.setsockopt_syscall(10, SOL_SOCKET, SO_REUSEPORT, 0),
+            -(Errno::EBADF as i32)
+        );
+
+        // out of range file descriptor
+        assert_eq!(
+            cage.setsockopt_syscall(-1, SOL_SOCKET, SO_REUSEPORT, 0),
+            -(Errno::EBADF as i32)
+        );
+
+        // fd that is not socket
+        assert_eq!(
+            cage.setsockopt_syscall(filefd, SOL_SOCKET, SO_REUSEPORT, 0),
+            -(Errno::ENOTSOCK as i32)
+        );
+
+        // invalid level argument
+        assert_eq!(
+            cage.setsockopt_syscall(sockfd, 30, SO_REUSEPORT, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // unsupported level argument
+        assert_eq!(
+            cage.setsockopt_syscall(sockfd, SOL_UDP, SO_REUSEPORT, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        // invalid optname argument
+        assert_eq!(
+            cage.setsockopt_syscall(sockfd, SOL_SOCKET, 20, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+        assert_eq!(
+            cage.setsockopt_syscall(sockfd, SOL_TCP, 20, 0),
+            -(Errno::EOPNOTSUPP as i32)
+        );
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_net_socketoptions() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -3427,7 +3583,7 @@ pub mod net_tests {
         assert_eq!(cage.bind_syscall(sockfd, &socket), 0);
         assert_eq!(cage.listen_syscall(sockfd, 4), 0);
 
-        //set and get some options:
+        // set and get some options:
         let mut optstore = -12;
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
@@ -3445,7 +3601,7 @@ pub mod net_tests {
         );
         assert_eq!(optstore, 0);
 
-        //linger...
+        // linger...
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_LINGER, &mut optstore),
             0
@@ -3458,7 +3614,7 @@ pub mod net_tests {
         );
         assert_eq!(optstore, 1);
 
-        //check the options
+        // check the options
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
             0
@@ -3475,7 +3631,7 @@ pub mod net_tests {
         );
         assert_eq!(optstore, 0);
 
-        //reuseport...
+        // reuseport...
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
             0
@@ -3491,7 +3647,7 @@ pub mod net_tests {
         );
         assert_eq!(optstore, 1);
 
-        //check the options
+        // check the options
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
             0
@@ -3508,7 +3664,7 @@ pub mod net_tests {
         );
         assert_eq!(optstore, 0);
 
-        //keep alive...
+        // keep alive...
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore),
             0
@@ -3519,7 +3675,7 @@ pub mod net_tests {
             0
         );
 
-        //check the options
+        // check the options
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
             0
@@ -3556,7 +3712,7 @@ pub mod net_tests {
         );
         assert_eq!(optstore, 2000);
 
-        //check the options
+        // check the options
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_REUSEPORT, &mut optstore),
             0
@@ -3569,6 +3725,14 @@ pub mod net_tests {
         assert_eq!(optstore, 1);
         assert_eq!(
             cage.getsockopt_syscall(sockfd, SOL_SOCKET, SO_KEEPALIVE, &mut optstore),
+            0
+        );
+        assert_eq!(optstore, 1);
+
+        // TCP_NODELAY for SOL_TCP
+        assert_eq!(cage.setsockopt_syscall(sockfd, SOL_TCP, TCP_NODELAY, 1), 0);
+        assert_eq!(
+            cage.getsockopt_syscall(sockfd, SOL_TCP, TCP_NODELAY, &mut optstore),
             0
         );
         assert_eq!(optstore, 1);

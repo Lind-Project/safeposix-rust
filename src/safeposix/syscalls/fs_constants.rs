@@ -14,7 +14,9 @@ pub const STARTINGPIPE: i32 = 0;
 pub const MAXPIPE: i32 = 1024;
 
 pub const ROOTDIRECTORYINODE: usize = 1;
-pub const STREAMINODE: usize = 2;
+pub const STREAMINODE: usize = 2; // Dummy value
+pub const PIPEINODE: usize = 0xfeef0000; // Dummy value
+pub const EPOLLINODE: usize = 0xfeef0000; // Dummy value
 
 pub const PIPE_CAPACITY: usize = 65536;
 
