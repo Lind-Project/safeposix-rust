@@ -2133,7 +2133,7 @@ impl Cage {
                         Inode::CharDev(ref char_inode_obj) => {
                             // The `_write_chr_file` helper function typically does not write
                             // anything to the device and simply returns the bytes count.
-                            self._write_chr_file(&char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, count)
                         }
 
                         // A Sanity check is added to make sure that there is no such case when the
@@ -2380,7 +2380,7 @@ impl Cage {
                         Inode::CharDev(ref char_inode_obj) => {
                             // The `_write_chr_file` helper function typically does not write
                             // anything to the device and simply returns the bytes count.
-                            self._write_chr_file(&char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, count)
                         }
 
                         // A Sanity check is added to make sure that there is no such case when the
@@ -2433,7 +2433,7 @@ impl Cage {
     /// ### Panics
     ///
     /// This function does not cause any panics.
-    fn _write_chr_file(&self, inodeobj: &DeviceInode, _buf: *const u8, count: usize) -> i32 {
+    fn _write_chr_file(&self, inodeobj: &DeviceInode, count: usize) -> i32 {
         // Writes to any of these device files transparently succeed while doing
         // nothing. The data passed to them for writing is simply discarded.
         match inodeobj.dev {
