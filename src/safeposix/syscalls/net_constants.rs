@@ -23,55 +23,55 @@ pub const SOCK_NONBLOCK: i32 = 0o00004000; // Mark as non-blocking
 
 /* Supported address families. */
 pub const AF_UNSPEC: i32 = 0;
-pub const AF_UNIX: i32 = 1; /* Unix domain sockets   */
+pub const AF_UNIX: i32 = 1; /* Unix domain sockets */
 pub const AF_LOCAL: i32 = 1; /* POSIX name for AF_UNIX */
-pub const AF_INET: i32 = 2; /* Internet IP Protocol  */
-pub const AF_AX25: i32 = 3; /* Amateur Radio AX.25   */
-pub const AF_IPX: i32 = 4; /* Novell IPX    */
-pub const AF_APPLETALK: i32 = 5; /* AppleTalk DDP   */
-pub const AF_NETROM: i32 = 6; /* Amateur Radio NET/ROM  */
-pub const AF_BRIDGE: i32 = 7; /* Multiprotocol bridge  */
-pub const AF_ATMPVC: i32 = 8; /* ATM PVCs   */
-pub const AF_X25: i32 = 9; /* Reserved for X.25 project  */
-pub const AF_INET6: i32 = 10; /* IP version 6   */
+pub const AF_INET: i32 = 2; /* Internet IP Protocol */
+pub const AF_AX25: i32 = 3; /* Amateur Radio AX.25 */
+pub const AF_IPX: i32 = 4; /* Novell IPX */
+pub const AF_APPLETALK: i32 = 5; /* AppleTalk DDP */
+pub const AF_NETROM: i32 = 6; /* Amateur Radio NET/ROM */
+pub const AF_BRIDGE: i32 = 7; /* Multiprotocol bridge */
+pub const AF_ATMPVC: i32 = 8; /* ATM PVCs */
+pub const AF_X25: i32 = 9; /* Reserved for X.25 project */
+pub const AF_INET6: i32 = 10; /* IP version 6 */
 pub const AF_ROSE: i32 = 11; /* Amateur Radio X.25 PLP */
 pub const AF_DECnet: i32 = 12; /* Reserved for DECnet project */
-pub const AF_NETBEUI: i32 = 13; /* Reserved for 802.2LLC project*/
+pub const AF_NETBEUI: i32 = 13; /* Reserved for 802.2LLC project */
 pub const AF_SECURITY: i32 = 14; /* Security callback pseudo AF */
 pub const AF_KEY: i32 = 15; /* PF_KEY key management API */
 pub const AF_NETLINK: i32 = 16;
 pub const AF_ROUTE: i32 = AF_NETLINK; /* Alias to emulate 4.4BSD */
-pub const AF_PACKET: i32 = 17; /* Packet family  */
-pub const AF_ASH: i32 = 18; /* Ash    */
-pub const AF_ECONET: i32 = 19; /* Acorn Econet   */
-pub const AF_ATMSVC: i32 = 20; /* ATM SVCs   */
-pub const AF_RDS: i32 = 21; /* RDS sockets    */
+pub const AF_PACKET: i32 = 17; /* Packet family */
+pub const AF_ASH: i32 = 18; /* Ash */
+pub const AF_ECONET: i32 = 19; /* Acorn Econet */
+pub const AF_ATMSVC: i32 = 20; /* ATM SVCs */
+pub const AF_RDS: i32 = 21; /* RDS sockets */
 pub const AF_SNA: i32 = 22; /* Linux SNA Project (nutters!) */
-pub const AF_IRDA: i32 = 23; /* IRDA sockets   */
-pub const AF_PPPOX: i32 = 24; /* PPPoX sockets  */
+pub const AF_IRDA: i32 = 23; /* IRDA sockets */
+pub const AF_PPPOX: i32 = 24; /* PPPoX sockets */
 pub const AF_WANPIPE: i32 = 25; /* Wanpipe API Sockets */
-pub const AF_LLC: i32 = 26; /* Linux LLC   */
+pub const AF_LLC: i32 = 26; /* Linux LLC */
 pub const AF_IB: i32 = 27; /* Native InfiniBand address */
 pub const AF_MPLS: i32 = 28; /* MPLS */
-pub const AF_CAN: i32 = 29; /* Controller Area Network      */
-pub const AF_TIPC: i32 = 30; /* TIPC sockets   */
-pub const AF_BLUETOOTH: i32 = 31; /* Bluetooth sockets   */
-pub const AF_IUCV: i32 = 32; /* IUCV sockets   */
-pub const AF_RXRPC: i32 = 33; /* RxRPC sockets   */
-pub const AF_ISDN: i32 = 34; /* mISDN sockets   */
-pub const AF_PHONET: i32 = 35; /* Phonet sockets  */
-pub const AF_IEEE802154: i32 = 36; /* IEEE802154 sockets  */
-pub const AF_CAIF: i32 = 37; /* CAIF sockets   */
-pub const AF_ALG: i32 = 38; /* Algorithm sockets  */
-pub const AF_NFC: i32 = 39; /* NFC sockets   */
-pub const AF_VSOCK: i32 = 40; /* vSockets   */
-pub const AF_KCM: i32 = 41; /* Kernel Connection Multiplexor*/
-pub const AF_QIPCRTR: i32 = 42; /* Qualcomm IPC Router          */
+pub const AF_CAN: i32 = 29; /* Controller Area Network */
+pub const AF_TIPC: i32 = 30; /* TIPC sockets */
+pub const AF_BLUETOOTH: i32 = 31; /* Bluetooth sockets */
+pub const AF_IUCV: i32 = 32; /* IUCV sockets */
+pub const AF_RXRPC: i32 = 33; /* RxRPC sockets */
+pub const AF_ISDN: i32 = 34; /* mISDN sockets */
+pub const AF_PHONET: i32 = 35; /* Phonet sockets */
+pub const AF_IEEE802154: i32 = 36; /* IEEE802154 sockets */
+pub const AF_CAIF: i32 = 37; /* CAIF sockets */
+pub const AF_ALG: i32 = 38; /* Algorithm sockets */
+pub const AF_NFC: i32 = 39; /* NFC sockets */
+pub const AF_VSOCK: i32 = 40; /* vSockets */
+pub const AF_KCM: i32 = 41; /* Kernel Connection Multiplexor */
+pub const AF_QIPCRTR: i32 = 42; /* Qualcomm IPC Router */
 pub const AF_SMC: i32 = 43; /* smc sockets: reserve number for
                              * PF_SMC protocol family that
                              * reuses AF_INET address family
                              */
-pub const AF_XDP: i32 = 44; /* XDP sockets   */
+pub const AF_XDP: i32 = 44; /* XDP sockets */
 pub const AF_MCTP: i32 = 45; /* Management component
                               * transport protocol
                               */
@@ -247,7 +247,7 @@ pub const MSG_TRYHARD: i32 = 4; /* Synonym for MSG_DONTROUTE for DECnet */
 pub const MSG_CTRUNC: i32 = 8;
 pub const MSG_PROBE: i32 = 0x10; /* Do not send. Only probe path f.e. for MTU */
 pub const MSG_TRUNC: i32 = 0x20;
-pub const MSG_DONTWAIT: i32 = 0x40; /* Nonblocking io		 */
+pub const MSG_DONTWAIT: i32 = 0x40; /* Nonblocking io */
 pub const MSG_EOR: i32 = 0x80; /* End of record */
 pub const MSG_WAITALL: i32 = 0x100; /* Wait for a full request */
 pub const MSG_FIN: i32 = 0x200;
@@ -334,6 +334,13 @@ pub const SO_ACCEPTCONN: i32 = 30;
 pub const SOL_TCP: i32 = IPPROTO_TCP;
 pub const SOL_UDP: i32 = IPPROTO_UDP;
 
+// some TCP flags below are not part of Linux standards
+// for example, TCP_NOPUSH is the flag used in FreeBSD/MacOS
+// while the actual flag in Linux that serves the similar purpose
+// is TCP_CORK
+// Besides, some other flags are also not found in Linux man page:
+// TCP_KEEPALIVE, TCP_CONNECTIONTIMEOUT, PERSIST_TIMEOUT, TCP_RXT_CONNDROPTIME
+// and TCP_RXT_FINDROP
 pub const TCP_NODELAY: i32 = 0x01; // don't delay send to coalesce packets
 pub const TCP_MAXSEG: i32 = 0x02; // set maximum segment size
 pub const TCP_NOPUSH: i32 = 0x04; // don't push last block of write

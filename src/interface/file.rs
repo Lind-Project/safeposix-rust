@@ -144,7 +144,8 @@ impl EmulatedFile {
 
     // Wrapper around Rust's file object read_at function
     // Reads from file at specified offset into provided C-buffer
-    // We need to specify the offset for read/write operations because multiple cages may refer to same system file handle
+    // We need to specify the offset for read/write operations because multiple
+    // cages may refer to same system file handle
     pub fn readat(&self, ptr: *mut u8, length: usize, offset: usize) -> std::io::Result<usize> {
         let buf = unsafe {
             assert!(!ptr.is_null());
@@ -166,7 +167,8 @@ impl EmulatedFile {
 
     // Wrapper around Rust's file object write_at function
     // Writes from provided C-buffer into file at specified offset
-    // We need to specify the offset for read/write operations because multiple cages may refer to same system file handle
+    // We need to specify the offset for read/write operations because multiple
+    // cages may refer to same system file handle
     pub fn writeat(
         &mut self,
         ptr: *const u8,
@@ -302,7 +304,8 @@ impl EmulatedFileMap {
         let map: Vec<u8>;
         let countmap: Vec<u8>;
 
-        // here were going to map the first 8 bytes of the file as the "count" (amount of bytes written), and then map another 1MB for logging
+        // here were going to map the first 8 bytes of the file as the "count" (amount
+        // of bytes written), and then map another 1MB for logging
         unsafe {
             let map_addr = mmap(
                 0 as *mut c_void,
@@ -426,9 +429,9 @@ pub fn new_shm_backing(key: i32, size: usize) -> std::io::Result<ShmFile> {
     ShmFile::new(key, size)
 }
 
-// Mimic shared memory in Linux by creating a file backing and truncating it to the segment size
-// We can then safely unlink the file while still holding a descriptor to that segment,
-// which we can use to map shared across cages.
+// Mimic shared memory in Linux by creating a file backing and truncating it to
+// the segment size We can then safely unlink the file while still holding a
+// descriptor to that segment, which we can use to map shared across cages.
 impl ShmFile {
     fn new(key: i32, size: usize) -> std::io::Result<ShmFile> {
         // open file "shm-#id"

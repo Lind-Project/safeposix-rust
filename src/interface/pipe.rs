@@ -1,8 +1,25 @@
-// Author: Nicholas Renner
-//
-// Pipes for SafePOSIX based on Lock-Free Circular Buffer
-
 #![allow(dead_code)]
+// Author: Nicholas Renner
+
+//! In-Memory Pipe Imlpementation for the RustPOSIX interface
+//!
+//! ## Pipe Module
+//!
+//! This module provides a method for in memory iPC between cages and is able to
+//! replicate both pipes and Unix domain sockets.
+//!
+//! Linux pipes are implemented as a circular buffer of 16 pages (4096 bytes
+//! each). Instead for RustPOSIX we implement the buffer as a lock-free circular
+//! buffer for the sum of bytes in those pages.
+//!
+//! This implementation is also used internally by RustPOSIX to approximate Unix
+//! sockets by allocating two of these pipes bi-directionally.
+//!
+//! We expose an API allowing to read and write to the pipe as well as check if
+//! pipe descriptors are reading for reading and writing via select/poll
+///
+/// To learn more about pipes
+/// [pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)
 use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
 
@@ -11,20 +28,26 @@ use ringbuf::{Consumer, Producer, RingBuffer};
 use std::cmp::min;
 use std::fmt;
 use std::slice;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use std::sync::Arc;
 
+// lets define a few constants for permission flags and the standard size of a
+// Linux page
 const O_RDONLY: i32 = 0o0;
 const O_WRONLY: i32 = 0o1;
 const O_RDWRFLAGS: i32 = 0o3;
 const PAGE_SIZE: usize = 4096;
 
-const CANCEL_CHECK_INTERVAL: usize = 1048576; // check to cancel pipe reads every 2^20 iterations
+// lets also define an interval to check for thread cancellations since we may
+// be blocking by busy waiting in trusted space here we're going to define this
+// as 2^20 which should be ~1 sec according to the standard CLOCKS_PER_SEC
+// definition, though it should be quite shorter on modern CPUs
+const CANCEL_CHECK_INTERVAL: usize = 1048576;
 
-pub fn new_pipe(size: usize) -> EmulatedPipe {
-    EmulatedPipe::new_with_capacity(size)
-}
-
+/// # Description
+/// In-memory pipe struct of given size which contains references to read and
+/// write ends of a lock-free ringbuffer, as well as reference counters to each
+/// end
 #[derive(Clone)]
 pub struct EmulatedPipe {
     // write_end: Arc<Mutex<Producer<u8>>>,
@@ -32,11 +55,25 @@ pub struct EmulatedPipe {
     pub ringbuf: Arc<Mutex<(Producer<u8>, Consumer<u8>)>>,
     pub refcount_write: Arc<AtomicU32>,
     pub refcount_read: Arc<AtomicU32>,
-    eof: Arc<AtomicBool>,
     size: usize,
+    writeflag: Arc<AtomicBool>,
+    readflag: Arc<AtomicBool>
 }
 
 impl EmulatedPipe {
+    /// # Description
+    /// Creates an in-memory pipe object of specified size.
+    /// The size provided is either a constant for a pipe (65,536 bytes) or a
+    /// domain socket (212,992 bytes)
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - Size of the iPC construct in bytes (either pipe or Unix
+    ///   socket)
+    ///
+    /// # Returns
+    ///
+    /// EmulatedPipe object
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
         let rb = RingBuffer::<u8>::new(size);
         // let (prod, cons) = rb.split();
@@ -46,23 +83,46 @@ impl EmulatedPipe {
             ringbuf: Arc::new(Mutex::new(rb.split())),
             refcount_write: Arc::new(AtomicU32::new(1)),
             refcount_read: Arc::new(AtomicU32::new(1)),
-            eof: Arc::new(AtomicBool::new(false)),
             size: size,
+            writeflag: Arc::new(AtomicBool::new(true)),
+            readflag: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    pub fn set_eof(&self) {
-        self.eof.store(true, Ordering::Relaxed);
+    /// # Description
+    /// Checks the references to each end of the pipe to determine if its closed
+    /// Necessary for determining if Unix sockets are closed for each direction
+    ///
+    /// # Returns
+    ///
+    /// True if all references are closed, false if there are open references
+    pub fn is_pipe_closed(&self) -> bool {
+        self.get_write_ref() + self.get_read_ref() == 0
     }
 
-    pub fn get_write_ref(&self) -> u32 {
+    /// Internal getter for write references
+    ///
+    /// Returns number of references to write end of the pipe
+    fn get_write_ref(&self) -> u32 {
         self.refcount_write.load(Ordering::Relaxed)
     }
 
-    pub fn get_read_ref(&self) -> u32 {
+    /// Internal getter for read references
+    ///
+    /// Returns number of references to read end of the pipe
+    fn get_read_ref(&self) -> u32 {
         self.refcount_read.load(Ordering::Relaxed)
     }
 
+    /// # Description
+    /// Increase references to write or read end.
+    /// This is called when a reference to the pipe end is duplicated in cases
+    /// such as fork() and dup/dup2().
+    ///
+    /// # Arguments
+    ///
+    /// * `flags` - Flags set on pipe descriptor, used to determine if its the
+    ///   read or write end
     pub fn incr_ref(&self, flags: i32) {
         if (flags & O_RDWRFLAGS) == O_RDONLY {
             self.refcount_read.fetch_add(1, Ordering::Relaxed);
@@ -72,6 +132,15 @@ impl EmulatedPipe {
         }
     }
 
+    /// # Description
+    /// Decrease references to write or read end.
+    /// This is called when a reference to the pipe end is removed in cases such
+    /// as close().
+    ///
+    /// # Arguments
+    ///
+    /// * `flags` - Flags set on pipe descriptor, used to determine if its the
+    ///   read or write end
     pub fn decr_ref(&self, flags: i32) {
         if (flags & O_RDWRFLAGS) == O_RDONLY {
             self.refcount_read.fetch_sub(1, Ordering::Relaxed);
@@ -81,31 +150,81 @@ impl EmulatedPipe {
         }
     }
 
+    /// # Description
+    /// Checks if pipe is currently ready for reading, used by select/poll etc.
+    /// A pipe descriptor is ready if there is anything in the pipe or there are
+    /// 0 remaining write references.
+    ///
+    /// # Returns
+    ///
+    /// True if descriptor is ready for reading, false if it will block
     pub fn check_select_read(&self) -> bool {
         // let read_end = self.read_end.lock().unwrap();
         let tuple = self.ringbuf.lock().unwrap();
         let read_end = &tuple.1;
         let pipe_space = read_end.len();
 
-        if (pipe_space > 0) || self.eof.load(Ordering::SeqCst) {
-            return true;
-        } else {
-            return false;
-        }
+        return (pipe_space > 0) || self.get_write_ref() == 0;
     }
+
+    /// # Description
+    /// Checks if pipe is currently ready for writing, used by select/poll etc.
+    /// A pipe descriptor is ready for writing if there is more than a page
+    /// (4096 bytes) of room in the pipe or if there are 0 remaining read
+    /// references.
+    ///
+    /// # Returns
+    ///
+    /// True if descriptor is ready for writing, false if it will block
     pub fn check_select_write(&self) -> bool {
         // let write_end = self.write_end.lock().unwrap();
         let tuple = self.ringbuf.lock().unwrap();
         let write_end = &tuple.0;
         let pipe_space = write_end.remaining();
 
-        return pipe_space != 0;
+        // Linux considers a pipe writeable if there is at least PAGE_SIZE (PIPE_BUF)
+        // remaining space (4096 bytes)
+        return pipe_space > PAGE_SIZE || self.get_read_ref() == 0;
     }
 
-    // Write length bytes from pointer into pipe
+    /// ### Description
+    ///
+    /// write_to_pipe writes a specified number of bytes starting at the given
+    /// pointer to a circular buffer.
+    ///
+    /// ### Arguments
+    ///
+    /// write_to_pipe accepts three arguments:
+    /// * `ptr` - a pointer to the data being written.
+    /// * `length` - the amount of bytes to attempt to write
+    /// * `nonblocking` - if this attempt to write is nonblocking
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, the amount of bytes written is returned.
+    /// In case of a failure, an error is returned to the calling syscall.
+    ///
+    /// ### Errors
+    ///
+    /// * `EAGAIN` - Non-blocking is enabled and the write has failed to fully
+    ///   complete.
+    /// * `EPIPE` - An attempt to write to a pipe with all read references have
+    ///   been closed.
+    ///
+    /// ### Panics
+    ///
+    /// A panic occurs if the provided pointer is null
+    ///
+    /// To learn more about pipes and the write syscall
+    /// [pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)
+    /// [write(2)](https://man7.org/linux/man-pages/man2/write.2.html)
     pub fn write_to_pipe(&self, ptr: *const u8, length: usize, nonblocking: bool) -> i32 {
-        let mut bytes_written = 0;
+        // unlikely but if we attempt to write nothing, return 0
+        if length == 0 {
+            return 0;
+        }
 
+        // convert the raw pointer into a slice to interface with the circular buffer
         let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts(ptr, length)
@@ -122,14 +241,18 @@ impl EmulatedPipe {
         //     );
         // }
 
+        let mut bytes_written = 0;
         while bytes_written < length {
             if self.get_read_ref() == 0 {
+                // we send EPIPE here since all read ends are closed
                 return syscall_error(Errno::EPIPE, "write", "broken pipe");
-            } // EPIPE, all read ends are closed
+            }
+
+            if !self.writeflag.load(Ordering::Relaxed) { continue; }
 
             let mut tuple = self.ringbuf.lock().unwrap();
             let write_end = &mut tuple.0;
-            let remaining = write_end.remaining();
+            let mut remaining = write_end.remaining();
 
             if remaining == 0 {
                 interface::lind_yield(); //yield on a full pipe
@@ -147,26 +270,69 @@ impl EmulatedPipe {
             let bytes_to_write = min(length, bytes_written as usize + remaining);
             write_end.push_slice(&buf[bytes_written..bytes_to_write]);
             bytes_written = bytes_to_write;
+            remaining = write_end.remaining();
+            if remaining == 0 { self.writeflag.store(false, Ordering::Relaxed); }
+            self.readflag.store(true, Ordering::Relaxed);
         }
 
+        // lets return the amount we've written to the pipe
         bytes_written as i32
     }
 
-    // Write length bytes from pointer into pipe
+    /// ### Description
+    ///
+    /// write_vectored_to_pipe translates iovecs into a singular buffer so that
+    /// write_to_pipe can write that data to a circular buffer.
+    ///
+    /// ### Arguments
+    ///
+    /// write_to_pipe accepts three arguments:
+    /// * `ptr` - a pointer to an Iovec array.
+    /// * `iovcnt` - the number of iovec indexes in the array
+    /// * `nonblocking` - if this attempt to write is nonblocking
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, the amount of bytes written is returned via
+    /// write_to_pipe. In case of a failure, an error is returned to the
+    /// calling syscall.
+    ///
+    /// ### Errors
+    ///
+    /// * `EAGAIN` - Non-blocking is enabled and the write has failed to fully
+    ///   complete (via write_to_pipe).
+    /// * `EPIPE` - An attempt to write to a pipe when all read references have
+    ///   been closed (via write_to_pipe).
+    ///
+    /// ### Panics
+    ///
+    /// A panic occurs if the provided pointer is null
+    ///
+    /// To learn more about pipes and the writev syscall
+    /// [pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)
+    /// [pipe(7)](https://man7.org/linux/man-pages/man2/writev.2.html)
     pub fn write_vectored_to_pipe(
         &self,
         ptr: *const interface::IovecStruct,
         iovcnt: i32,
         nonblocking: bool,
     ) -> i32 {
+        // unlikely but if we attempt to write 0 iovecs, return 0
+        if iovcnt == 0 {
+            return 0;
+        }
+
         let mut buf = Vec::new();
         let mut length = 0;
 
-        // we're going to loop through the iovec array and combine the buffers into one slice, recording the length
-        // this is hacky but is the best way to do this for now
+        // we're going to loop through the iovec array and combine the buffers into one
+        // Rust slice so that we can use the write_to_pipe function, recording the
+        // length this is hacky but is the best way to do this for now
         for _iov in 0..iovcnt {
             unsafe {
                 assert!(!ptr.is_null());
+                // lets convert this iovec into a Rust slice,
+                // and then extend our combined buffer
                 let iovec = *ptr;
                 let iovbuf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
                 buf.extend_from_slice(iovbuf);
@@ -178,9 +344,41 @@ impl EmulatedPipe {
         self.write_to_pipe(buf.as_ptr(), length, nonblocking)
     }
 
-    // Read length bytes from the pipe into pointer
-    // Will wait for bytes unless pipe is empty and eof is set.
+    /// ### Description
+    ///
+    /// read_from_pipe reads a specified number of bytes from the circular
+    /// buffer to a given pointer.
+    ///
+    /// ### Arguments
+    ///
+    /// write_to_pipe accepts three arguments:
+    /// * `ptr` - a pointer to the buffer being read to.
+    /// * `length` - the amount of bytes to attempt to read
+    /// * `nonblocking` - if this attempt to read is nonblocking
+    ///
+    /// ### Returns
+    ///
+    /// Upon successful completion, the amount of bytes read is returned.
+    /// In case of a failure, an error is returned to the calling syscall.
+    ///
+    /// ### Errors
+    ///
+    /// * `EAGAIN` - A non-blocking  read is attempted without EOF being reached
+    ///   but there is no data in the pipe.
+    ///
+    /// ### Panics
+    ///
+    /// A panic occurs if the provided pointer is null
+    ///
+    /// To learn more about pipes and the read syscall
+    /// [read(2))](https://man7.org/linux/man-pages/man2/read.2.html)
     pub fn read_from_pipe(&self, ptr: *mut u8, length: usize, nonblocking: bool) -> i32 {
+        // unlikely but if we attempt to read nothing, return 0
+        if length == 0 {
+            return 0;
+        }
+
+        // convert the raw pointer into a slice to interface with the circular buffer
         let buf = unsafe {
             assert!(!ptr.is_null());
             slice::from_raw_parts_mut(ptr, length)
@@ -204,22 +402,31 @@ impl EmulatedPipe {
         
         let mut bytes_to_read = 0;
         // wait for something to be in the pipe, but break on eof
-        // check cancel point after 2^20 cycles just in case
         let mut count = 0;
         while pipe_space == 0 {
-            if self.eof.load(Ordering::SeqCst) {
+            // If write references are 0, we've reached EOF so return 0
+            if self.get_write_ref() == 0 {
                 return 0;
             }
+
+            if !self.readflag.load(Ordering::Relaxed) { continue; }
+
             let mut tuple = self.ringbuf.lock().unwrap();
             let read_end = &mut tuple.1;
 
+            // we return EAGAIN here so we can go back to check if this cage has been sent a
+            // cancel notification in the calling syscall if the calling
+            // descriptor is blocking we then attempt to read again
             if count == CANCEL_CHECK_INTERVAL {
-                return -(Errno::EAGAIN as i32); // we've tried enough, return to pipe
+                return -(Errno::EAGAIN as i32);
             }
 
+            // lets check again if were empty
             pipe_space = read_end.len();
             count = count + 1;
+
             if pipe_space == 0 {
+                // we yield here on an empty pipe to let other threads continue more quickly
                 interface::lind_yield();
                 drop(tuple);
                 continue;
@@ -228,9 +435,13 @@ impl EmulatedPipe {
 
             bytes_to_read = min(length, pipe_space);
             read_end.pop_slice(&mut buf[0..bytes_to_read]);
+            if (bytes_to_read == pipe_space) { self.readflag.store(false, Ordering::Relaxed);}
+            self.writeflag.store(true, Ordering::Relaxed);
+
             
         }
 
+        // return the amount we read
         bytes_to_read as i32
     }
 }
@@ -240,7 +451,6 @@ impl fmt::Debug for EmulatedPipe {
         f.debug_struct("EmulatedPipe")
             .field("refcount read", &self.refcount_read)
             .field("refcount write", &self.refcount_write)
-            .field("eof", &self.eof)
             .finish()
     }
 }
