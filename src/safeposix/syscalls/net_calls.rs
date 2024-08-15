@@ -638,7 +638,7 @@ impl Cage {
                 Socket(ref mut sockfdobj) => {
                     //Clone the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
-                    //Obtain write gaurd for socket handle
+                    //Obtain write guard for socket handle
                     let mut sockhandle = sock_tmp.write();
                     //We would like to pass the socket handle data to the function
                     //without giving it ownership sockfdobj, which may be in use
@@ -811,19 +811,21 @@ impl Cage {
     ///   address family of the specified socket.
     /// * EALREADY - A connection request is already in progress for the
     ///   specified socket.
-    /// ** EBADF - The socket argument is not a valid file descriptor.
+    /// * EBADF - The socket argument is not a valid file descriptor. May be
+    ///   returned by RustPOSIX
     /// * ECONNREFUSED - The target address was not listening for connections or
     ///   refused the connection request.
-    /// ** EINPROGRESS - O_NONBLOCK is set for the file descriptor for the
-    ///    socket and the connection cannot be immediately established; the
-    ///    connection shall be established asynchronously.
+    /// * EINPROGRESS - O_NONBLOCK is set for the file descriptor for the socket
+    ///   and the connection cannot be immediately established; the connection
+    ///   shall be established asynchronously. (May be returned by RustPOSIX)
     /// * EINTR - The attempt to establish a connection was interrupted by
     ///   delivery of a signal that was caught; the connection shall be
     ///   established asynchronously.
-    /// ** EISCONN - The specified socket is connection-mode and is already
-    ///    connected.
+    /// * EISCONN - The specified socket is connection-mode and is already
+    ///   connected. (May be returned by RustPOSIX)
     /// * ENETUNREACH - No route to the network is present.
-    /// ** ENOTSOCK - The socket argument does not refer to a socket.
+    /// * ENOTSOCK - The socket argument does not refer to a socket. May be
+    ///   returned by RustPOSIX
     /// * EPROTOTYPE - The specified address has a different type than the
     ///   socket bound to the specified peer address.
     /// * ETIMEDOUT - The attempt to connect timed out before a connection was
@@ -838,8 +840,8 @@ impl Cage {
     ///   of the pathname in address.
     /// * ENAMETOOLONG - A component of a pathname exceeded {NAME_MAX}
     ///   characters, or an entire pathname exceeded {PATH_MAX} characters.
-    /// ** ENOENT - A component of the pathname does not name an existing file
-    ///    or the pathname is an empty string.
+    /// * ENOENT - A component of the pathname does not name an existing file or
+    ///   the pathname is an empty string. (May be returned by RustPOSIX)
     /// * ENOTDIR - A component of the path prefix of the pathname in address is
     ///   not a directory.
     ///
@@ -852,8 +854,9 @@ impl Cage {
     /// * ECONNRESET - Remote host reset the connection request.
     /// * EHOSTUNREACH - The destination host cannot be reached (probably
     ///   because the host is down or a remote router cannot reach it).
-    /// ** EINVAL - The address_len argument is not a valid length for the
-    ///    address family; or invalid address family in the sockaddr structure.
+    /// * EINVAL - The address_len argument is not a valid length for the
+    ///   address family; or invalid address family in the sockaddr structure.
+    ///   (May be returned by RustPOSIX)
     /// * ELOOP - More than {SYMLOOP_MAX} symbolic links were encountered during
     ///   resolution of the pathname in address.
     /// * ENAMETOOLONG - Pathname resolution of a symbolic link produced an
@@ -861,20 +864,19 @@ impl Cage {
     /// * ENETDOWN - The local network interface used to reach the destination
     ///   is down.
     /// * ENOBUFS- No buffer space is available.
-    /// ** EOPNOTSUPP - The socket is listening and cannot be connected.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
+    /// * EOPNOTSUPP - The socket is listening and cannot be connected. May be
+    ///   returned by RustPOSIX
     ///
     /// ### Panics
     ///
-    /// * Unknown errno value from bind libc call, will cause panic
-    /// * Unknown errno value from connect libc call, will cause panic.
+    /// * Unknown errno value from bind libc call will cause panic.
+    /// * Unknown errno value from connect libc call will cause panic.
     ///
     /// for more detailed description of all the commands and return values, see
     /// [connect(3)](https://linux.die.net/man/3/connect)
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         //Pattern match such that FileDescriptor object must be the Socket variant
@@ -1242,6 +1244,105 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    /// `sendto_syscall` sends a message on a socket
+    ///
+    ///  Note:
+    ///  send(fd, buf, buflen, flags);
+    ///  is equivalent to
+    ///  sendto(fd, buf, buflen, flags, destaddr);
+    ///  where destaddr has an unspecified port or IP
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts five parameters:
+    /// * `fd` - the file descriptor of the sending socket
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    /// * 'destaddr' - the address of the target socket
+    ///
+    /// ### Returns
+    ///
+    /// On success, the call returns the number of bytes sent. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// * EACCES - (For UNIX domain sockets, which are identified by pathname)
+    ///   Write permission is denied on the destination socket file, or search
+    ///   permission is denied for one of the directories the path prefix.  (See
+    ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
+    ///   a network/broadcast address as though it was a unicast address.
+    ///
+    /// * EAGAIN - The socket is marked nonblocking and the requested operation
+    ///   would block. Or (Internet domain datagram sockets) The socket referred
+    ///   to by sockfd had not previously been bound to an address and, upon
+    ///   attempting to bind it to an ephemeral port, it was determined that all
+    ///   port numbers in the ephemeral port range are currently in use.  See
+    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7). May
+    ///   be returned by RustPOSIX
+    ///
+    /// * EALREADY - Another Fast Open is in progress.
+    ///
+    /// * EBADF - sockfd is not a valid open file descriptor. (May be returned
+    ///   by RustPOSIX)
+    ///
+    /// * ECONNRESET - Connection reset by peer.
+    ///
+    /// * EDESTADDRREQ - The socket is not connection-mode, and no peer address
+    ///   is set.
+    ///
+    /// * EFAULT - An invalid user space address was specified for an argument.
+    ///
+    /// * EINTR - A signal occurred before any data was transmitted; see
+    ///   signal(7).
+    ///
+    /// * EINVAL - Invalid argument passed. (May be returned by RustPOSIX)
+    ///
+    /// * EISCONN - The connection-mode socket was connected already but a
+    ///   recipient was specified.  (Now either this error is returned, or the
+    ///   recipient specification is ignored.)
+    ///
+    /// * EMSGSIZE - The socket type requires that message be sent atomically,
+    ///   and the size of the message to be sent made this impossible.
+    ///
+    /// * ENOBUFS - The output queue for a network interface was full.  This
+    ///   generally indicates that the interface has stopped sending, but may be
+    ///   caused by transient congestion. (Normally, this does not occur in
+    ///   Linux.  Packets are just silently dropped when a device queue
+    ///   overflows.)
+    ///
+    /// * ENOMEM - No memory available.
+    ///
+    /// * ENOTCONN - The socket is not connected, and no target has been given.
+    ///   (May be returned by RustPOSIX)
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket. (May
+    ///   be returned by RustPOSIX)
+    ///
+    /// * EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
+    ///   socket type. (May be returned by RustPOSIX)
+    ///
+    /// * EPIPE - The local end has been shut down on a connection oriented
+    ///   socket.  In this case, the process will also receive a SIGPIPE unless
+    ///   MSG_NOSIGNAL is set. (May be returned by RustPOSIX)
+    ///
+    /// ### Panics:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from sendto returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [send(2)](https://linux.die.net/man/2/send)
     pub fn sendto_syscall(
         &self,
         fd: i32,
@@ -1251,19 +1352,29 @@ impl Cage {
         dest_addr: &interface::GenSockaddr,
     ) -> i32 {
         //if ip and port are not specified, shunt off to send
+        //to check for a possible connection to another socket that may exist
         if dest_addr.port() == 0 && dest_addr.addr().is_unspecified() {
             return self.send_syscall(fd, buf, buflen, flags);
         }
-
+        //BUG:
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //Check if the write guard holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
+                //In this case, the file descriptor refers to a socket
                 Socket(ref mut sockfdobj) => {
+                    //Grab a write guard to the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
 
-                    // check if this is a domain socket
+                    //If the socket's domain is UNIX, return with error as UNIX
+                    //sockets are connection based. Currently, lind
+                    //does not implement UDP sends/recvs over UNIX sockets
+                    //TODO: Check whether the socket is connected and return
+                    //EISCONN or ENOTCONN accordingly.
                     if sockhandle.domain == AF_UNIX {
                         return syscall_error(
                             Errno::EISCONN,
@@ -1272,6 +1383,8 @@ impl Cage {
                         );
                     }
 
+                    //The destaddr's address family must match that of the
+                    //socket's address from 'fd'. Otherwise, a message can't be sent
                     if dest_addr.get_family() != sockhandle.domain as u16 {
                         return syscall_error(
                             Errno::EINVAL,
@@ -1279,14 +1392,11 @@ impl Cage {
                             "An address with an invalid family for the given domain was specified",
                         );
                     }
-                    if (flags & !MSG_NOSIGNAL) != 0 {
-                        return syscall_error(
-                            Errno::EOPNOTSUPP,
-                            "sendto",
-                            "The flags are not understood!",
-                        );
-                    }
 
+                    //If sendto_syscall is used on a connection-mode socket, then
+                    // the error EISCONN may be returned when destaddr is not NULL,
+                    // as we checked above
+                    // UDP sockets may be connected
                     if sockhandle.state != ConnState::NOTCONNECTED {
                         return syscall_error(
                             Errno::EISCONN,
@@ -1295,8 +1405,12 @@ impl Cage {
                         );
                     }
 
+                    //Pattern match based on the socket's protocol
                     match sockhandle.protocol {
-                        //Sendto doesn't make sense for the TCP protocol, it's connection oriented
+                        //The TCP protocol is a connection-mode
+                        //If sendto_syscall is used on a connection-mode socket, then
+                        // the error EISCONN may be returned when destaddr is not NULL,
+                        // as we checked above
                         IPPROTO_TCP => {
                             return syscall_error(
                                 Errno::EISCONN,
@@ -1305,23 +1419,37 @@ impl Cage {
                             );
                         }
 
+                        //UDP protocol
                         IPPROTO_UDP => {
+                            //An implicit bind refers to the automatic binding of a socket to an
+                            // address and port by the system, without
+                            // an explicit call to the bind() function by
+                            // the programmer.
+                            //This is necessary if the socket isn't assigned an address
                             let tmpdest = *dest_addr;
                             let ibindret =
                                 self._implicit_bind(&mut *sockhandle, tmpdest.get_family() as i32);
+                            //Call to _implicit_bind may panic upon unknown error values
+                            //Otherwise, the error value is returned here and passed through
                             if ibindret < 0 {
                                 return ibindret;
                             }
 
-                            //unwrap ok because we implicit_bind_right before
+                            //unwrap is safe because of the call to _implicit_bind
+                            //above. innersocket/raw_sys_fd will be set since
+                            //lind passes TCP sockets to the OS to partially handle.
+                            //Here we call sendto from libc
                             let sockret = sockhandle.innersocket.as_ref().unwrap().sendto(
                                 buf,
                                 buflen,
                                 Some(dest_addr),
                             );
 
-                            //we don't mind if this fails for now and we will just get the error
-                            //from calling sendto
+                            //If the call to sendto from libc returns
+                            //-1, indicating an error, retrieve the err
+                            //and return appropriately
+                            //Otherwise, return the number of bytes
+                            //written to the connected socket
                             if sockret < 0 {
                                 match Errno::from_discriminant(interface::get_errno()) {
                                     Ok(i) => {
@@ -1336,10 +1464,12 @@ impl Cage {
                                     }
                                 };
                             } else {
-                                return sockret;
+                                return sockret; //on success, return the number
+                                                // of bytes sent
                             }
                         }
-
+                        //If the protocol of the socket is not TCP or UDP,
+                        //lind does not support it
                         _ => {
                             return syscall_error(
                                 Errno::EOPNOTSUPP,
@@ -1349,7 +1479,8 @@ impl Cage {
                         }
                     }
                 }
-
+                //If the file descriptor does not refer to a socket,
+                //return with error
                 _ => {
                     return syscall_error(
                         Errno::ENOTSOCK,
@@ -1358,64 +1489,203 @@ impl Cage {
                     );
                 }
             }
+        //Otherwise, the write guard does not hold a FileDescriptor
         } else {
             return syscall_error(Errno::EBADF, "sendto", "invalid file descriptor");
         }
     }
 
+    /// ### Description
+    ///
+    /// `send_syscall` sends a message on a socket
+    ///
+    ///  The send() call may be used only when the socket is in a
+    ///  connected state (so that the intended recipient is known).
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts four parameters:
+    /// * `fd` - the file descriptor of the sending socket
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    ///
+    /// ### Returns
+    ///
+    /// On success, the call returns the number of bytes sent. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// * EACCES - (For UNIX domain sockets, which are identified by pathname)
+    ///   Write permission is denied on the destination socket file, or search
+    ///   permission is denied for one of the directories the path prefix.  (See
+    ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
+    ///   a network/broadcast address as though it was a unicast address.
+    ///
+    /// * EAGAIN - The socket is marked nonblocking and the requested operation
+    ///   would block. Or (Internet domain datagram sockets) The socket referred
+    ///   to by sockfd had not previously been bound to an address and, upon
+    ///   attempting to bind it to an ephemeral port, it was determined that all
+    ///   port numbers in the ephemeral port range are currently in use.  See
+    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    ///   (May be returned by RustPOSIX)
+    ///
+    /// * EALREADY - Another Fast Open is in progress.
+    ///
+    /// * EBADF - sockfd is not a valid open file descriptor. (May be returned
+    ///   by RustPOSIX)
+    ///
+    /// * ECONNRESET - Connection reset by peer.
+    ///
+    /// * EDESTADDRREQ - The socket is not connection-mode, and no peer address
+    ///   is set.
+    ///
+    /// * EFAULT - An invalid user space address was specified for an argument.
+    ///
+    /// * EINTR - A signal occurred before any data was transmitted; see
+    ///   signal(7).
+    ///
+    /// * EINVAL - Invalid argument passed. (May be returned by RustPOSIX)
+    ///
+    /// * EISCONN - The connection-mode socket was connected already but a
+    ///   recipient was specified.  (Now either this error is returned, or the
+    ///   recipient specification is ignored.)
+    ///
+    /// * EMSGSIZE - The socket type requires that message be sent atomically,
+    ///   and the size of the message to be sent made this impossible.
+    ///
+    /// * ENOBUFS - The output queue for a network interface was full.  This
+    ///   generally indicates that the interface has stopped sending, but may be
+    ///   caused by transient congestion. (Normally, this does not occur in
+    ///   Linux.  Packets are just silently dropped when a device queue
+    ///   overflows.)
+    ///
+    /// * ENOMEM - No memory available.
+    ///
+    /// * ENOTCONN - The socket is not connected, and no target has been given.
+    ///   (May be returned by RustPOSIX)
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket. (May
+    ///   be returned by RustPOSIX)
+    ///
+    /// * EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
+    ///   socket type. (May be returned by RustPOSIX)
+    ///
+    /// * EPIPE - The local end has been shut down on a connection oriented
+    ///   socket.  In this case, the process will also receive a SIGPIPE unless
+    ///   MSG_NOSIGNAL is set. (May be returned by RustPOSIX)
+    ///
+    /// ### Panics:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from sendto returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [send(2)](https://linux.die.net/man/2/send)
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
+        //BUG:
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //Check if the write guard holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
+                //In this case, the file descriptor refers to a socket
                 Socket(ref mut sockfdobj) => {
+                    //Grab a write guard to the socket handle
                     let sock_tmp = sockfdobj.handle.clone();
                     let sockhandle = sock_tmp.write();
 
-                    if (flags & !MSG_NOSIGNAL) != 0 {
-                        return syscall_error(
-                            Errno::EOPNOTSUPP,
-                            "send",
-                            "The flags are not understood!",
-                        );
-                    }
-
-                    // check if this is a domain socket
+                    //Pattern match based on the domain of the socket
+                    //Lind handles UNIX sockets internally,
+                    //but will call send from libc for INET sockets
                     let socket_type = sockhandle.domain;
                     match socket_type {
                         AF_UNIX => {
+                            //Pattern match based on the socket protocol
                             match sockhandle.protocol {
+                                //TCP socket
+                                //Across UNIX connections, it rarely exists
+                                //that it is preferable to use UDP sockets
+                                //rather than TCP sockets.
+                                //As of right now, lind only implements
+                                //UNIX sockets with the TCP protocol
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected,
-                                    // or connected for write only
+                                    //For a TCP socket to be able to send here we
+                                    //either need to be fully connected, or connected for write
+                                    // only
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
+                                        //Otherwise, return with an error as
+                                        //TCP sockets taht aren't connected
+                                        //can't send messages
                                         return syscall_error(
                                             Errno::ENOTCONN,
-                                            "writev",
+                                            "send",
                                             "The descriptor is not connected",
                                         );
                                     }
                                     // get the socket pipe, write to it, and return bytes written
                                     let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                    //When the message does not fit into the send buffer of the
+                                    // socket, send() normally
+                                    // blocks, unless the socket has been placed in
+                                    // nonblocking I/O mode.  In nonblocking mode it would fail with
+                                    // the error EAGAIN in this case.
                                     let mut nonblocking = false;
                                     if sockfdobj.flags & O_NONBLOCK != 0 {
                                         nonblocking = true;
                                     }
                                     let retval = match sockinfo.sendpipe.as_ref() {
+                                        //sendpipe is available in unix socket info
+                                        //it is needed to send the message found in buf
+                                        //to the connected socket
                                         Some(sendpipe) => {
                                             sendpipe.write_to_pipe(buf, buflen, nonblocking) as i32
                                         }
+                                        //sendpipe is not available in unix socket info
+                                        //transmission of data is not possible so return with error
                                         None => {
-                                            return syscall_error(Errno::EAGAIN, "writev", "there is no data available right now, try again later");
+                                            return syscall_error(
+                                                Errno::ENOTCONN,
+                                                "send",
+                                                "sendpipe is not available",
+                                            )
                                         }
                                     };
-                                    if retval == -(Errno::EPIPE as i32) {
+                                    //In the case that the write_to_pipe call returns EPIPE,
+                                    // meaning the local end has been shut down on a connection
+                                    // oriented socket. Then, the process will also receive
+                                    // a SIGPIPE unless MSG_NOSIGNAL is set.
+                                    if (retval == -(Errno::EPIPE as i32))
+                                        && ((flags & MSG_NOSIGNAL) == 0)
+                                    {
+                                        // The default action for SIGPIPE is to terminate the
+                                        // process without a core dump. This simplifies error
+                                        // handling in programs that
+                                        // are meant to run as part of a shell pipeline: reading
+                                        // input, transforming it, and then writing it to another
+                                        // process. SIGPIPE allows the program to skip error
+                                        // handling and blindly write data until it’s killed
+                                        //
+                                        // BUG: Issue #306 -> https://github.com/Lind-Project/safeposix-rust/issues/306
+                                        // Trigger SIGPIPE
                                         interface::lind_kill_from_id(self.cageid, SIGPIPE);
-                                    } // Trigger SIGPIPE
-                                    retval
+                                    }
+                                    retval //on success, return number of bytes
+                                           // sent
                                 }
+                                //PROTOCOL is not TCP
                                 _ => {
                                     return syscall_error(
                                         Errno::EOPNOTSUPP,
@@ -1425,78 +1695,117 @@ impl Cage {
                                 }
                             }
                         }
-                        // for inet
-                        AF_INET | AF_INET6 => match sockhandle.protocol {
-                            IPPROTO_TCP => {
-                                if (sockhandle.state != ConnState::CONNECTED)
-                                    && (sockhandle.state != ConnState::CONNWRONLY)
-                                {
-                                    return syscall_error(
-                                        Errno::ENOTCONN,
-                                        "send",
-                                        "The descriptor is not connected",
-                                    );
-                                }
-
-                                //because socket must be connected it must have an inner socket
-                                let retval = sockhandle
-                                    .innersocket
-                                    .as_ref()
-                                    .unwrap()
-                                    .sendto(buf, buflen, None);
-                                if retval < 0 {
-                                    match Errno::from_discriminant(interface::get_errno()) {
-                                        Ok(i) => {
-                                            return syscall_error(
-                                                i,
-                                                "send",
-                                                "The libc call to sendto failed!",
-                                            );
-                                        }
-                                        Err(()) => panic!(
-                                            "Unknown errno value from socket sendto returned!"
-                                        ),
-                                    };
-                                } else {
-                                    return retval;
-                                }
-                            }
-
-                            IPPROTO_UDP => {
-                                let remoteaddr = match &sockhandle.remoteaddr {
-                                    Some(x) => x.clone(),
-                                    None => {
+                        //Pattern match based on the socket protocol
+                        AF_INET | AF_INET6 => {
+                            match sockhandle.protocol {
+                                //For a TCP socket to be able to send here we
+                                //either need to be fully connected, or connected for write
+                                // only
+                                IPPROTO_TCP => {
+                                    if (sockhandle.state != ConnState::CONNECTED)
+                                        && (sockhandle.state != ConnState::CONNWRONLY)
+                                    {
+                                        //Otherwise, return with an error as
+                                        //TCP sockets taht aren't connected
+                                        //can't send messages
                                         return syscall_error(
                                             Errno::ENOTCONN,
                                             "send",
                                             "The descriptor is not connected",
                                         );
                                     }
-                                };
-                                drop(unlocked_fd);
-                                drop(sockhandle);
-                                //send from a udp socket is just shunted off to sendto with the
-                                // remote address set
-                                return self.sendto_syscall(fd, buf, buflen, flags, &remoteaddr);
-                            }
 
-                            _ => {
-                                return syscall_error(
-                                    Errno::EOPNOTSUPP,
-                                    "send",
-                                    "Unkown protocol in send",
-                                );
+                                    //We passed the above check so the TCP socket must be connected
+                                    //Hence, it must have a valid inner socket/raw sys fd
+                                    //Call sendto from libc to send the buff
+                                    let retval = sockhandle
+                                        .innersocket
+                                        .as_ref()
+                                        .unwrap()
+                                        .sendto(buf, buflen, None);
+                                    //If the call to sendto from libc returns
+                                    //-1, indicating an error, retrieve the err
+                                    //and return appropriately
+                                    //Otherwise, return the number of bytes
+                                    //written to the connected socket
+                                    if retval < 0 {
+                                        match Errno::from_discriminant(interface::get_errno()) {
+                                            Ok(i) => {
+                                                return syscall_error(
+                                                    i,
+                                                    "send",
+                                                    "The libc call to sendto failed!",
+                                                );
+                                            }
+                                            Err(()) => panic!(
+                                                "Unknown errno value from socket sendto returned!"
+                                            ),
+                                        };
+                                    } else {
+                                        return retval; //return the number of
+                                                       // bytes written to the
+                                                       // connected socket
+                                    }
+                                }
+
+                                //For INET sockets following the UDP protocol,
+                                //we don't need to check for connection status
+                                //as UDP is connection-less. This lets us grab
+                                //the remote address of the socket and send the
+                                //message in buf to it by calling sendto_syscall
+                                IPPROTO_UDP => {
+                                    let remoteaddr = match &sockhandle.remoteaddr {
+                                        Some(x) => x.clone(),
+                                        None => {
+                                            return syscall_error(
+                                                Errno::ENOTCONN,
+                                                "send",
+                                                "The descriptor is not connected",
+                                            );
+                                        }
+                                    };
+                                    //in sendto_syscall, we need to acquire the
+                                    //fd/sockhandle with write/read lock again.
+                                    //If we do not release the lock here, deadlock will happen
+                                    drop(unlocked_fd);
+                                    drop(sockhandle);
+                                    //remote address is set in sendto from libc
+                                    //as UDP socket is connection-less
+                                    //error checking is handled in sento_syscall
+                                    return self.sendto_syscall(
+                                        fd,
+                                        buf,
+                                        buflen,
+                                        flags,
+                                        &remoteaddr,
+                                    ); //return the number of bytes written to
+                                       // the connected socket
+                                }
+
+                                //Protcol besides UDP and TCP are not supported
+                                //for INET sockets in lind
+                                _ => {
+                                    return syscall_error(
+                                        Errno::EOPNOTSUPP,
+                                        "send",
+                                        "Unkown protocol in send",
+                                    );
+                                }
                             }
-                        },
+                        }
+                        //If the domain of the socket is not UNIX or INET
+                        //lind does not support it
                         _ => {
                             return syscall_error(
                                 Errno::EINVAL,
-                                "connect",
+                                "send",
                                 "Unsupported domain provided",
                             )
                         }
                     }
                 }
+                //If the file descriptor does not refer to a socket,
+                //return with error
                 _ => {
                     return syscall_error(
                         Errno::ENOTSOCK,
@@ -1505,11 +1814,13 @@ impl Cage {
                     );
                 }
             }
+        //Otherwise, the write guard does not hold a FileDescriptor
         } else {
             return syscall_error(Errno::EBADF, "send", "invalid file descriptor");
         }
     }
 
+    //Helper function of recv_common, for recv and recvfrom syscalls
     fn recv_common_inner(
         &self,
         filedesc_enum: &mut FileDescriptor,
@@ -1519,9 +1830,13 @@ impl Cage {
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
         match &mut *filedesc_enum {
+            //Verify that the file descriptor refers to a socket
             Socket(ref mut sockfdobj) => {
+                //Grab a write guard to the socket handle
                 let sock_tmp = sockfdobj.handle.clone();
                 let mut sockhandle = sock_tmp.write();
+                //Pattern match based on the socket protocol
+                //and call the appropriate function to handle each case
                 match sockhandle.protocol {
                     IPPROTO_TCP => {
                         return self.recv_common_inner_tcp(
@@ -1543,6 +1858,8 @@ impl Cage {
                         )
                     }
 
+                    //In the case that the protocol is neither TCP nor UDP,
+                    //return with error as lind does not support it
                     _ => {
                         return syscall_error(
                             Errno::EOPNOTSUPP,
@@ -1552,6 +1869,8 @@ impl Cage {
                     }
                 }
             }
+            //If the file descriptor does not refer to a socket,
+            //return with error
             _ => {
                 return syscall_error(
                     Errno::ENOTSOCK,
@@ -1562,6 +1881,8 @@ impl Cage {
         }
     }
 
+    //Helper function of recv_common_inner, for recv and recvfrom syscalls
+    //Handles TCP sockets
     fn recv_common_inner_tcp(
         &self,
         sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>,
@@ -1571,8 +1892,12 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-        // maybe select reported a INPROGRESS tcp socket as readable, so re-check the
-        // state here
+        //In the case that the socket is nonblocking and the connection can not
+        //be completed immediately, the connection state of the socket will
+        //be set to INPROGRESS.
+        //It is possible that select_syscall or poll_syscall had reported
+        //the INPROGRESS TCP socket as readable. If so, we can adjust the
+        //state of the socket to CONNECTED.
         if sockhandle.state == ConnState::INPROGRESS
             && sockhandle
                 .innersocket
@@ -1583,6 +1908,9 @@ impl Cage {
             sockhandle.state = ConnState::CONNECTED;
         }
 
+        //In the case that the socket is neither connected to another socket
+        //nor connected to another socket in a read-only mode, return with error
+        //as data can not be read otherwise.
         if (sockhandle.state != ConnState::CONNECTED) && (sockhandle.state != ConnState::CONNRDONLY)
         {
             return syscall_error(
@@ -1595,11 +1923,17 @@ impl Cage {
         let mut newbuflen = buflen;
         let mut newbufptr = buf;
 
-        //if we have peeked some data before, fill our buffer with that data before
-        // moving on
+        //if we have peeked some data before, fill our buffer with that data
+        //before moving on. This step is neccessary as we read the data from
+        //the pipe into the last peek field of the socket handle during our
+        //last peek
         if !sockhandle.last_peek.is_empty() {
+            //Grab the minimum of the two values
             let bytecount = interface::rust_min(sockhandle.last_peek.len(), newbuflen);
+            //Copy the bytes from the previous peek into buf
             interface::copy_fromrustdeque_sized(buf, bytecount, &sockhandle.last_peek);
+            //newbufptr now points to the first byte available in the buffer
+            //newbuflen reflects the number of bytes that are available in the buffer
             newbuflen -= bytecount;
             newbufptr = newbufptr.wrapping_add(bytecount);
 
@@ -1613,34 +1947,53 @@ impl Cage {
                     .drain(..(if bytecount > len { len } else { bytecount }));
             }
 
+            //if we've filled all of the buffer with peeked data, return with success
             if newbuflen == 0 {
-                //if we've filled all of the buffer with peeked data, return
-                return bytecount as i32;
+                return bytecount as i32; //return number of bytes read into
+                                         // buff
             }
         }
 
+        //Initialize variables to indicate a pointer to the first available
+        //byte in the buff and remaining buffer length, respectively
         let bufleft = newbufptr;
         let buflenleft = newbuflen;
         let mut retval;
 
+        //The domain of the socket is UNIX
+        //lind handles UNIX communication using pipes
         if sockhandle.domain == AF_UNIX {
             // get the remote socket pipe, read from it, and return bytes read
+            //
+            //Check if the socket is non-blocking
+            //If no messages are available at the socket, the receive calls
+            //wait for a message to arrive, unless the socket is nonblocking
+            //(see fcntl(2)), in which case the value -1 is returned and errno
+            //is set to EAGAIN.
             let mut nonblocking = false;
             if sockfdobj.flags & O_NONBLOCK != 0 {
                 nonblocking = true;
             }
+            //we loop here so we can cancel blocking recvs, if necessary
             loop {
+                //Grab the receive pipe from the socket to read the data
+                //into the remaining space in the buffer
                 let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                 let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                 retval = receivepipe.read_from_pipe(bufleft, buflenleft, nonblocking) as i32;
+                //In the case of an error from reading from the receive pipe
                 if retval < 0 {
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft {
-                        return (buflen - buflenleft) as i32;
+                        return (buflen - buflenleft) as i32; //return number of
+                                                             // bytes read from
+                                                             // peek
                     }
+                    //In the case that the socket is blocking and errno = EAGAIN,
+                    //a receive timeout has expired before data was received.
+                    //Check for cancellation of recv call before looping back to
+                    //read again
                     if sockfdobj.flags & O_NONBLOCK == 0 && retval == -(Errno::EAGAIN as i32) {
-                        // with blocking sockets, we return EAGAIN here to check for cancellation,
-                        // then return to reading
                         if self
                             .cancelstatus
                             .load(interface::RustAtomicOrdering::Relaxed)
@@ -1652,20 +2005,31 @@ impl Cage {
                                 interface::cancelpoint(self.cageid)
                             }
                         }
-                        // in order to prevent deadlock
+                        //in order to prevent deadlock,
+                        //temporarily yield the lock on the socket handle
+                        //to a waiting thread, if one exists
                         interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
-                        continue;
+                        continue; //read again from receive pipe, as errno =
+                                  // EAGAIN on a blocking socket
                     } else {
-                        //if not EAGAIN, return the error
+                        //In the case that the error is not EAGAIN, return the error
                         return retval;
                     }
                 }
-                break;
+                break; //upon a successful read from the receive pipe, break
+                       // from the loop
             }
+        //The domain of the socket is INET or INET6
+        //We will call recvfrom from libc to handle the reading of data
         } else {
+            //we loop here so we can cancel blocking recvs, if necessary
             loop {
-                // we loop here so we can cancel blocking recvs
-                //socket must be connected so unwrap ok
+                //socket must be connected so the innersocket/raw_sys_fd is filled
+                //the unwrap won't cause a panic
+                //
+                //Depending on whether the socket is blocking or non-blocking,
+                //call the relevant corresponding function
+                //to read into the remaining space in the buffer
                 if sockfdobj.flags & O_NONBLOCK != 0 {
                     retval = sockhandle
                         .innersocket
@@ -1680,10 +2044,13 @@ impl Cage {
                         .recvfrom(bufleft, buflenleft, addr);
                 }
 
+                //In the case that the libc call returns with an error
                 if retval < 0 {
                     //If we have already read from a peek but have failed to read more, exit!
                     if buflen != buflenleft {
-                        return (buflen - buflenleft) as i32;
+                        return (buflen - buflenleft) as i32; //return number of
+                                                             // bytes read from
+                                                             // peek
                     }
 
                     match Errno::from_discriminant(interface::get_errno()) {
@@ -1705,8 +2072,12 @@ impl Cage {
                                         interface::cancelpoint(self.cageid);
                                     }
                                 }
+                                //in order to prevent deadlock,
+                                //temporarily yield the lock on the socket handle
+                                //to a waiting thread, if one exists
                                 interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
-                                continue; // EAGAIN, try again
+                                continue; //read again from receive pipe, as
+                                          // errno = EAGAIN on a blocking socket
                             }
 
                             return syscall_error(
@@ -1715,22 +2086,34 @@ impl Cage {
                                 "Internal call to recvfrom failed",
                             );
                         }
+                        //In the case that recvfrom from libc returns an unknown errno
+                        //value, panic
                         Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                     };
                 }
-                break; // we're okay to move on
+                break; //upon a successful read from the receive pipe, break
+                       // from the loop
             }
         }
+        //sum the total number of bytes from the last peek plus the additional
+        //bytes from the current read. This equates to the number of bytes
+        //return to our buff
         let totalbyteswritten = (buflen - buflenleft) as i32 + retval;
 
+        //If the MSG_PEEK flag is on, write the new bytes read from the receive pipe
+        //into the last_peek field of the socket handle to keep track of
+        //the last peek
         if flags & MSG_PEEK != 0 {
             //extend from the point after we read our previously peeked bytes
             interface::extend_fromptr_sized(newbufptr, retval as usize, &mut sockhandle.last_peek);
         }
 
-        return totalbyteswritten;
+        return totalbyteswritten; //upon success, return the number of bytes
+                                  // written into buff
     }
 
+    //Helper function of recv_common_inner, for recv and recvfrom syscalls
+    //Handles UDP sockets
     fn recv_common_inner_udp(
         &self,
         sockhandle: &mut interface::RustLockWriteGuard<SocketHandle>,
@@ -1739,21 +2122,34 @@ impl Cage {
         buflen: usize,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
+        //Unlikely the following sequence occurs.
+        //Only happens if the sockhandle isn't binded to an address.
+        //
+        //If the sending address's domain isn't specified, assume INET
         let binddomain = if let Some(baddr) = addr {
             baddr.get_family() as i32
         } else {
             AF_INET
         };
 
+        //An implicit bind refers to the automatic binding of a socket to an
+        // address and port by the system, without
+        // an explicit call to the bind() function by
+        // the programmer.
+        //This is necessary if the socket isn't assigned an address
+        //Call to _implicit_bind may panic upon unknown error values
+        //Otherwise, the error value is returned here and passed through
         let ibindret = self._implicit_bind(&mut *sockhandle, binddomain);
         if ibindret < 0 {
             return ibindret;
         }
 
+        //we loop here so we can cancel blocking recvs, if necessary
         loop {
-            // loop for blocking sockets
-            //if the remoteaddr is set and addr is not, use remoteaddr
-            //unwrap is ok because of implicit bind
+            //if the remoteaddr is set and addr is not, use remoteaddr buff
+            //to grab the address from which the message is sent from
+            //otherwise, use addr to grab the address from which the message is sent from
+            //note: unwrap will not cause panic because of implicit bind
             let retval = if let (None, Some(ref mut remoteaddr)) = (&addr, sockhandle.remoteaddr) {
                 sockhandle.innersocket.as_ref().unwrap().recvfrom(
                     buf,
@@ -1768,8 +2164,14 @@ impl Cage {
                     .recvfrom(buf, buflen, addr)
             };
 
+            //In the case that the libc call to recvfrom returns with an error
             if retval < 0 {
                 match Errno::from_discriminant(interface::get_errno()) {
+                    //We have the recieve timeout set to every one second, so
+                    //if our blocking socket ever returns EAGAIN, it must be
+                    //the case that this recv timeout was exceeded, and we
+                    //should thus not treat this as a failure in our emulated
+                    //socket; see comment in Socket::new in interface/comm.rs
                     Ok(i) => {
                         if sockfdobj.flags & O_NONBLOCK == 0 && i == Errno::EAGAIN {
                             if self
@@ -1783,6 +2185,9 @@ impl Cage {
                                     interface::cancelpoint(self.cageid);
                                 }
                             }
+                            //in order to prevent deadlock,
+                            //temporarily yield the lock on the socket handle
+                            //to a waiting thread, if one exists
                             interface::RustLockWriteGuard::<SocketHandle>::bump(sockhandle);
                             continue; //received EAGAIN on blocking socket, try
                                       // again
@@ -1792,11 +2197,13 @@ impl Cage {
                     Err(()) => panic!("Unknown errno value from socket recvfrom returned!"),
                 };
             } else {
-                return retval; // we can proceed
+                return retval; //upon success, return the number of bytes
+                               // written into buff
             }
         }
     }
 
+    //Helper function of recv_syscall and recvfrom_syscall
     pub fn recv_common(
         &self,
         fd: i32,
@@ -1805,8 +2212,14 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
+        //BUG:
+        //If fd is out of range of [0,MAXFD], process will panic
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
+        //Check if the write guard holds a valid FileDescriptor, and if so
+        //call recv_common_inner.
+        //Otherwise, return with an error
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             return self.recv_common_inner(filedesc_enum, buf, buflen, flags, addr);
         } else {
@@ -1814,6 +2227,77 @@ impl Cage {
         }
     }
 
+    /// ### Description
+    ///
+    /// `recvfrom_syscall` receives a message from a socket
+    ///
+    ///  The recvfrom() call receives messages from a socket, and may be used
+    ///  to receive data on a socket whether or not it is connection-oriented.
+    ///  recvfrom(fd, buf, buflen, flags, NULL);
+    ///  It is equivalent to the call:
+    ///  recv(fd, buf, buflen, flags);
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts five parameters:
+    /// * `fd` - the file descriptor of the socket receiving a message
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    /// * 'addr' - the source address of the message received
+    ///
+    /// ### Returns
+    ///
+    /// * On success, the call returns the number of bytes received. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    /// * When a stream socket peer has performed an orderly shutdown, the
+    /// return value will be 0 (the traditional "end-of-file" return).
+    /// * Datagram sockets in various domains (e.g., the UNIX and Internet
+    /// domains) permit zero-length datagrams.  When such a datagram is
+    /// received, the return value is 0.
+    /// * The value 0 may also be returned if the requested number of bytes
+    /// to receive from a stream socket was 0.
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// * EAGAIN - The socket is marked nonblocking and the receive operation
+    ///   would block, or a receive timeout had been set and the timeout expired
+    ///   before data was received. (May be returned by RustPOSIX)
+    ///
+    /// * EBADF - The argument sockfd is an invalid file descriptor.
+    ///
+    /// * ECONNREFUSED - A remote host refused to allow the network connection
+    ///   (typically because it is not running the requested service).
+    ///
+    /// * EFAULT - The receive buffer pointer(s) point outside the process's
+    ///   address space.
+    ///
+    /// * EINTR - The receive was interrupted by delivery of a signal before any
+    ///   data was available; see signal(7).
+    ///
+    /// * EINVAL - Invalid argument passed.
+    ///
+    /// * ENOMEM - Could not allocate memory for recvmsg().
+    ///
+    /// * ENOTCONN - The socket is associated with a connection-oriented
+    ///   protocol and has not been connected (see connect(2) and accept(2)).
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from recvfrom returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [recvfrom(2)](https://linux.die.net/man/2/recvfrom)
     pub fn recvfrom_syscall(
         &self,
         fd: i32,
@@ -1825,6 +2309,74 @@ impl Cage {
         return self.recv_common(fd, buf, buflen, flags, addr);
     }
 
+    /// ### Description
+    ///
+    /// `recv_syscall` receives a message from a socket
+    ///
+    ///  The recv() call is normally used only on a connected socket.
+    ///  It is equivalent to the call:
+    ///  recvfrom(fd, buf, buflen, flags, NULL);
+    ///
+    /// ### Arguments
+    ///
+    /// it accepts four parameters:
+    /// * `fd` - the file descriptor of the socket receiving a message
+    /// * `buf` - the message is found in buf
+    /// * `buflen` - the len of the message found in buf
+    /// * `flags` - bitwise OR of zero or more flags. Refer to man page to find
+    ///   possible args
+    ///
+    /// ### Returns
+    ///
+    /// * On success, the call returns the number of bytes received. On error, a
+    /// negative error number is returned, with the errorno set to represent
+    /// the corresponding error
+    /// * When a stream socket peer has performed an orderly shutdown, the
+    /// return value will be 0 (the traditional "end-of-file" return).
+    /// * Datagram sockets in various domains (e.g., the UNIX and Internet
+    /// domains) permit zero-length datagrams.  When such a datagram is
+    /// received, the return value is 0.
+    /// * The value 0 may also be returned if the requested number of bytes
+    /// to receive from a stream socket was 0.
+    ///
+    /// ### Errors
+    ///
+    /// These are some standard errors generated by the socket layer.
+    ///    Additional errors may be generated and returned from the
+    ///    underlying protocol modules; see their respective manual pages.
+    ///
+    /// * EAGAIN - The socket is marked nonblocking and the receive operation
+    ///   would block, or a receive timeout had been set and the timeout expired
+    ///   before data was received. (May be returned by RustPOSIX)
+    ///
+    /// * EBADF - The argument sockfd is an invalid file descriptor.
+    ///
+    /// * ECONNREFUSED - A remote host refused to allow the network connection
+    ///   (typically because it is not running the requested service).
+    ///
+    /// * EFAULT - The receive buffer pointer(s) point outside the process's
+    ///   address space.
+    ///
+    /// * EINTR - The receive was interrupted by delivery of a signal before any
+    ///   data was available; see signal(7).
+    ///
+    /// * EINVAL - Invalid argument passed.
+    ///
+    /// * ENOMEM - Could not allocate memory for recvmsg().
+    ///
+    /// * ENOTCONN - The socket is associated with a connection-oriented
+    ///   protocol and has not been connected (see connect(2) and accept(2)).
+    ///
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics:
+    ///
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
+    ///   cause a panic.
+    /// * Unknown errno value from recvfrom returned, will cause panic.
+    ///
+    /// for more detailed description of all the commands and return values, see
+    /// [recv(2)](https://linux.die.net/man/2/recv)
     pub fn recv_syscall(&self, fd: i32, buf: *mut u8, buflen: usize, flags: i32) -> i32 {
         return self.recv_common(fd, buf, buflen, flags, &mut None);
     }
@@ -1869,7 +2421,7 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// * invalid or out-of-bounds file descriptor), calling unwrap() on it will
+    /// * invalid or out-of-bounds file descriptor, calling unwrap() on it will
     ///   cause a panic.
     /// * unknown errno value from socket bind sys call from libc in the case
     ///   that the socket isn't assigned an address
@@ -1877,12 +2429,10 @@ impl Cage {
     ///
     /// for more detailed description of all the commands and return values, see
     /// [listen(2)](https://linux.die.net/man/2/listen)
-    //
-    // TODO: We are currently ignoring backlog
     pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
-        //BUG:s
+        //BUG:
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -2312,14 +2862,11 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// ** EAGAIN or EWOULDBLOCK - The socket is marked nonblocking and no
-    ///     connections are present to be accepted.  
-    ///     POSIX.1-2001 and POSIX.1-2008
-    ///     allow either error to be returned for this case, and do
-    ///     not require these constants to have the same value, so a
-    ///     portable application should check for both possibilities.
+    /// * EAGAIN - The socket is marked nonblocking and no connections are
+    ///   present to be accepted. (May be returned by RustPOSIX)
     ///
-    /// ** EBADF - sockfd is not an open file descriptor.
+    /// * EBADF - sockfd is not an open file descriptor. (May be returned by
+    ///   RustPOSIX)
     ///
     /// * ECONNABORTED - A connection has been aborted.
     ///
@@ -2329,8 +2876,8 @@ impl Cage {
     /// * EINTR - The system call was interrupted by a signal that was caught
     ///   before a valid connection arrived; see signal(7).
     ///
-    /// ** EINVAL - Socket is not listening for connections, or addrlen is
-    ///            invalid (e.g., is negative).
+    /// * EINVAL - Socket is not listening for connections, or addrlen is
+    ///   invalid (e.g., is negative). (May be returned by RustPOSIX)
     ///
     /// * EMFILE - The per-process limit on the number of open file descriptors
     ///   has been reached.
@@ -2342,9 +2889,11 @@ impl Cage {
     ///   allocation is limited by the socket buffer limits, not by the system
     ///   memory.
     ///
-    /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket. (May
+    ///   be returned by RustPOSIX)
     ///
-    /// ** EOPNOTSUPP - The referenced socket is not of type SOCK_STREAM.
+    /// * EOPNOTSUPP - The referenced socket is not of type SOCK_STREAM. (May be
+    ///   returned by RustPOSIX)
     ///
     /// * EPERM - Firewall rules forbid connection.
     ///
@@ -2354,8 +2903,6 @@ impl Cage {
     /// the protocol may be returned.  Various Linux kernels can return
     /// other errors such as ENOSR, ESOCKTNOSUPPORT, EPROTONOSUPPORT,
     /// ETIMEDOUT.  The value ERESTARTSYS may be seen during a trace.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
     ///
     /// ### Panics
     ///
@@ -2367,7 +2914,7 @@ impl Cage {
     /// [accept(2)](https://linux.die.net/man/2/accept)
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         //If fd is out of range of [0,MAXFD], process will panic
-        //Otherwise, we obtain a write gaurd to the Option<FileDescriptor> object
+        //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
