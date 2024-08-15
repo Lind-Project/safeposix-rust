@@ -811,19 +811,21 @@ impl Cage {
     ///   address family of the specified socket.
     /// * EALREADY - A connection request is already in progress for the
     ///   specified socket.
-    /// ** EBADF - The socket argument is not a valid file descriptor.
+    /// * EBADF - The socket argument is not a valid file descriptor. May be
+    ///   returned by RustPOSIX
     /// * ECONNREFUSED - The target address was not listening for connections or
     ///   refused the connection request.
-    /// ** EINPROGRESS - O_NONBLOCK is set for the file descriptor for the
-    ///    socket and the connection cannot be immediately established; the
-    ///    connection shall be established asynchronously.
+    /// * EINPROGRESS - O_NONBLOCK is set for the file descriptor for the socket
+    ///   and the connection cannot be immediately established; the connection
+    ///   shall be established asynchronously. (May be returned by RustPOSIX)
     /// * EINTR - The attempt to establish a connection was interrupted by
     ///   delivery of a signal that was caught; the connection shall be
     ///   established asynchronously.
-    /// ** EISCONN - The specified socket is connection-mode and is already
-    ///    connected.
+    /// * EISCONN - The specified socket is connection-mode and is already
+    ///   connected. (May be returned by RustPOSIX)
     /// * ENETUNREACH - No route to the network is present.
-    /// ** ENOTSOCK - The socket argument does not refer to a socket.
+    /// * ENOTSOCK - The socket argument does not refer to a socket. May be
+    ///   returned by RustPOSIX
     /// * EPROTOTYPE - The specified address has a different type than the
     ///   socket bound to the specified peer address.
     /// * ETIMEDOUT - The attempt to connect timed out before a connection was
@@ -838,8 +840,8 @@ impl Cage {
     ///   of the pathname in address.
     /// * ENAMETOOLONG - A component of a pathname exceeded {NAME_MAX}
     ///   characters, or an entire pathname exceeded {PATH_MAX} characters.
-    /// ** ENOENT - A component of the pathname does not name an existing file
-    ///    or the pathname is an empty string.
+    /// * ENOENT - A component of the pathname does not name an existing file or
+    ///   the pathname is an empty string. (May be returned by RustPOSIX)
     /// * ENOTDIR - A component of the path prefix of the pathname in address is
     ///   not a directory.
     ///
@@ -852,8 +854,9 @@ impl Cage {
     /// * ECONNRESET - Remote host reset the connection request.
     /// * EHOSTUNREACH - The destination host cannot be reached (probably
     ///   because the host is down or a remote router cannot reach it).
-    /// ** EINVAL - The address_len argument is not a valid length for the
-    ///    address family; or invalid address family in the sockaddr structure.
+    /// * EINVAL - The address_len argument is not a valid length for the
+    ///   address family; or invalid address family in the sockaddr structure.
+    ///   (May be returned by RustPOSIX)
     /// * ELOOP - More than {SYMLOOP_MAX} symbolic links were encountered during
     ///   resolution of the pathname in address.
     /// * ENAMETOOLONG - Pathname resolution of a symbolic link produced an
@@ -861,14 +864,13 @@ impl Cage {
     /// * ENETDOWN - The local network interface used to reach the destination
     ///   is down.
     /// * ENOBUFS- No buffer space is available.
-    /// ** EOPNOTSUPP - The socket is listening and cannot be connected.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
+    /// * EOPNOTSUPP - The socket is listening and cannot be connected. May be
+    ///   returned by RustPOSIX
     ///
     /// ### Panics
     ///
-    /// * Unknown errno value from bind libc call, will cause panic
-    /// * Unknown errno value from connect libc call, will cause panic.
+    /// * Unknown errno value from bind libc call will cause panic.
+    /// * Unknown errno value from connect libc call will cause panic.
     ///
     /// for more detailed description of all the commands and return values, see
     /// [connect(3)](https://linux.die.net/man/3/connect)
@@ -1280,18 +1282,18 @@ impl Cage {
     ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
     ///   a network/broadcast address as though it was a unicast address.
     ///
-    /// ** EAGAIN - The socket is marked nonblocking and the
-    ///    requested operation would block.
-    ///
-    /// ** EAGAIN - (Internet domain datagram sockets) The socket referred to by
-    ///   sockfd had not previously been bound to an address and, upon
+    /// * EAGAIN - The socket is marked nonblocking and the requested operation
+    ///   would block. Or (Internet domain datagram sockets) The socket referred
+    ///   to by sockfd had not previously been bound to an address and, upon
     ///   attempting to bind it to an ephemeral port, it was determined that all
     ///   port numbers in the ephemeral port range are currently in use.  See
-    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7). May
+    ///   be returned by RustPOSIX
     ///
     /// * EALREADY - Another Fast Open is in progress.
     ///
-    /// ** EBADF - sockfd is not a valid open file descriptor.
+    /// * EBADF - sockfd is not a valid open file descriptor. (May be returned
+    ///   by RustPOSIX)
     ///
     /// * ECONNRESET - Connection reset by peer.
     ///
@@ -1303,7 +1305,7 @@ impl Cage {
     /// * EINTR - A signal occurred before any data was transmitted; see
     ///   signal(7).
     ///
-    /// ** EINVAL - Invalid argument passed.
+    /// * EINVAL - Invalid argument passed. (May be returned by RustPOSIX)
     ///
     /// * EISCONN - The connection-mode socket was connected already but a
     ///   recipient was specified.  (Now either this error is returned, or the
@@ -1320,18 +1322,18 @@ impl Cage {
     ///
     /// * ENOMEM - No memory available.
     ///
-    /// ** ENOTCONN - The socket is not connected, and no target has been given.
+    /// * ENOTCONN - The socket is not connected, and no target has been given.
+    ///   (May be returned by RustPOSIX)
     ///
-    /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket. (May
+    ///   be returned by RustPOSIX)
     ///
-    /// ** EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
-    ///   socket type.
+    /// * EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
+    ///   socket type. (May be returned by RustPOSIX)
     ///
-    /// ** EPIPE - The local end has been shut down on a connection oriented
+    /// * EPIPE - The local end has been shut down on a connection oriented
     ///   socket.  In this case, the process will also receive a SIGPIPE unless
-    ///   MSG_NOSIGNAL is set.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
+    ///   MSG_NOSIGNAL is set. (May be returned by RustPOSIX)
     ///
     /// ### Panics:
     ///
@@ -1527,18 +1529,18 @@ impl Cage {
     ///   path_resolution(7).)  (For UDP sockets) An attempt was made to send to
     ///   a network/broadcast address as though it was a unicast address.
     ///
-    /// ** EAGAIN - The socket is marked nonblocking and the
-    ///   requested operation would block.
-    ///
-    /// ** EAGAIN - (Internet domain datagram sockets) The socket referred to by
-    ///   sockfd had not previously been bound to an address and, upon
+    /// * EAGAIN - The socket is marked nonblocking and the requested operation
+    ///   would block. Or (Internet domain datagram sockets) The socket referred
+    ///   to by sockfd had not previously been bound to an address and, upon
     ///   attempting to bind it to an ephemeral port, it was determined that all
     ///   port numbers in the ephemeral port range are currently in use.  See
     ///   the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    ///   (May be returned by RustPOSIX)
     ///
     /// * EALREADY - Another Fast Open is in progress.
     ///
-    /// ** EBADF - sockfd is not a valid open file descriptor.
+    /// * EBADF - sockfd is not a valid open file descriptor. (May be returned
+    ///   by RustPOSIX)
     ///
     /// * ECONNRESET - Connection reset by peer.
     ///
@@ -1550,7 +1552,7 @@ impl Cage {
     /// * EINTR - A signal occurred before any data was transmitted; see
     ///   signal(7).
     ///
-    /// ** EINVAL - Invalid argument passed.
+    /// * EINVAL - Invalid argument passed. (May be returned by RustPOSIX)
     ///
     /// * EISCONN - The connection-mode socket was connected already but a
     ///   recipient was specified.  (Now either this error is returned, or the
@@ -1567,18 +1569,18 @@ impl Cage {
     ///
     /// * ENOMEM - No memory available.
     ///
-    /// ** ENOTCONN - The socket is not connected, and no target has been given.
+    /// * ENOTCONN - The socket is not connected, and no target has been given.
+    ///   (May be returned by RustPOSIX)
     ///
-    /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket. (May
+    ///   be returned by RustPOSIX)
     ///
-    /// ** EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
-    ///   socket type.
+    /// * EOPNOTSUPP - Some bit in the flags argument is inappropriate for the
+    ///   socket type. (May be returned by RustPOSIX)
     ///
-    /// ** EPIPE - The local end has been shut down on a connection oriented
+    /// * EPIPE - The local end has been shut down on a connection oriented
     ///   socket.  In this case, the process will also receive a SIGPIPE unless
-    ///   MSG_NOSIGNAL is set.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
+    ///   MSG_NOSIGNAL is set. (May be returned by RustPOSIX)
     ///
     /// ### Panics:
     ///
@@ -2264,9 +2266,9 @@ impl Cage {
     ///    Additional errors may be generated and returned from the
     ///    underlying protocol modules; see their respective manual pages.
     ///
-    /// ** EAGAIN - The socket is marked nonblocking and the
-    ///    receive operation would block, or a receive timeout had been set and
-    ///    the timeout expired before data was received.
+    /// * EAGAIN - The socket is marked nonblocking and the receive operation
+    ///   would block, or a receive timeout had been set and the timeout expired
+    ///   before data was received. (May be returned by RustPOSIX)
     ///
     /// * EBADF - The argument sockfd is an invalid file descriptor.
     ///
@@ -2287,8 +2289,6 @@ impl Cage {
     ///   protocol and has not been connected (see connect(2) and accept(2)).
     ///
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
     ///
     /// ### Panics:
     ///
@@ -2345,9 +2345,9 @@ impl Cage {
     ///    Additional errors may be generated and returned from the
     ///    underlying protocol modules; see their respective manual pages.
     ///
-    /// ** EAGAIN - The socket is marked nonblocking and the
-    ///    receive operation would block, or a receive timeout had been set and
-    ///    the timeout expired before data was received.
+    /// * EAGAIN - The socket is marked nonblocking and the receive operation
+    ///   would block, or a receive timeout had been set and the timeout expired
+    ///   before data was received. (May be returned by RustPOSIX)
     ///
     /// * EBADF - The argument sockfd is an invalid file descriptor.
     ///
@@ -2368,8 +2368,6 @@ impl Cage {
     ///   protocol and has not been connected (see connect(2) and accept(2)).
     ///
     /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
     ///
     /// ### Panics:
     ///
@@ -2775,10 +2773,11 @@ impl Cage {
     ///
     /// ### Errors
     ///
-    /// ** EAGAIN - The socket is marked nonblocking and no
-    ///             connections are present to be accepted.  
+    /// * EAGAIN - The socket is marked nonblocking and no connections are
+    ///   present to be accepted. (May be returned by RustPOSIX)
     ///
-    /// ** EBADF - sockfd is not an open file descriptor.
+    /// * EBADF - sockfd is not an open file descriptor. (May be returned by
+    ///   RustPOSIX)
     ///
     /// * ECONNABORTED - A connection has been aborted.
     ///
@@ -2788,8 +2787,8 @@ impl Cage {
     /// * EINTR - The system call was interrupted by a signal that was caught
     ///   before a valid connection arrived; see signal(7).
     ///
-    /// ** EINVAL - Socket is not listening for connections, or addrlen is
-    ///            invalid (e.g., is negative).
+    /// * EINVAL - Socket is not listening for connections, or addrlen is
+    ///   invalid (e.g., is negative). (May be returned by RustPOSIX)
     ///
     /// * EMFILE - The per-process limit on the number of open file descriptors
     ///   has been reached.
@@ -2801,9 +2800,11 @@ impl Cage {
     ///   allocation is limited by the socket buffer limits, not by the system
     ///   memory.
     ///
-    /// ** ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket. (May
+    ///   be returned by RustPOSIX)
     ///
-    /// ** EOPNOTSUPP - The referenced socket is not of type SOCK_STREAM.
+    /// * EOPNOTSUPP - The referenced socket is not of type SOCK_STREAM. (May be
+    ///   returned by RustPOSIX)
     ///
     /// * EPERM - Firewall rules forbid connection.
     ///
@@ -2813,8 +2814,6 @@ impl Cage {
     /// the protocol may be returned.  Various Linux kernels can return
     /// other errors such as ENOSR, ESOCKTNOSUPPORT, EPROTONOSUPPORT,
     /// ETIMEDOUT.  The value ERESTARTSYS may be seen during a trace.
-    ///
-    /// ** Indicates the error may be returned from RustPOSIX
     ///
     /// ### Panics
     ///
