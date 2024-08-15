@@ -2594,13 +2594,53 @@ impl Cage {
         }
     }
 
+    /// ## ------------------SHUTDOWN SYSCALL------------------
+    /// ### Description
+    /// The `netshutdown_syscall()` call causes all or part of a full-duplex
+    /// connection on the socket associated with fd to be shut down. If "how" is
+    /// SHUT_RD, further receptions will be disallowed.  If "how" is SHUT_WR,
+    /// further transmissions will be disallowed.  If "how" is SHUT_RDWR,
+    /// further receptions and transmissions will be disallowed.
+    ///
+    /// ### Function Arguments
+    /// The `netshutdown_syscall()` receives two arguments:
+    /// * `fd` - The socket file descriptor
+    /// * `how` -  how to shutdown the socket. If how is SHUT_RD, further
+    ///   receptions will be disallowed.  If how is SHUT_WR, further
+    ///   transmissions will be disallowed.  If how is SHUT_RDWR, further
+    ///   receptions and transmissions will be disallowed.
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - An invalid file descriptor was given in one of the sets
+    /// * EINVAL - An invalid value was specified in "how"
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The specified socket is not connected.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
     pub fn netshutdown_syscall(&self, fd: i32, how: i32) -> i32 {
+        // BUG: we did not check if the specified socket is connected or not
+
+        // first let's check fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "netshutdown",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
         match how {
             SHUT_RDWR | SHUT_RD | SHUT_WR => {
                 return Self::_cleanup_socket(self, fd, how);
             }
             _ => {
-                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                // invalid how argument
+                // See http://linux.die.net/man/2/shutdown for nuance to this error
                 return syscall_error(
                     Errno::EINVAL,
                     "netshutdown",
@@ -2610,6 +2650,7 @@ impl Cage {
         }
     }
 
+    // this function handles the core logic of shutdown
     pub fn _cleanup_socket_inner_helper(
         sockhandle: &mut SocketHandle,
         how: i32,
@@ -2617,40 +2658,59 @@ impl Cage {
     ) -> i32 {
         // we need to do a bunch of actual socket cleanup for INET sockets
         if sockhandle.domain != AF_UNIX {
+            // this flag is used for marking if we want to release the resources of the
+            // socket
             let mut releaseflag = false;
             if let Some(ref sobj) = sockhandle.innersocket {
+                // get the innersocket
                 if shutdown {
+                    // shutdown the internal socket with libc shutdown
                     let shutresult = sobj.shutdown(how);
 
                     if shutresult < 0 {
+                        // in case of error from libc shutdown, return the errno
                         match Errno::from_discriminant(interface::get_errno()) {
                             Ok(i) => {
                                 return syscall_error(
                                     i,
                                     "shutdown",
-                                    "The libc call to setsockopt failed!",
+                                    "The libc call to shutdown failed!",
                                 );
                             }
-                            Err(()) => panic!("Unknown errno value from setsockopt returned!"),
+                            Err(()) => panic!("Unknown errno value from shutdown returned!"),
                         };
                     }
 
+                    // here we want to release the resources (port, innersocket) if the socket is
+                    // closed on RD and WR at the same time. however, BUG: this
+                    // is not something that is supposed to be done in shutdown, instead, they
+                    // should be handled in close
                     match how {
                         SHUT_RD => {
+                            // if we shutdown RD on a socket that is already in RDONLY state
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             if sockhandle.state == ConnState::CONNRDONLY {
                                 releaseflag = true;
                             }
                         }
                         SHUT_WR => {
+                            // if we shutdown WR on a socket that is already in WRONLY state
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             if sockhandle.state == ConnState::CONNWRONLY {
                                 releaseflag = true;
                             }
                         }
                         SHUT_RDWR => {
+                            // we shutdown RD and WR
+                            // that would mean the socket can neither read or write
+                            // so we want to release its resources
                             releaseflag = true;
                         }
                         _ => {
-                            //See http://linux.die.net/man/2/shutdown for nuance to this error
+                            // invalid how argument
+                            // See http://linux.die.net/man/2/shutdown for nuance to this error
                             return syscall_error(
                                 Errno::EINVAL,
                                 "netshutdown",
@@ -2659,51 +2719,69 @@ impl Cage {
                         }
                     }
                 } else {
-                    //Reaching this means that the socket is closed. Removing the sockobj
-                    //indicates that the sockobj will drop, and therefore close
+                    // Reaching this means that the socket is closed after close_syscall. Removing
+                    // the sockobj indicates that the sockobj will drop, and therefore close
                     releaseflag = true;
                     sockhandle.innersocket = None;
                 }
             }
 
+            // if we want to release the associated resources of the socket
             if releaseflag {
                 if let Some(localaddr) = sockhandle.localaddr.as_ref().clone() {
-                    //move to end
+                    // release the port
                     let release_ret_val = NET_METADATA._release_localport(
                         localaddr.addr(),
                         localaddr.port(),
                         sockhandle.protocol,
                         sockhandle.domain,
                     );
+                    // release the localaddr
                     sockhandle.localaddr = None;
                     if let Err(e) = release_ret_val {
+                        // in case of any error in releasing the port
+                        // return the error
                         return e;
                     }
                 }
             }
         }
 
-        // now change the connections for all socket types
+        // now change the connection state for all socket types
         match how {
             SHUT_RD => {
-                if sockhandle.state == ConnState::CONNWRONLY {
+                if sockhandle.state == ConnState::CONNRDONLY {
+                    // shutdown RD on socket with RDONLY state means
+                    // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
                 } else {
+                    // otherwise, we only closed RD, and the socket can still write
+                    // however, BUG: Linux is handling shutdown for different state seperately.
+                    // shutdown on RD does not mean the socket would always be WRONLY. for example,
+                    // if the socket is in LISTEN state, shutdown on RD will cause the socket to
+                    // disconnect directly, without the need to shutdown on WR again.
                     sockhandle.state = ConnState::CONNWRONLY;
                 }
             }
             SHUT_WR => {
-                if sockhandle.state == ConnState::CONNRDONLY {
+                if sockhandle.state == ConnState::CONNWRONLY {
+                    // shutdown WR on socket with WRONLY state means
+                    // the socket is neither readable nor writable
                     sockhandle.state = ConnState::NOTCONNECTED;
                 } else {
+                    // otherwise, we only closed WR, and the socket can still read
+                    // however, see above BUG
                     sockhandle.state = ConnState::CONNRDONLY;
                 }
             }
             SHUT_RDWR => {
+                // the socket is neither readable nor writable
+                // we just set the state to not connected
                 sockhandle.state = ConnState::NOTCONNECTED;
             }
             _ => {
-                //See http://linux.die.net/man/2/shutdown for nuance to this error
+                // invalid how argument
+                // See http://linux.die.net/man/2/shutdown for nuance to this error
                 return syscall_error(
                     Errno::EINVAL,
                     "netshutdown",
@@ -2715,6 +2793,7 @@ impl Cage {
         return 0;
     }
 
+    // this function is an inner function of shutdown and checks for fd type
     pub fn _cleanup_socket_inner(
         &self,
         filedesc: &mut FileDescriptor,
@@ -2722,11 +2801,13 @@ impl Cage {
         shutdown: bool,
     ) -> i32 {
         if let Socket(sockfdobj) = filedesc {
+            // get write lock of sockhandle
             let sock_tmp = sockfdobj.handle.clone();
             let mut sockhandle = sock_tmp.write();
 
             Self::_cleanup_socket_inner_helper(&mut *sockhandle, how, shutdown)
         } else {
+            // this file descriptor is not a socket fd
             syscall_error(
                 Errno::ENOTSOCK,
                 "cleanup socket",
@@ -2735,19 +2816,27 @@ impl Cage {
         }
     }
 
+    // this function is an inner function of shutdown and checks for fd
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
             if inner_result < 0 {
+                // in case of error, return the error
                 return inner_result;
             }
 
+            // if how is SHUT_RDWR, we clear this file descriptor
+            // however, BUG: according to standard, shutdown() doesn’t close the file
+            // descriptor, even if how is specified as SHUT_RDWR. To close the file
+            // descriptor, we must additionally call close().
             if how == SHUT_RDWR {
                 let _discarded_fd = unlocked_fd.take();
             }
         } else {
+            // file descriptor does not exist
             return syscall_error(Errno::EBADF, "cleanup socket", "invalid file descriptor");
         }
 
@@ -3631,18 +3720,97 @@ impl Cage {
         return 0;
     }
 
+    /// ## ------------------GETSOCKOPT SYSCALL------------------
+    /// ### Description
+    /// "getsockopt_syscall()" retrieves the option specified by the optname
+    /// argument at the protocol level specified by the level argument for
+    /// the socket associated with the file descriptor specified by the fd
+    /// argument, and stores the result in the optval argument.
+    ///
+    /// ### Function Arguments
+    /// The `getsockopt_syscall()` receives four arguments:
+    /// * `fd` - The file descriptor to retrieve the socket option.
+    /// * `level` - the protocol level at which the option resides. To get
+    ///   options at the socket level, specify the level argument as SOL_SOCKET.
+    ///   To get options at other levels, supply the appropriate level
+    ///   identifier for the protocol controlling the option.
+    /// * `optname` - The name of the option
+    /// * `optval` - The buffer to hold the return value
+    ///
+    /// ### Returns
+    /// Upon successful completion, getsockopt_syscall() shall return 0.
+    ///
+    /// ### Errors
+    /// * EBADF - The socket argument is not a valid file descriptor.
+    /// * ENOPROTOOPT - The option is unknown at the level indicated.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getsockopt.2.html
+    /// more details for avaliable socket options at
+    /// https://man7.org/linux/man-pages/man7/socket.7.html
+    /// https://man7.org/linux/man-pages/man7/tcp.7.html
     pub fn getsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: &mut i32) -> i32 {
+        // The current sockopt syscalls have issues storing the option values. Our
+        // approach uses the optname as the bit position of the option, meaning
+        // the i-th bit of the option corresponds to the i-th optname. This
+        // causes problems because we use a 32-bit integer to store both the
+        // socket option and the TCP option, leading to overflow if any optname
+        // is larger than 32.
+        //
+        // Linux handles this differently. For TCP options, the option values are not
+        // stored centrally; each option is handled separately and may
+        // correspond to multiple flags being turned on or off. For socket
+        // options, Linux stores some options in a single location (sk_flags)
+        // using a similar approach to ours. However, Linux uses a separate
+        // layer of internal flags specifically for those stored in sk_flags. These
+        // internal flag values are of enum type and are sequential, indicating
+        // the bit position of the option. Linux creates a mapping from
+        // user-facing socket optnames (e.g., SO_KEEPALIVE) to internal flags.
+        // This ensures that optnames not meant for sk_flags do not affect the
+        // sequential order of sk_flags bits, and those that should be stored in
+        // sk_flags are grouped efficiently. This allows Linux to support more
+        // than 32 socket options while correctly storing some boolean socket
+        // options in sk_flags, a 32-bit integer.
+        //
+        // other issues include:
+        // 1. many of the options such as SO_SNDBUF, SO_RCVBUF, though are stored in
+        //    sockhandle, never get used anywhere
+        // 2. when we set the socket options before bind/connect, these options will not
+        //    be set with libc setsockopt since innersocket hasn’t been created yet. But
+        //    when later the innersocket is created, we did not set these options to
+        //    innersocket
+        // 3. the optval argument is not supposed to be an integer type. Optval for some
+        //    optname is a struct.
+
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getsockopt",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
+        // try to get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
+                // we store the options inside a 32-bit integer
+                // where i-th bits corresponds to i-th option
                 let optbit = 1 << optname;
+                // get the write lock of the socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let mut sockhandle = sock_tmp.write();
                 match level {
+                    // a few UDP options are avaliable in Linux
+                    // though we do not support them for now
                     SOL_UDP => {
                         return syscall_error(
-                            Errno::EOPNOTSUPP,
+                            Errno::ENOPROTOOPT,
                             "getsockopt",
                             "UDP is not supported for getsockopt",
                         );
@@ -3650,17 +3818,30 @@ impl Cage {
                     SOL_TCP => {
                         // Checking the tcp_options here
                         // Currently only support TCP_NODELAY option for SOL_TCP
+
+                        // TCP_NODELAY: If set, disable the Nagle algorithm. This means that
+                        // segments are always sent as soon as possible, even if
+                        // there is only a small amount of data. When not set, data
+                        // is buffered until there is a sufficient amount to send
+                        // out, thereby avoiding the frequent sending of small
+                        // packets, which results in poor utilization of the network.
+                        // This option is overridden by TCP_CORK; however, setting
+                        // this option forces an explicit flush of pending output,
+                        // even if TCP_CORK is currently set.
                         if optname == TCP_NODELAY {
                             let optbit = 1 << optname;
                             if optbit & sockhandle.tcp_options == optbit {
+                                // if the bit is set, set optval to 1
                                 *optval = 1;
                             } else {
+                                // otherwise, set optval to 0
                                 *optval = 0;
                             }
                             return 0;
                         }
+                        // other TCP options are not supported yet
                         return syscall_error(
-                            Errno::EOPNOTSUPP,
+                            Errno::ENOPROTOOPT,
                             "getsockopt",
                             "TCP options not remembered by getsockopt",
                         );
@@ -3668,46 +3849,85 @@ impl Cage {
                     SOL_SOCKET => {
                         // checking the socket_options here
                         match optname {
-                            //indicate whether we are accepting connections or not in the moment
+                            // indicate whether we are accepting connections or not in the moment
                             SO_ACCEPTCONN => {
                                 if sockhandle.state == ConnState::LISTEN {
+                                    // if in LISTEN state, set return value to 1
                                     *optval = 1;
                                 } else {
+                                    // otherwise, set return value to 0
                                     *optval = 0;
                                 }
                             }
-                            //if the option is a stored binary option, just return it...
+                            // these options are stored inside the socket_options
+                            // so we just retrieve it and set to optval
+                            // BUG: SO_LINGER is not supposed to be a boolean option
+
+                            // SO_LINGER: When enabled, a close or shutdown will not return
+                            // until all queued messages for the socket have been
+                            // successfully sent or the linger timeout has been reached.
+                            // Otherwise, the call returns immediately and the closing is
+                            // done in the background.  When the socket is closed as part
+                            // of exit, it always lingers in the background.
+
+                            // SO_KEEPALIVE: Enable sending of keep-alive messages on connection-
+                            // oriented sockets.  Expects an integer boolean flag.
+
+                            // SO_SNDLOWAT/SO_RCVLOWAT: Specify the minimum number of bytes in the
+                            // buffer until the socket layer will pass
+                            // the data to the protocol (SO_SNDLOWAT) or
+                            // the user on receiving (SO_RCVLOWAT).
+
+                            // SO_REUSEPORT: Permits multiple AF_INET or AF_INET6 sockets to be
+                            // bound to an identical socket address.
+
+                            // SO_REUSEADDR: Indicates that the rules used in validating addresses
+                            // supplied in a bind call should allow reuse of local addresses.
                             SO_LINGER | SO_KEEPALIVE | SO_SNDLOWAT | SO_RCVLOWAT | SO_REUSEPORT
                             | SO_REUSEADDR => {
                                 if sockhandle.socket_options & optbit == optbit {
+                                    // if the bit is set, set optval to 1
                                     *optval = 1;
                                 } else {
+                                    // otherwise, set optval to 0
                                     *optval = 0;
                                 }
                             }
-                            //handling the ignored buffer settings:
+                            // sndbuf, rcvbuf, socktype are stored in a dedicated field
+                            // so retrieve it directly and set the optval to it
+
+                            // SO_SNDBUF: Sets or gets the maximum socket send buffer in bytes.
+                            // SO_RCVBUF: Sets or gets the maximum socket receive buffer in bytes.
                             SO_SNDBUF => {
                                 *optval = sockhandle.sndbuf;
                             }
                             SO_RCVBUF => {
                                 *optval = sockhandle.rcvbuf;
                             }
-                            //returning the type if asked
+                            // SO_TYPE: Gets the socket type as an integer
                             SO_TYPE => {
                                 *optval = sockhandle.socktype;
                             }
-                            //should always be true
+                            // If SO_OOBINLINE is enabled, out-of-band data is directly
+                            // placed into the receive data stream.  Otherwise, out-of-
+                            // band data is passed only when the MSG_OOB flag is set
+                            // during receiving.
+                            // currently we do not support changing this value
+                            // so it should always be 1
                             SO_OOBINLINE => {
                                 *optval = 1;
                             }
+                            // Get and clear the pending socket error. This socket
+                            // option is read-only.
                             SO_ERROR => {
                                 let tmp = sockhandle.errno;
                                 sockhandle.errno = 0;
                                 *optval = tmp;
                             }
                             _ => {
+                                // we do not support other options currently
                                 return syscall_error(
-                                    Errno::EOPNOTSUPP,
+                                    Errno::ENOPROTOOPT,
                                     "getsockopt",
                                     "unknown optname passed into syscall",
                                 );
@@ -3715,6 +3935,7 @@ impl Cage {
                         }
                     }
                     _ => {
+                        // we do not support other levels yet
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "getsockopt",
@@ -3723,6 +3944,7 @@ impl Cage {
                     }
                 }
             } else {
+                // the file descriptor is not socket fd
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockopt",
@@ -3730,6 +3952,7 @@ impl Cage {
                 );
             }
         } else {
+            // the file descriptor does not exist
             return syscall_error(
                 Errno::EBADF,
                 "getsockopt",
@@ -3739,14 +3962,64 @@ impl Cage {
         return 0;
     }
 
+    /// ## ------------------SETSOCKOPT SYSCALL------------------
+    /// ### Description
+    /// "setsockopt_syscall()" sets a socket option. It configures the option
+    /// specified by the optname argument, at the protocol level specified
+    /// by the level argument, to the value pointed to by the optval argument.
+    /// This is done for the socket associated with the file descriptor provided
+    /// in the fd argument.
+    ///
+    ///
+    /// ### Function Arguments
+    /// The `setsockopt_syscall()` receives four arguments:
+    /// * `fd` - The file descriptor to retrieve the socket option.
+    /// * `level` - the protocol level at which the option resides. To set
+    ///   options at the socket level, specify the level argument as SOL_SOCKET.
+    ///   To set options at other levels, supply the appropriate level
+    ///   identifier for the protocol controlling the option.
+    /// * `optname` - The name of the option
+    /// * `optval` - The value of the option
+    ///
+    /// ### Returns
+    /// Upon successful completion, setsockopt_syscall() shall return 0.
+    ///
+    /// ### Errors
+    /// * EBADF - The socket argument is not a valid file descriptor.
+    /// * EINVAL - The specified option is invalid at the specified socket level
+    ///   or the socket has been shut down.
+    /// * EISCONN - The socket is already connected, and a specified option
+    ///   cannot be set while the socket is connected.
+    /// * ENOPROTOOPT - The option is unknown at the level indicated.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No panic is expected from this syscall
+    ///
+    /// more details at https://man7.org/linux/man-pages/man3/setsockopt.3p.html
     pub fn setsockopt_syscall(&self, fd: i32, level: i32, optname: i32, optval: i32) -> i32 {
+        // there are some issues with sockopt syscalls. See comment at
+        // getsockopt_syscall for more detail
+
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "setsockopt",
+                "provided fd is not a valid file descriptor",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
-                //checking that we recieved SOL_SOCKET
+                // for the explanation of each socket options, check
+                // getsockopt_syscall at corresponding location
                 match level {
                     SOL_UDP => {
+                        // we do not support SOL_UDP
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "setsockopt",
@@ -3757,22 +4030,28 @@ impl Cage {
                         // Here we check and set tcp_options
                         // Currently only support TCP_NODELAY for SOL_TCP
                         if optname == TCP_NODELAY {
+                            // we store this flag in tcp_options at the corresponding bit
                             let optbit = 1 << optname;
                             let sock_tmp = sockfdobj.handle.clone();
                             let mut sockhandle = sock_tmp.write();
                             let mut newoptions = sockhandle.tcp_options;
-                            //now let's set this if we were told to
+                            // now let's set this if we were told to
+                            // optval should always be 1 or 0.
                             if optval != 0 {
-                                //optval should always be 1 or 0.
+                                // set the bit
                                 newoptions |= optbit;
                             } else {
+                                // clear the bit
                                 newoptions &= !optbit;
                             }
 
+                            // if the tcp option changed, we need to call underlining
+                            // setsockopt on rawfd to actually set the option with libc setsockopt
                             if newoptions != sockhandle.tcp_options {
                                 if let Some(sock) = sockhandle.innersocket.as_ref() {
                                     let sockret = sock.setsockopt(SOL_TCP, optname, optval);
                                     if sockret < 0 {
+                                        // error returned from libc setsockopt
                                         match Errno::from_discriminant(interface::get_errno()) {
                                             Ok(i) => {
                                                 return syscall_error(
@@ -3788,9 +4067,11 @@ impl Cage {
                                     }
                                 }
                             }
+                            // store the new options
                             sockhandle.tcp_options = newoptions;
                             return 0;
                         }
+                        // we do not support other TCP options yet
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "setsockopt",
@@ -3799,12 +4080,14 @@ impl Cage {
                     }
                     SOL_SOCKET => {
                         // Here we check and set socket_options
+                        // we store this flag in socket_options at the corresponding bit
                         let optbit = 1 << optname;
                         let sock_tmp = sockfdobj.handle.clone();
                         let mut sockhandle = sock_tmp.write();
 
                         match optname {
                             SO_ACCEPTCONN | SO_TYPE | SO_SNDLOWAT | SO_RCVLOWAT => {
+                                // these socket options are read-only and cannot be manually set
                                 let error_string =
                                     format!("Cannot set option using setsockopt. {}", optname);
                                 return syscall_error(
@@ -3814,30 +4097,41 @@ impl Cage {
                                 );
                             }
                             SO_LINGER | SO_KEEPALIVE => {
+                                // these socket options are stored inside socket_options
+                                // so we just modify it in socket_options
+                                // optval should always be 1 or 0.
                                 if optval == 0 {
+                                    // clear the bit
                                     sockhandle.socket_options &= !optbit;
                                 } else {
-                                    //optval should always be 1 or 0.
+                                    // set the bit
                                     sockhandle.socket_options |= optbit;
                                 }
+                                // BUG: we did not pass these options to libc setsockopt
 
                                 return 0;
                             }
 
                             SO_REUSEPORT | SO_REUSEADDR => {
                                 let mut newoptions = sockhandle.socket_options;
-                                //now let's set this if we were told to
+                                // now let's set this if we were told to
+                                // optval should always be 1 or 0.
                                 if optval != 0 {
-                                    //optval should always be 1 or 0.
+                                    // set the bit
                                     newoptions |= optbit;
                                 } else {
+                                    // clear the bit
                                     newoptions &= !optbit;
                                 }
 
+                                // if the socket option changed, we need to call underlining
+                                // setsockopt on rawfd to actually set the option with libc
+                                // setsockopt
                                 if newoptions != sockhandle.socket_options {
                                     if let Some(sock) = sockhandle.innersocket.as_ref() {
                                         let sockret = sock.setsockopt(SOL_SOCKET, optname, optval);
                                         if sockret < 0 {
+                                            // error from libc setsockopt
                                             match Errno::from_discriminant(interface::get_errno()) {
                                                 Ok(i) => {
                                                     return syscall_error(
@@ -3854,10 +4148,13 @@ impl Cage {
                                     }
                                 }
 
+                                // set the new options
                                 sockhandle.socket_options = newoptions;
 
                                 return 0;
                             }
+                            // sndbuf and rcvbuf are stored in a dedicated field
+                            // so we just set it
                             SO_SNDBUF => {
                                 sockhandle.sndbuf = optval;
                                 return 0;
@@ -3866,7 +4163,7 @@ impl Cage {
                                 sockhandle.rcvbuf = optval;
                                 return 0;
                             }
-                            //should always be one -- can only handle it being 1
+                            // we do not support changing this option yet
                             SO_OOBINLINE => {
                                 if optval != 1 {
                                     return syscall_error(
@@ -3877,6 +4174,7 @@ impl Cage {
                                 }
                                 return 0;
                             }
+                            // other options are either not supported or invalid
                             _ => {
                                 return syscall_error(
                                     Errno::EOPNOTSUPP,
@@ -3887,6 +4185,7 @@ impl Cage {
                         }
                     }
                     _ => {
+                        // invalid level
                         return syscall_error(
                             Errno::EOPNOTSUPP,
                             "getsockopt",
@@ -3895,6 +4194,7 @@ impl Cage {
                     }
                 }
             } else {
+                // the fd is not a socket
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockopt",
@@ -3902,6 +4202,7 @@ impl Cage {
                 );
             }
         } else {
+            // the fd is not a valid file descriptor
             return syscall_error(
                 Errno::EBADF,
                 "getsockopt",
@@ -3910,14 +4211,48 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETPEERNAME SYSCALL------------------
+    /// ### Description
+    /// The `getpeername_syscall()` returns the address of the peer connected to
+    /// the socket fd, in the buffer pointed to by ret_addr
+    ///
+    /// ### Function Arguments
+    /// The `getpeername_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    /// * ENOTCONN - The socket is not connected.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getpeername.2.html
     pub fn getpeername_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getpeername",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
-                //if the socket is not connected, then we should return an error
+                // get the read lock of sockhandle
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // if the socket is not connected, then we should return an error
                 if sockhandle.remoteaddr == None {
                     return syscall_error(
                         Errno::ENOTCONN,
@@ -3925,9 +4260,12 @@ impl Cage {
                         "the socket is not connected",
                     );
                 }
+                // remoteaddr stores the value we want so we just return the remoteaddr stored
+                // in sockhandle
                 *ret_addr = sockhandle.remoteaddr.unwrap();
                 return 0;
             } else {
+                // if the fd is not socket object
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getpeername",
@@ -3935,6 +4273,7 @@ impl Cage {
                 );
             }
         } else {
+            // if the fd is not valid
             return syscall_error(
                 Errno::EBADF,
                 "getpeername",
@@ -3943,15 +4282,56 @@ impl Cage {
         }
     }
 
+    /// ## ------------------GETSOCKNAME SYSCALL------------------
+    /// ### Description
+    /// The `getsockname_syscall()` returns the current address to which the
+    /// socket fd is bound, in the buffer pointed to by ret_addr. If the socket
+    /// hasn't bound to any address, it returns an empty address.
+    ///
+    /// ### Function Arguments
+    /// The `getsockname_syscall()` receives two arguments:
+    /// * `fd` -  The file descriptor of the socket
+    /// * `ret_addr` - A buffer of GenSockaddr type to store the return value
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EBADF - The argument fd is not a valid file descriptor.
+    /// * ENOTSOCK - The file descriptor sockfd does not refer to a socket.
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://man7.org/linux/man-pages/man2/getsockname.2.html
     pub fn getsockname_syscall(&self, fd: i32, ret_addr: &mut interface::GenSockaddr) -> i32 {
+        // first let's check the fd range
+        if fd < 0 || fd >= MAXFD {
+            return syscall_error(
+                Errno::EBADF,
+                "getsockname",
+                "the provided file descriptor is not valid",
+            );
+        }
+
+        // get the file descriptor object
         let checkedfd = self.get_filedescriptor(fd).unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
+                // must be a socket file descriptor
+
+                // get the read lock of socket handler
                 let sock_tmp = sockfdobj.handle.clone();
                 let sockhandle = sock_tmp.read();
+                // each socket type has different structure
+                // so we must handle them seperately
                 if sockhandle.domain == AF_UNIX {
+                    // in case of AF_UNIX socket
                     if sockhandle.localaddr == None {
+                        // if hasn't bound to any address,
+                        // return an empty address
                         let null_path: &[u8] = &[];
                         *ret_addr = interface::GenSockaddr::Unix(interface::new_sockaddr_unix(
                             sockhandle.domain as u16,
@@ -3959,13 +4339,19 @@ impl Cage {
                         ));
                         return 0;
                     }
-                    //if the socket is not none, then return the socket
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 } else {
+                    // in case of AF_INET/AF_INET6
                     if sockhandle.localaddr == None {
-                        //sets the address to 0.0.0.0 if the address is not initialized yet
-                        //setting the family as well based on the domain
+                        // if the socket hasn't bound to any address, we'd return an empty address
+                        // with both ip and port set to 0. But family should be set since it is
+                        // something that was already specified when the socket was created
+
+                        // for ipv4, set the address to 0.0.0.0 to indicate uninitialized address
+                        // for ipv6, set the address to 0:0:0:0:0:0:0:0
+                        // (::) to indicate uninitialized address
                         let addr = match sockhandle.domain {
                             AF_INET => interface::GenIpaddr::V4(interface::V4Addr::default()),
                             AF_INET6 => interface::GenIpaddr::V6(interface::V6Addr::default()),
@@ -3975,13 +4361,16 @@ impl Cage {
                         };
                         ret_addr.set_addr(addr);
                         ret_addr.set_port(0);
+                        // set the family
                         ret_addr.set_family(sockhandle.domain as u16);
                         return 0;
                     }
+                    // if the socket address is not none, then return the socket address
                     *ret_addr = sockhandle.localaddr.unwrap();
                     return 0;
                 }
             } else {
+                // the fd is not a socket
                 return syscall_error(
                     Errno::ENOTSOCK,
                     "getsockname",
@@ -3989,6 +4378,7 @@ impl Cage {
                 );
             }
         } else {
+            // invalid fd
             return syscall_error(
                 Errno::EBADF,
                 "getsockname",
@@ -3997,9 +4387,32 @@ impl Cage {
         }
     }
 
-    //we only return the default host name because we do not allow for the user to
-    // change the host name right now
+    /// ## ------------------GETHOSTNAME SYSCALL------------------
+    /// ### Description
+    /// The `gethostname_syscall()` returns the null-terminated hostname in the
+    /// address_ptr, which has length bytes.  If the null-terminated
+    /// hostname is too large to fit, then the name is truncated, and no error
+    /// is returned
+    ///
+    /// ### Function Arguments
+    /// The `gethostname_syscall()` receives two arguments:
+    /// * `address_ptr` -  The buffer to hold the returned host name
+    /// * `length` - The length of the buffer
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EINVAL - length is negative
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man2/gethostname.2.html
     pub fn gethostname_syscall(&self, address_ptr: *mut u8, length: isize) -> i32 {
+        // we only return the default host name (Lind) because we do not allow for the
+        // user to change the host name right now
         if length < 0 {
             return syscall_error(
                 Errno::EINVAL,
@@ -4008,15 +4421,19 @@ impl Cage {
             );
         }
 
+        // DEFAULT_HOSTNAME is "Lind"
+        // we convert the string to vector with a null terminator
         let mut bytes: Vec<u8> = DEFAULT_HOSTNAME.as_bytes().to_vec();
         bytes.push(0u8); //Adding a null terminator to the end of the string
         let name_length = bytes.len();
 
+        // take the min between name_length and length from argument
         let mut len = name_length;
         if (length as usize) < len {
             len = length as usize;
         }
 
+        // fill up the address_ptr
         interface::fill(address_ptr, len, &bytes);
 
         return 0;
@@ -4798,9 +5215,32 @@ impl Cage {
         return 0;
     }
 
-    // all this does is send the net_devs data in a string to libc, where we will
-    // later parse and alloc into getifaddrs structs
+    /// ## ------------------GETIFADDRS SYSCALL------------------
+    /// ### Description
+    /// The `getifaddrs_syscall()` function creates a linked list of structures
+    /// describing the network interfaces of the local system, and stores the
+    /// address of the first item of the list in buf.
+    ///
+    /// ### Function Arguments
+    /// The `getifaddrs_syscall()` receives two arguments:
+    /// * `buf` -  The buffer to hold the returned address
+    /// * `count` - The length of the buffer
+    ///
+    /// ### Returns
+    /// On success, zero is returned. Otherwise, errors or panics are returned
+    /// for different scenarios.
+    ///
+    /// ### Errors
+    /// * EOPNOTSUPP - buf length is too small to hold the return value
+    ///
+    /// ### Panics
+    /// No Panic is expected from this syscall.
+    ///
+    /// more details at https://www.man7.org/linux/man-pages/man3/getifaddrs.3.html
     pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
+        // all this does is returning the net_devs data in a string, where we will later
+        // parse and alloc into getifaddrs structs in libc
+
         if NET_IFADDRS_STR.len() < count {
             interface::fill(
                 buf,
