@@ -2133,7 +2133,7 @@ impl Cage {
                         Inode::CharDev(ref char_inode_obj) => {
                             // The `_write_chr_file` helper function typically does not write
                             // anything to the device and simply returns the bytes count.
-                            self._write_chr_file(&char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, count)
                         }
 
                         // A Sanity check is added to make sure that there is no such case when the
@@ -2380,7 +2380,7 @@ impl Cage {
                         Inode::CharDev(ref char_inode_obj) => {
                             // The `_write_chr_file` helper function typically does not write
                             // anything to the device and simply returns the bytes count.
-                            self._write_chr_file(&char_inode_obj, buf, count)
+                            self._write_chr_file(&char_inode_obj, count)
                         }
 
                         // A Sanity check is added to make sure that there is no such case when the
@@ -2433,7 +2433,7 @@ impl Cage {
     /// ### Panics
     ///
     /// This function does not cause any panics.
-    fn _write_chr_file(&self, inodeobj: &DeviceInode, _buf: *const u8, count: usize) -> i32 {
+    fn _write_chr_file(&self, inodeobj: &DeviceInode, count: usize) -> i32 {
         // Writes to any of these device files transparently succeed while doing
         // nothing. The data passed to them for writing is simply discarded.
         match inodeobj.dev {
@@ -5583,25 +5583,57 @@ impl Cage {
         shmid
     }
 
-    //------------------SHMAT SYSCALL------------------
-
+    /// ### Description
+    ///
+    /// The `shmat_syscall` maps the shared memory segment associated with the
+    /// shared memory identifer onto the address space of the calling Cage
+    /// object. The address to which the segment is mapped is given by the
+    /// `shmaddr` parameter of this function.
+    ///
+    /// ### Arguments
+    ///
+    /// `shmid` : identifier of the memory segment to be mapped
+    /// `shmaddr` : Address in the address space of the calling Cage where the
+    /// segment is to be mapped `shmflag` : Flag which indicates if the
+    /// memory segment to be mapped is readonly or not
+    ///
+    /// ### Returns
+    ///
+    /// Returns the address at which the memory segment has been mapped into
+    ///
+    /// ### Errors
+    ///
+    /// * `EINVAL` : If the shmid passed as an argument is an invalid identifier
+    ///
+    /// ### Panics
+    ///
+    /// Currently there are no scenarios where the function panics
+    ///
+    /// For more information - refer the documentation at [https://man7.org/linux/man-pages/man3/shmat.3p.html]
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
+        // Get shm table
         let metadata = &SHM_METADATA;
         let prot: i32;
+        // Check if the shmid passed points to a valid table entry
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+            // Check if the readonly flag is set or not
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             } else {
                 prot = PROT_READ | PROT_WRITE;
             }
+            // Aquire a mutex lock on the reverse memory mappings
             let mut rev_shm = self.rev_shm.lock();
+            // Push a reverse mapping of shmaddr -> shmid the processes's reverse mapping
+            // table
             rev_shm.push((shmaddr as u32, shmid));
             drop(rev_shm);
 
-            // update semaphores
+            // Clone semaphores that the memory segment holds into the current calling
+            // process
             if !segment.semaphor_offsets.is_empty() {
-                // lets just look at the first cage in the set, since we only need to grab the
-                // ref from one
+                // Since all processes that share this segment hold all the semaphores - we only
+                // need to grab them from one cage
                 if let Some(cageid) = segment
                     .attached_cages
                     .clone()
@@ -5609,56 +5641,106 @@ impl Cage {
                     .keys()
                     .next()
                 {
+                    // Get the first cage associated with the memory segment
                     let cage2 = interface::cagetable_getref(*cageid);
+                    // Get the reverse memory mappings
                     let cage2_rev_shm = cage2.rev_shm.lock();
-                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
+                    // Find all addresses associated with the shmid of the memory segment
+                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid);
+                    // Add each semaphore at its appropriate offset - only need to index the first
+                    // address Since semaphores are consistent across all cages
+                    // and all addresses within the cages
                     for offset in segment.semaphor_offsets.iter() {
-                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
+                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone();
                         self.sem_table.insert(shmaddr as u32 + *offset, sementry);
                     }
                 }
             }
 
+            // Map the shared segment onto the current cage using `map_shm` function
             segment.map_shm(shmaddr, prot, self.cageid)
         } else {
             syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
         }
     }
 
-    //------------------SHMDT SYSCALL------------------
-
+    ///------------------SHMDT SYSCALL------------------
+    /// ### Description
+    ///
+    /// This syscall can be viewed as a reversal of the `shmat_syscall`
+    /// 'shmat_syscall` attaches a particular memory shared memory segment to a
+    /// `shmaddr` passed as an argument
+    /// `shmdt` unmaps the shared memory segment that is currently mapped at the
+    /// address specified by the `shmaddr` argument.
+    ///
+    /// ### Arguments
+    ///
+    /// `shmaddr` : The address within the address space of the calling Cage to
+    /// unmap
+    ///
+    /// ### Returns
+    ///
+    /// Returns the id of the memory segment that has been unmapped
+    ///
+    /// ### Errors
+    ///
+    /// This function can result in the following errors
+    ///
+    /// * EINVAL : If there is no memory segment with the address specified
+    ///
+    ///
+    /// ### Panics
+    ///
+    /// This function panics if there is no memory segment associated with the specified `shmaddr`
+    ///
+    /// For more information please refer - [https://man7.org/linux/man-pages/man3/shmdt.3p.html]
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
+        // Acquire the lock of the reverse memory mappings of the Cage object
         let mut rev_shm = self.rev_shm.lock();
+        // This function returns the index where the pair of (shmaddr, shmid) is stored
+        // within the vector That holds these mappings
         let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
 
+        // Check if the index is valid
         if let Some(index) = rev_shm_index {
+            // Get the second element of the (shmaddr,shmid) pair which gives us the id of
+            // the memory segment
             let shmid = rev_shm[index].1;
+            // Get the memory segment from the shmtable which corresponds to the shmid
+            // extracted above
             match metadata.shmtable.entry(shmid) {
+                // If the memory segment is occupied
                 interface::RustHashEntry::Occupied(mut occupied) => {
+                    // Get the mutex for the memory segment
                     let segment = occupied.get_mut();
-
-                    // update semaphores
+                    // Loop through each semaphore that the segment hold and remove it from the semaphore table
                     for offset in segment.semaphor_offsets.iter() {
                         self.sem_table.remove(&(shmaddr as u32 + *offset));
                     }
-
+                    // Use the unmap helper function to unmap the shmaddr from the current cage object
                     segment.unmap_shm(shmaddr, self.cageid);
 
+                    // Check if segment has been removed previously by the `shmctl_syscall`
+                    // and that the number of processess attached to the segment are zero
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         rm = true;
                     }
+
+                    // Remove the reverse mapping from the mappings of the current cage object
                     rev_shm.swap_remove(index);
 
+                    // If segment has been removed previously 
+                    // and has no processess attached to it 
+                    // we delete the memory segment from the shmtable
                     if rm {
                         let key = segment.key;
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
-
-                    return shmid; //NaCl relies on this non-posix behavior of
-                                  // returning the shmid on success
+                    
+                    return shmid; 
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
