@@ -2109,23 +2109,6 @@ impl Cage {
                                 }
                             }
 
-                            let newposition;
-                            //write to a file
-                            if let Ok(byteswritten) = fileobject.writeat(buf, count, position) {
-                                //move position forward by the number of bytes we've written
-                                normalfile_filedesc_obj.position = position + byteswritten;
-                                newposition = normalfile_filedesc_obj.position;
-                                if newposition > normalfile_inode_obj.size {
-                                    normalfile_inode_obj.size = newposition;
-                                    drop(inodeobj);
-                                    drop(fileobject);
-                                    log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
-                                } //update file size if necessary
-
-                                byteswritten as i32
-                            } else {
-                                0 //0 bytes written, but not an error value
-                                  // that can/should be passed to the user
                             // Write `count` bytes from `buf` to the file at `position` using
                             // `writeat` function, which returns the number of bytes written when
                             // successful, else panics.
