@@ -4692,6 +4692,10 @@ pub mod fs_tests {
         // normal rename
         assert_eq!(cage.rename_syscall("/tmp/generic", "/tmp/generic1"), 0);
 
+        // clean up
+        cage.close_syscall(creat_fd);
+
+        lindrustfinalize();
         return;
     }
 }
