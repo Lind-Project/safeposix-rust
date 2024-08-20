@@ -2680,7 +2680,7 @@ impl Cage {
                                 let slice = unsafe { std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) };
                                 buffer.extend_from_slice(slice);
                             }
-                            self._write_chr_file(&char_inode_obj, buffer.as_ptr(), buffer.len())
+                            self._write_chr_file(&char_inode_obj, buffer.len())
                         }
                         // The _write_chr_file function handles write operations for character device files (Inode::CharDev).
                         Inode::Socket(_) => {
