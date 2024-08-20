@@ -2815,12 +2815,53 @@ impl Cage {
     }
 
     //------------------------------------ACCESS SYSCALL------------------------------------
+    /// ### Description
+    ///
+    /// `access_syscall` checks the accessibility of the file specified by
+    /// `path` according to the given `amode`. The assumption while running this
+    /// command is that the current user owns the file.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `path` - A string slice that specifies the file path for which
+    ///   accessibility is to be checked.
+    /// * `amode` - A bitmask value specifying the accessibility check to be
+    ///   performed. It can be a combination of the following constants:
+    ///     * `R_OK` - Check for read permission.
+    ///     * `W_OK` - Check for write permission.
+    ///     * `X_OK` - Check for execute (search) permission.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0, indicating that the
+    /// requested access is allowed. On error, a negative errno is returned to
+    /// indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The file specified by `path` does not exist or the path is
+    ///   invalid.
+    /// * `EACCES` - The requested access would be denied to the file due to
+    ///   insufficient permissions.
+    ///
+    /// ### Panics
+    ///
+    /// * There are no known panics in this system call.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the access syscall man page [here](https://man7.org/linux/man-pages/man2/access.2.html).
 
     pub fn access_syscall(&self, path: &str, amode: u32) -> i32 {
         let truepath = normpath(convpath(path), self);
 
         //Walk the file tree to get inode from path
         if let Some(inodenum) = metawalk(truepath.as_path()) {
+            // BUG: We don't support F_OK as a valid amode flag, which when passed we need
+            // to check only whether the file exists or not
+
+            // will not panic since check for existence in table already happened in
+            // metawalk
             let inodeobj = FS_METADATA.inodetable.get(&inodenum).unwrap();
 
             //Get the mode bits if the type of the inode is sane
@@ -2835,13 +2876,19 @@ impl Cage {
 
             //Construct desired access bits (i.e. 0777) based on the amode parameter
             let mut newmode: u32 = 0;
+            // if we are checking for execute rights
             if amode & X_OK == X_OK {
+                // update newmode with S_IXUSR flags
                 newmode |= S_IXUSR;
             }
+            // if we are checking for write rights
             if amode & W_OK == W_OK {
+                // update newmode with S_IWUSR flags
                 newmode |= S_IWUSR;
             }
+            // if we are checking for read rights
             if amode & R_OK == R_OK {
+                // update newmode with S_IRUSR flags
                 newmode |= S_IRUSR;
             }
 
@@ -2857,6 +2904,7 @@ impl Cage {
                 )
             }
         } else {
+            // if incase the file isn't found
             syscall_error(
                 Errno::ENOENT,
                 "access",
@@ -4654,6 +4702,38 @@ impl Cage {
     }
 
     //------------------RENAME SYSCALL------------------
+    /// ### Description
+    ///
+    /// `rename_syscall` renames a file or directory specified by `oldpath` to
+    /// `newpath`.
+    ///
+    /// ### Arguments
+    ///
+    /// It accepts two parameters:
+    /// * `oldpath` - A string slice that specifies the current name and
+    ///   location of the file or directory.
+    /// * `newpath` - A string slice that specifies the new name and location
+    ///   for the file or directory.
+    ///
+    /// ### Returns
+    ///
+    /// For a successful call, the return value will be 0, indicating that the
+    /// rename operation was successful. On error, a negative errno is returned
+    /// to indicate the error.
+    ///
+    /// ### Errors
+    ///
+    /// * `ENOENT` - The `oldpath` or `newpath` is null, i.e. not provided.
+    /// * `EEXIST` - The `oldpath` does not exist.
+    /// * `EBUSY` - Cannot rename the root directory.
+    /// * `EOPNOTSUPP` - Cannot move the file or directory to another directory.
+    ///
+    /// ### Panics
+    ///
+    /// * There are no known panics in this function.
+    ///
+    /// For more detailed description of all the commands and return values,
+    /// refer to the rename syscall man page [here](https://man7.org/linux/man-pages/man2/rename.2.html).
 
     pub fn rename_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
         if oldpath.len() == 0 {
@@ -4676,7 +4756,12 @@ impl Cage {
                 // make sure file is not moved to another dir
                 // get inodenum for parent of new path
                 let (_, new_par_inodenum) = metawalkandparent(true_newpath.as_path());
+
+                // BUG: the rename according to the spec supports moving of files from one
+                // parent to another, so the below behavior is not as per spec
+
                 // check if old and new paths share parent
+                // if they don't, then that is not allowed
                 if new_par_inodenum != Some(parent_inodenum) {
                     return syscall_error(
                         Errno::EOPNOTSUPP,
@@ -4685,7 +4770,9 @@ impl Cage {
                     );
                 }
 
+                // get parent directory inode object
                 let pardir_inodeobj = FS_METADATA.inodetable.get_mut(&parent_inodenum).unwrap();
+
                 if let Inode::Dir(parent_dir) = &*pardir_inodeobj {
                     // add pair of new path and its inodenum to filename-inode dict
                     parent_dir.filename_to_inode_dict.insert(
@@ -4707,7 +4794,11 @@ impl Cage {
                             .unwrap()
                             .to_string(),
                     );
+
+                    // drop the ref to the parent dir inode object
                     drop(pardir_inodeobj);
+
+                    // log and update metadata
                     log_metadata(&FS_METADATA, parent_inodenum);
                 }
                 NET_METADATA.domsock_paths.insert(true_newpath);
