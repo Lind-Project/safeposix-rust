@@ -4,6 +4,7 @@
 mod fs_tests;
 mod ipc_tests;
 mod networking_tests;
+mod sys_tests;
 use rand::Rng;
 use std::net::{TcpListener, UdpSocket};
 
@@ -36,7 +37,15 @@ mod setup {
         set_panic_hook();
 
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently
-        let thelock = TESTMUTEX.lock().unwrap();
+        let thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
+            //if the lock is poisoned, we need to clear the poison and clean up references
+            // to the cage.
+            lindrustfinalize();
+            //clear the mutex poisoning.
+            TESTMUTEX.clear_poison();
+            //return the underlying guard.
+            e.into_inner()
+        });
 
         interface::RUSTPOSIX_TESTSUITE.store(true, interface::RustAtomicOrdering::Relaxed);
 

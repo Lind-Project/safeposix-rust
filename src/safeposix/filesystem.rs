@@ -50,6 +50,8 @@ pub enum Inode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct GenericInode {
     pub size: usize,
     pub uid: u32,
@@ -66,6 +68,8 @@ pub struct GenericInode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct DeviceInode {
     pub size: usize,
     pub uid: u32,
@@ -83,6 +87,8 @@ pub struct DeviceInode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct SocketInode {
     pub size: usize,
     pub uid: u32,
@@ -97,6 +103,8 @@ pub struct SocketInode {
 }
 
 #[derive(interface::SerdeSerialize, interface::SerdeDeserialize, Debug)]
+/// Refer [here](https://man7.org/linux/man-pages/man7/inode.7.html)
+/// for more information on the below fields.
 pub struct DirectoryInode {
     pub size: usize,
     pub uid: u32,
@@ -635,23 +643,4 @@ pub fn incref_root() {
     } else {
         panic!("Root directory inode was not a directory");
     }
-}
-
-pub fn decref_dir(cwd_container: &interface::RustPathBuf) {
-    if let Some(cwdinodenum) = metawalk(&cwd_container) {
-        if let Inode::Dir(ref mut cwddir) = *(FS_METADATA.inodetable.get_mut(&cwdinodenum).unwrap())
-        {
-            cwddir.refcount -= 1;
-
-            //if the directory has been removed but this cwd was the last open handle to it
-            if cwddir.refcount == 0 && cwddir.linkcount == 0 {
-                FS_METADATA.inodetable.remove(&cwdinodenum);
-            }
-        } else {
-            panic!("Cage had a cwd that was not a directory!");
-        }
-    } else {
-        panic!("Cage had a cwd which did not exist!");
-    } //we probably want to handle this case, maybe cwd should be an inode
-      // number?? Not urgent
 }
