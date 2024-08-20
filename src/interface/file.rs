@@ -223,6 +223,7 @@ impl EmulatedFile {
 
         Ok(total_bytes_written)
     }
+
     // Reads entire file into bytes
     pub fn readfile_to_new_bytes(&self) -> std::io::Result<Vec<u8>> {
         match &self.fobj {
