@@ -326,31 +326,42 @@ impl EmulatedPipe {
         iovcnt: i32,
         nonblocking: bool,
     ) -> i32 {
-        // unlikely but if we attempt to write 0 iovecs, return 0
+        // Return immediately if there are no iovecs to write.
         if iovcnt == 0 {
             return 0;
         }
-
-        let mut buf = Vec::new();
-        let mut length = 0;
-
-        // we're going to loop through the iovec array and combine the buffers into one
-        // Rust slice so that we can use the write_to_pipe function, recording the
-        // length this is hacky but is the best way to do this for now
-        for _iov in 0..iovcnt {
-            unsafe {
-                assert!(!ptr.is_null());
-                // lets convert this iovec into a Rust slice,
-                // and then extend our combined buffer
-                let iovec = *ptr;
-                let iovbuf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
-                buf.extend_from_slice(iovbuf);
-                length = length + iovec.iov_len
-            };
+    
+        // Unsafe block to access the iovecs.
+        let iovecs = unsafe { slice::from_raw_parts(ptr, iovcnt as usize) };
+        let mut total_bytes_written = 0;
+    
+        // Iterate through each iovec.
+        for iovec in iovecs {
+            let buf = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
+    
+            // Write the buffer to the pipe.
+            let current_write = self.write_to_pipe(buf.as_ptr(), buf.len(), nonblocking);
+    
+            // Handle successful write.
+            if current_write > 0 {
+                total_bytes_written += current_write as usize;
+            } else {
+                // Nested error handling.
+                if current_write == -(Errno::EPIPE as i32) {
+                    // Pipe is broken, return immediately.
+                    return -(Errno::EPIPE as i32);
+                } else if current_write == -(Errno::EAGAIN as i32) {
+                    // Handling EAGAIN depending on whether data was previously written.
+                    if total_bytes_written == 0 {
+                        return -(Errno::EAGAIN as i32); // No data written yet, return EAGAIN.
+                    } else {
+                        return total_bytes_written as i32; // Return amount of data written before EAGAIN occurred.
+                    }
+                }
+            }
         }
-
-        // now that we have a single buffer we can use the usual write to pipe function
-        self.write_to_pipe(buf.as_ptr(), length, nonblocking)
+        // Return the total number of bytes written.
+        total_bytes_written as i32
     }
 
     /// ### Description
