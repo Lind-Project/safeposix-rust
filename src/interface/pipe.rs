@@ -23,7 +23,8 @@
 use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
 
-use std::sync::Mutex;
+// use std::sync::Mutex;
+use parking_lot::Mutex;
 use ringbuf::{Consumer, Producer, RingBuffer};
 use std::cmp::min;
 use std::fmt;
@@ -159,8 +160,8 @@ impl EmulatedPipe {
     ///
     /// True if descriptor is ready for reading, false if it will block
     pub fn check_select_read(&self) -> bool {
-        // let read_end = self.read_end.lock().unwrap();
-        let tuple = self.ringbuf.lock().unwrap();
+        // let read_end = self.read_end.lock();
+        let tuple = self.ringbuf.lock();
         let read_end = &tuple.1;
         let pipe_space = read_end.len();
 
@@ -177,8 +178,8 @@ impl EmulatedPipe {
     ///
     /// True if descriptor is ready for writing, false if it will block
     pub fn check_select_write(&self) -> bool {
-        // let write_end = self.write_end.lock().unwrap();
-        let tuple = self.ringbuf.lock().unwrap();
+        // let write_end = self.write_end.lock();
+        let tuple = self.ringbuf.lock();
         let write_end = &tuple.0;
         let pipe_space = write_end.remaining();
 
@@ -230,7 +231,7 @@ impl EmulatedPipe {
             slice::from_raw_parts(ptr, length)
         };
 
-        // let mut write_end = self.write_end.lock().unwrap();
+        // let mut write_end = self.write_end.lock();
 
         // let pipe_space = write_end.remaining();
         // if nonblocking && (pipe_space == 0) {
@@ -250,7 +251,7 @@ impl EmulatedPipe {
 
             if !self.writeflag.load(Ordering::Relaxed) { continue; }
 
-            let mut tuple = self.ringbuf.lock().unwrap();
+            let mut tuple = self.ringbuf.lock();
             let write_end = &mut tuple.0;
             let mut remaining = write_end.remaining();
 
@@ -384,7 +385,7 @@ impl EmulatedPipe {
             slice::from_raw_parts_mut(ptr, length)
         };
 
-        // let mut read_end = self.read_end.lock().unwrap();
+        // let mut read_end = self.read_end.lock();
         // let mut pipe_space = read_end.len();
         // if nonblocking && (pipe_space == 0) {
         //     if self.eof.load(Ordering::SeqCst) {
@@ -411,7 +412,7 @@ impl EmulatedPipe {
 
             if !self.readflag.load(Ordering::Relaxed) { continue; }
 
-            let mut tuple = self.ringbuf.lock().unwrap();
+            let mut tuple = self.ringbuf.lock();
             let read_end = &mut tuple.1;
 
             // we return EAGAIN here so we can go back to check if this cage has been sent a
