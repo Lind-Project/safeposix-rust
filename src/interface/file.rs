@@ -212,17 +212,14 @@ impl EmulatedFile {
             // checks if the file object (fobj) exists.
             let mut file = f.lock();
             // Seek to the specified offset from the beginning of the file
-            file.seek(SeekFrom::Start(offset as u64))?; // moves the file pointer to the desired starting position (offset) from the
-                                                        // beginning of the file.
+            file.seek(SeekFrom::Start(offset as u64))?; 
+            // moves the file pointer to the desired starting position (offset) from the
+            // beginning of the file.
 
             // Use write_vectored for efficient writing from multiple buffers
-            total_bytes_written = file.write_vectored(bufs)?; //It performs a
-                                                              // vectored write
-                                                              // operation,
-                                                              // which means it
-                                                              // writes data to
-                                                              // the file from
-                                                              // multiple buffers
+            total_bytes_written = file.write_vectored(bufs)?; 
+            //It performs a vectored write operation,which means it
+            // writes data to the file from multiple buffers
         }
         // Update recorded filesize if we've written past the previous filesize
         if offset + total_bytes_written > self.filesize {

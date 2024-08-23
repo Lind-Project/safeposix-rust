@@ -2683,10 +2683,11 @@ impl Cage {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             // The inode object retrieved is of type File. We get a mutable
                             // reference to the actual inode data.
-                            let position = normalfile_filedesc_obj.position; // Get the current write position from the file descriptor object
+                            let position = normalfile_filedesc_obj.position; 
+                            // Get the current write position from the file descriptor object
                             let filesize = normalfile_inode_obj.size; // Get the file size
-                            let blankbytecount = position as isize - filesize as isize; // Calculate the difference between the required and desired file
-                                                                                        // position
+                            let blankbytecount = position as isize - filesize as isize; 
+                            // Calculate the difference between the required and desired file position
 
                             // Retrieve the file object from the file object table
                             let mut fileobject = FILEOBJECTTABLE
