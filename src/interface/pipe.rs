@@ -332,7 +332,7 @@ impl EmulatedPipe {
         iovcnt: i32,
         nonblocking: bool,
     ) -> i32 {
-        // Return immediately if there are no iovecs to write.
+        // Return 0 if there are no iovecs to write.
         if iovcnt == 0 {
             return 0;
         }
@@ -359,13 +359,11 @@ impl EmulatedPipe {
                 } else if current_write == -(Errno::EAGAIN as i32) {
                     // Handling EAGAIN depending on whether data was previously written.
                     if total_bytes_written == 0 {
-                        return -(Errno::EAGAIN as i32); // No data written yet,
-                                                        // return EAGAIN.
+                        return -(Errno::EAGAIN as i32); 
+                        // No data written yet,return EAGAIN.
                     } else {
-                        return total_bytes_written as i32; // Return amount of
-                                                           // data written
-                                                           // before EAGAIN
-                                                           // occurred.
+                        return total_bytes_written as i32; 
+                        // Return amount of data written before EAGAIN occurred.
                     }
                 }
             }
