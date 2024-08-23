@@ -2464,37 +2464,47 @@ impl Cage {
     /// ### Description
     /// This function writes data to a file descriptor from multiple buffers.
     /// Currently, it supports writing to sockets and pipes.
-    /// The function first retrieves the file descriptor object associated with the provided file descriptor
-    /// and then matches the file descriptor type and calls the appropriate write function based on the type.
-    /// * `Sockets`: The function writes data to the connected socket, handling both TCP and UDP sockets.
-    ///     * Checks if the socket is connected (either fully connected or connected for write-only).
-    ///     * If connected, calls the underlying `writev` function on the raw socket.
+    /// The function first retrieves the file descriptor object associated with
+    /// the provided file descriptor and then matches the file descriptor
+    /// type and calls the appropriate write function based on the type.
+    /// * `Sockets`: The function writes data to the connected socket, handling
+    ///   both TCP and UDP sockets.
+    ///     * Checks if the socket is connected (either fully connected or
+    ///       connected for write-only).
+    ///     * If connected, calls the underlying `writev` function on the raw
+    ///       socket.
     ///     * Handles errors returned by the underlying `writev` function.
-    /// * `Pipes`: The function writes data to the pipe, supporting non-blocking writes.
+    /// * `Pipes`: The function writes data to the pipe, supporting non-blocking
+    ///   writes.
     ///     * Checks if the pipe is open for writing.
     ///     * Handles non-blocking writes.
     ///     * Triggers `SIGPIPE` if the pipe is closed on the other end.
     ///
     /// ### Function Arguments
     /// * `fd`: The file descriptor to write to.
-    /// * `iovec`: A pointer to an array of `IovecStruct` objects representing the data buffers to write.
-    /// The IovecStruct structure enables efficient writing of data from multiple buffers to a file 
-    /// descriptor in a single operation using the writev system call, potentially avoiding unnecessary data copying.
+    /// * `iovec`: A pointer to an array of `IovecStruct` objects representing
+    ///   the data buffers to write.
+    /// The IovecStruct structure enables efficient writing of data from
+    /// multiple buffers to a file descriptor in a single operation using
+    /// the writev system call, potentially avoiding unnecessary data copying.
     /// * `iovcnt`: The number of `IovecStruct` objects in the array.
     ///
     /// ### Returns
     /// * The number of bytes written on success.
-    /// * A negative value on error, with the specific error code set in `errno`.
+    /// * A negative value on error, with the specific error code set in
+    ///   `errno`.
     ///
     /// ### Errors
     /// * `EBADF(9)`: The file descriptor is invalid.
     /// * `ENOTCONN(107)`: The socket is not connected (for sockets).
-    /// * `EOPNOTSUPP(95)`: The system call is not supported for the given socket protocol.
+    /// * `EOPNOTSUPP(95)`: The system call is not supported for the given
+    ///   socket protocol.
     /// * `EAGAIN(11)`: There is no data available right now (for pipes).
     /// * `EPIPE(32)`: The pipe has been closed on the other end (for pipes).
-    /// 
+    ///
     /// ### Panics
-    /// * If an unknown error code is returned by the underlying socket writev function.
+    /// * If an unknown error code is returned by the underlying socket writev
+    ///   function.
     ///  [writev(2)](https://linux.die.net/man/2/writev)
     pub fn writev_syscall(
         &self,
@@ -2514,7 +2524,7 @@ impl Cage {
                     match sockhandle.domain {
                         AF_INET | AF_INET6 => match sockhandle.protocol {
                             IPPROTO_TCP => {
-                               // We need to be either fully connected or connected for write-only.
+                                // We need to be either fully connected or connected for write-only.
                                 if (sockhandle.state != ConnState::CONNECTED)
                                     && (sockhandle.state != ConnState::CONNWRONLY)
                                 {
@@ -2561,7 +2571,8 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // We need to be either fully connected or connected for write-only.
+                                    // We need to be either fully connected or connected for
+                                    // write-only.
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -2624,8 +2635,9 @@ impl Cage {
 
                     let mut nonblocking = false;
                     // Check if the O_NONBLOCK flag is set in the pipe's flags.
-                    // If it is, enable non-blocking mode for the write operation. 
-                    //Non-blocking I/O allows a process to continue doing other tasks while waiting for I/O operations to complete. 
+                    // If it is, enable non-blocking mode for the write operation.
+                    //Non-blocking I/O allows a process to continue doing other tasks while waiting
+                    // for I/O operations to complete.
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
@@ -2643,7 +2655,7 @@ impl Cage {
                 Stream(_stream_filedesc_obj) => {
                     // Convert the iovec array to a single contiguous slice of bytes
                     let iovecslice = interface::concat_iovec_to_slice(iovec, iovcnt);
-        
+
                     // Log the data from the slice. Handle the Result from log_from_slice
                     match interface::log_from_slice(fd, &iovecslice) {
                         Ok(bytes_written) => bytes_written,
@@ -2669,19 +2681,24 @@ impl Cage {
 
                     match *inodeobj {
                         Inode::File(ref mut normalfile_inode_obj) => {
-                            // The inode object retrieved is of type File. We get a mutable reference to the actual inode data.
+                            // The inode object retrieved is of type File. We get a mutable
+                            // reference to the actual inode data.
                             let position = normalfile_filedesc_obj.position; // Get the current write position from the file descriptor object
                             let filesize = normalfile_inode_obj.size; // Get the file size
-                            let blankbytecount = position as isize - filesize as isize; // Calculate the difference between the required and desired file position
+                            let blankbytecount = position as isize - filesize as isize; // Calculate the difference between the required and desired file
+                                                                                        // position
 
                             // Retrieve the file object from the file object table
                             let mut fileobject = FILEOBJECTTABLE
                                 .get_mut(&normalfile_filedesc_obj.inode)
                                 .unwrap(); // Panic if the inode number does not exist
 
-                            // Pad the file with blank bytes if we are at a position past the end of the file
+                            // Pad the file with blank bytes if we are at a position past the end of
+                            // the file
                             if blankbytecount > 0 {
-                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                if let Ok(byteswritten) =
+                                    fileobject.zerofill_at(filesize, blankbytecount as usize)
+                                {
                                     if byteswritten != blankbytecount as usize {
                                         panic!("Write of blank bytes for writev failed!");
                                     }
@@ -2694,7 +2711,8 @@ impl Cage {
                             let iovs = interface::iovec_to_ioslice(iovec, iovcnt);
 
                             // Write to the file using the vectored IO method
-                            if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position) {
+                            if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position)
+                            {
                                 // Move position forward by the number of bytes we've written
                                 normalfile_filedesc_obj.position = position + byteswritten as usize;
                                 let newposition = normalfile_filedesc_obj.position;
@@ -2714,16 +2732,23 @@ impl Cage {
                         }
                         // Handle character device file
                         Inode::CharDev(ref char_inode_obj) => {
-                            let iovecs = unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
+                            let iovecs =
+                                unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
                             let total_len = iovecs.iter().map(|iov| iov.iov_len).sum::<usize>();
                             let mut buffer = Vec::with_capacity(total_len);
                             for iov in iovecs {
-                                let slice = unsafe { std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) };
+                                let slice = unsafe {
+                                    std::slice::from_raw_parts(
+                                        iov.iov_base as *const u8,
+                                        iov.iov_len,
+                                    )
+                                };
                                 buffer.extend_from_slice(slice);
                             }
                             self._write_chr_file(&char_inode_obj, buffer.len())
                         }
-                        // The _write_chr_file function handles write operations for character device files (Inode::CharDev).
+                        // The _write_chr_file function handles write operations for character
+                        // device files (Inode::CharDev).
                         Inode::Socket(_) => {
                             panic!("writev(): Socket inode found on a filedesc fd")
                         }
@@ -5825,7 +5850,8 @@ impl Cage {
     ///
     /// ### Panics
     ///
-    /// This function panics if there is no memory segment associated with the specified `shmaddr`
+    /// This function panics if there is no memory segment associated with the
+    /// specified `shmaddr`
     ///
     /// For more information please refer - [https://man7.org/linux/man-pages/man3/shmdt.3p.html]
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
@@ -5849,11 +5875,13 @@ impl Cage {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     // Get the mutex for the memory segment
                     let segment = occupied.get_mut();
-                    // Loop through each semaphore that the segment hold and remove it from the semaphore table
+                    // Loop through each semaphore that the segment hold and remove it from the
+                    // semaphore table
                     for offset in segment.semaphor_offsets.iter() {
                         self.sem_table.remove(&(shmaddr as u32 + *offset));
                     }
-                    // Use the unmap helper function to unmap the shmaddr from the current cage object
+                    // Use the unmap helper function to unmap the shmaddr from the current cage
+                    // object
                     segment.unmap_shm(shmaddr, self.cageid);
 
                     // Check if segment has been removed previously by the `shmctl_syscall`
@@ -5865,16 +5893,16 @@ impl Cage {
                     // Remove the reverse mapping from the mappings of the current cage object
                     rev_shm.swap_remove(index);
 
-                    // If segment has been removed previously 
-                    // and has no processess attached to it 
+                    // If segment has been removed previously
+                    // and has no processess attached to it
                     // we delete the memory segment from the shmtable
                     if rm {
                         let key = segment.key;
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
-                    
-                    return shmid; 
+
+                    return shmid;
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");

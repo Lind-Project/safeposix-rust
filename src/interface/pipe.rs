@@ -290,32 +290,38 @@ impl EmulatedPipe {
 
     /// ### Description
     ///
-    /// `write_vectored_to_pipe` writes data from a set of iovec buffers to a pipe, handling multiple
-    /// iovec structures in a single operation. This function ensures the complete writing of data from
-    /// the provided buffers or returns an error code in case of failure.
+    /// `write_vectored_to_pipe` writes data from a set of iovec buffers to a
+    /// pipe, handling multiple iovec structures in a single operation. This
+    /// function ensures the complete writing of data from the provided
+    /// buffers or returns an error code in case of failure.
     ///
     /// ### Arguments
     ///
-    /// * `ptr` - A pointer to an array of `IovecStruct` which contains the buffers (iovecs) that will
-    ///   be written to the pipe.
+    /// * `ptr` - A pointer to an array of `IovecStruct` which contains the
+    ///   buffers (iovecs) that will be written to the pipe.
     /// * `iovcnt` - The number of `IovecStruct` buffers to be written.
-    /// * `nonblocking` - A boolean flag indicating whether the write operation should be non-blocking.
+    /// * `nonblocking` - A boolean flag indicating whether the write operation
+    ///   should be non-blocking.
     ///
     /// ### Returns
     ///
-    /// Upon success, the function returns the total number of bytes written. If no bytes could be written 
-    /// due to an empty pipe (EAGAIN), it returns an error code. For other error conditions, such as a broken pipe, 
-    /// an appropriate error code is returned.
+    /// Upon success, the function returns the total number of bytes written. If
+    /// no bytes could be written due to an empty pipe (EAGAIN), it returns
+    /// an error code. For other error conditions, such as a broken pipe, an
+    /// appropriate error code is returned.
     ///
     /// ### Errors
     ///
-    /// * `EPIPE` - Indicates a broken pipe error, where the pipe no longer has an open reading end.
-    /// * `EAGAIN` - If the pipe is non-blocking and cannot accept data at the moment, this error is returned.
-    ///   If no data was written at all, `EAGAIN` is returned immediately.
+    /// * `EPIPE` - Indicates a broken pipe error, where the pipe no longer has
+    ///   an open reading end.
+    /// * `EAGAIN` - If the pipe is non-blocking and cannot accept data at the
+    ///   moment, this error is returned. If no data was written at all,
+    ///   `EAGAIN` is returned immediately.
     ///
     /// ### Panics
     ///
-    /// A panic occurs if the provided `ptr` is null when dereferencing the iovecs.
+    /// A panic occurs if the provided `ptr` is null when dereferencing the
+    /// iovecs.
     ///
     /// To learn more about pipes and the writev syscall
     /// [pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)
@@ -330,18 +336,18 @@ impl EmulatedPipe {
         if iovcnt == 0 {
             return 0;
         }
-    
+
         // Unsafe block to access the iovecs.
         let iovecs = unsafe { slice::from_raw_parts(ptr, iovcnt as usize) };
         let mut total_bytes_written = 0;
-    
+
         // Iterate through each iovec.
         for iovec in iovecs {
             let buf = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
-    
+
             // Write the buffer to the pipe.
             let current_write = self.write_to_pipe(buf.as_ptr(), buf.len(), nonblocking);
-    
+
             // Handle successful write.
             if current_write > 0 {
                 total_bytes_written += current_write as usize;
@@ -353,9 +359,13 @@ impl EmulatedPipe {
                 } else if current_write == -(Errno::EAGAIN as i32) {
                     // Handling EAGAIN depending on whether data was previously written.
                     if total_bytes_written == 0 {
-                        return -(Errno::EAGAIN as i32); // No data written yet, return EAGAIN.
+                        return -(Errno::EAGAIN as i32); // No data written yet,
+                                                        // return EAGAIN.
                     } else {
-                        return total_bytes_written as i32; // Return amount of data written before EAGAIN occurred.
+                        return total_bytes_written as i32; // Return amount of
+                                                           // data written
+                                                           // before EAGAIN
+                                                           // occurred.
                     }
                 }
             }

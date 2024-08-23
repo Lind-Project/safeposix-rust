@@ -352,13 +352,14 @@ pub mod ipc_tests {
         lindrustfinalize();
     }
 
-    // support for retrying writes in case the system doesn't write all bytes at once 
+    // support for retrying writes in case the system doesn't write all bytes at
+    // once
     #[test]
     pub fn ut_lind_ipc_writev2() {
         // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-    
+
         let cage = interface::cagetable_getref(1);
         let mut socketpair = interface::SockPair::default();
         assert_eq!(
@@ -366,14 +367,14 @@ pub mod ipc_tests {
             0
         );
         let cage2 = cage.clone();
-    
+
         let thread = interface::helper_thread(move || {
             let mut buf = sizecbuf(10);
             cage2.recv_syscall(socketpair.sock2, buf.as_mut_ptr(), 10, 0);
             assert_eq!(cbuf2str(&buf), "test\0\0\0\0\0\0");
-    
+
             interface::sleep(interface::RustDuration::from_millis(30));
-    
+
             let iovec: [interface::IovecStruct; 3] = [
                 interface::IovecStruct {
                     iov_base: str2cbuf(&"A".repeat(100)) as *mut c_void,
@@ -388,37 +389,42 @@ pub mod ipc_tests {
                     iov_len: 100,
                 },
             ];
-    
+
             let mut total_bytes_written = 0;
             while total_bytes_written < 300 {
                 let bytes_written = cage2.writev_syscall(socketpair.sock2, iovec.as_ptr(), 3);
                 assert!(bytes_written >= 0, "writev_syscall returned an error");
                 total_bytes_written += bytes_written as usize;
             }
-    
+
             assert_eq!(total_bytes_written, 300);
         });
-    
+
         let iovec2: [interface::IovecStruct; 1] = [interface::IovecStruct {
             iov_base: str2cbuf("test") as *mut c_void,
             iov_len: 4,
         }];
         assert_eq!(cage.writev_syscall(socketpair.sock1, iovec2.as_ptr(), 1), 4);
-    
+
         let mut buf2 = sizecbuf(300);
         let mut total_bytes_read = 0;
         while total_bytes_read < 300 {
-            let bytes_read = cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 300 - total_bytes_read, 0);
+            let bytes_read = cage.recv_syscall(
+                socketpair.sock1,
+                buf2.as_mut_ptr(),
+                300 - total_bytes_read,
+                0,
+            );
             assert!(bytes_read >= 0, "recv_syscall returned an error");
             total_bytes_read += bytes_read as usize;
         }
-    
+
         assert_eq!(total_bytes_read, 300);
         thread.join().unwrap();
-    
+
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
         assert_eq!(cage.close_syscall(socketpair.sock2), 0);
-    
+
         assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
         lindrustfinalize();
     }

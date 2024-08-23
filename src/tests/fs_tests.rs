@@ -6,10 +6,10 @@ pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use interface::IovecStruct;
     use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use interface::IovecStruct;
 
     #[test]
     pub fn ut_lind_fs_simple() {
@@ -4726,7 +4726,8 @@ pub mod fs_tests {
         let mut buffer = vec![0u8; data.len()];
         let bytes_read = cage.recv_syscall(socketpair.sock2, buffer.as_mut_ptr(), buffer.len(), 0);
         assert_eq!(bytes_read, data.len() as i32);
-        // Verify that the data received from the second socket matches the original data.
+        // Verify that the data received from the second socket matches the original
+        // data.
         assert_eq!(buffer, data);
         // Close both sockets.
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
