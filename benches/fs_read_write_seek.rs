@@ -47,11 +47,17 @@ pub fn run_benchmark(c: &mut Criterion) {
 
     // Iterate for different buffer sizes...
     for buflen in [1, 64, 1024, 65536].iter() {
-        let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+        let fd = cage.open_syscall("foo", O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
 
         let deststring = tests::str2cbuf(
             &String::from_utf8(vec![b'X'; *buflen]).expect("error building string"),
         );
+
+        // The size of the buffer and the amount we expect to read and write.
+        // I need to type convert this because it's a usize by default.
+        // I'm lazily converting with as here because it's not feasible to
+        // test values where usize would overflow this.
+        let expected_retval = *buflen as i32;
 
         let read_buffer = tests::sizecbuf(*buflen).as_mut_ptr();
         // Let's see how fast various file system calls are
@@ -60,10 +66,10 @@ pub fn run_benchmark(c: &mut Criterion) {
             buflen,
             |b, buflen| {
                 b.iter(|| {
-                    let _ = cage.write_syscall(fd, deststring, *buflen);
-                    cage.lseek_syscall(fd, 0, SEEK_SET);
-                    cage.read_syscall(fd, read_buffer, *buflen);
-                    cage.lseek_syscall(fd, 0, SEEK_SET);
+                    assert_eq!(cage.write_syscall(fd, deststring, *buflen), expected_retval);
+                    assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
+                    assert_eq!(cage.read_syscall(fd, read_buffer, *buflen), expected_retval);
+                    assert_eq!(cage.lseek_syscall(fd, 0, SEEK_SET), 0);
                 })
             },
         );
@@ -83,7 +89,7 @@ pub fn run_benchmark(c: &mut Criterion) {
         let path = c_str.into_raw() as *const u8;
 
         unsafe {
-            fd = libc::open(path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXA);
+            fd = libc::open(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
         }
 
         let deststring = tests::str2cbuf(
@@ -92,16 +98,30 @@ pub fn run_benchmark(c: &mut Criterion) {
 
         let read_buffer = tests::sizecbuf(*buflen).as_mut_ptr();
 
+        // The size of the buffer and the amount we expect to read and write.
+        // I need to type convert this because it's a usize by default.
+        // I'm lazily converting with as here because it's not feasible to
+        // test values where usize would overflow this.
+        // NOTE: This has a different type than Lind, which is i32.  I think
+        // this is likely okay.
+        let expected_retval = *buflen as isize;
+
         // For comparison let's time the native OS...
         group.bench_with_input(
             BenchmarkId::new("TF03:Native write+read+lseek", buflen),
             buflen,
             |b, buflen| {
                 b.iter(|| unsafe {
-                    let _ = libc::write(fd, deststring as *const c_void, *buflen);
-                    libc::lseek(fd, 0, SEEK_SET);
-                    libc::read(fd, read_buffer as *mut c_void, *buflen);
-                    libc::lseek(fd, 0, SEEK_SET);
+                    assert_eq!(
+                        libc::write(fd, deststring as *const c_void, *buflen),
+                        expected_retval
+                    );
+                    assert_eq!(libc::lseek(fd, 0, SEEK_SET), 0);
+                    assert_eq!(
+                        libc::read(fd, read_buffer as *mut c_void, *buflen),
+                        expected_retval
+                    );
+                    assert_eq!(libc::lseek(fd, 0, SEEK_SET), 0);
                 })
             },
         );
@@ -118,7 +138,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     rustposix::safeposix::dispatcher::lindrustfinalize();
 }
 
-criterion_group!(name=benches; 
+criterion_group!(name=benches;
                  // Add the global settings here so we don't type it everywhere
                  config=global_criterion_settings::get_criterion(); 
                  targets=run_benchmark);
