@@ -2463,23 +2463,40 @@ impl Cage {
     ///
     /// ### Description
     /// This function writes data to a file descriptor from multiple buffers.
-    /// Currently, it supports writing to sockets and pipes.
+    /// It supports writing to sockets, pipes, streams and files.
     /// The function first retrieves the file descriptor object associated with
     /// the provided file descriptor and then matches the file descriptor
     /// type and calls the appropriate write function based on the type.
-    /// * `Sockets`: The function writes data to the connected socket, handling
+    /// #### Sockets: 
+    /// The function writes data to the connected socket, handling
     ///   both TCP and UDP sockets.
     ///     * Checks if the socket is connected (either fully connected or
     ///       connected for write-only).
     ///     * If connected, calls the underlying `writev` function on the raw
     ///       socket.
     ///     * Handles errors returned by the underlying `writev` function.
-    /// * `Pipes`: The function writes data to the pipe, supporting non-blocking
+    /// #### Pipes: 
+    /// The function writes data to the pipe, supporting non-blocking
     ///   writes.
     ///     * Checks if the pipe is open for writing.
     ///     * Handles non-blocking writes.
     ///     * Triggers `SIGPIPE` if the pipe is closed on the other end.
     ///
+    /// #### Streams:
+    /// The function supports logging data written to a stream.
+    /// * Concatenates the multiple buffers (`iovec`) into a single contiguous slice.
+    /// * Calls `log_from_slice` to write the data and logs the result.
+    /// * Returns the number of bytes successfully written.
+    ///
+    /// #### Files:
+    /// The function writes data to regular files using vectored I/O.
+    /// * Checks if the file is open for writing.
+    /// * Retrieves the associated inode and ensures the write position is valid.
+    /// * Handles writing past the end of the file by padding with blank bytes if necessary.
+    /// * Updates the file size if the write extends the file.
+    /// * Writes data using the vectored I/O method and returns the number of bytes written.
+    /// * Triggers `EISDIR` if an attempt is made to write to a directory.
+    /// 
     /// ### Function Arguments
     /// * `fd`: The file descriptor to write to.
     /// * `iovec`: A pointer to an array of `IovecStruct` objects representing
@@ -2501,9 +2518,11 @@ impl Cage {
     ///   socket protocol.
     /// * `EAGAIN(11)`: There is no data available right now (for pipes).
     /// * `EPIPE(32)`: The pipe has been closed on the other end (for pipes).
-    ///
+    /// * `EISDIR(21)`: The target file descriptor points to a directory (for files).
+    /// 
     /// ### Panics
     /// * If an unknown error code is returned by the underlying socket writev
+    /// * If the inode number does not exist in the file system metadata table.
     ///   function.
     ///  [writev(2)](https://linux.die.net/man/2/writev)
     pub fn writev_syscall(
