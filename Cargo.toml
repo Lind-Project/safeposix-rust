@@ -25,6 +25,7 @@ dashmap = { version = "5.1", features=["serde"] }
 parking_lot = "0.12"
 rand = "0.8.4"
 lazy_static = "1.4.0"
+spin = "0.9.8"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"]}
