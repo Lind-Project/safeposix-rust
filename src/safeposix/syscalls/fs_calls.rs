@@ -2459,7 +2459,43 @@ impl Cage {
     }
 
     //------------------------------------WRITEV SYSCALL------------------------------------
-
+    /// ## `writev_syscall`
+    ///
+    /// ### Description
+    /// This function writes data to a file descriptor from multiple buffers.
+    /// Currently, it supports writing to sockets and pipes.
+    /// The function first retrieves the file descriptor object associated with the provided file descriptor
+    /// and then matches the file descriptor type and calls the appropriate write function based on the type.
+    /// * `Sockets`: The function writes data to the connected socket, handling both TCP and UDP sockets.
+    ///     * Checks if the socket is connected (either fully connected or connected for write-only).
+    ///     * If connected, calls the underlying `writev` function on the raw socket.
+    ///     * Handles errors returned by the underlying `writev` function.
+    /// * `Pipes`: The function writes data to the pipe, supporting non-blocking writes.
+    ///     * Checks if the pipe is open for writing.
+    ///     * Handles non-blocking writes.
+    ///     * Triggers `SIGPIPE` if the pipe is closed on the other end.
+    ///
+    /// ### Function Arguments
+    /// * `fd`: The file descriptor to write to.
+    /// * `iovec`: A pointer to an array of `IovecStruct` objects representing the data buffers to write.
+    /// The IovecStruct structure enables efficient writing of data from multiple buffers to a file 
+    /// descriptor in a single operation using the writev system call, potentially avoiding unnecessary data copying.
+    /// * `iovcnt`: The number of `IovecStruct` objects in the array.
+    ///
+    /// ### Returns
+    /// * The number of bytes written on success.
+    /// * A negative value on error, with the specific error code set in `errno`.
+    ///
+    /// ### Errors
+    /// * `EBADF(9)`: The file descriptor is invalid.
+    /// * `ENOTCONN(107)`: The socket is not connected (for sockets).
+    /// * `EOPNOTSUPP(95)`: The system call is not supported for the given socket protocol.
+    /// * `EAGAIN(11)`: There is no data available right now (for pipes).
+    /// * `EPIPE(32)`: The pipe has been closed on the other end (for pipes).
+    /// 
+    /// ### Panics
+    /// * If an unknown error code is returned by the underlying socket writev function.
+    ///  [writev(2)](https://linux.die.net/man/2/writev)
     pub fn writev_syscall(
         &self,
         fd: i32,
@@ -2474,12 +2510,11 @@ impl Cage {
                 Socket(socket_filedesc_obj) => {
                     let sock_tmp = socket_filedesc_obj.handle.clone();
                     let sockhandle = sock_tmp.write();
-
+                    // Check the domain of the socket (IPv4 or IPv6)
                     match sockhandle.domain {
                         AF_INET | AF_INET6 => match sockhandle.protocol {
                             IPPROTO_TCP => {
-                                // to be able to send here we either need to be fully connected, or
-                                // connected for write only
+                               // We need to be either fully connected or connected for write-only.
                                 if (sockhandle.state != ConnState::CONNECTED)
                                     && (sockhandle.state != ConnState::CONNWRONLY)
                                 {
@@ -2497,6 +2532,7 @@ impl Cage {
                                     .as_ref()
                                     .unwrap()
                                     .writev(iovec, iovcnt);
+                                // Handle errors
                                 if retval < 0 {
                                     match Errno::from_discriminant(interface::get_errno()) {
                                         Ok(i) => {
@@ -2525,8 +2561,7 @@ impl Cage {
                         AF_UNIX => {
                             match sockhandle.protocol {
                                 IPPROTO_TCP => {
-                                    // to be able to send here we either need to be fully connected,
-                                    // or connected for write only
+                                    // We need to be either fully connected or connected for write-only.
                                     if (sockhandle.state != ConnState::CONNECTED)
                                         && (sockhandle.state != ConnState::CONNWRONLY)
                                     {
@@ -2542,6 +2577,7 @@ impl Cage {
                                     if socket_filedesc_obj.flags & O_NONBLOCK != 0 {
                                         nonblocking = true;
                                     }
+                                    // Write data to the socket pipe.
                                     let retval = match sockinfo.sendpipe.as_ref() {
                                         Some(sendpipe) => sendpipe.write_vectored_to_pipe(
                                             iovec,
@@ -2577,6 +2613,7 @@ impl Cage {
                     }
                 }
                 Pipe(pipe_filedesc_obj) => {
+                    // Check if the pipe is open for writing.
                     if is_rdonly(pipe_filedesc_obj.flags) {
                         return syscall_error(
                             Errno::EBADF,
@@ -2586,10 +2623,13 @@ impl Cage {
                     }
 
                     let mut nonblocking = false;
+                    // Check if the O_NONBLOCK flag is set in the pipe's flags.
+                    // If it is, enable non-blocking mode for the write operation. 
+                    //Non-blocking I/O allows a process to continue doing other tasks while waiting for I/O operations to complete. 
                     if pipe_filedesc_obj.flags & O_NONBLOCK != 0 {
                         nonblocking = true;
                     }
-
+                    // Write to the pipe using vectored I/O.
                     let retval =
                         pipe_filedesc_obj
                             .pipe
@@ -2600,8 +2640,102 @@ impl Cage {
                     } // Trigger SIGPIPE
                     retval
                 }
+                Stream(_stream_filedesc_obj) => {
+                    // Convert the iovec array to a single contiguous slice of bytes
+                    let iovecslice = interface::concat_iovec_to_slice(iovec, iovcnt);
+        
+                    // Log the data from the slice. Handle the Result from log_from_slice
+                    match interface::log_from_slice(fd, &iovecslice) {
+                        Ok(bytes_written) => bytes_written,
+                        Err(err_msg) => syscall_error(Errno::EIO, "writev", &err_msg),
+                    }
+                }
+                File(ref mut normalfile_filedesc_obj) => {
+                    // Check if the file is open for writing
+                    if is_rdonly(normalfile_filedesc_obj.flags) {
+                        // Return error if the file is read-only
+                        return syscall_error(
+                            Errno::EBADF,
+                            "writev",
+                            "specified file not open for writing",
+                        );
+                    }
+
+                    // Retrieve the inode object for the file
+                    let mut inodeobj = FS_METADATA
+                        .inodetable
+                        .get_mut(&normalfile_filedesc_obj.inode)
+                        .unwrap(); // Panic if the inode number does not exist
+
+                    match *inodeobj {
+                        Inode::File(ref mut normalfile_inode_obj) => {
+                            // The inode object retrieved is of type File. We get a mutable reference to the actual inode data.
+                            let position = normalfile_filedesc_obj.position; // Get the current write position from the file descriptor object
+                            let filesize = normalfile_inode_obj.size; // Get the file size
+                            let blankbytecount = position as isize - filesize as isize; // Calculate the difference between the required and desired file position
+
+                            // Retrieve the file object from the file object table
+                            let mut fileobject = FILEOBJECTTABLE
+                                .get_mut(&normalfile_filedesc_obj.inode)
+                                .unwrap(); // Panic if the inode number does not exist
+
+                            // Pad the file with blank bytes if we are at a position past the end of the file
+                            if blankbytecount > 0 {
+                                if let Ok(byteswritten) = fileobject.zerofill_at(filesize, blankbytecount as usize) {
+                                    if byteswritten != blankbytecount as usize {
+                                        panic!("Write of blank bytes for writev failed!");
+                                    }
+                                } else {
+                                    panic!("Write of blank bytes for writev failed!");
+                                }
+                            }
+
+                            // Create IoSlice objects from the raw iovec pointer
+                            let iovs = interface::iovec_to_ioslice(iovec, iovcnt);
+
+                            // Write to the file using the vectored IO method
+                            if let Ok(byteswritten) = fileobject.write_vectored_at(&iovs, position) {
+                                // Move position forward by the number of bytes we've written
+                                normalfile_filedesc_obj.position = position + byteswritten as usize;
+                                let newposition = normalfile_filedesc_obj.position;
+
+                                // Update file size if necessary
+                                if newposition > normalfile_inode_obj.size {
+                                    normalfile_inode_obj.size = newposition;
+                                    drop(inodeobj);
+                                    drop(fileobject);
+                                    log_metadata(&FS_METADATA, normalfile_filedesc_obj.inode);
+                                }
+
+                                byteswritten as i32
+                            } else {
+                                syscall_error(Errno::EIO, "writev", "Failed to write data to file")
+                            }
+                        }
+                        // Handle character device file
+                        Inode::CharDev(ref char_inode_obj) => {
+                            let iovecs = unsafe { std::slice::from_raw_parts(iovec, iovcnt as usize) };
+                            let total_len = iovecs.iter().map(|iov| iov.iov_len).sum::<usize>();
+                            let mut buffer = Vec::with_capacity(total_len);
+                            for iov in iovecs {
+                                let slice = unsafe { std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) };
+                                buffer.extend_from_slice(slice);
+                            }
+                            self._write_chr_file(&char_inode_obj, buffer.len())
+                        }
+                        // The _write_chr_file function handles write operations for character device files (Inode::CharDev).
+                        Inode::Socket(_) => {
+                            panic!("writev(): Socket inode found on a filedesc fd")
+                        }
+
+                        Inode::Dir(_) => syscall_error(
+                            Errno::EISDIR,
+                            "writev",
+                            "attempted to write to a directory",
+                        ),
+                    }
+                }
                 _ => {
-                    // we currently don't support writev for files/streams
                     return syscall_error(
                         Errno::EOPNOTSUPP,
                         "writev",

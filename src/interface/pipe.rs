@@ -290,32 +290,32 @@ impl EmulatedPipe {
 
     /// ### Description
     ///
-    /// write_vectored_to_pipe translates iovecs into a singular buffer so that
-    /// write_to_pipe can write that data to a circular buffer.
+    /// `write_vectored_to_pipe` writes data from a set of iovec buffers to a pipe, handling multiple
+    /// iovec structures in a single operation. This function ensures the complete writing of data from
+    /// the provided buffers or returns an error code in case of failure.
     ///
     /// ### Arguments
     ///
-    /// write_to_pipe accepts three arguments:
-    /// * `ptr` - a pointer to an Iovec array.
-    /// * `iovcnt` - the number of iovec indexes in the array
-    /// * `nonblocking` - if this attempt to write is nonblocking
+    /// * `ptr` - A pointer to an array of `IovecStruct` which contains the buffers (iovecs) that will
+    ///   be written to the pipe.
+    /// * `iovcnt` - The number of `IovecStruct` buffers to be written.
+    /// * `nonblocking` - A boolean flag indicating whether the write operation should be non-blocking.
     ///
     /// ### Returns
     ///
-    /// Upon successful completion, the amount of bytes written is returned via
-    /// write_to_pipe. In case of a failure, an error is returned to the
-    /// calling syscall.
+    /// Upon success, the function returns the total number of bytes written. If no bytes could be written 
+    /// due to an empty pipe (EAGAIN), it returns an error code. For other error conditions, such as a broken pipe, 
+    /// an appropriate error code is returned.
     ///
     /// ### Errors
     ///
-    /// * `EAGAIN` - Non-blocking is enabled and the write has failed to fully
-    ///   complete (via write_to_pipe).
-    /// * `EPIPE` - An attempt to write to a pipe when all read references have
-    ///   been closed (via write_to_pipe).
+    /// * `EPIPE` - Indicates a broken pipe error, where the pipe no longer has an open reading end.
+    /// * `EAGAIN` - If the pipe is non-blocking and cannot accept data at the moment, this error is returned.
+    ///   If no data was written at all, `EAGAIN` is returned immediately.
     ///
     /// ### Panics
     ///
-    /// A panic occurs if the provided pointer is null
+    /// A panic occurs if the provided `ptr` is null when dereferencing the iovecs.
     ///
     /// To learn more about pipes and the writev syscall
     /// [pipe(7)](https://man7.org/linux/man-pages/man7/pipe.7.html)
@@ -326,31 +326,42 @@ impl EmulatedPipe {
         iovcnt: i32,
         nonblocking: bool,
     ) -> i32 {
-        // unlikely but if we attempt to write 0 iovecs, return 0
+        // Return immediately if there are no iovecs to write.
         if iovcnt == 0 {
             return 0;
         }
-
-        let mut buf = Vec::new();
-        let mut length = 0;
-
-        // we're going to loop through the iovec array and combine the buffers into one
-        // Rust slice so that we can use the write_to_pipe function, recording the
-        // length this is hacky but is the best way to do this for now
-        for _iov in 0..iovcnt {
-            unsafe {
-                assert!(!ptr.is_null());
-                // lets convert this iovec into a Rust slice,
-                // and then extend our combined buffer
-                let iovec = *ptr;
-                let iovbuf = slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len);
-                buf.extend_from_slice(iovbuf);
-                length = length + iovec.iov_len
-            };
+    
+        // Unsafe block to access the iovecs.
+        let iovecs = unsafe { slice::from_raw_parts(ptr, iovcnt as usize) };
+        let mut total_bytes_written = 0;
+    
+        // Iterate through each iovec.
+        for iovec in iovecs {
+            let buf = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
+    
+            // Write the buffer to the pipe.
+            let current_write = self.write_to_pipe(buf.as_ptr(), buf.len(), nonblocking);
+    
+            // Handle successful write.
+            if current_write > 0 {
+                total_bytes_written += current_write as usize;
+            } else {
+                // Nested error handling.
+                if current_write == -(Errno::EPIPE as i32) {
+                    // Pipe is broken, return immediately.
+                    return -(Errno::EPIPE as i32);
+                } else if current_write == -(Errno::EAGAIN as i32) {
+                    // Handling EAGAIN depending on whether data was previously written.
+                    if total_bytes_written == 0 {
+                        return -(Errno::EAGAIN as i32); // No data written yet, return EAGAIN.
+                    } else {
+                        return total_bytes_written as i32; // Return amount of data written before EAGAIN occurred.
+                    }
+                }
+            }
         }
-
-        // now that we have a single buffer we can use the usual write to pipe function
-        self.write_to_pipe(buf.as_ptr(), length, nonblocking)
+        // Return the total number of bytes written.
+        total_bytes_written as i32
     }
 
     /// ### Description
