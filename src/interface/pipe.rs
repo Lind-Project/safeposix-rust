@@ -24,7 +24,7 @@ use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
 
 // use std::sync::Mutex;
-use parking_lot::Mutex;
+use spin::Mutex;
 use ringbuf::{Consumer, Producer, RingBuffer};
 use std::cmp::min;
 use std::fmt;
