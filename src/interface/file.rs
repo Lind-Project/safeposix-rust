@@ -206,26 +206,18 @@ impl EmulatedFile {
         bufs: &[IoSlice<'_>],
         offset: usize,
     ) -> std::io::Result<usize> {
-        let mut total_bytes_written = 0; //to keep track of the total number of bytes written.
-
+        let mut total_bytes_written = 0; // To keep track of the total number of bytes written.
+    
         if let Some(f) = &self.fobj {
-            // checks if the file object (fobj) exists.
-            let mut file = f.lock();
-            // Seek to the specified offset from the beginning of the file
-            file.seek(SeekFrom::Start(offset as u64))?; 
-            // moves the file pointer to the desired starting position (offset) from the
-            // beginning of the file.
-
-            // Use write_vectored for efficient writing from multiple buffers
-            total_bytes_written = file.write_vectored(bufs)?; 
-            //It performs a vectored write operation,which means it
-            // writes data to the file from multiple buffers
+            // Use write_vectored_at directly
+            total_bytes_written = f.lock().write_vectored_at(bufs, offset as u64)?;
         }
-        // Update recorded filesize if we've written past the previous filesize
+    
+        // Update the recorded file size if we've written past the previous file size
         if offset + total_bytes_written > self.filesize {
             self.filesize = offset + total_bytes_written;
         }
-
+    
         Ok(total_bytes_written)
     }
 

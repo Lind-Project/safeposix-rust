@@ -131,34 +131,17 @@ pub fn concat_iovec_to_slice(iovec: *const interface::IovecStruct, iovcnt: i32) 
 }
 
 //This function logs data from a slice to the specified file descriptor.
-// It handles logging to standard output (fd 1) and standard error (fd 2).
-// For other file descriptors, it uses a low-level approach to write the data.
+// It handles logging to standard output 
 
-pub fn log_from_slice(fd: i32, data: &[u8]) -> Result<i32, String> {
-    match from_utf8(data) {
+
+pub fn log_from_slice(_fd: i32, data: &[u8]) -> Result<i32, String> {
+    match std::str::from_utf8(data) {
         Ok(s) => {
-            match fd {
-                1 => {
-                    // File descriptor 1 is standard output
-                    io::stdout()
-                        .write_all(s.as_bytes())
-                        .map_err(|_| "Failed to write to stdout".to_string())?;
-                }
-                2 => {
-                    // File descriptor 2 is standard error
-                    io::stderr()
-                        .write_all(s.as_bytes())
-                        .map_err(|_| "Failed to write to stderr".to_string())?;
-                }
-                _ => {
-                    // For other file descriptors, we need to use a low-level approach
-                    let result =
-                        unsafe { libc::write(fd, s.as_ptr() as *const libc::c_void, s.len()) };
-                    if result < 0 {
-                        return Err("Failed to write to file descriptor".to_string());
-                    }
-                }
-            }
+            // Log everything to stdout, regardless of the file descriptor provided
+            io::stdout()
+                .write_all(s.as_bytes())
+                .map_err(|_| "Failed to write to stdout".to_string())?;
+            
             Ok(data.len() as i32)
         }
         Err(_) => Err("Failed to convert data to string".to_string()),

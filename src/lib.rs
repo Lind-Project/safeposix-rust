@@ -2,6 +2,7 @@
 #![feature(vec_into_raw_parts)]
 #![feature(thread_local)]
 #![allow(unused_imports)]
+#![feature(unix_file_vectored_at)]
 
 //! # RustPOSIX
 //! Welcome to the RustPOSIX microvisor.
