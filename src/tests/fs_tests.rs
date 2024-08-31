@@ -40,9 +40,8 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
-        // Attempt to open up to 2048 unique file descriptors
-        for i in 0..23 {
-            // Vary the filename to avoid conflicts or state issues
+        for i in 0..1020 {
+            // Vary the filename 
             let path = format!("/dev/test_{}", i);
 
             // Open the file with the given path
