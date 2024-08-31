@@ -36,6 +36,30 @@ pub mod fs_tests {
     }
 
     #[test]
+    fn test_fd_leak() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Attempt to open up to 2048 unique file descriptors
+        for i in 0..23 {
+            // Vary the filename to avoid conflicts or state issues
+            let path = format!("/dev/test_{}", i);
+
+            // Open the file with the given path
+            let fd = cage.open_syscall(&path, O_CREAT | O_RDWR, S_IRWXA);
+            if fd == -23 {
+                panic!("System-wide file descriptor limit reached (ENFILE) at iteration {}.", i);
+            } else if fd < 0 {
+                panic!("Failed to open file descriptor at iteration {}: {:?}", i, std::io::Error::last_os_error());
+            }
+            println!("Opened file descriptor: {}", fd);
+        }
+
+        println!("Completed opening 2048 file descriptors");
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn rdwrtest() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
