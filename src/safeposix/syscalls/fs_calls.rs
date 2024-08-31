@@ -207,7 +207,7 @@ impl Cage {
     
         // When the file descriptor is valid, we proceed with performing the remaining checks
         // for open_syscall.
-        let fdoption = &mut *guardopt.unwrap();
+        let fdoption = &mut *guardopt.unwrap_or_else(|| panic!("File descriptor couldn't be fetched!"));
     
                     // Walk through the absolute path which returns a tuple consisting of inode
                     // number of file (if it exists), and inode number of parent (if it exists)
@@ -255,10 +255,10 @@ impl Cage {
                                 gid: DEFAULT_GID,
                                 mode: effective_mode,
                                 linkcount: 1, /* because when a new file is created, it has a single
-                                            * hard link, which is the directory entry that points
-                                            * to this file's inode. */
+                                               * hard link, which is the directory entry that points
+                                               * to this file's inode. */
                                 refcount: 1, /* Because a new file descriptor will open and refer to
-                                            * this file */
+                                              * this file */
                                 atime: time,
                                 ctime: time,
                                 mtime: time,
