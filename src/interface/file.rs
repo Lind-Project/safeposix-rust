@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 use std::env;
 pub use std::ffi::CStr as RustCStr;
 use std::fs::{self, canonicalize, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{IoSlice, Read, Seek, SeekFrom, Write};
 pub use std::path::{Component as RustPathComponent, Path as RustPath, PathBuf as RustPathBuf};
 use std::slice;
 use std::sync::Arc;
@@ -199,6 +199,26 @@ impl EmulatedFile {
         }
 
         Ok(bytes_written)
+    }
+
+    pub fn write_vectored_at(
+        &mut self,
+        bufs: &[IoSlice<'_>],
+        offset: usize,
+    ) -> std::io::Result<usize> {
+        let mut total_bytes_written = 0; // To keep track of the total number of bytes written.
+    
+        if let Some(f) = &self.fobj {
+            // Use write_vectored_at directly
+            total_bytes_written = f.lock().write_vectored_at(bufs, offset as u64)?;
+        }
+    
+        // Update the recorded file size if we've written past the previous file size
+        if offset + total_bytes_written > self.filesize {
+            self.filesize = offset + total_bytes_written;
+        }
+    
+        Ok(total_bytes_written)
     }
 
     // Reads entire file into bytes

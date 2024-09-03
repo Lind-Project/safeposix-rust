@@ -15,7 +15,9 @@ use std::cell::RefCell;
 pub use std::cmp::{max as rust_max, min as rust_min};
 pub use std::collections::VecDeque as RustDeque;
 use std::fs::File;
+pub use std::io::IoSlice as RustIOSlice;
 use std::io::{self, Read, Write};
+use std::slice;
 use std::str::{from_utf8, Utf8Error};
 pub use std::sync::atomic::{
     AtomicBool as RustAtomicBool, AtomicI32 as RustAtomicI32, AtomicU16 as RustAtomicU16,
@@ -106,6 +108,66 @@ pub fn cagetable_clear() {
 
     for cage in exitvec {
         cage.exit_syscall(EXIT_SUCCESS);
+    }
+}
+
+// It takes a raw pointer (`iovec`) to an array of `IovecStruct` objects, which
+// represent data buffers, and the number of `IovecStruct` objects in the array
+// (`iovcnt`). It iterates through the array, extracts the data from each
+// buffer, and concatenates it into a single `Vec<u8>`.
+
+pub fn concat_iovec_to_slice(iovec: *const interface::IovecStruct, iovcnt: i32) -> Vec<u8> {
+    // Ensure that the iovec pointer is valid and points to a valid iovec array.
+    let iovecs = unsafe { slice::from_raw_parts(iovec, iovcnt as usize) };
+    // Create an empty vector to store the concatenated data.
+    let mut data = Vec::new();
+    for iovec in iovecs {
+        // Create a slice from the current iovec's base pointer and length.
+        let slice = unsafe { slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len) };
+        // Extend the data vector with the slice from the current iovec.
+        data.extend_from_slice(slice);
+    }
+    data
+}
+
+//This function logs data from a slice to the specified file descriptor.
+// It handles logging to standard output 
+
+
+pub fn log_from_slice(_fd: i32, data: &[u8]) -> Result<i32, String> {
+    match std::str::from_utf8(data) {
+        Ok(s) => {
+            // Log everything to stdout, regardless of the file descriptor provided
+            io::stdout()
+                .write_all(s.as_bytes())
+                .map_err(|_| "Failed to write to stdout".to_string())?;
+            
+            Ok(data.len() as i32)
+        }
+        Err(_) => Err("Failed to convert data to string".to_string()),
+    }
+}
+
+// This function converts a raw pointer to an array of `IovecStruct` objects
+// into a vector of `IoSlice` objects. It handles the conversion from the
+// C-style `iovec` structure to the Rust-style `IoSlice` structure,
+// which is used for vectored I/O operations.
+
+pub fn iovec_to_ioslice<'a>(
+    iovec: *const interface::IovecStruct,
+    iovcnt: i32,
+) -> Vec<RustIOSlice<'a>> {
+    unsafe {
+        std::slice::from_raw_parts(iovec, iovcnt as usize)
+            .iter()
+            .map(|current_iovec| {
+                let slice = std::slice::from_raw_parts(
+                    current_iovec.iov_base as *const u8,
+                    current_iovec.iov_len as usize,
+                );
+                RustIOSlice::new(slice)
+            })
+            .collect()
     }
 }
 

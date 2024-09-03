@@ -6,6 +6,7 @@ pub mod fs_tests {
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use interface::IovecStruct;
     use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
@@ -4720,5 +4721,152 @@ pub mod fs_tests {
 
         lindrustfinalize();
         return;
+    }
+
+    #[test]
+    fn ut_lind_fs_writev_socketpair() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        let mut socketpair = interface::SockPair::default();
+        assert_eq!(
+            Cage::socketpair_syscall(cage.clone(), AF_UNIX, SOCK_STREAM, 0, &mut socketpair),
+            0
+        );
+
+        // Prepare data to write.
+        let data = b"Hello, world!";
+        let iovec = interface::IovecStruct {
+            iov_base: data.as_ptr() as *mut libc::c_void,
+            iov_len: data.len(),
+        };
+        // Write the data to the first socket using writev_syscall.
+        let bytes_written = cage.writev_syscall(socketpair.sock1, &iovec, 1);
+        assert_eq!(bytes_written, data.len() as i32);
+        // Read the data from the second socket.
+        let mut buffer = vec![0u8; data.len()];
+        let bytes_read = cage.recv_syscall(socketpair.sock2, buffer.as_mut_ptr(), buffer.len(), 0);
+        assert_eq!(bytes_read, data.len() as i32);
+        // Verify that the data received from the second socket matches the original
+        // data.
+        assert_eq!(buffer, data);
+        // Close both sockets.
+        assert_eq!(cage.close_syscall(socketpair.sock1), 0);
+        assert_eq!(cage.close_syscall(socketpair.sock2), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_writev_pipe() {
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        // Create a pipe
+        let mut pipe_fds = PipeArray::default();
+        assert_eq!(cage.pipe_syscall(&mut pipe_fds), 0);
+        let read_fd = pipe_fds.readfd;
+        let write_fd = pipe_fds.writefd;
+    
+        // Prepare multiple data segments to be written using an iovec structure
+        let data1 = b"Hello, ";
+        let data2 = b"pipe!";
+        let data3 = b" Testing writev.";
+    
+        let iovec = [
+            interface::IovecStruct {
+                iov_base: data1.as_ptr() as *mut libc::c_void,
+                iov_len: data1.len(),
+            },
+            interface::IovecStruct {
+                iov_base: data2.as_ptr() as *mut libc::c_void,
+                iov_len: data2.len(),
+            },
+            interface::IovecStruct {
+                iov_base: data3.as_ptr() as *mut libc::c_void,
+                iov_len: data3.len(),
+            },
+        ];
+    
+        // Write the data to the pipe using writev_syscall
+        let bytes_written = cage.writev_syscall(write_fd, iovec.as_ptr(), iovec.len() as i32);
+        assert_eq!(
+            bytes_written,
+            (data1.len() + data2.len() + data3.len()) as i32
+        );
+    
+        // Read the data from the pipe
+        let mut buffer = vec![0u8; data1.len() + data2.len() + data3.len()];
+        let bytes_read = cage.read_syscall(read_fd, buffer.as_mut_ptr(), buffer.len());
+        assert_eq!(bytes_read, buffer.len() as i32);
+    
+        // Verify that the data read is the same as the data written
+        let expected_data = [data1.as_ref(), data2.as_ref(), data3.as_ref()].concat();
+        assert_eq!(buffer, expected_data);
+    
+        // Close both pipe file descriptors
+        assert_eq!(cage.close_syscall(read_fd), 0);
+        assert_eq!(cage.close_syscall(write_fd), 0);
+    
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    fn ut_lind_fs_writev_file() {
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean environment setup.
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Define the file path
+        let file_path = "/tmp/test_writev_file";
+
+        // Open or create a file for writing
+        let fd = cage.open_syscall(file_path, O_CREAT | O_RDWR, S_IRWXA);
+        assert!(fd >= 0, "Failed to open file");
+
+        // Prepare the data to be written using an iovec structure
+        let data1 = b"Hello, ";
+        let data2 = b"world!";
+        let expected_data = [data1.as_slice(), data2.as_slice()].concat(); // Concatenate slices for comparison
+        let iovecs = [
+            interface::IovecStruct {
+                iov_base: data1.as_ptr() as *mut libc::c_void,
+                iov_len: data1.len(),
+            },
+            interface::IovecStruct {
+                iov_base: data2.as_ptr() as *mut libc::c_void,
+                iov_len: data2.len(),
+            },
+        ];
+
+        // Write the data to the file using writev_syscall
+        let total_len = expected_data.len() as i32;
+        let bytes_written = cage.writev_syscall(fd, iovecs.as_ptr(), iovecs.len() as i32);
+        assert_eq!(bytes_written, total_len);
+
+        // Read the data back from the file
+        let mut buffer = vec![0u8; total_len as usize];
+        cage.lseek_syscall(fd, 0, libc::SEEK_SET); // Seek to the beginning of the file
+        let bytes_read = cage.read_syscall(fd, buffer.as_mut_ptr(), buffer.len());
+        assert_eq!(bytes_read, total_len);
+
+        // Verify that the data read is the same as the data written
+        assert_eq!(buffer, expected_data);
+
+        // Close the file
+        assert_eq!(cage.close_syscall(fd), 0);
+
+        // Clean up the file
+        assert_eq!(cage.unlink_syscall(file_path), 0);
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
     }
 }

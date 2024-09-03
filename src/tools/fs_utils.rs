@@ -1,6 +1,7 @@
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
 #![feature(duration_constants)]
+#![feature(unix_file_vectored_at)]
 #![allow(unused)]
 
 /// Author: Jonathan Singer

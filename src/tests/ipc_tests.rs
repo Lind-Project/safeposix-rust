@@ -352,9 +352,11 @@ pub mod ipc_tests {
         lindrustfinalize();
     }
 
+    // support for retrying writes in case the system doesn't write all bytes at
+    // once
     #[test]
-    pub fn ut_lind_ipc_writev() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+    pub fn ut_lind_ipc_writev2() {
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
         let _thelock = setup::lock_and_init();
 
@@ -388,10 +390,14 @@ pub mod ipc_tests {
                 },
             ];
 
-            assert_eq!(
-                cage2.writev_syscall(socketpair.sock2, iovec.as_ptr(), 3),
-                300
-            );
+            let mut total_bytes_written = 0;
+            while total_bytes_written < 300 {
+                let bytes_written = cage2.writev_syscall(socketpair.sock2, iovec.as_ptr(), 3);
+                assert!(bytes_written >= 0, "writev_syscall returned an error");
+                total_bytes_written += bytes_written as usize;
+            }
+
+            assert_eq!(total_bytes_written, 300);
         });
 
         let iovec2: [interface::IovecStruct; 1] = [interface::IovecStruct {
@@ -401,10 +407,19 @@ pub mod ipc_tests {
         assert_eq!(cage.writev_syscall(socketpair.sock1, iovec2.as_ptr(), 1), 4);
 
         let mut buf2 = sizecbuf(300);
-        assert_eq!(
-            cage.recv_syscall(socketpair.sock1, buf2.as_mut_ptr(), 300, 0),
-            300
-        );
+        let mut total_bytes_read = 0;
+        while total_bytes_read < 300 {
+            let bytes_read = cage.recv_syscall(
+                socketpair.sock1,
+                buf2.as_mut_ptr(),
+                300 - total_bytes_read,
+                0,
+            );
+            assert!(bytes_read >= 0, "recv_syscall returned an error");
+            total_bytes_read += bytes_read as usize;
+        }
+
+        assert_eq!(total_bytes_read, 300);
         thread.join().unwrap();
 
         assert_eq!(cage.close_syscall(socketpair.sock1), 0);
