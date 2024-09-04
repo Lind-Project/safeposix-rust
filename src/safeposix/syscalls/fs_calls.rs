@@ -2144,7 +2144,8 @@ impl Cage {
                     // Stream 1 represents `stdout` and 2 represents `stderr`.
                     if stream_filedesc_obj.stream == 1 || stream_filedesc_obj.stream == 2 {
                         // `log_from_ptr` simply prints out the data to stdout
-                        interface::log_from_ptr(buf, count);
+                        // interface::log_from_ptr(buf, count);
+                        unsafe { libc::write(1, buf as *const libc::c_void, count); }
                         count as i32
                     } else {
                         syscall_error(
