@@ -52,6 +52,7 @@ const CANCEL_CHECK_INTERVAL: usize = 1048576;
 pub struct EmulatedPipe {
     write_end: Arc<Mutex<Producer<u8>>>,
     read_end: Arc<Mutex<Consumer<u8>>>,
+    dummy_pipe: Arc<Mutex<Vec<u8>>>,
     refcount_write: Arc<AtomicU32>,
     refcount_read: Arc<AtomicU32>,
     size: usize,
@@ -77,6 +78,7 @@ impl EmulatedPipe {
         EmulatedPipe {
             write_end: Arc::new(Mutex::new(prod)),
             read_end: Arc::new(Mutex::new(cons)),
+            dummy_pipe: Arc::new(Mutex::new(vec![0; size])),
             refcount_write: Arc::new(AtomicU32::new(1)),
             refcount_read: Arc::new(AtomicU32::new(1)),
             size: size,
@@ -220,72 +222,83 @@ impl EmulatedPipe {
             slice::from_raw_parts(ptr, length)
         };
 
-        let mut write_end = self.write_end.lock();
-        let mut bytes_written = 0;
+        let mut start = 0;
 
-        // Here we attempt to write the data to the pipe, looping until all bytes are
-        // written or in non-blocking scenarios error with EAGAIN
-        //
-        // Here are the four different scenarios we encounter (via the pipe(7) manpage):
-        //
-        // O_NONBLOCK disabled, n <= PAGE_SIZE
-        // All n bytes are written, write may block if
-        // there is not room for n bytes to be written immediately
-
-        // O_NONBLOCK enabled, n <= PAGE_SIZE
-        // If there is room to write n bytes to the pipe, then
-        // write succeeds immediately, writing all n bytes;
-        // otherwise write fails, with errno set to EAGAIN.
-
-        // O_NONBLOCK disabled, n > PAGE_SIZE
-        // The write blocks until n bytes have been written.
-        // Because Linux implements pipes as a buffer of pages, we need to wait until
-        // a page worth of bytes is free in our buffer until we can write
-
-        // O_NONBLOCK enabled, n > PAGE_SIZE
-        // If the pipe is full, then write fails, with errno set to EAGAIN.
-        // Otherwise, a "partial write" may occur returning the number of bytes written
-
-        while bytes_written < length {
-            if self.get_read_ref() == 0 {
-                // we send EPIPE here since all read ends are closed
-                return syscall_error(Errno::EPIPE, "write", "broken pipe");
-            }
-
-            let remaining = write_end.remaining();
-
-            // we loop until either more than a page of bytes is free in the pipe
-            // Linux technically writes a page per iteration here but its more efficient and
-            // should be semantically equivalent to write more for why we wait
-            if remaining < PAGE_SIZE {
-                if nonblocking {
-                    // for non-blocking if we have written a bit lets return how much we've written,
-                    // otherwise we return EAGAIN
-                    if bytes_written > 0 {
-                        return bytes_written as i32;
-                    } else {
-                        return syscall_error(
-                            Errno::EAGAIN,
-                            "write",
-                            "there is no space available right now, try again later",
-                        );
-                    }
-                } else {
-                    // we yield here on a non-writable pipe to let other threads continue more
-                    // quickly
-                    interface::lind_yield();
-                    continue;
-                }
-            };
-
-            // lets read the minimum of the specified amount or whatever space we have
-            let bytes_to_write = min(length, bytes_written as usize + remaining);
-            write_end.push_slice(&buf[bytes_written..bytes_to_write]);
-            bytes_written = bytes_to_write;
+        let mut fakepipe = self.dummy_pipe.lock();
+        
+        while start < length {
+            let end = start + min(length - start, self.size);
+            fakepipe.copy_from_slice(&buf[start..end]);
+            start = end;
         }
 
+        // let mut write_end = self.write_end.lock();
+        // let mut bytes_written = 0;
+
+        // // Here we attempt to write the data to the pipe, looping until all bytes are
+        // // written or in non-blocking scenarios error with EAGAIN
+        // //
+        // // Here are the four different scenarios we encounter (via the pipe(7) manpage):
+        // //
+        // // O_NONBLOCK disabled, n <= PAGE_SIZE
+        // // All n bytes are written, write may block if
+        // // there is not room for n bytes to be written immediately
+
+        // // O_NONBLOCK enabled, n <= PAGE_SIZE
+        // // If there is room to write n bytes to the pipe, then
+        // // write succeeds immediately, writing all n bytes;
+        // // otherwise write fails, with errno set to EAGAIN.
+
+        // // O_NONBLOCK disabled, n > PAGE_SIZE
+        // // The write blocks until n bytes have been written.
+        // // Because Linux implements pipes as a buffer of pages, we need to wait until
+        // // a page worth of bytes is free in our buffer until we can write
+
+        // // O_NONBLOCK enabled, n > PAGE_SIZE
+        // // If the pipe is full, then write fails, with errno set to EAGAIN.
+        // // Otherwise, a "partial write" may occur returning the number of bytes written
+
+        // while bytes_written < length {
+        //     if self.get_read_ref() == 0 {
+        //         // we send EPIPE here since all read ends are closed
+        //         return syscall_error(Errno::EPIPE, "write", "broken pipe");
+        //     }
+
+        //     let remaining = write_end.remaining();
+
+        //     // we loop until either more than a page of bytes is free in the pipe
+        //     // Linux technically writes a page per iteration here but its more efficient and
+        //     // should be semantically equivalent to write more for why we wait
+        //     if remaining < PAGE_SIZE {
+        //         if nonblocking {
+        //             // for non-blocking if we have written a bit lets return how much we've written,
+        //             // otherwise we return EAGAIN
+        //             if bytes_written > 0 {
+        //                 return bytes_written as i32;
+        //             } else {
+        //                 return syscall_error(
+        //                     Errno::EAGAIN,
+        //                     "write",
+        //                     "there is no space available right now, try again later",
+        //                 );
+        //             }
+        //         } else {
+        //             // we yield here on a non-writable pipe to let other threads continue more
+        //             // quickly
+        //             interface::lind_yield();
+        //             continue;
+        //         }
+        //     };
+
+        //     // lets read the minimum of the specified amount or whatever space we have
+        //     let bytes_to_write = min(length, bytes_written as usize + remaining);
+
+        //     // write_end.push_slice(&buf[bytes_written..bytes_to_write]);
+        //     bytes_written = bytes_to_write;
+        // }
+
         // lets return the amount we've written to the pipe
-        bytes_written as i32
+        length as i32
     }
 
     /// ### Description
