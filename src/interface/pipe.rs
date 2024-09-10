@@ -52,7 +52,8 @@ const CANCEL_CHECK_INTERVAL: usize = 1048576;
 pub struct EmulatedPipe {
     write_end: Arc<Mutex<Producer<u8>>>,
     read_end: Arc<Mutex<Consumer<u8>>>,
-    dummy_pipe: Arc<Mutex<Vec<u8>>>,
+    dummy_write: Arc<Mutex<Vec<u8>>>,
+    dummy_read: Arc<Mutex<Vec<u8>>>,
     refcount_write: Arc<AtomicU32>,
     refcount_read: Arc<AtomicU32>,
     size: usize,
@@ -78,7 +79,8 @@ impl EmulatedPipe {
         EmulatedPipe {
             write_end: Arc::new(Mutex::new(prod)),
             read_end: Arc::new(Mutex::new(cons)),
-            dummy_pipe: Arc::new(Mutex::new(vec![0; size])),
+            dummy_write: Arc::new(Mutex::new(vec![0; size])),
+            dummy_read: Arc::new(Mutex::new(vec![0; size])),
             refcount_write: Arc::new(AtomicU32::new(1)),
             refcount_read: Arc::new(AtomicU32::new(1)),
             size: size,
@@ -224,7 +226,7 @@ impl EmulatedPipe {
 
         let mut start = 0;
 
-        let mut fakepipe = self.dummy_pipe.lock();
+        let mut fakepipe = self.dummy_write.lock();
         
         while start < length {
             let end = start + min(length - start, self.size);
@@ -425,54 +427,66 @@ impl EmulatedPipe {
             slice::from_raw_parts_mut(ptr, length)
         };
 
-        let mut read_end = self.read_end.lock();
-        let mut pipe_space = read_end.len();
-        if nonblocking && (pipe_space == 0) {
-            // if the descriptor is non-blocking and theres nothing in the pipe we either:
-            // return 0 if the EOF is reached (zero write references)
-            // or return EAGAIN due to the O_NONBLOCK flag
-            if self.get_write_ref() == 0 {
-                return 0;
-            }
-            return syscall_error(
-                Errno::EAGAIN,
-                "read",
-                "there is no data available right now, try again later",
-            );
+        let mut start = 0;
+
+        let mut fakepipe = self.dummy_read.lock();
+        
+        while start < length {
+            let bytes = min(length - start, self.size);
+            let end = start + bytes;
+            buf[start..end].copy_from_slice(&fakepipe[0..bytes]);
+            start = end;
         }
 
-        // wait for something to be in the pipe, but break on eof
-        let mut count = 0;
-        while pipe_space == 0 {
-            // If write references are 0, we've reached EOF so return 0
-            if self.get_write_ref() == 0 {
-                return 0;
-            }
 
-            // we return EAGAIN here so we can go back to check if this cage has been sent a
-            // cancel notification in the calling syscall if the calling
-            // descriptor is blocking we then attempt to read again
-            if count == CANCEL_CHECK_INTERVAL {
-                return -(Errno::EAGAIN as i32);
-            }
+        // let mut read_end = self.read_end.lock();
+        // let mut pipe_space = read_end.len();
+        // if nonblocking && (pipe_space == 0) {
+        //     // if the descriptor is non-blocking and theres nothing in the pipe we either:
+        //     // return 0 if the EOF is reached (zero write references)
+        //     // or return EAGAIN due to the O_NONBLOCK flag
+        //     if self.get_write_ref() == 0 {
+        //         return 0;
+        //     }
+        //     return syscall_error(
+        //         Errno::EAGAIN,
+        //         "read",
+        //         "there is no data available right now, try again later",
+        //     );
+        // }
 
-            // lets check again if were empty
-            pipe_space = read_end.len();
-            count = count + 1;
+        // // wait for something to be in the pipe, but break on eof
+        // let mut count = 0;
+        // while pipe_space == 0 {
+        //     // If write references are 0, we've reached EOF so return 0
+        //     if self.get_write_ref() == 0 {
+        //         return 0;
+        //     }
 
-            if pipe_space == 0 {
-                // we yield here on an empty pipe to let other threads continue more quickly
-                interface::lind_yield();
-            }
-        }
+        //     // we return EAGAIN here so we can go back to check if this cage has been sent a
+        //     // cancel notification in the calling syscall if the calling
+        //     // descriptor is blocking we then attempt to read again
+        //     if count == CANCEL_CHECK_INTERVAL {
+        //         return -(Errno::EAGAIN as i32);
+        //     }
 
-        // we've found something int the pipe
-        // lets read the minimum of the specified amount or whatever is in the pipe
-        let bytes_to_read = min(length, pipe_space);
-        read_end.pop_slice(&mut buf[0..bytes_to_read]);
+        //     // lets check again if were empty
+        //     pipe_space = read_end.len();
+        //     count = count + 1;
+
+        //     if pipe_space == 0 {
+        //         // we yield here on an empty pipe to let other threads continue more quickly
+        //         interface::lind_yield();
+        //     }
+        // }
+
+        // // we've found something int the pipe
+        // // lets read the minimum of the specified amount or whatever is in the pipe
+        // let bytes_to_read = min(length, pipe_space);
+        // read_end.pop_slice(&mut buf[0..bytes_to_read]);
 
         // return the amount we read
-        bytes_to_read as i32
+        length as i32
     }
 }
 
