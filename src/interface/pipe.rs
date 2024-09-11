@@ -248,17 +248,20 @@ impl EmulatedPipe {
                 return syscall_error(Errno::EPIPE, "write", "broken pipe");
             }
 
-            if !self.writeflag.load(Ordering::Relaxed) { continue; }
+            if !self.writeflag.load(Ordering::Relaxed) { 
+                interface::lind_yield(); //yield on a full pipe
+                continue; 
+            }
 
             let mut tuple = self.ringbuf.lock().unwrap();
             let write_end = &mut tuple.0;
             let mut remaining = write_end.remaining();
 
-            if remaining == 0 {
-                interface::lind_yield(); //yield on a full pipe
-                drop(tuple);
-                continue;
-            }
+            // if remaining == 0 {
+            //     interface::lind_yield(); //yield on a full pipe
+            //     drop(tuple);
+            //     continue;
+            // }
             // // we write if the pipe is empty, otherwise we try to limit writes to 4096 bytes (unless whats leftover of this write is < 4096)
             // if remaining != self.size
             //     && (length - bytes_written) > PAGE_SIZE
@@ -409,7 +412,10 @@ impl EmulatedPipe {
                 return 0;
             }
 
-            if !self.readflag.load(Ordering::Relaxed) { continue; }
+            if !self.readflag.load(Ordering::Relaxed) { 
+                interface::lind_yield(); //yield on a full pipe
+                continue; 
+            }
 
             let mut tuple = self.ringbuf.lock().unwrap();
             let read_end = &mut tuple.1;
@@ -425,12 +431,12 @@ impl EmulatedPipe {
             pipe_space = read_end.len();
             count = count + 1;
 
-            if pipe_space == 0 {
-                // we yield here on an empty pipe to let other threads continue more quickly
-                interface::lind_yield();
-                drop(tuple);
-                continue;
-            } // yield on an empty pipe
+            // if pipe_space == 0 {
+            //     // we yield here on an empty pipe to let other threads continue more quickly
+            //     interface::lind_yield();
+            //     drop(tuple);
+            //     continue;
+            // } // yield on an empty pipe
 
 
             bytes_to_read = min(length, pipe_space);
