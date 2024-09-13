@@ -229,7 +229,7 @@ impl EmulatedPipe {
         let mut fakepipe = self.dummy_write.lock();
         
         while start < length {
-            let bytes = start + min(length - start, self.size);
+            let bytes = min(length - start, self.size);
             let end = start + bytes;
             fakepipe[0..bytes].copy_from_slice(&buf[start..end]);
             start = end;
