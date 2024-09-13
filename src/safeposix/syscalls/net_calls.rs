@@ -1598,7 +1598,6 @@ impl Cage {
     /// for more detailed description of all the commands and return values, see
     /// [send(2)](https://linux.die.net/man/2/send)
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -2220,7 +2219,6 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -2439,7 +2437,6 @@ impl Cage {
     /// for more detailed description of all the commands and return values, see
     /// [listen(2)](https://linux.die.net/man/2/listen)
     pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -3428,11 +3425,11 @@ impl Cage {
                     if !exceptfds_ref.is_set(fd) {
                         continue;
                     }
-                            
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
-        }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+
+                    if let Err(_) = self.get_filedescriptor(fd) {
+                        return -1;
+                    }
+                    let checkedfd = self.get_filedescriptor(fd).unwrap();
                     let unlocked_fd = checkedfd.read();
                     if unlocked_fd.is_none() {
                         return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
@@ -3489,10 +3486,10 @@ impl Cage {
             // try to get the FileDescriptor Object from fd number
             // if the fd exists, do further processing based on the file descriptor type
             // otherwise, raise an error
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
-        }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+            if let Err(_) = self.get_filedescriptor(fd) {
+                return -1;
+            }
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
@@ -3651,10 +3648,10 @@ impl Cage {
             // try to get the FileDescriptor Object from fd number
             // if the fd exists, do further processing based on the file descriptor type
             // otherwise, raise an error
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
-        }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+            if let Err(_) = self.get_filedescriptor(fd) {
+                return -1;
+            }
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
@@ -4277,7 +4274,7 @@ impl Cage {
         }
 
         // get the file descriptor object
-         if let Err(_) = self.get_filedescriptor(fd) {
+        if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
         let checkedfd = self.get_filedescriptor(fd).unwrap();
@@ -4789,10 +4786,10 @@ impl Cage {
                 }
 
                 // check if the other fd is an epoll or not...
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
-        }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+                if let Err(_) = self.get_filedescriptor(fd) {
+                    return -1;
+                }
+                let checkedfd = self.get_filedescriptor(fd).unwrap();
                 let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
                     match filedesc_enum {

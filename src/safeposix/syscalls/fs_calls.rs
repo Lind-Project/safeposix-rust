@@ -186,13 +186,13 @@ impl Cage {
         if path.len() == 0 {
             return syscall_error(Errno::ENOENT, "open", "given path was null");
         }
-    
+
         // Retrieve the absolute path from the root directory. The absolute path is then
         // used to validate directory paths while navigating through
         // subdirectories and creating a new file or open existing file at the given
         // location.
         let truepath = normpath(convpath(path), self);
-    
+
         // Fetch the next file descriptor and its lock write guard to ensure the file
         // can be associated with the file descriptor
         let (fd, guardopt) = self.get_next_fd(None);
@@ -204,11 +204,12 @@ impl Cage {
                 "no available file descriptor number could be found",
             );
         }
-    
+
         // When the file descriptor is valid, we proceed with performing the remaining
         // checks for open_syscall.
-        let fdoption = &mut *guardopt.unwrap_or_else(|| panic!("File descriptor couldn't be fetched!"));
-    
+        let fdoption =
+            &mut *guardopt.unwrap_or_else(|| panic!("File descriptor couldn't be fetched!"));
+
         // Walk through the absolute path which returns a tuple consisting of inode
         // number of file (if it exists), and inode number of parent (if it exists)
         match metawalkandparent(truepath.as_path()) {
@@ -223,13 +224,13 @@ impl Cage {
                         "tried to open a file that did not exist, and O_CREAT was not specified",
                     );
                 }
-    
+
                 // Error is thrown when the input flags contain S_IFCHR flag representing a
                 // special character file.
                 if S_IFCHR == (S_IFCHR & flags) {
                     return syscall_error(Errno::EINVAL, "open", "Invalid value in flags");
                 }
-    
+
                 // S_FILETYPEFLAGS represents a bitmask that can be used to extract the file
                 // type information from a file's mode. This code is
                 // referenced from Lind-Repy codebase. Here, we are
@@ -239,14 +240,14 @@ impl Cage {
                 if mode & (S_IRWXA | S_FILETYPEFLAGS as u32) != mode {
                     return syscall_error(Errno::EPERM, "open", "Mode bits were not sane");
                 }
-    
+
                 let filename = truepath.file_name().unwrap().to_str().unwrap().to_string(); //for now we assume this is sane, but maybe this should be checked later
                 let time = interface::timestamp(); //We do a real timestamp now
-    
+
                 // S_IFREG is the flag for a regular file, so it's added to the mode to
                 // indicate that the new file being created is a regular file.
                 let effective_mode = S_IFREG as u32 | mode;
-    
+
                 // Create a new inode of type "File" representing a file and set the
                 // required attributes
                 let newinode = Inode::File(GenericInode {
@@ -263,12 +264,12 @@ impl Cage {
                     ctime: time,
                     mtime: time,
                 });
-    
+
                 // Fetch the next available inode number using the FileSystem MetaData table
                 let newinodenum = FS_METADATA
                     .nextinode
                     .fetch_add(1, interface::RustAtomicOrdering::Relaxed); //fetch_add returns the previous value, which is the inode number we want
-    
+
                 // Fetch the inode of the parent directory and only proceed when its type is
                 // directory.
                 if let Inode::Dir(ref mut ind) =
@@ -291,7 +292,7 @@ impl Cage {
                 FS_METADATA.inodetable.insert(newinodenum, newinode);
                 log_metadata(&FS_METADATA, pardirinode);
                 log_metadata(&FS_METADATA, newinodenum);
-    
+
                 // FileObjectTable stores the entries of the currently opened files in the
                 // system Since, a new file is being opened here, an
                 // entry corresponding to that newinode is made in the FileObjectTable
@@ -303,13 +304,14 @@ impl Cage {
                     vac.insert(interface::openfile(sysfilename, 0).unwrap());
                     // new file of size 0
                 }
-    
+
                 // The file object of size 0, associated with the newinode number is
                 // inserted into the FileDescriptorTable associated with the cage using the
                 // guard lock.
-                let _insertval = fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
+                let _insertval =
+                    fdoption.insert(File(self._file_initializer(newinodenum, flags, 0)));
             }
-    
+
             // Case 2: When the file exists (we don't need to look at parent here)
             (Some(inodenum), ..) => {
                 //If O_CREAT and O_EXCL flags are set in the input parameters,
@@ -326,7 +328,7 @@ impl Cage {
                     );
                 }
                 let size;
-    
+
                 // Fetch the Inode Object associated with the inode number of the existing
                 // file. There are different Inode types supported
                 // by the open_syscall (i.e., File, Directory, Socket, CharDev).
@@ -344,38 +346,40 @@ impl Cage {
                             if let interface::RustHashEntry::Occupied(occ) = &entry {
                                 occ.get().close().unwrap();
                             }
-    
+
                             f.size = 0;
-    
+
                             // Update the timestamps as well
                             let latest_time = interface::timestamp();
                             f.ctime = latest_time;
                             f.mtime = latest_time;
-    
+
                             // Remove the previous file and add a new one of 0 length
                             if let interface::RustHashEntry::Occupied(occ) = entry {
                                 occ.remove_entry();
                             }
-    
+
                             // The current file is removed from the filesystem
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             interface::removefile(sysfilename.clone()).unwrap();
                         }
-    
+
                         // Once the metadata for the file is reset, a new file is inserted
                         // in file system. Also, it is
                         // inserted back to the FileObjectTable and associated with same
                         // inodeNumber representing that the file is currently in open
                         // state.
-                        if let interface::RustHashEntry::Vacant(vac) = FILEOBJECTTABLE.entry(inodenum) {
+                        if let interface::RustHashEntry::Vacant(vac) =
+                            FILEOBJECTTABLE.entry(inodenum)
+                        {
                             let sysfilename = format!("{}{}", FILEDATAPREFIX, inodenum);
                             vac.insert(interface::openfile(sysfilename, f.size).unwrap());
                         }
-    
+
                         // Update the final size and reference count for the file
                         size = f.size;
                         f.refcount += 1;
-    
+
                         // Current Implementation for File Truncate: The
                         // previous entry of the file is removed from
                         // the FileObjectTable, with a new file of size
@@ -384,7 +388,7 @@ impl Cage {
                         // the file size and pointer of the existing
                         // file?
                     }
-    
+
                     // When the existing file type is of Directory or Character Device, only
                     // the file size and the reference count is updated.
                     Inode::Dir(ref mut f) => {
@@ -395,20 +399,21 @@ impl Cage {
                         size = f.size;
                         f.refcount += 1;
                     }
-    
+
                     // If the existing file type is a socket, error is thrown as socket type
                     // files are not supported by open_syscall
                     Inode::Socket(_) => {
                         return syscall_error(Errno::ENXIO, "open", "file is a UNIX domain socket");
                     }
                 }
-    
+
                 // The file object of size 0, associated with the existing inode number is
                 // inserted into the FileDescriptorTable associated with the cage using the
                 // guard lock.
-                let _insertval = fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
+                let _insertval =
+                    fdoption.insert(File(self._file_initializer(inodenum, flags, size)));
             }
-    
+
             // Case 3: When neither the file directory nor the parent directory exists
             (None, None) => {
                 // O_CREAT flag is used to create a file if it doesn't exist.
@@ -433,7 +438,6 @@ impl Cage {
         // Return the valid file descriptor
         fd
     }
-    
 
     /// ### Description
     ///
@@ -1469,7 +1473,6 @@ impl Cage {
     /// refer to the statfs man page [here](https://man7.org/linux/man-pages/man2/statfs.2.html).
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -2021,7 +2024,7 @@ impl Cage {
         //If the provided file descriptor is out of bounds, get_filedescriptor returns
         //Err(), unwrapping on which  produces a 'panic!'
         //otherwise, file descriptor table entry is stored in 'checkedfd'
-                if let Err(_) = self.get_filedescriptor(fd) {
+        if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
         let checkedfd = self.get_filedescriptor(fd).unwrap();
@@ -2255,7 +2258,6 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [pwrite(2)](https://man7.org/linux/man-pages/man2/pwrite.2.html)
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -2465,7 +2467,7 @@ impl Cage {
     /// The function first retrieves the file descriptor object associated with
     /// the provided file descriptor and then matches the file descriptor
     /// type and calls the appropriate write function based on the type.
-    /// #### Sockets: 
+    /// #### Sockets:
     /// The function writes data to the connected socket, handling
     ///   both TCP and UDP sockets.
     ///     * Checks if the socket is connected (either fully connected or
@@ -2473,7 +2475,7 @@ impl Cage {
     ///     * If connected, calls the underlying `writev` function on the raw
     ///       socket.
     ///     * Handles errors returned by the underlying `writev` function.
-    /// #### Pipes: 
+    /// #### Pipes:
     /// The function writes data to the pipe, supporting non-blocking
     ///   writes.
     ///     * Checks if the pipe is open for writing.
@@ -2482,19 +2484,23 @@ impl Cage {
     ///
     /// #### Streams:
     /// The function supports logging data written to a stream.
-    /// * Concatenates the multiple buffers (`iovec`) into a single contiguous slice.
+    /// * Concatenates the multiple buffers (`iovec`) into a single contiguous
+    ///   slice.
     /// * Calls `log_from_slice` to write the data and logs the result.
     /// * Returns the number of bytes successfully written.
     ///
     /// #### Files:
     /// The function writes data to regular files using vectored I/O.
     /// * Checks if the file is open for writing.
-    /// * Retrieves the associated inode and ensures the write position is valid.
-    /// * Handles writing past the end of the file by padding with blank bytes if necessary.
+    /// * Retrieves the associated inode and ensures the write position is
+    ///   valid.
+    /// * Handles writing past the end of the file by padding with blank bytes
+    ///   if necessary.
     /// * Updates the file size if the write extends the file.
-    /// * Writes data using the vectored I/O method and returns the number of bytes written.
+    /// * Writes data using the vectored I/O method and returns the number of
+    ///   bytes written.
     /// * Triggers `EISDIR` if an attempt is made to write to a directory.
-    /// 
+    ///
     /// ### Function Arguments
     /// * `fd`: The file descriptor to write to.
     /// * `iovec`: A pointer to an array of `IovecStruct` objects representing
@@ -2516,8 +2522,9 @@ impl Cage {
     ///   socket protocol.
     /// * `EAGAIN(11)`: There is no data available right now (for pipes).
     /// * `EPIPE(32)`: The pipe has been closed on the other end (for pipes).
-    /// * `EISDIR(21)`: The target file descriptor points to a directory (for files).
-    /// 
+    /// * `EISDIR(21)`: The target file descriptor points to a directory (for
+    ///   files).
+    ///
     /// ### Panics
     /// * If an unknown error code is returned by the underlying socket writev
     /// * If the inode number does not exist in the file system metadata table.
@@ -2703,11 +2710,12 @@ impl Cage {
                         Inode::File(ref mut normalfile_inode_obj) => {
                             // The inode object retrieved is of type File. We get a mutable
                             // reference to the actual inode data.
-                            let position = normalfile_filedesc_obj.position; 
+                            let position = normalfile_filedesc_obj.position;
                             // Get the current write position from the file descriptor object
                             let filesize = normalfile_inode_obj.size; // Get the file size
-                            let blankbytecount = position as isize - filesize as isize; 
-                            // Calculate the difference between the required and desired file position
+                            let blankbytecount = position as isize - filesize as isize;
+                            // Calculate the difference between the required and desired file
+                            // position
 
                             // Retrieve the file object from the file object table
                             let mut fileobject = FILEOBJECTTABLE
@@ -2843,7 +2851,6 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [lseek(2)](https://man7.org/linux/man-pages/man2/lseek.2.html)
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -3127,7 +3134,6 @@ impl Cage {
     /// [fchdir(2)](https://linux.die.net/man/2/fchdir)
 
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -3609,7 +3615,6 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [close(2)](https://man7.org/linux/man-pages/man2/close.2.html)
     pub fn _close_helper_inner(&self, fd: i32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -3894,7 +3899,6 @@ impl Cage {
     /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -4040,7 +4044,6 @@ impl Cage {
     /// devices, and possible error values, see [ioctl(2)](https://man.openbsd.org/ioctl)
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -4313,7 +4316,6 @@ impl Cage {
     /// [fchmod(2)](https://linux.die.net/man/2/fchmod)
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
-
         if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
@@ -5076,7 +5078,7 @@ impl Cage {
     //------------------------------------FSYNC SYSCALL------------------------------------
 
     pub fn fsync_syscall(&self, fd: i32) -> i32 {
-                if let Err(_) = self.get_filedescriptor(fd) {
+        if let Err(_) = self.get_filedescriptor(fd) {
             return -1;
         }
         let checkedfd = self.get_filedescriptor(fd).unwrap();

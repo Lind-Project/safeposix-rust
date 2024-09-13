@@ -204,10 +204,10 @@ impl Cage {
         let newfdtable = init_fdtable();
         //Loop from 0 to maximum value of file descriptor index
         for fd in 0..MAXFD {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
-        }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+            if let Err(_) = self.get_filedescriptor(fd) {
+                return -1;
+            }
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             //Get the lock for the file descriptor
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
@@ -453,7 +453,7 @@ impl Cage {
             if let Err(_) = self.get_filedescriptor(fd) {
                 return -1;
             }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+            let checkedfd = self.get_filedescriptor(fd).unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 // For each valid file descriptor we chech if the O_CLOEXEC flag is set or not
