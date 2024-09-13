@@ -74,16 +74,17 @@ impl EmulatedPipe {
     ///
     /// EmulatedPipe object
     pub fn new_with_capacity(size: usize) -> EmulatedPipe {
-        let rb = RingBuffer::<u8>::new(size);
+        let size2 = usize::pow(2, 20);
+        let rb = RingBuffer::<u8>::new(size2);
         let (prod, cons) = rb.split();
         EmulatedPipe {
             write_end: Arc::new(Mutex::new(prod)),
             read_end: Arc::new(Mutex::new(cons)),
-            dummy_write: Arc::new(Mutex::new(vec![0; size])),
-            dummy_read: Arc::new(Mutex::new(vec![0; size])),
+            dummy_write: Arc::new(Mutex::new(vec![0; size2])),
+            dummy_read: Arc::new(Mutex::new(vec![0; size2])),
             refcount_write: Arc::new(AtomicU32::new(1)),
             refcount_read: Arc::new(AtomicU32::new(1)),
-            size: size,
+            size: size2,
         }
     }
 
