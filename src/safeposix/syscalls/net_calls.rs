@@ -629,10 +629,11 @@ impl Cage {
         prereserved: bool,
     ) -> i32 {
         //checkedfd is an atomic reference count of the number of locks on the fd
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "bind_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         //returns a write lock once no other writers or readers have access to the lock
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -880,10 +881,11 @@ impl Cage {
     pub fn connect_syscall(&self, fd: i32, remoteaddr: &interface::GenSockaddr) -> i32 {
         //If fd is out of range of [0,MAXFD], process will panic
         //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "connect_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         //Pattern match such that FileDescriptor object must be the Socket variant
         //Otherwise, return with an err as the fd refers to something other than a
@@ -1363,10 +1365,11 @@ impl Cage {
             return self.send_syscall(fd, buf, buflen, flags);
         }
 
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "sendto_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         //Check if the write guard holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -1598,10 +1601,11 @@ impl Cage {
     /// for more detailed description of all the commands and return values, see
     /// [send(2)](https://linux.die.net/man/2/send)
     pub fn send_syscall(&self, fd: i32, buf: *const u8, buflen: usize, flags: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "send_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         //Check if the write guard holds a valid FileDescriptor
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -2219,10 +2223,11 @@ impl Cage {
         flags: i32,
         addr: &mut Option<&mut interface::GenSockaddr>,
     ) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "recv_common", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         //Check if the write guard holds a valid FileDescriptor, and if so
         //call recv_common_inner.
@@ -2437,10 +2442,11 @@ impl Cage {
     /// for more detailed description of all the commands and return values, see
     /// [listen(2)](https://linux.die.net/man/2/listen)
     pub fn listen_syscall(&self, fd: i32, backlog: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "listen_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -2826,10 +2832,11 @@ impl Cage {
     // this function is an inner function of shutdown and checks for fd
     pub fn _cleanup_socket(&self, fd: i32, how: i32) -> i32 {
         // get the file descriptor object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "netshutdown_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(ref mut filedesc_enum) = &mut *unlocked_fd {
             let inner_result = self._cleanup_socket_inner(filedesc_enum, how, true);
@@ -2925,10 +2932,11 @@ impl Cage {
     pub fn accept_syscall(&self, fd: i32, addr: &mut interface::GenSockaddr) -> i32 {
         //If fd is out of range of [0,MAXFD], process will panic
         //Otherwise, we obtain a write guard to the Option<FileDescriptor> object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "accept_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             //Find the next available file descriptor and grab a mutable reference
@@ -3818,10 +3826,11 @@ impl Cage {
         }
 
         // try to get the file descriptor object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "getsockopt_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
@@ -4037,10 +4046,11 @@ impl Cage {
         }
 
         // get the file descriptor object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "setsockopt_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             if let Socket(ref mut sockfdobj) = filedesc_enum {
@@ -4274,10 +4284,11 @@ impl Cage {
         }
 
         // get the file descriptor object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "getpeername_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {
@@ -4348,10 +4359,11 @@ impl Cage {
         }
 
         // get the file descriptor object
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "getsockname_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             if let Socket(sockfdobj) = filedesc_enum {

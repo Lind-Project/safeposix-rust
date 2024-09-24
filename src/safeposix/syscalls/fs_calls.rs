@@ -1315,10 +1315,11 @@ impl Cage {
     pub fn fstat_syscall(&self, fd: i32, statbuf: &mut StatData) -> i32 {
         // Attempt to get the file descriptor
 
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fstat_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
 
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let unlocked_fd = checkedfd.read();
@@ -1473,10 +1474,11 @@ impl Cage {
     /// refer to the statfs man page [here](https://man7.org/linux/man-pages/man2/statfs.2.html).
 
     pub fn fstatfs_syscall(&self, fd: i32, databuf: &mut FSData) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fstatfs_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
 
         if let Some(filedesc_enum) = &*unlocked_fd {
@@ -1586,10 +1588,11 @@ impl Cage {
     /// [read(2)](https://man7.org/linux/man-pages/man2/read.2.html)
     pub fn read_syscall(&self, fd: i32, buf: *mut u8, count: usize) -> i32 {
         // Attempt to get the file descriptor
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "read_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
@@ -1800,10 +1803,11 @@ impl Cage {
     /// [pread(2)](https://man7.org/linux/man-pages/man2/pread.2.html)
     pub fn pread_syscall(&self, fd: i32, buf: *mut u8, count: usize, offset: isize) -> i32 {
         // Attempt to get the file descriptor
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "pread_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
@@ -2024,10 +2028,11 @@ impl Cage {
         //If the provided file descriptor is out of bounds, get_filedescriptor returns
         //Err(), unwrapping on which  produces a 'panic!'
         //otherwise, file descriptor table entry is stored in 'checkedfd'
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "write_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
@@ -2258,10 +2263,11 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [pwrite(2)](https://man7.org/linux/man-pages/man2/pwrite.2.html)
     pub fn pwrite_syscall(&self, fd: i32, buf: *const u8, count: usize, offset: isize) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "pwrite_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
@@ -2536,10 +2542,11 @@ impl Cage {
         iovec: *const interface::IovecStruct,
         iovcnt: i32,
     ) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "writev_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             // we're only implementing this for INET/tcp sockets right now
@@ -2851,10 +2858,11 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [lseek(2)](https://man7.org/linux/man-pages/man2/lseek.2.html)
     pub fn lseek_syscall(&self, fd: i32, offset: isize, whence: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "lseek_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         // Acquire a write lock on the file descriptor to ensure exclusive access.
         let mut unlocked_fd = checkedfd.write();
 
@@ -3134,10 +3142,11 @@ impl Cage {
     /// [fchdir(2)](https://linux.die.net/man/2/fchdir)
 
     pub fn fchdir_syscall(&self, fd: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fchdir_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
         //If a table descriptor entry corresponds to a file, we check if it is
         //a directory file type. If it is not, we return `A component of path is
@@ -3615,10 +3624,11 @@ impl Cage {
     /// For more detailed description of all the commands and return values, see
     /// [close(2)](https://man7.org/linux/man-pages/man2/close.2.html)
     pub fn _close_helper_inner(&self, fd: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "close_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             // We decide, how to proceed depending on the fd type.
@@ -3850,10 +3860,11 @@ impl Cage {
         // we remove the file descriptor from the fd table and free the space.
         //
 
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "close_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         // This operation effectively removes the file descriptor from the fd table
         // by removing its reference from the variable and then not using it further,
@@ -3899,10 +3910,11 @@ impl Cage {
     /// [fcntl(2)](https://linux.die.net/man/2/fcntl)
 
     pub fn fcntl_syscall(&self, fd: i32, cmd: i32, arg: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fcntl_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             //'flags' consists of bitwise-or'd access mode, file creation, and file status flags
@@ -4044,10 +4056,11 @@ impl Cage {
     /// devices, and possible error values, see [ioctl(2)](https://man.openbsd.org/ioctl)
 
     pub fn ioctl_syscall(&self, fd: i32, request: u32, ptrunion: IoctlPtrUnion) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "ioctl_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &mut *unlocked_fd {
@@ -4316,10 +4329,11 @@ impl Cage {
     /// [fchmod(2)](https://linux.die.net/man/2/fchmod)
 
     pub fn fchmod_syscall(&self, fd: i32, mode: u32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fchmod_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
         //if a table descriptor entry is non-empty, a valid request is performed
         if let Some(filedesc_enum) = &*unlocked_fd {
@@ -4592,10 +4606,11 @@ impl Cage {
     //------------------------------------FLOCK SYSCALL------------------------------------
 
     pub fn flock_syscall(&self, fd: i32, operation: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "flock_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             let lock = match filedesc_enum {
@@ -5078,10 +5093,11 @@ impl Cage {
     //------------------------------------FSYNC SYSCALL------------------------------------
 
     pub fn fsync_syscall(&self, fd: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fsync_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -5132,10 +5148,11 @@ impl Cage {
     //------------------------------------FDATASYNC SYSCALL------------------------------------
 
     pub fn fdatasync_syscall(&self, fd: i32) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "fdatasync_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -5192,10 +5209,11 @@ impl Cage {
         nbytes: isize,
         flags: u32,
     ) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "sync_file_range_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let mut unlocked_fd = checkedfd.write();
         if let Some(filedesc_enum) = &mut *unlocked_fd {
             match filedesc_enum {
@@ -5251,10 +5269,11 @@ impl Cage {
     //------------------FTRUNCATE SYSCALL------------------
 
     pub fn ftruncate_syscall(&self, fd: i32, length: isize) -> i32 {
-        if let Err(_) = self.get_filedescriptor(fd) {
-            return -1;
+        let fdres = self.get_filedescriptor(fd);
+        if fdres.is_err() {
+            return syscall_error(Errno::EBADF, "ftruncate_syscall", "invalid file descriptor");
         }
-        let checkedfd = self.get_filedescriptor(fd).unwrap();
+        let checkedfd = fdres.unwrap();
         let unlocked_fd = checkedfd.read();
         if let Some(filedesc_enum) = &*unlocked_fd {
             match filedesc_enum {
