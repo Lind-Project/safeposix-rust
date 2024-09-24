@@ -3433,11 +3433,11 @@ impl Cage {
                     if !exceptfds_ref.is_set(fd) {
                         continue;
                     }
-
-                    if let Err(_) = self.get_filedescriptor(fd) {
-                        return -1;
+                    let fdres = self.get_filedescriptor(fd);
+                    if fdres.is_err() {
+                        return syscall_error(Errno::EBADF, "select_syscall", "invalid file descriptor");
                     }
-                    let checkedfd = self.get_filedescriptor(fd).unwrap();
+                    let checkedfd = fdres.unwrap();
                     let unlocked_fd = checkedfd.read();
                     if unlocked_fd.is_none() {
                         return syscall_error(Errno::EBADF, "select", "invalid file descriptor");
@@ -3494,10 +3494,11 @@ impl Cage {
             // try to get the FileDescriptor Object from fd number
             // if the fd exists, do further processing based on the file descriptor type
             // otherwise, raise an error
-            if let Err(_) = self.get_filedescriptor(fd) {
-                return -1;
+            let fdres = self.get_filedescriptor(fd);
+            if fdres.is_err() {
+                return syscall_error(Errno::EBADF, "select_readfds", "invalid file descriptor");
             }
-            let checkedfd = self.get_filedescriptor(fd).unwrap();
+            let checkedfd = fdres.unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
@@ -3656,10 +3657,11 @@ impl Cage {
             // try to get the FileDescriptor Object from fd number
             // if the fd exists, do further processing based on the file descriptor type
             // otherwise, raise an error
-            if let Err(_) = self.get_filedescriptor(fd) {
-                return -1;
+            let fdres = self.get_filedescriptor(fd);
+            if fdres.is_err() {
+                return syscall_error(Errno::EBADF, "select_writefds", "invalid file descriptor");
             }
-            let checkedfd = self.get_filedescriptor(fd).unwrap();
+            let checkedfd = fdres.unwrap();
             let unlocked_fd = checkedfd.read();
             if let Some(filedesc_enum) = &*unlocked_fd {
                 match filedesc_enum {
@@ -4798,10 +4800,11 @@ impl Cage {
                 }
 
                 // check if the other fd is an epoll or not...
-                if let Err(_) = self.get_filedescriptor(fd) {
-                    return -1;
+                let fdres = self.get_filedescriptor(fd);
+                if fdres.is_err() {
+                    return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "invalid file descriptor");
                 }
-                let checkedfd = self.get_filedescriptor(fd).unwrap();
+                let checkedfd = fdres.unwrap();
                 let unlocked_fd = checkedfd.read();
                 if let Some(filedesc_enum) = &*unlocked_fd {
                     match filedesc_enum {
