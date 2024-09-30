@@ -56,6 +56,8 @@ use super::net_constants::*;
 use super::sys_constants::*;
 use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
+use crate::interface::GenIpaddr;
+use crate::interface::GenSockaddr;
 use crate::safeposix::cage::{FileDescriptor::*, *};
 use crate::safeposix::filesystem::*;
 use crate::safeposix::net::*;
@@ -445,7 +447,32 @@ impl Cage {
         let res = match sockhandle.domain {
             AF_UNIX => self.bind_inner_socket_unix(sockhandle, &mut newsockaddr),
             AF_INET | AF_INET6 => {
-                self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved)
+                let loopback_addr = u32::from_ne_bytes([127, 0, 0, 7]);
+                match newsockaddr.addr() {
+                    interface::GenIpaddr::V4(addr) => {
+                        if addr.s_addr == loopback_addr {
+                            // this is the loopback address, and we need to fake it into a domain socket
+
+                            let mut path = interface::get_loopback_path(newsockaddr.port());
+                            newsockaddr = GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
+
+                            sockhandle.domain = AF_UNIX;
+
+                            // self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved)
+                            let ret = self.bind_inner_socket_unix(sockhandle, &mut newsockaddr);
+
+                            ret
+
+                        } else {
+                            // not loopback adddress
+                            self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved)
+                        }
+                    },
+                    _ => {
+                        // we do not want to handle ipv6 loopback for now
+                        self.bind_inner_socket_inet(sockhandle, &mut newsockaddr, prereserved)
+                    }
+                }
             }
             _ => {
                 return syscall_error(Errno::EINVAL, "bind", "Unsupported domain provided");
@@ -890,6 +917,7 @@ impl Cage {
                     //by other threads accessing other fields
                     let sock_tmp = sockfdobj.handle.clone();
                     let mut sockhandle = sock_tmp.write();
+
                     //Possible address families are Unix, V4, V6
                     //Error occurs if remoteaddr's address family does not match
                     //the domain of the socket pointed to by fd
@@ -901,12 +929,27 @@ impl Cage {
                         );
                     }
 
+                    let mut remoteaddr_final = remoteaddr.clone();
+
+                    if remoteaddr.get_family() == AF_INET as u16 {
+                        let loopback_addr = u32::from_ne_bytes([127, 0, 0, 7]);
+                        let addr = remoteaddr.addr();
+                        if let interface::GenIpaddr::V4(addr) = addr {
+                            if addr.s_addr == loopback_addr {
+                                sockhandle.domain = AF_UNIX;
+                                let path = interface::get_loopback_path(remoteaddr.port());
+
+                                remoteaddr_final = GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
+                            }
+                        }
+                    }
+
                     match sockhandle.protocol {
                         IPPROTO_UDP => {
-                            return self.connect_udp(&mut *sockhandle, sockfdobj, remoteaddr)
+                            return self.connect_udp(&mut *sockhandle, sockfdobj, &remoteaddr_final)
                         }
                         IPPROTO_TCP => {
-                            return self.connect_tcp(&mut *sockhandle, sockfdobj, remoteaddr)
+                            return self.connect_tcp(&mut *sockhandle, sockfdobj, &remoteaddr_final)
                         }
                         _ => {
                             return syscall_error(
