@@ -390,44 +390,32 @@ pub mod ipc_tests {
 
             let clientsockfd = cage2.socket_syscall(AF_INET, SOCK_STREAM, 0);
 
-            println!("client connect");
             // connect to server
             assert_eq!(cage2.connect_syscall(clientsockfd, &socket), 0);
-            println!("client connect done");
 
-            println!("client send");
             // send message to server
             assert_eq!(cage2.send_syscall(clientsockfd, str2cbuf("test"), 4, 0), 4);
-            println!("client send done");
 
             interface::sleep(interface::RustDuration::from_millis(1));
 
-            println!("client receive");
             // receive message from server
             let mut buf = sizecbuf(4);
             assert_eq!(cage2.recv_syscall(clientsockfd, buf.as_mut_ptr(), 4, 0), 4);
             assert_eq!(cbuf2str(&buf), "test");
-            println!("client receive done");
 
-            println!("client close");
             assert_eq!(cage2.close_syscall(clientsockfd), 0);
-            println!("client close done");
 
             barrier_clone.wait();
 
-            println!("client exit");
             cage2.exit_syscall(EXIT_SUCCESS);
         });
 
         let mut sockgarbage =
             interface::GenSockaddr::V4(interface::SockaddrV4::default());
 
-        println!("server accept");
         let sockfd = cage.accept_syscall(serversockfd as i32, &mut sockgarbage);
         assert!(sockfd > 0);
-        println!("server accept done");
         
-        println!("server receive");
         let mut buf = sizecbuf(4);
         let mut recvresult: i32;
         loop {
@@ -440,14 +428,10 @@ pub mod ipc_tests {
         }
 
         assert!(cbuf2str(&buf) == "test");
-        println!("server receive done");
 
-        println!("server send");
         // send message to server
         assert_eq!(cage.send_syscall(sockfd, str2cbuf("test"), 4, 0), 4);
-        println!("server send done");
 
-        println!("server wait");
         barrier.wait();
         
         threadclient.join().unwrap();

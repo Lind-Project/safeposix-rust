@@ -453,7 +453,7 @@ impl Cage {
                         if addr.s_addr == loopback_addr {
                             // this is the loopback address, and we need to fake it into a domain socket
 
-                            let mut path = interface::get_loopback_path(newsockaddr.port());
+                            let path = interface::get_loopback_path(newsockaddr.port());
                             newsockaddr = GenSockaddr::Unix(interface::new_sockaddr_unix(AF_UNIX as u16, path.as_bytes()));
 
                             sockhandle.domain = AF_UNIX;
