@@ -352,6 +352,94 @@ pub mod ipc_tests {
         lindrustfinalize();
     }
 
+    #[test]
+    pub fn ut_lind_ipc_loopback_socket() {
+        // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+
+        let cage = interface::cagetable_getref(1);
+        
+        let serversockfd = cage.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+        // create a INET address
+        let port: u16 = generate_random_port();
+
+        let sockaddr = interface::SockaddrV4 {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_le(),
+            sin_addr: interface::V4Addr {
+                s_addr: u32::from_ne_bytes([127, 0, 0, 7]),
+            },
+            padding: 0,
+        };
+        let socket = interface::GenSockaddr::V4(sockaddr); //127.0.0.7 from bytes above
+
+        assert_eq!(cage.bind_syscall(serversockfd, &socket), 0);
+        assert_eq!(cage.listen_syscall(serversockfd, 4), 0);
+
+        let barrier = interface::RustRfc::new(std::sync::Barrier::new(2));
+        let barrier_clone = barrier.clone();
+
+        assert_eq!(cage.fork_syscall(2), 0); // used for pipe thread
+
+        // client 1 connects to the server to send and recv data
+        let threadclient = interface::helper_thread(move || {
+            let cage2 = interface::cagetable_getref(2);
+            // assert_eq!(cage2.close_syscall(serversockfd), 0);
+
+            let clientsockfd = cage2.socket_syscall(AF_INET, SOCK_STREAM, 0);
+
+            // connect to server
+            assert_eq!(cage2.connect_syscall(clientsockfd, &socket), 0);
+
+            // send message to server
+            assert_eq!(cage2.send_syscall(clientsockfd, str2cbuf("test"), 4, 0), 4);
+
+            interface::sleep(interface::RustDuration::from_millis(1));
+
+            // receive message from server
+            let mut buf = sizecbuf(4);
+            assert_eq!(cage2.recv_syscall(clientsockfd, buf.as_mut_ptr(), 4, 0), 4);
+            assert_eq!(cbuf2str(&buf), "test");
+
+            assert_eq!(cage2.close_syscall(clientsockfd), 0);
+
+            barrier_clone.wait();
+
+            cage2.exit_syscall(EXIT_SUCCESS);
+        });
+
+        let mut sockgarbage =
+            interface::GenSockaddr::V4(interface::SockaddrV4::default());
+
+        let sockfd = cage.accept_syscall(serversockfd as i32, &mut sockgarbage);
+        assert!(sockfd > 0);
+        
+        let mut buf = sizecbuf(4);
+        let mut recvresult: i32;
+        loop {
+            // receive message from peer
+            recvresult = cage.recv_syscall(sockfd as i32, buf.as_mut_ptr(), 4, 0);
+            if recvresult != -libc::EINTR {
+                break; // if the error was EINTR, retry the
+                       // syscall
+            }
+        }
+
+        assert!(cbuf2str(&buf) == "test");
+
+        // send message to server
+        assert_eq!(cage.send_syscall(sockfd, str2cbuf("test"), 4, 0), 4);
+
+        barrier.wait();
+        
+        threadclient.join().unwrap();
+
+        assert_eq!(cage.exit_syscall(EXIT_SUCCESS), EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
     // support for retrying writes in case the system doesn't write all bytes at
     // once
     #[test]

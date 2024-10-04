@@ -639,3 +639,10 @@ pub fn kernel_select(
 
     return result;
 }
+
+pub fn get_loopback_path(port: u16) -> String {
+    let mut path = String::from("tmp/loopback");
+    path.push_str(&port.to_string());
+
+    path
+}
