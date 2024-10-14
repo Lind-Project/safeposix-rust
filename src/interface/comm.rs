@@ -641,7 +641,7 @@ pub fn kernel_select(
 }
 
 
-// Implementations of select related FD_SET structure
+// Implementations of poll related pollfd structure
 pub struct PollFd(pub libc::pollfd);
 
 impl PollFd {
@@ -668,41 +668,11 @@ impl PollFd {
     }
 }
 
-// for unwrapping in kernel_poll
-// fn to_pollfd_ptr(opt: &mut [PollFd]) -> *mut libc::pollfd {
-//     let length = opt.len();
-
-//     // Convert your PollFd structs into libc::pollfd pointers
-//     let mut poll_fds: Vec<libc::pollfd> = opt.iter_mut()
-//         .map(|poll_fd| poll_fd.0) // Directly use the value
-//         .collect();
-
-//     // println!("tmp:");
-//     // for pollfd in &poll_fds {
-//     //     println!("fd: {}, events: {}, revents: {}", pollfd.fd, pollfd.events, pollfd.revents);
-//     // }
-
-//     // Get a raw pointer to the first element of the vector
-//     let ret = poll_fds.as_mut_ptr();
-
-//     // Ensure the vector is not dropped
-//     std::mem::forget(poll_fds); // Prevent drop
-
-//     let slice = unsafe { std::slice::from_raw_parts(ret, length) };
-
-//     // println!("converted raw pollfd:");
-//     // for pollfd in slice {
-//     //     println!("fd: {}, events: {}, revents: {}", pollfd.fd, pollfd.events, pollfd.revents);
-//     // }
-
-//     ret
-// }
-
-
 pub fn kernel_poll(
     fds: &mut [PollFd],
     nfds: u64,
 ) -> i32 {
+    // convert [PollFd] to Vec<libc::pollfd>
     let mut poll_fds: Vec<libc::pollfd> = fds.iter_mut()
         .map(|poll_fd| poll_fd.0) // Directly use the value
         .collect();
@@ -712,12 +682,14 @@ pub fn kernel_poll(
         // Create a timeval struct with zero timeout
         let kpoll_timeout: i32 = 0;
 
+        // do the libc poll
         let ret = libc::poll(
             poll_fds.as_mut_ptr(),
             nfds as u64,
             kpoll_timeout
         );
 
+        // convert the result back to [PollFd]
         for (index, pollfd) in poll_fds.iter().enumerate() {
             let item = fds.get_mut(index).unwrap();
             item.0.revents = pollfd.revents;

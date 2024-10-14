@@ -4482,141 +4482,6 @@ impl Cage {
     ///
     /// ### Panics
     /// No panic is expected from this syscall
-    // pub fn poll_syscall(
-    //     &self,
-    //     fds: &mut [PollStruct],
-    //     timeout: Option<interface::RustDuration>,
-    // ) -> i32 {
-    //     // timeout is supposed to be in milliseconds
-
-    //     // current implementation of poll_syscall is based on select_syscall
-    //     // which gives several issues:
-    //     // 1. according to standards, select_syscall should only support file descriptor
-    //     //    that is smaller than 1024, while poll_syscall should not have such
-    //     //    limitation but our implementation of poll_syscall is actually calling
-    //     //    select_syscall directly which would mean poll_syscall would also have the
-    //     //    1024 maximum size limitation However, rustposix itself only support file
-    //     //    descriptor that is smaller than 1024 which solves this issue automatically
-    //     //    in an interesting way
-    //     // 2. current implementation of poll_syscall is very inefficient, that it passes
-    //     //    each of the file descriptor into select_syscall one by one. A better
-    //     //    solution might be transforming pollstruct into fdsets and pass into
-    //     //    select_syscall once (TODO). A even more efficienct way would be completely
-    //     //    rewriting poll_syscall so it does not depend on select_syscall anymore.
-    //     //    This is also how Linux does for poll_syscall since Linux claims that poll
-    //     //    have a better performance than select.
-    //     // 3. several revent value such as POLLERR (which should be set when pipe is
-    //     //    broken), or POLLHUP (when peer closed its channel) are not possible to
-    //     //    monitor. Since select_syscall does not have these features, so our
-    //     //    poll_syscall, which derived from select_syscall, would subsequently not be
-    //     //    able to support these features.
-
-    //     let mut return_code: i32 = 0;
-    //     let start_time = interface::starttimer();
-
-    //     let end_time = match timeout {
-    //         Some(time) => time,
-    //         None => interface::RustDuration::MAX,
-    //     };
-
-    //     // according to standard, we should clear all revents
-    //     for structpoll in &mut *fds {
-    //         structpoll.revents = 0;
-    //     }
-
-    //     // we loop until either timeout
-    //     // or any of the file descriptor is ready
-    //     loop {
-    //         // iterate through each file descriptor
-    //         for structpoll in &mut *fds {
-    //             // get the file descriptor
-    //             let fd = structpoll.fd;
-
-    //             // according to standard, we should ignore all file descriptor
-    //             // that is smaller than 0
-    //             if fd < 0 {
-    //                 continue;
-    //             }
-
-    //             // get the associated events to monitor
-    //             let events = structpoll.events;
-
-    //             // init FdSet structures
-    //             let reads = &mut interface::FdSet::new();
-    //             let writes = &mut interface::FdSet::new();
-    //             let errors = &mut interface::FdSet::new();
-
-    //             // POLLIN for readable fd
-    //             if events & POLLIN > 0 {
-    //                 reads.set(fd)
-    //             }
-    //             // POLLOUT for writable fd
-    //             if events & POLLOUT > 0 {
-    //                 writes.set(fd)
-    //             }
-    //             // POLLPRI for except fd
-    //             if events & POLLPRI > 0 {
-    //                 errors.set(fd)
-    //             }
-
-    //             // this mask is used for storing final revent result
-    //             let mut mask: i16 = 0;
-
-    //             // here we just call select_syscall with timeout of zero,
-    //             // which essentially just check each fd set once then return
-    //             // NOTE that the nfds argument is highest fd + 1
-    //             let selectret = Self::select_syscall(
-    //                 &self,
-    //                 fd + 1,
-    //                 Some(reads),
-    //                 Some(writes),
-    //                 Some(errors),
-    //                 Some(interface::RustDuration::ZERO),
-    //             );
-    //             // if there is any file descriptor ready
-    //             if selectret > 0 {
-    //                 // is the file descriptor ready to read?
-    //                 mask |= if !reads.is_empty() { POLLIN } else { 0 };
-    //                 // is the file descriptor ready to write?
-    //                 mask |= if !writes.is_empty() { POLLOUT } else { 0 };
-    //                 // is there any exception conditions on the file descriptor?
-    //                 mask |= if !errors.is_empty() { POLLPRI } else { 0 };
-    //                 // this file descriptor is ready for something,
-    //                 // increment the return value
-    //                 return_code += 1;
-    //             } else if selectret < 0 {
-    //                 // if there is any error, first check if the error
-    //                 // is EBADF, which refers to invalid file descriptor error
-    //                 // in this case, we should set POLLNVAL to revent
-    //                 if selectret == -(Errno::EBADF as i32) {
-    //                     mask |= POLLNVAL;
-    //                     // according to standard, return value is the number of fds
-    //                     // with non-zero revent, which may indicate an error as well
-    //                     return_code += 1;
-    //                 } else {
-    //                     return selectret;
-    //                 }
-    //             }
-    //             // set the revents
-    //             structpoll.revents = mask;
-    //         }
-
-    //         // we break if there is any file descriptor ready
-    //         // or timeout is reached
-    //         if return_code != 0 || interface::readtimer(start_time) > end_time {
-    //             break;
-    //         } else {
-    //             // otherwise, check for signal and loop again
-    //             if interface::sigcheck() {
-    //                 return syscall_error(Errno::EINTR, "poll", "interrupted function call");
-    //             }
-    //             // We yield to let other threads continue if we've found no ready descriptors
-    //             interface::lind_yield();
-    //         }
-    //     }
-    //     return return_code;
-    // }
-
     pub fn poll_syscall(
         &self,
         fds: &mut [PollStruct],
@@ -4624,27 +4489,9 @@ impl Cage {
     ) -> i32 {
         // timeout is supposed to be in milliseconds
 
-        // current implementation of poll_syscall is based on select_syscall
-        // which gives several issues:
-        // 1. according to standards, select_syscall should only support file descriptor
-        //    that is smaller than 1024, while poll_syscall should not have such
-        //    limitation but our implementation of poll_syscall is actually calling
-        //    select_syscall directly which would mean poll_syscall would also have the
-        //    1024 maximum size limitation However, rustposix itself only support file
-        //    descriptor that is smaller than 1024 which solves this issue automatically
-        //    in an interesting way
-        // 2. current implementation of poll_syscall is very inefficient, that it passes
-        //    each of the file descriptor into select_syscall one by one. A better
-        //    solution might be transforming pollstruct into fdsets and pass into
-        //    select_syscall once (TODO). A even more efficienct way would be completely
-        //    rewriting poll_syscall so it does not depend on select_syscall anymore.
-        //    This is also how Linux does for poll_syscall since Linux claims that poll
-        //    have a better performance than select.
-        // 3. several revent value such as POLLERR (which should be set when pipe is
-        //    broken), or POLLHUP (when peer closed its channel) are not possible to
-        //    monitor. Since select_syscall does not have these features, so our
-        //    poll_syscall, which derived from select_syscall, would subsequently not be
-        //    able to support these features.
+        // To-do: several revent value such as POLLERR (which should be set when pipe is
+        // broken), or POLLHUP (when peer closed its channel) are currently not
+        // monitored. 
 
         let mut return_code: i32 = 0;
         let start_time = interface::starttimer();
@@ -4661,6 +4508,11 @@ impl Cage {
 
         // For INET: prepare the data structures for the kernel_poll's use
         let mut inet_info = PollInetInfo::new();
+
+        // we record whether the first iteration or not
+        // since inet_info only need to be filled up once
+        // so during the second iteration or so, the step
+        // could be skipped for optmization
         let mut first_iteration = true;
 
         // we loop until either timeout
@@ -4688,6 +4540,7 @@ impl Cage {
                 if let Some(filedesc_enum) = &*unlocked_fd {
                     match filedesc_enum {
                         Socket(ref sockfdobj) => {
+                            // in case of socket
                             let mut mask = 0;
 
                             // sockethandle lock with read access
@@ -4696,6 +4549,7 @@ impl Cage {
                             let mut newconnection = false;
                             match sockhandle.domain {
                                 AF_UNIX => {
+                                    // in case of domain socket
                                     if events & POLLIN > 0 {
                                         if sockhandle.state == ConnState::LISTEN {
                                             // if connection state is LISTEN
@@ -4720,6 +4574,7 @@ impl Cage {
                                             let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                             let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                                             if receivepipe.check_select_read() {
+                                                //set the mask
                                                 mask |= POLLIN;
                                             }
                                         }
@@ -4728,6 +4583,7 @@ impl Cage {
                                         let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
                                         let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
                                         if receivepipe.check_select_write() {
+                                            // set the mask
                                             mask |= POLLOUT;
                                         }
                                     }
@@ -4736,6 +4592,9 @@ impl Cage {
                                     // add this after it is fixed
                                 }
                                 AF_INET | AF_INET6 => {
+                                    // for inet, we are not handling the poll in this loop
+                                    // we just gathering all the INET pollfd and ready to feed
+                                    // to kernel poll outside the loop
                                     if events & POLLOUT > 0 {
                                         // For AF_INET or AF_INET6 socket, currently we still rely on kernel
                                         // implementation, so here we simply
@@ -4749,7 +4608,6 @@ impl Cage {
                                                 .check_rawconnection()
                                         {
                                             newconnection = true;
-                                            // sockhandle.state = ConnState::CONNECTED;
                                         }
                                     }
 
@@ -4757,11 +4615,13 @@ impl Cage {
                                         continue;
                                     }
 
+                                    // inet_info only need to be filled up on first iteration
                                     if first_iteration {
                                         // push to inet poll_fds
                                         let mut new_pollfd = interface::PollFd::new_with_fd(sockfdobj.rawfd);
                                         new_pollfd.set_event(events);
                                         inet_info.kernel_pollfd.push(new_pollfd);
+                                        // mantain the mapping from rawfd to lindfd
                                         inet_info.rawfd_lindfd_index_tuples.insert(sockfdobj.rawfd, index as i32);
                                     }
                                 }
@@ -4784,14 +4644,15 @@ impl Cage {
                             }
                         }
 
-                        // we always say streams are writable?
                         Stream(_) => {
+                            // in case of stream
                             let mut mask = 0;
                             if events & POLLIN > 0 {
                                 // doing nothing here, since we always
                                 // say streams are not readable
                             }
                             if events & POLLOUT > 0 {
+                                // we always say stream socket are wrtiable
                                 mask |= POLLOUT;
                             }
                             // set the revents
@@ -4802,6 +4663,7 @@ impl Cage {
                         }
 
                         Pipe(pipefdobj) => {
+                            // in case of pipe
                             let mut mask = 0;
                             if events & POLLIN > 0 {
                                 if pipefdobj.pipe.check_select_read() {
@@ -4845,17 +4707,17 @@ impl Cage {
                     structpoll.revents = POLLNVAL;
                     return_code += 1;
                 }
-                // if return_code != 0 {
-                //     return return_code;
-                // }
             }
+            // first iteration done, set to false
             first_iteration = false;
 
+            // if there are any INET pollfd, pass it down to kernel
             if inet_info.kernel_pollfd.len() != 0 {
                 let kernel_ret = update_pollstruct_from_kernel_poll(fds, &mut inet_info);
                 if kernel_ret < 0 {
                     return kernel_ret;
                 }
+                // update return code
                 return_code += kernel_ret;
             }
 

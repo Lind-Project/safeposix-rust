@@ -595,14 +595,17 @@ pub fn update_pollstruct_from_kernel_poll(
     let kernel_ret;
     // note that this poll call always have timeout = 0, so it doesn't block
     let nfds = inet_info.kernel_pollfd.len() as u64;
+    // do the kernel poll
     kernel_ret = interface::kernel_poll(
         inet_info.kernel_pollfd.as_mut_slice(),
         nfds
     );
     if kernel_ret > 0 {
+        // fill the pollfds with kernel poll result
         for pollfd in &inet_info.kernel_pollfd {
             let index = (*inet_info.rawfd_lindfd_index_tuples.get(&pollfd.get_fd()).unwrap()) as usize;
             let pollstruct = pollfds.get_mut(index).unwrap();
+            // set revents
             pollstruct.revents = pollfd.get_revent();
         }
     }
