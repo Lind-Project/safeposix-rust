@@ -4489,27 +4489,9 @@ impl Cage {
     ) -> i32 {
         // timeout is supposed to be in milliseconds
 
-        // current implementation of poll_syscall is based on select_syscall
-        // which gives several issues:
-        // 1. according to standards, select_syscall should only support file descriptor
-        //    that is smaller than 1024, while poll_syscall should not have such
-        //    limitation but our implementation of poll_syscall is actually calling
-        //    select_syscall directly which would mean poll_syscall would also have the
-        //    1024 maximum size limitation However, rustposix itself only support file
-        //    descriptor that is smaller than 1024 which solves this issue automatically
-        //    in an interesting way
-        // 2. current implementation of poll_syscall is very inefficient, that it passes
-        //    each of the file descriptor into select_syscall one by one. A better
-        //    solution might be transforming pollstruct into fdsets and pass into
-        //    select_syscall once (TODO). A even more efficienct way would be completely
-        //    rewriting poll_syscall so it does not depend on select_syscall anymore.
-        //    This is also how Linux does for poll_syscall since Linux claims that poll
-        //    have a better performance than select.
-        // 3. several revent value such as POLLERR (which should be set when pipe is
-        //    broken), or POLLHUP (when peer closed its channel) are not possible to
-        //    monitor. Since select_syscall does not have these features, so our
-        //    poll_syscall, which derived from select_syscall, would subsequently not be
-        //    able to support these features.
+        // To-do: several revent value such as POLLERR (which should be set when pipe is
+        // broken), or POLLHUP (when peer closed its channel) are currently not
+        // monitored. 
 
         let mut return_code: i32 = 0;
         let start_time = interface::starttimer();
@@ -4524,11 +4506,20 @@ impl Cage {
             structpoll.revents = 0;
         }
 
+        // For INET: prepare the data structures for the kernel_poll's use
+        let mut inet_info = PollInetInfo::new();
+
+        // we record whether the first iteration or not
+        // since inet_info only need to be filled up once
+        // so during the second iteration or so, the step
+        // could be skipped for optmization
+        let mut first_iteration = true;
+
         // we loop until either timeout
         // or any of the file descriptor is ready
         loop {
             // iterate through each file descriptor
-            for structpoll in &mut *fds {
+            for (index, structpoll) in fds.iter_mut().enumerate() {
                 // get the file descriptor
                 let fd = structpoll.fd;
 
@@ -4541,64 +4532,193 @@ impl Cage {
                 // get the associated events to monitor
                 let events = structpoll.events;
 
-                // init FdSet structures
-                let reads = &mut interface::FdSet::new();
-                let writes = &mut interface::FdSet::new();
-                let errors = &mut interface::FdSet::new();
+                // try to get the FileDescriptor Object from fd number
+                // if the fd exists, do further processing based on the file descriptor type
+                // otherwise, raise an error
+                let checkedfd = self.get_filedescriptor(fd).unwrap();
+                let unlocked_fd = checkedfd.read();
+                if let Some(filedesc_enum) = &*unlocked_fd {
+                    match filedesc_enum {
+                        Socket(ref sockfdobj) => {
+                            // in case of socket
+                            let mut mask = 0;
 
-                // POLLIN for readable fd
-                if events & POLLIN > 0 {
-                    reads.set(fd)
-                }
-                // POLLOUT for writable fd
-                if events & POLLOUT > 0 {
-                    writes.set(fd)
-                }
-                // POLLPRI for except fd
-                if events & POLLPRI > 0 {
-                    errors.set(fd)
-                }
+                            // sockethandle lock with read access
+                            let sock_tmp = sockfdobj.handle.clone();
+                            let sockhandle = sock_tmp.read();
+                            let mut newconnection = false;
+                            match sockhandle.domain {
+                                AF_UNIX => {
+                                    // in case of domain socket
+                                    if events & POLLIN > 0 {
+                                        if sockhandle.state == ConnState::LISTEN {
+                                            // if connection state is LISTEN
+                                            // then check if there are any pending connections
 
-                // this mask is used for storing final revent result
-                let mut mask: i16 = 0;
+                                            // get the path of the socket
+                                            let localpathbuf = normpath(
+                                                convpath(sockhandle.localaddr.unwrap().path()),
+                                                self,
+                                            );
+                                            // check if there is any connections associated with the path
+                                            let dsconnobj =
+                                                NET_METADATA.domsock_accept_table.get(&localpathbuf);
+                                            if dsconnobj.is_some() {
+                                                // we have a connecting domain socket, return as readable to
+                                                // be accepted
+                                                mask |= POLLIN;
+                                            }
+                                        } else if sockhandle.state == ConnState::CONNECTED || newconnection {
+                                            // otherwise, the connection is already established
+                                            // check if the pipe has any thing
+                                            let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                            let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
+                                            if receivepipe.check_select_read() {
+                                                //set the mask
+                                                mask |= POLLIN;
+                                            }
+                                        }
+                                    }
+                                    if events & POLLOUT > 0 {
+                                        let sockinfo = &sockhandle.unix_info.as_ref().unwrap();
+                                        let receivepipe = sockinfo.receivepipe.as_ref().unwrap();
+                                        if receivepipe.check_select_write() {
+                                            // set the mask
+                                            mask |= POLLOUT;
+                                        }
+                                    }
+                                    // we should handle INPROGRESS state as well, but nonblocking connect for
+                                    // domain socket is a half-broken feature right now, so we might want to
+                                    // add this after it is fixed
+                                }
+                                AF_INET | AF_INET6 => {
+                                    // for inet, we are not handling the poll in this loop
+                                    // we just gathering all the INET pollfd and ready to feed
+                                    // to kernel poll outside the loop
+                                    if events & POLLOUT > 0 {
+                                        // For AF_INET or AF_INET6 socket, currently we still rely on kernel
+                                        // implementation, so here we simply
+                                        // call check_rawconnection with innersocket if connection state
+                                        // is INPROGRESS (non-blocking AF_INET/AF_INET6 socket connection)
+                                        if sockhandle.state == ConnState::INPROGRESS
+                                            && sockhandle
+                                                .innersocket
+                                                .as_ref()
+                                                .unwrap()
+                                                .check_rawconnection()
+                                        {
+                                            newconnection = true;
+                                        }
+                                    }
 
-                // here we just call select_syscall with timeout of zero,
-                // which essentially just check each fd set once then return
-                // NOTE that the nfds argument is highest fd + 1
-                let selectret = Self::select_syscall(
-                    &self,
-                    fd + 1,
-                    Some(reads),
-                    Some(writes),
-                    Some(errors),
-                    Some(interface::RustDuration::ZERO),
-                );
-                // if there is any file descriptor ready
-                if selectret > 0 {
-                    // is the file descriptor ready to read?
-                    mask |= if !reads.is_empty() { POLLIN } else { 0 };
-                    // is the file descriptor ready to write?
-                    mask |= if !writes.is_empty() { POLLOUT } else { 0 };
-                    // is there any exception conditions on the file descriptor?
-                    mask |= if !errors.is_empty() { POLLPRI } else { 0 };
-                    // this file descriptor is ready for something,
-                    // increment the return value
-                    return_code += 1;
-                } else if selectret < 0 {
-                    // if there is any error, first check if the error
-                    // is EBADF, which refers to invalid file descriptor error
-                    // in this case, we should set POLLNVAL to revent
-                    if selectret == -(Errno::EBADF as i32) {
-                        mask |= POLLNVAL;
-                        // according to standard, return value is the number of fds
-                        // with non-zero revent, which may indicate an error as well
-                        return_code += 1;
-                    } else {
-                        return selectret;
+                                    if sockfdobj.rawfd < 0 {
+                                        continue;
+                                    }
+
+                                    // inet_info only need to be filled up on first iteration
+                                    if first_iteration {
+                                        // push to inet poll_fds
+                                        let mut new_pollfd = interface::PollFd::new_with_fd(sockfdobj.rawfd);
+                                        new_pollfd.set_event(events);
+                                        inet_info.kernel_pollfd.push(new_pollfd);
+                                        // mantain the mapping from rawfd to lindfd
+                                        inet_info.rawfd_lindfd_index_tuples.insert(sockfdobj.rawfd, index as i32);
+                                    }
+                                }
+                                _ => {
+                                    return syscall_error(Errno::EINVAL, "poll", "Unsupported domain")
+                                }
+                            }
+
+                            // non-blocking AF_INET/AF_INET6 socket connection now established
+                            // change the state to connected
+                            if newconnection {
+                                let mut newconnhandle = sock_tmp.write();
+                                newconnhandle.state = ConnState::CONNECTED;
+                            }
+
+                            // set the revents
+                            if mask != 0 {
+                                structpoll.revents = mask;
+                                return_code += 1;
+                            }
+                        }
+
+                        Stream(_) => {
+                            // in case of stream
+                            let mut mask = 0;
+                            if events & POLLIN > 0 {
+                                // doing nothing here, since we always
+                                // say streams are not readable
+                            }
+                            if events & POLLOUT > 0 {
+                                // we always say stream socket are wrtiable
+                                mask |= POLLOUT;
+                            }
+                            // set the revents
+                            if mask != 0 {
+                                structpoll.revents = mask;
+                                return_code += 1;
+                            }
+                        }
+
+                        Pipe(pipefdobj) => {
+                            // in case of pipe
+                            let mut mask = 0;
+                            if events & POLLIN > 0 {
+                                if pipefdobj.pipe.check_select_read() {
+                                    // set the mask
+                                    mask |= POLLIN;
+                                }
+                            }
+                            if events & POLLOUT > 0 {
+                                if pipefdobj.pipe.check_select_write() {
+                                    // set the mask
+                                    mask |= POLLOUT;
+                                }
+                            }
+                            // set the revents
+                            if mask != 0 {
+                                structpoll.revents = mask;
+                                return_code += 1;
+                            }
+                        }
+
+                        // these file writes never block
+                        _ => {
+                            let mut mask = 0;
+                            if events & POLLIN > 0 {
+                                // set the mask
+                                mask |= POLLIN;
+                            }
+                            if events & POLLOUT > 0 {
+                                // set the mask
+                                mask |= POLLOUT;
+                            }
+                            // set the revents
+                            if mask != 0 {
+                                structpoll.revents = mask;
+                                return_code += 1;
+                            }
+                        }
                     }
+                } else {
+                    // handle invalid file descriptor
+                    structpoll.revents = POLLNVAL;
+                    return_code += 1;
                 }
-                // set the revents
-                structpoll.revents = mask;
+            }
+            // first iteration done, set to false
+            first_iteration = false;
+
+            // if there are any INET pollfd, pass it down to kernel
+            if inet_info.kernel_pollfd.len() != 0 {
+                let kernel_ret = update_pollstruct_from_kernel_poll(fds, &mut inet_info);
+                if kernel_ret < 0 {
+                    return kernel_ret;
+                }
+                // update return code
+                return_code += kernel_ret;
             }
 
             // we break if there is any file descriptor ready
