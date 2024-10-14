@@ -639,3 +639,92 @@ pub fn kernel_select(
 
     return result;
 }
+
+
+// Implementations of select related FD_SET structure
+pub struct PollFd(pub libc::pollfd);
+
+impl PollFd {
+    pub fn new_with_fd(fd: i32) -> PollFd {
+        let raw_pollfd = libc::pollfd {
+            fd,
+            events: 0,
+            revents: 0,
+        };
+        PollFd(raw_pollfd)
+    }
+
+    // set the event in pollfd
+    pub fn set_event(&mut self, event: i16) {
+        self.0.events |= event;
+    }
+
+    pub fn get_revent(&self) -> i16 {
+        self.0.revents
+    }
+
+    pub fn get_fd(&self) -> i32 {
+        self.0.fd
+    }
+}
+
+// for unwrapping in kernel_poll
+// fn to_pollfd_ptr(opt: &mut [PollFd]) -> *mut libc::pollfd {
+//     let length = opt.len();
+
+//     // Convert your PollFd structs into libc::pollfd pointers
+//     let mut poll_fds: Vec<libc::pollfd> = opt.iter_mut()
+//         .map(|poll_fd| poll_fd.0) // Directly use the value
+//         .collect();
+
+//     // println!("tmp:");
+//     // for pollfd in &poll_fds {
+//     //     println!("fd: {}, events: {}, revents: {}", pollfd.fd, pollfd.events, pollfd.revents);
+//     // }
+
+//     // Get a raw pointer to the first element of the vector
+//     let ret = poll_fds.as_mut_ptr();
+
+//     // Ensure the vector is not dropped
+//     std::mem::forget(poll_fds); // Prevent drop
+
+//     let slice = unsafe { std::slice::from_raw_parts(ret, length) };
+
+//     // println!("converted raw pollfd:");
+//     // for pollfd in slice {
+//     //     println!("fd: {}, events: {}, revents: {}", pollfd.fd, pollfd.events, pollfd.revents);
+//     // }
+
+//     ret
+// }
+
+
+pub fn kernel_poll(
+    fds: &mut [PollFd],
+    nfds: u64,
+) -> i32 {
+    let mut poll_fds: Vec<libc::pollfd> = fds.iter_mut()
+        .map(|poll_fd| poll_fd.0) // Directly use the value
+        .collect();
+
+    // Call libc::poll and store the result
+    let result = unsafe {
+        // Create a timeval struct with zero timeout
+        let kpoll_timeout: i32 = 0;
+
+        let ret = libc::poll(
+            poll_fds.as_mut_ptr(),
+            nfds as u64,
+            kpoll_timeout
+        );
+
+        for (index, pollfd) in poll_fds.iter().enumerate() {
+            let item = fds.get_mut(index).unwrap();
+            item.0.revents = pollfd.revents;
+        }
+
+        ret
+    };
+
+    return result;
+}
