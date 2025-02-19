@@ -777,6 +777,7 @@ impl Cage {
         if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
             let threadid = cage.main_threadid.load(interface::RustAtomicOrdering::Relaxed);
             if threadid == 0 { return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist"); }
+            
             interface::lind_threadkill(
                 threadid,
                 sig,
