@@ -3386,6 +3386,8 @@ impl Cage {
         // the new copies
         let new_readfds = &mut interface::FdSet::new();
         let new_writefds = &mut interface::FdSet::new();
+        let clear_exceptfds = &mut interface::FdSet::new();
+
         loop {
             //we must block manually
             // 1. iterate thru readfds
@@ -3439,6 +3441,11 @@ impl Cage {
 
         if writefds.is_some() {
             writefds.unwrap().copy_from(&new_writefds);
+        }
+
+        // clear out except fds
+        if exceptfds.is_some() {
+            exceptfds.unwrap().copy_from(&clear_exceptfds);
         }
 
         return retval;
