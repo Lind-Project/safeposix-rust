@@ -573,3 +573,41 @@ pub fn update_readfds_from_kernel_select(
     }
     return kernel_ret;
 }
+
+pub struct PollInetInfo {
+    pub rawfd_lindfd_index_tuples: interface::RustHashMap<i32, i32>,
+    pub kernel_pollfd: Vec<interface::PollFd>,
+}
+
+impl PollInetInfo {
+    pub fn new() -> Self {
+        PollInetInfo {
+            rawfd_lindfd_index_tuples: interface::RustHashMap::new(),
+            kernel_pollfd: Vec::new(),
+        }
+    }
+}
+
+pub fn update_pollstruct_from_kernel_poll(
+    pollfds: &mut [interface::PollStruct],
+    inet_info: &mut PollInetInfo,
+) -> i32 {
+    let kernel_ret;
+    // note that this poll call always have timeout = 0, so it doesn't block
+    let nfds = inet_info.kernel_pollfd.len() as u64;
+    // do the kernel poll
+    kernel_ret = interface::kernel_poll(
+        inet_info.kernel_pollfd.as_mut_slice(),
+        nfds
+    );
+    if kernel_ret > 0 {
+        // fill the pollfds with kernel poll result
+        for pollfd in &inet_info.kernel_pollfd {
+            let index = (*inet_info.rawfd_lindfd_index_tuples.get(&pollfd.get_fd()).unwrap()) as usize;
+            let pollstruct = pollfds.get_mut(index).unwrap();
+            // set revents
+            pollstruct.revents = pollfd.get_revent();
+        }
+    }
+    return kernel_ret;
+}
